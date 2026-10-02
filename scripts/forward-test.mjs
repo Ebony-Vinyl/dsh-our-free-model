@@ -20,6 +20,8 @@
 import http from 'node:http'
 import assert from 'node:assert/strict'
 import { startForwardServer, resolveLoopbackBind } from '../src/forward.js'
+import { toToolDefs } from '../src/messages.js'
+import { applyFingerprint } from '../src/upstream.js'
 
 let failures = 0
 const check = (name, fn) => {
@@ -268,6 +270,88 @@ await checkAsync('responses endpoint reports an incomplete turn after a cut', as
   const payload = await response.json()
   assert.equal(payload.status, 'incomplete')
   assert.deepEqual(payload.incomplete_details, { reason: 'max_output_tokens' })
+})
+
+// ── caller tools survive the round trip (#26) ────────────────────────────────
+// The listener used to pre-convert its caller's `body.tools` into the OpenAI
+// wrapper shape before handing them to the adapter, while the adapter's own
+// conversion reads `tool.name` — so every tool was dropped, the request reached
+// the wire with an empty tool list, and `applyFingerprint` filled the quartet's
+// self-disabling decoys in their place and pinned `tool_choice: 'none'`. The
+// model then told the client it had no tools, and any decoy it called anyway was
+// dropped downstream as an empty answer.
+const openAiTool = name => ({
+  type: 'function',
+  function: {
+    name,
+    description: `${name} tool`,
+    parameters: { type: 'object', properties: { x: { type: 'string' } }, required: ['x'] },
+  },
+})
+
+/** Mirrors index.js's own normalizer, the listener's front door for caller tools. */
+const normalizeTool = tool => {
+  const name = tool?.name ?? tool?.function?.name
+  if (typeof name !== 'string' || name.trim() === '') return null
+  return {
+    name,
+    description: String(tool?.description ?? tool?.function?.description ?? ''),
+    parameters: tool?.parameters ?? tool?.function?.parameters ?? { type: 'object', properties: {} },
+  }
+}
+
+check('toToolDefs reads a flat harness def', () => {
+  const defs = toToolDefs([{ name: 'pwsh', description: 'shell', parameters: { type: 'object', properties: {} } }], 'chat')
+  assert.equal(defs.length, 1)
+  assert.equal(defs[0].function.name, 'pwsh')
+})
+
+check('toToolDefs reads an OpenAI wrapper def instead of dropping the tool', () => {
+  const defs = toToolDefs([openAiTool('pwsh'), openAiTool('glob')], 'chat')
+  assert.deepEqual(defs.map(def => def.function.name), ['pwsh', 'glob'])
+  assert.equal(defs[0].function.parameters.properties.x.type, 'string')
+})
+
+check('the adapter conversion keeps every caller tool', () => {
+  const callerTools = ['pwsh', 'glob', 'grep', 'read'].map(openAiTool)
+  // The listener's own pass used to produce this wrapper shape and the adapter
+  // then ran its own conversion over it — the step where every tool vanished.
+  const preConverted = toToolDefs(callerTools.map(normalizeTool).filter(Boolean), 'chat')
+  const declared = toToolDefs(preConverted, 'chat')
+  assert.equal(declared.length, callerTools.length)
+})
+
+check('a non-empty caller list keeps its real tools and no forced tool_choice', () => {
+  const body = { tools: toToolDefs([normalizeTool(openAiTool('pwsh')), normalizeTool(openAiTool('glob'))], 'chat') }
+  applyFingerprint(body, false)
+  assert.deepEqual(body.tools.map(tool => tool.function.name), ['bash', 'glob', 'grep', 'read'])
+  assert.equal(String(body.tools[0].function.description).includes('unavailable'), false)
+  assert.equal(String(body.tools[1].function.description).includes('unavailable'), false)
+  assert.equal(body.tool_choice, undefined)
+})
+
+check('an empty caller list is the shape that forces tool_choice none', () => {
+  const body = { tools: [] }
+  applyFingerprint(body, false)
+  assert.deepEqual(body.tools.map(tool => tool.function.name), ['bash', 'glob', 'grep', 'read'])
+  assert.equal(body.tool_choice, 'none')
+})
+
+await checkAsync('a promoted quartet slot stays mapped back to the caller name', async () => {
+  const body = { tools: toToolDefs([normalizeTool(openAiTool('pwsh'))], 'chat') }
+  const map = applyFingerprint(body, false)
+  assert.equal(map.get('bash'), 'pwsh')
+})
+
+await checkAsync('the lane receives the caller tools the client sent', async () => {
+  const lane = makeLane()
+  lane.script = () => ({ chunks: [], outcome: { text: 'ok', toolCalls: [], usage: undefined } })
+  const base = await serve(lane)
+  const response = await authFetch(base, '/v1/chat/completions', {
+    model: 'm', stream: false, tools: [openAiTool('pwsh')], messages: [{ role: 'user', content: 'hi' }],
+  })
+  assert.equal(response.status, 200)
+  assert.deepEqual(lane.seen.at(-1).openAi.tools.map(tool => tool.function.name), ['pwsh'])
 })
 
 // ── the bind address (issue #19) ─────────────────────────────────────────────

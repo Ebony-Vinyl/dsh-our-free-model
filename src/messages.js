@@ -379,12 +379,21 @@ export function toResponseInput(messages, resolveImage, warnings) {
 export function toToolDefs(tools, style) {
   const list = []
   for (const tool of tools ?? []) {
-    const name = String(tool.name ?? '').trim()
+    // Both spellings have to work here. The harness hands over flat
+    // `{name, description, parameters}` defs, but a caller that already speaks
+    // OpenAI — the forward listener's own caller, or anything re-feeding this
+    // with `{type:'function', function:{…}}` — used to lose every tool to the
+    // `if (!name) continue` below, silently: the request went upstream with an
+    // empty tool list and only the fingerprint quartet's decoys came back.
+    const source = tool && typeof tool.function === 'object' && tool.function !== null && !Array.isArray(tool.function)
+      ? tool.function
+      : tool
+    const name = String(source?.name ?? '').trim()
     if (!name) continue
-    const parameters = tool.parameters && typeof tool.parameters === 'object' && !Array.isArray(tool.parameters)
-      ? tool.parameters
+    const parameters = source.parameters && typeof source.parameters === 'object' && !Array.isArray(source.parameters)
+      ? source.parameters
       : { type: 'object', properties: {} }
-    const description = typeof tool.description === 'string' ? tool.description : ''
+    const description = typeof source.description === 'string' ? source.description : ''
     if (style === 'claude') list.push({ name: name.slice(0, MAX_TOOL_NAME_LEN), description, input_schema: parameters })
     else if (style === 'flat') list.push({ type: 'function', name: name.slice(0, MAX_TOOL_NAME_LEN), description, parameters })
     else list.push({ type: 'function', function: { name: name.slice(0, MAX_TOOL_NAME_LEN), description, parameters } })

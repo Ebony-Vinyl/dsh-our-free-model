@@ -34,7 +34,6 @@ import { generateKey, startForwardServer, toOpenAiUsage } from './src/forward.js
 import { CODE, UpstreamError, getJson } from './src/http.js'
 import { mintRequestId, sessionForConversation } from './src/upstream.js'
 import { DEFAULT_LEVEL, budgetLadder } from './src/effort.js'
-import { toToolDefs } from './src/messages.js'
 import { windowTokens } from './src/stream.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { PluginUpdater, restoreBackup } from './src/updater.js'
@@ -444,7 +443,13 @@ export function apply(ctx, config) {
     if (entry === undefined) throw httpError(404, `model "${request.model}" not found`)
     const openAi = request.openAi ?? {}
     const messages = fromOpenAiMessages(openAi, request.responses === true)
-    const tools = toToolDefs((openAi.tools ?? []).map(normalizeTool).filter(Boolean), request.responses === true ? 'flat' : 'chat')
+    // The caller's defs reach the adapter in the harness's own flat spelling,
+    // and the adapter re-shapes them for the endpoint it picked. Pre-converting
+    // them here fed `{type,function:{…}}` wrappers back into that same
+    // conversion, which reads `tool.name`: every tool was dropped, the request
+    // went upstream with none, and the model answered "no tool is available"
+    // instead of calling the one the caller offered.
+    const tools = (openAi.tools ?? []).map(normalizeTool).filter(Boolean)
     const handler = typeof onChunk === 'function' ? onChunk : () => {}
     const outcome = { text: '', toolCalls: [], usage: undefined, truncated: false, error: undefined }
 
