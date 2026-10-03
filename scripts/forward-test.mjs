@@ -31,7 +31,7 @@ import assert from 'node:assert/strict'
 import { startForwardServer, startLanRelay, resolveLoopbackBind, bindForwardPort, classifyBindError, startHeartbeat, SSE_HEARTBEAT_MS } from '../src/forward.js'
 import { toToolDefs } from '../src/messages.js'
 import { readStream } from '../src/stream.js'
-import { applyFingerprint } from '../src/upstream.js'
+import { applyFingerprint, gatewayHeaders } from '../src/upstream.js'
 
 let failures = 0
 const check = (name, fn) => {
@@ -795,6 +795,43 @@ await checkAsync('a truncated handshake dies by the probe timeout, never reaches
   assert.equal(reply, '')
   assert.ok(listener.logs.some(line => line.includes('handshake')),
     `no timeout logged: ${JSON.stringify(listener.logs)}`)
+})
+
+// ── the device reaches the gateway (#40) ───────────────────────────────────
+await checkAsync('the PROXY-claimed device rides into the completion request', async () => {
+  const lane = makeLane()
+  const listener = await sniffedListener(lane)
+  const body = JSON.stringify({ model: 'mimo-v2.6-flash-free', stream: false, messages: [{ role: 'user', content: 'hi' }] })
+  const payload = `PROXY TCP4 192.168.1.23 192.168.1.50 52000 8080\r\nPOST /v1/chat/completions HTTP/1.1\r\nHost: t\r\nauthorization: Bearer k-test\r\ncontent-type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`
+  const reply = await rawTalk(listener.port, payload, 4000)
+  assert.match(reply, /^HTTP\/1\.1 200/)
+  assert.equal(lane.seen.at(-1)?.deviceIp, '192.168.1.23', '声明的设备必须到达 complete')
+})
+
+await checkAsync('a plain local completion claims no device', async () => {
+  const lane = makeLane()
+  const listener = await sniffedListener(lane)
+  const body = JSON.stringify({ model: 'mimo-v2.6-flash-free', stream: false, messages: [{ role: 'user', content: 'hi' }] })
+  const payload = `POST /v1/chat/completions HTTP/1.1\r\nHost: t\r\nauthorization: Bearer k-test\r\ncontent-type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`
+  const reply = await rawTalk(listener.port, payload, 4000)
+  assert.match(reply, /^HTTP\/1\.1 200/)
+  assert.equal(lane.seen.at(-1)?.deviceIp, undefined, '本地流量不得携带设备地址')
+})
+
+await checkAsync('a PROXY line at the relay door rides the claimed device, not the tunnel socket', async () => {
+  const listener = await sniffedListener(makeLane())
+  const relay = await serveRelay({ targetPort: listener.port })
+  const request = `PROXY TCP4 203.0.113.7 127.0.0.1 50000 8080\r\nGET /v1/models HTTP/1.1\r\nHost: t\r\nauthorization: Bearer lan-test\r\nConnection: close\r\n\r\n`
+  await rawTalk(relay.port, request, 4000)
+  const deviceLines = listener.logs.filter(line => line.startsWith('forward: '))
+  assert.ok(deviceLines.some(line => line.startsWith('forward: 203.0.113.7')), `中继必须把声称的设备 IP 传下去，实际日志：${JSON.stringify(deviceLines)}`)
+})
+
+await checkAsync('gatewayHeaders attaches x-forwarded-for only when deviceIp is given', async () => {
+  const noIp = gatewayHeaders({ session: 's', requestId: 'r', stream: true })
+  assert.ok(!('x-forwarded-for' in noIp), '无 deviceIp 时不得添加 x-forwarded-for')
+  const withIp = gatewayHeaders({ session: 's', requestId: 'r', stream: true, deviceIp: '198.51.100.23' })
+  assert.equal(withIp['x-forwarded-for'], '198.51.100.23', '有 deviceIp 时必须出现 x-forwarded-for')
 })
 
 for (const server of openServers) await server.close()
