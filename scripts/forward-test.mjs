@@ -13,7 +13,10 @@
  * - a turn whose tool arguments were cut by the output ceiling finishes as
  *   `length`, not as an executable `tool_calls`;
  * - a non-JSON body answers 400 (not 500), an unknown model 404 (not 502);
- * - `/v1/responses` honors `instructions`, `max_output_tokens` and `stream`.
+ * - `/v1/responses` honors `instructions`, `max_output_tokens` and `stream`;
+ * - the relay hop opens each loopback connection with a PROXY v1 line, so the
+ *   listener logs the LAN device instead of the relay's own socket, and the
+ *   handshake survives the edges (plain traffic, malformed, truncated).
  *
  * Plus the two wire-level gaps behind the "unstable over the LAN" report:
  * thinking that arrives under a name other than `reasoning` now reaches the
@@ -691,6 +694,107 @@ await checkAsync('a second relay hop is refused instead of spinning', async () =
   const first = await serveRelay({ targetPort: 0, localKey: 'lan-test' })
   const second = await serveRelay({ targetPort: first.port, localKey: 'lan-test' })
   assert.equal((await lanGet(second.base, '/v1/models')).status, 508)
+})
+
+// ── PROXY protocol on the relay hop ───────────────────────────────────────────
+/**
+ * A listener that keeps its log lines, so the PROXY tests can assert on what
+ * the front door actually attributed.
+ */
+async function sniffedListener(lane) {
+  const logs = []
+  const server = await startForwardServer({
+    config: () => ({ host: '127.0.0.1', port: 0, enabled: true, key: 'k-test' }),
+    complete: lane.complete,
+    modelRows: () => [],
+    log: message => logs.push(message),
+  })
+  openServers.push(server)
+  return { port: server.port, logs }
+}
+
+/**
+ * One raw TCP exchange against the front door: send bytes as given, collect
+ * whatever comes back until the far end closes or the deadline does.
+ */
+function rawTalk(port, payload, deadlineMs) {
+  return new Promise(resolve => {
+    const socket = net.connect(port, '127.0.0.1')
+    let received = ''
+    let done = false
+    const settle = () => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      socket.destroy()
+      resolve(received)
+    }
+    const timer = setTimeout(settle, deadlineMs)
+    socket.on('connect', () => socket.write(payload))
+    socket.on('data', chunk => { received += chunk.toString('latin1') })
+    socket.on('close', settle)
+    socket.on('error', settle)
+  })
+}
+
+await checkAsync('a PROXY line names the device the relay stood for', async () => {
+  const listener = await sniffedListener(makeLane())
+  const reply = await rawTalk(listener.port,
+    'PROXY TCP4 192.168.1.23 192.168.1.50 52000 8080\r\nGET /health HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n', 4000)
+  assert.match(reply, /^HTTP\/1\.1 200/)
+  assert.ok(listener.logs.some(line => line.includes('192.168.1.23')),
+    `device IP absent from logs: ${JSON.stringify(listener.logs)}`)
+})
+
+await checkAsync('a plain loopback connection needs no header and logs no device', async () => {
+  const listener = await sniffedListener(makeLane())
+  const reply = await rawTalk(listener.port,
+    'GET /health HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n', 4000)
+  assert.match(reply, /^HTTP\/1\.1 200/)
+  assert.ok(!listener.logs.some(line => line.startsWith('forward: ')),
+    `plain traffic was attributed a device: ${JSON.stringify(listener.logs)}`)
+})
+
+await checkAsync('two connections keep their own addresses — no cross-talk', async () => {
+  const listener = await sniffedListener(makeLane())
+  const [first, second] = await Promise.all([
+    rawTalk(listener.port, 'PROXY TCP4 192.168.1.23 192.168.1.50 52000 8080\r\nGET /health HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n', 4000),
+    rawTalk(listener.port, 'PROXY TCP4 192.168.1.44 192.168.1.50 52001 8080\r\nGET /health HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n', 4000),
+  ])
+  assert.match(first, /^HTTP\/1\.1 200/)
+  assert.match(second, /^HTTP\/1\.1 200/)
+  for (const ip of ['192.168.1.23', '192.168.1.44']) {
+    assert.ok(listener.logs.some(line => line.includes(ip)), `${ip} missing: ${JSON.stringify(listener.logs)}`)
+  }
+})
+
+await checkAsync('each relayed request rides its own loopback line — a pooled socket would borrow the last device\'s address', async () => {
+  const listener = await sniffedListener(makeLane())
+  const relay = await serveRelay({ targetPort: listener.port })
+  const request = 'GET /v1/models HTTP/1.1\r\nHost: t\r\nauthorization: Bearer lan-test\r\nConnection: close\r\n\r\n'
+  await rawTalk(relay.port, request, 4000)
+  await rawTalk(relay.port, request, 4000)
+  const deviceLines = listener.logs.filter(line => line.startsWith('forward: '))
+  assert.equal(deviceLines.length, 2, `expected two attributed requests: ${JSON.stringify(listener.logs)}`)
+  const sources = new Set(deviceLines.map(line => line.split(' ')[1]))
+  assert.equal(sources.size, 2, `the listener saw one source twice — connection reuse?: ${JSON.stringify(deviceLines)}`)
+})
+
+await checkAsync('a malformed PROXY line drops the connection instead of guessing', async () => {
+  const listener = await sniffedListener(makeLane())
+  const reply = await rawTalk(listener.port,
+    'PROXY TCP4 bogus\r\nGET /health HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n', 4000)
+  assert.ok(!reply.startsWith('HTTP/1.1'), `the listener answered a liar: ${JSON.stringify(reply.slice(0, 60))}`)
+  assert.ok(listener.logs.some(line => line.includes('malformed PROXY header')),
+    `no rejection logged: ${JSON.stringify(listener.logs)}`)
+})
+
+await checkAsync('a truncated handshake dies by the probe timeout, never reaches HTTP', async () => {
+  const listener = await sniffedListener(makeLane())
+  const reply = await rawTalk(listener.port, 'PROXY TCP4 192.168.1.7 10.0.0.1 52341', 5000)
+  assert.equal(reply, '')
+  assert.ok(listener.logs.some(line => line.includes('handshake')),
+    `no timeout logged: ${JSON.stringify(listener.logs)}`)
 })
 
 for (const server of openServers) await server.close()
