@@ -106,6 +106,9 @@ export function sniffBody(text) {
  * reported as a retryable timeout. Frames arrive as they are read, so the first
  * token is not held back for the rest of the sniff window either.
  *
+ * Exported for the co-paid lane's poster (`src/eac.js`), which shares the sniff
+ * discipline but not the headers.
+ *
  * @param {ReadableStream} stream
  * @param {number} limit
  * @param {object} options
@@ -113,7 +116,7 @@ export function sniffBody(text) {
  * @param {number} options.timeoutMs - how long to wait for anything at all
  * @returns {Promise<{reader:object, chunks:Uint8Array[], done:boolean, text:string, decoder:TextDecoder}>}
  */
-async function readHead(stream, limit, { signal, timeoutMs }) {
+export async function readHead(stream, limit, { signal, timeoutMs }) {
   const reader = stream.getReader()
   const chunks = []
   // One decoder for the whole body: flushing here would corrupt a multi-byte
@@ -198,9 +201,9 @@ async function headRead(reader, signal, deadline) {
 
 /**
  * Turn a head that was already read, plus the reader that follows it, back into
- * one byte stream.
+ * one byte stream. Shared with the co-paid lane's poster (`src/eac.js`).
  */
-function replayStream(head) {
+export function replayStream(head) {
   const stream = (async function* () {
     try {
       for (const chunk of head.chunks) yield chunk

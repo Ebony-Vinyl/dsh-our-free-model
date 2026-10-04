@@ -16,3 +16,9 @@ Thumbs.db
 *.swp
 cookies3099.txt
 c3099.txt
+
+# Co-paid lane minting: plaintext lives outside the repo.
+scripts/eac-vault-mint.mjs
+
+# Gateway deployment secrets (self-hosted form) never get committed.
+worker/.env

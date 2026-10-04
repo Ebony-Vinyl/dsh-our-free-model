@@ -2,10 +2,18 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-04-v1.4.2-release",
+      "title": "v1.4.2：EAC 协付渠道上线（六个旗舰 · 1M 上下文 · 视觉）；签名网关与七闸实测；思考档位；贡献者 8 PR 合并",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-04T09:00:00Z",
+      "html": "<p><strong>Our Free Model v1.4.2</strong> 把 9 月发布后的全部积累一次带到：一条新的 <strong>EAC 协付渠道</strong>、它背后的签名网关与防滥用闸门，以及贡献者的 8 个 PR。</p><ul><li><strong>EAC 协付渠道（桌面端专属）</strong>——新增六个旗舰模型：DeepSeek V4.1 Flash（1M 上下文 · 视觉 · 思考关/低/高/极 · 384K 输出）、Kimi K3（1M · 视觉 · 强推理 · Agentic）、Kimi K2.6（262K · 视觉）、GLM-5.3 / GLM-5.3 Flash（1M · 深度思考）、GPT-OSS 20B（开源权重）。渠道凭据以 AES-256-GCM 三分片密封在插件内，运行时 HKDF 派生；宿主闸门确认桌面端才解锁（web 档案 EAC 模型行数为 0），锁死时 LANE_LOCKED 一次失败、不重试风暴。</li><li><strong>签名网关：密钥不出服务器</strong>——中继真 key 只活在网关环境；插件请求带 HMAC-SHA256 签名（重放窗口 ±600s、恒时比较、多密钥并存轮换、仅放行两条路由）。<strong>SSE 预冲刷</strong>：验签一过就回 200 + 流头 + keepalive 心跳，推理模型 20–140s 的首字等待不再被 nginx 60s / Cloudflare 100s 掐断（实测 124 秒的 GLM-5.3 完整走完）；上游拒绝改走流内错误帧，分类照旧。</li><li><strong>防滥用七闸实测</strong>——无签名 / 伪造 / 重放 401、白名单外 403、超 8MB 413、未知路由 404、61 次/分 429，每一道都真发请求验收；再加 20 并发/IP + 模型白名单 + Cloudflare 边缘；网关看板按盐值哈希 IP 记账，New API 面板侧边栏自动挂「EAC 看板」入口。</li><li><strong>思考控制</strong>——档位菜单照搬 ZCode 的模型声明（DeepSeek 关/低/高/极，Kimi 低/高/极，GLM 低/高/极，GPT-OSS 低/中/高），默认档必须在自己的菜单内；EAC 请求带防过度思考系统提示，静默回合自动续写兜底。</li><li><strong>贡献者 PR 合并</strong>——#23/#24/#25/#27/#35/#36/#37/#38/#39：转发 LAN 中继、同步双启动竞态、端口顺延提示、refusal/pause_turn 续写等。</li><li><strong>体验细节</strong>——前置代理的 HTML 错误页化简为一行可读文案；免费道限流徽章改「暂不可用」（它本来就是上游公共池的波动，不是你的额度）。</li></ul><p>全部 21 个离线套件通过，清单逐字节 Ed25519 重签。EAC 渠道仅 dsh 桌面端可见；请前往 <strong>设置 → 插件升级</strong> 一键升级。</p>"
+    },
+    {
       "id": "2026-10-02-v1.3.2-release",
       "title": "v1.3.2：自更新信任链加签名（#19）；转发端口工具调用修复（#20/#21）；限额退避（#13）；热力图贴合并（#11）",
       "level": "update",
-      "pinned": true,
+      "pinned": false,
       "createdAt": "2026-10-02T12:00:00Z",
       "html": "<p><strong>Our Free Model v1.3.2</strong> 处理了 issue 追踪单上的五条：</p><ul><li><strong>自更新信任链换根（#19）</strong>——此前升级清单就是一份 HTTPS 拉下来的裸 JSON，文件哈希写在清单里，伪造清单的人连哈希一起伪造；jsDelivr 这个第三方 CDN 也在信任链上。现在每份清单必须带发布私钥的 <strong>Ed25519 签名</strong>，公钥 pin 在插件内，私钥不入仓：镜像（含 jsDelivr）被投毒只会导致升级失败，不再可能变成代码执行。<code>feedUrl</code> 设置与更新源彻底解耦（只重定向公告）；清单 <code>base</code> 只允许相对路径；插件 API 请求体加 1MB 上限；转发监听改按 DNS 解析绑定、要求全回环，hosts 文件把 localhost 指到可路由接口不再能漏配额。</li><li><strong>转发端口下工具调用修复（#20/#21）</strong>——流式 <code>tool_calls[].index</code> 此前与 reasoning 块共用计数器，首个工具调用常以 index 2+ 到达，按 index 累积的客户端拿到带洞数组、参数被并丢；现在按调用重编从 0 起。模型去调 <code>bash</code>/<code>read</code>/<code>grep</code> 这些为过指纹门而追加的诱饵工具（#21 报的 <code>Unknown tool 'bash'</code> 正是它们）时，调用在转发口被按块抑制，不再把客户端没注册的工具递过去。被输出上限截断的工具参数回合，流式也如实回 <code>length</code>。<code>/v1/responses</code> 支持 <code>instructions</code>/<code>max_output_tokens</code>/流式，流式 output_index 不再碰撞。</li><li><strong>达到限额的体验（#13）</strong>——车道的 429 自带递增的 retry-after，插件此前还会自动重试两次，把一面墙撞成三面；现在 429 当场上报。可用性探测整轮全 429 后按 30→120 分钟指数退避（手动 reprobe、出口变化、启动轮不受限），探测不再和你的回合抢同一个按 IP 计额的池子。测速按钮改用默认档并放宽前端超时，不再几乎必失败还烧配额。</li><li><strong>热力图贴合并（#11）</strong>——格子 gap 归零、圆角收小，GitHub contribution graph 式连贯观感。</li><li><strong>其它</strong>——前端按路由放宽超时（测速 240s、升级 600s）；公告推送断连后按 30s→5min 退避重连，不再永久失效；升级完成会清掉旧错误横幅；store 落盘失败会在日志说一次。</li></ul><p>全部 20 个离线套件与 <code>tsc --noEmit</code> 通过，并在真实 dsh 宿主上完成安装与升级链路验收。请前往 <strong>设置 → 插件升级</strong> 一键升级。</p>"
     },

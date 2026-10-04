@@ -1,0 +1,29 @@
+name = "ofm-eac-gateway"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Comma-separated model allowlist for /v1/chat/completions. Empty string accepts everything.
+MODELS = "deepseek-ai/deepseek-v4.1-flash,moonshotai/kimi-k2.6,moonshotai/kimi-k3,openai/gpt-oss-20b,z-ai/glm-5.3,z-ai/glm-5.3-flash"
+# Replay window for the signed timestamp, in seconds.
+CLOCK_SKEW_SECONDS = "600"
+# Request body cap.
+MAX_BODY_BYTES = "8388608"
+# Optional sub-path mount so the lane can share a domain the relay already
+# uses, e.g. MOUNT_PREFIX = "/eac" puts the lane at /eac/v1/... (the client's
+# sealed base would then be https://<domain>/eac/v1). Empty = serve at root.
+MOUNT_PREFIX = ""
+
+# Secrets are set per-environment, never in this file:
+#   npx wrangler secret put UPSTREAM_URL        # https://<relay>/v1
+#   npx wrangler secret put UPSTREAM_API_KEY    # the relay credential
+#   npx wrangler secret put SIGNING_SECRETS     # comma-separated; the value of signingSecret in the lane's private file
+#
+# Optional per-IP rate limiting (Workers rate-limit binding). Uncomment for
+# `wrangler deploy`, or add a binding named RATE_LIMITER in the dashboard
+# (Settings → Bindings → Rate Limit). The Worker skips limiting when absent.
+# [[unsafe.bindings]]
+# name = "RATE_LIMITER"
+# type = "ratelimit"
+# namespace_id = "1001"
+# simple = { limit = 30, period = 60 }

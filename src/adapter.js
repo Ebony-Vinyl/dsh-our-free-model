@@ -20,10 +20,12 @@
 import { applyFingerprint, baseModelId, endpointFor, mintRequestId, sessionForConversation, wireFor } from './upstream.js'
 import { toChatMessages, toClaudeMessages, toResponseInput, toToolDefs, repairToolPairing } from './messages.js'
 import { CODE, UpstreamError, postStreamed } from './http.js'
+import { postSealedStreamed } from './eac.js'
 import { finishReason, readStream, windowTokens } from './stream.js'
-import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, effortsFor, resolveLevel } from './effort.js'
+import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
+import { isEacEntry } from './catalog.js'
 
 export const ROUTE_MAIN = 'our-free-model'
 export const ROUTE_REGION = 'our-free-model-region'
@@ -114,7 +116,7 @@ export class FreeModelAdapter {
       inputModalities: entry.vision ? ['text', 'image'] : ['text'],
       context: { contextWindow: entry.contextWindow },
       defaultMaxTokens: ceiling,
-      ...efforts === undefined ? {} : { reasoning: { efforts, defaultEffort: DEFAULT_LEVEL } },
+      ...efforts === undefined ? {} : { reasoning: { efforts, defaultEffort: defaultEffortFor(entry) } },
     }
   }
 
@@ -188,7 +190,8 @@ export class FreeModelAdapter {
       return
     }
 
-    const wire = wireFor(entry.id)
+    const sealed = isEacEntry(entry)
+    const wire = sealed ? 'chat' : wireFor(entry.id)
     const style = STYLE_FOR_WIRE[wire]
     const warnings = []
     const resolveImage = this.deps.resolveImage
@@ -226,6 +229,14 @@ export class FreeModelAdapter {
       if (typeof options.temperature === 'number' && Number.isFinite(options.temperature)) payload.temperature = options.temperature
       if (wire !== 'responses' && Array.isArray(options.stop) && options.stop.length > 0) payload.stop = options.stop
       if (recovering) payload.tool_choice = wire === 'messages' ? { type: 'none' } : 'none'
+      // The co-paid lane's thinking is the model's own effort field, applied as
+      // a JSON merge patch on the request body (ZCode's declaration shape); the
+      // free lane keeps its token-budget behaviour untouched.
+      if (sealed) {
+        const patch = effortPatchFor(options.reasoningEffort, entry)
+        if (patch !== null) Object.assign(payload, patch)
+        applySealedPacingHint(payload)
+      }
       return payload
     }
 
@@ -239,7 +250,9 @@ export class FreeModelAdapter {
       const attemptStarted = Date.now()
       const recovering = attempt === 1
       const payload = payloadFor(attemptMessages, attemptBudget, recovering, recovering ? [] : warnings)
-      const renameMap = applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
+      // The co-paid relay has no tool-name gate; its models see the caller's
+      // tools exactly as declared, so the fingerprint pass is free-lane only.
+      const renameMap = sealed ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
       const controller = new AbortController()
       const onAbort = () => controller.abort(options.signal?.reason)
       options.signal?.addEventListener('abort', onAbort, { once: true })
@@ -252,14 +265,17 @@ export class FreeModelAdapter {
       }, timeoutMs) : undefined
       timer?.unref?.()
       const channel = createChannel()
-      const request = postStreamed({
-        path: endpointFor(entry.id), body: payload, session,
-        requestId: attempt === 0 ? recoveryId : mintRequestId(),
-        attributionUserAgent: snapshot.attributionUserAgent,
-        deviceIp: options.deviceIp,
-        signal: controller.signal,
-        onData: value => channel.push(value),
-      }).then(() => channel.push(undefined))
+      const request = (sealed
+        ? postSealedTurn(this.deps, payload, controller.signal, value => channel.push(value))
+        : postStreamed({
+          path: endpointFor(entry.id), body: payload, session,
+          requestId: attempt === 0 ? recoveryId : mintRequestId(),
+          attributionUserAgent: snapshot.attributionUserAgent,
+          deviceIp: options.deviceIp,
+          signal: controller.signal,
+          onData: value => channel.push(value),
+        }))
+        .then(() => channel.push(undefined))
         .catch(error => channel.push(error instanceof Error ? error : new Error(String(error))))
       let firstDeltaAt
       let delivered = false
@@ -414,6 +430,43 @@ export class FreeModelAdapter {
       }
     }
   }
+}
+
+/** The co-paid reasoning models can burn minutes in the thinking channel on
+ * turns that need seconds (observed: an entire small token budget spent on
+ * reasoning for a one-line answer, first visible byte minutes late). The
+ * effort menu owns the hard depth; this one-line prompt asks for pacing so a
+ * turn does not sit silent while the model over-explores. Applied on every
+ * sealed build, so the continuation and recovery payloads carry it too. */
+const SEALED_PACING_HINT =
+  'Avoid overthinking: keep your reasoning brief and proportionate to the task.'
+
+function applySealedPacingHint(payload) {
+  if (Array.isArray(payload.messages)) {
+    const system = payload.messages.find(message => message?.role === 'system' && typeof message.content === 'string')
+    if (system !== undefined) {
+      system.content = system.content === '' ? SEALED_PACING_HINT : `${system.content}\n\n${SEALED_PACING_HINT}`
+      return
+    }
+    payload.messages.unshift({ role: 'system', content: SEALED_PACING_HINT })
+    return
+  }
+  if (typeof payload.system === 'string') {
+    payload.system = payload.system === '' ? SEALED_PACING_HINT : `${payload.system}\n\n${SEALED_PACING_HINT}`
+  }
+}
+
+/**
+ * One co-paid-lane turn: unlock the sealed credential for this request frame
+ * and hand it straight to the lane's poster. A host the gate refuses — or a
+ * seal that does not open — is a non-retryable configuration state, not a
+ * transport fault: `LANE_LOCKED` is deliberately outside the retryable set so
+ * a locked host fails its turn once, with a plain message and no retry storm.
+ */
+async function postSealedTurn(deps, payload, signal, onData) {
+  const credential = await Promise.resolve(deps.sealedCredential?.())
+  if (credential === null || credential === undefined) throw new UpstreamError('this model lane is not available on this host', 'LANE_LOCKED')
+  return postSealedStreamed({ credential, body: payload, signal, onData })
 }
 
 function buildPayload(wire, modelId, messages, options, budget, resolveImage, warnings) {

@@ -39,6 +39,7 @@ const suites = [
   ['picker', 'picker-test.mjs', []],
   ['tui', 'tui-test.mjs', []],
   ['catalog', 'catalog-test.mjs', []],
+  ['vault', 'vault-test.mjs', []],
   ['offline', 'offline-test.mjs', []],
 ].filter(([name]) => only === null || name.startsWith(only))
 

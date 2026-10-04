@@ -47,7 +47,7 @@ window.__ModuleLoader__.load({
         'state.available': '可用',
         'state.region-blocked': '地区受限',
         'state.unavailable': '暂不可用',
-        'state.throttled': '已达限额',
+        'state.throttled': '暂不可用',
         'state.unknown': '未探测',
         'hint.region': '该模型按出口地区放行。开启网络代理后，插件会在下一次探测自动把它移入可用分组。',
         'hint.unknown': '尚未探测，默认保持可达。',
@@ -63,6 +63,7 @@ window.__ModuleLoader__.load({
         'tag.context': '上下文',
         'tag.output': '最长输出',
         'tag.latency': '首字',
+        'tag.eacChannel': 'EAC 渠道 · 仅桌面端',
         'section.models': '模型清单',
         'section.modelsHint': '名称与能力来自上游清单与公开能力表，可用性由本机出口实测得出。',
         'section.dash': '用量看板',
@@ -235,7 +236,7 @@ window.__ModuleLoader__.load({
         'state.available': 'Available',
         'state.region-blocked': 'Region-limited',
         'state.unavailable': 'Unavailable',
-        'state.throttled': 'Quota reached',
+        'state.throttled': 'Temporarily unavailable',
         'state.unknown': 'Not probed',
         'hint.region': 'This model is gated by egress country. Once a proxy changes your egress, the next probe moves it into the available group by itself.',
         'hint.unknown': 'Not probed yet, so it stays reachable.',
@@ -251,6 +252,7 @@ window.__ModuleLoader__.load({
         'tag.context': 'Context',
         'tag.output': 'Max output',
         'tag.latency': 'First token',
+        'tag.eacChannel': 'EAC lane · desktop hosts only',
         'section.models': 'Model roster',
         'section.modelsHint': 'Names and capacities come from the upstream roster and published capability tables; availability is measured from this machine.',
         'section.dash': 'Usage dashboard',
@@ -443,6 +445,7 @@ window.__ModuleLoader__.load({
 .ofm_id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ofm_tags{display:flex;gap:5px;flex-wrap:wrap}
 .ofm_tag{font-size:10.5px;padding:2px 7px;border-radius:6px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}
+.ofm_chantag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;border:1px solid var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary);white-space:nowrap}
 .ofm_metrics{display:flex;gap:12px;font-size:11px;color:var(--dsw-alias-label-tertiary);flex-wrap:wrap}
 .ofm_metrics b{color:var(--dsw-alias-label-secondary);font-weight:600;font-variant-numeric:tabular-nums}
 .ofm_note{font-size:11px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
@@ -1061,6 +1064,7 @@ window.__ModuleLoader__.load({
       const rung = (m.budgets ?? []).find(row => row.isDefault === true)
       return h('article', { className: 'ofm_card' + (dim ? ' dim' : '') },
         h('div', { className: 'ofm_cardhead' },
+          m.channel === 'eac' ? h('span', { className: 'ofm_chantag', title: t('tag.eacChannel') }, 'EAC') : null,
           h('span', { className: 'ofm_cardname', title: m.name }, m.name),
           h('span', { className: 'ofm_badge ' + m.availability }, t(stateKey))),
         h('div', { className: 'ofm_id', title: m.id }, m.id),

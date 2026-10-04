@@ -29,10 +29,12 @@ import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { FreeModelAdapter, ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, DATA_DIR_NAME, MIN_DECODE_MS, decodeWindow, migrateStats, pruneDays, recordTurn, recordUsage, resolveDshHome } from './src/store.js'
-import { buildCatalog, parseListing } from './src/catalog.js'
+import { buildCatalog, buildEacCatalog, isEacEntry, parseListing } from './src/catalog.js'
 import { STATE, detectEgress, probeCatalog } from './src/probe.js'
 import { generateKey, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
 import { CODE, UpstreamError, getJson } from './src/http.js'
+import { fetchSealedListing } from './src/eac.js'
+import { unlockSealedLane } from './src/vault.js'
 import { mintRequestId, sessionForConversation } from './src/upstream.js'
 import { DEFAULT_LEVEL, budgetLadder } from './src/effort.js'
 import { windowTokens } from './src/stream.js'
@@ -157,6 +159,24 @@ export function apply(ctx, config) {
   let relay = null
   let relayError = ''
 
+  // ── the co-paid lane ────────────────────────────────────────────────────────
+  /**
+   * The sealed lane is invisible until the host gate passes and the seal opens,
+   * both re-checked per use. Its roster persists under `sealIds` in the catalog
+   * store so a desktop restart offline still shows what it served last, but a
+   * host the gate refuses never reads that list: `sealedCatalog` starts and
+   * stays empty, and nothing about the lane — no entry, no request, no error —
+   * is observable from an unapproved host.
+   */
+  const profileNameOf = () => {
+    const context = typeof ctx.get === 'function' ? ctx.get('profileContext') : undefined
+    return typeof context?.name === 'string' ? context.name : undefined
+  }
+  const sealedCredentialOf = () => unlockSealedLane({ profileName: profileNameOf() })
+  let sealedCatalog = sealedCredentialOf() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
+  const mergeCatalogs = () => { catalog = [...catalog, ...sealedCatalog.filter(row => !catalog.some(entry => entry.id === row.id))] }
+  mergeCatalogs()
+
   // ── push channel ────────────────────────────────────────────────────────────
   const push = createPushHub({ logger })
 
@@ -229,6 +249,7 @@ export function apply(ctx, config) {
   const adapter = new FreeModelAdapter({
     state,
     resolveImage: imageResolver(ctx, logger),
+    sealedCredential: sealedCredentialOf,
     recordUsage: record => {
       recordUsage(stats, record)
       stats.edit(state => pruneDays(state, 120))
@@ -283,9 +304,44 @@ export function apply(ctx, config) {
     } else {
       catalog = materializeCatalog(catalogStore.get().entries ?? [])
     }
+    await refreshSealedRoster()
+    mergeCatalogs()
     if (probe) await refreshAvailability(force)
     emitTopology()
     return catalog
+  }
+
+  /**
+   * One roster round for the sealed lane, after the free lane's.
+   *
+   * A transient listing failure keeps the roster it served last; a credential
+   * refusal means the lane is closed to this install, so the roster and its
+   * persisted ids are dropped — a picker full of models the relay now refuses
+   * is worse than an empty group with the failure in the log. Every log line
+   * carries the failure class only, never the endpoint or the credential.
+   */
+  async function refreshSealedRoster() {
+    const credential = sealedCredentialOf()
+    if (credential === null) {
+      sealedCatalog = []
+      catalogStore.update({ sealIds: [] })
+      return
+    }
+    try {
+      const ids = parseListing(await fetchSealedListing(credential))
+      if (ids.length > 0) {
+        sealedCatalog = buildEacCatalog(ids)
+        catalogStore.update({ sealIds: sealedCatalog.map(entry => entry.id) })
+      }
+    } catch (error) {
+      if (error?.code === CODE.credential) {
+        sealedCatalog = []
+        catalogStore.update({ sealIds: [] })
+        logger.warn?.('our-free-model: the sealed lane refused its credential; its models are hidden until it is accepted again')
+        return
+      }
+      logger.warn?.(`our-free-model: sealed lane listing failed (${error?.code ?? 'unknown'}); keeping its cached roster`)
+    }
   }
 
   async function fetchListing() {
@@ -300,7 +356,11 @@ export function apply(ctx, config) {
   }
 
   async function runProbeRound() {
-    const results = await probeCatalog(catalog, { attributionUserAgent }, (id, result) => {
+    // The sealed lane gets no per-model probes: its verdicts would be spent
+    // against a different relay, and a roster the listing named is advertised
+    // as-is (its health is the listing round's, refreshed on the same cadence).
+    const probeable = catalog.filter(entry => !isEacEntry(entry))
+    const results = await probeCatalog(probeable, { attributionUserAgent }, (id, result) => {
       availability.edit(state => ({ ...state, results: { ...state.results, [id]: { state: result.state, ...result.detail === undefined ? {} : { detail: result.detail }, ...result.ttftMs === undefined ? {} : { ttftMs: result.ttftMs }, latencyMs: result.latencyMs, at: Date.now() } } }))
     }, 2)
     availability.update({ at: Date.now(), egress })
@@ -1448,11 +1508,13 @@ function buildSummary(deps) {
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
-      availability: snapshot.results?.[entry.id]?.state ?? STATE.unknown,
-      detail: snapshot.results?.[entry.id]?.detail ?? '',
-      probedAt: snapshot.results?.[entry.id]?.at ?? 0,
-      ttftMs: snapshot.results?.[entry.id]?.ttftMs,
-      latencyMs: snapshot.results?.[entry.id]?.latencyMs,
+      // The sealed lane is not probed: its presence in the roster is the
+      // verdict — the listing round named it after the host gate opened.
+      availability: isEacEntry(entry) ? STATE.available : (snapshot.results?.[entry.id]?.state ?? STATE.unknown),
+      detail: isEacEntry(entry) ? '' : (snapshot.results?.[entry.id]?.detail ?? ''),
+      probedAt: isEacEntry(entry) ? 0 : (snapshot.results?.[entry.id]?.at ?? 0),
+      ttftMs: isEacEntry(entry) ? undefined : snapshot.results?.[entry.id]?.ttftMs,
+      latencyMs: isEacEntry(entry) ? undefined : snapshot.results?.[entry.id]?.latencyMs,
       // What each rung of the effort menu will really put on the wire for this
       // model, so the page never shows a 32K "output ceiling" beside a call that
       // was cut off at 8K. A model with no effort menu has no ladder to show.

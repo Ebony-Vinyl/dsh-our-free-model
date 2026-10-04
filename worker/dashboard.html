@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EAC 网关 · IP 看板</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; font: 13.5px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0f1420; color: #dbe2f0; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #7d8aa3; font-size: 12px; margin-bottom: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .card { background: #171e2e; border: 1px solid #26324a; border-radius: 10px; padding: 10px 14px; }
+  .card b { display: block; font-size: 20px; margin-top: 2px; }
+  .card span { color: #7d8aa3; font-size: 11.5px; }
+  .panel { background: #171e2e; border: 1px solid #26324a; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .panel h2 { font-size: 13.5px; margin: 0 0 10px; color: #a9b7d0; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #1f2940; white-space: nowrap; }
+  th { color: #7d8aa3; font-weight: 600; font-size: 11.5px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: #1b2438; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11.5px; margin-top: 8px; color: #a9b7d0; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+  .err { color: #ff8484; }
+  .muted { color: #7d8aa3; }
+  button { background: #2b3b5e; color: #dbe2f0; border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12px; }
+  button:hover { background: #354a75; }
+  svg text { fill: #7d8aa3; font-size: 9.5px; }
+  #gate { position: fixed; inset: 0; background: rgba(8, 12, 20, 0.88); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  #gate .box { background: #171e2e; border: 1px solid #26324a; border-radius: 12px; padding: 26px 30px; width: 340px; }
+  #gate h2 { font-size: 15px; margin: 0 0 6px; }
+  #gate p { color: #7d8aa3; font-size: 12px; margin: 0 0 14px; }
+  #gate input { width: 100%; background: #0f1420; border: 1px solid #26324a; color: #dbe2f0; border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
+  #gate .gerr { color: #ff8484; font-size: 12px; margin-bottom: 10px; min-height: 16px; }
+</style>
+</head>
+<body>
+<h1>EAC 网关 · IP 看板</h1>
+<div class="sub">数据由网关进程实时统计并每 30 秒落盘 · <span id="gen"></span> · <button onclick="load()">刷新</button> <span id="err" class="err"></span></div>
+
+<div class="cards" id="cards"></div>
+
+<div class="panel"><h2>请求热力图 · 星期 × 小时（近 7 天，颜色越亮请求越多）</h2><div id="heat"></div></div>
+<div class="panel"><h2>请求曲线 · 近 72 小时（每小时请求数）</h2><div id="curve"></div></div>
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+  <div id="gate" style="display:none">
+  <div class="box">
+    <h2>EAC 网关管理令牌</h2>
+    <p>输入 .env 里的 ADMIN_TOKEN，本浏览器会记住（存于 localStorage，不动服务器）。</p>
+    <input id="gateToken" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
+    <div class="gerr" id="gateErr"></div>
+    <button onclick="useGateToken()">进入看板</button>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+  <div class="panel"><h2>Token 消耗占比 · 按 IP</h2><div id="pieIp"></div><div class="legend" id="pieIpL"></div></div>
+  <div class="panel"><h2>Token 消耗占比 · 按模型</h2><div id="pieModel"></div><div class="legend" id="pieModelL"></div></div>
+</div>
+<div class="panel"><h2>IP 明细（按总请求排序 · IP 以盐值哈希存储，仅本面板可关联）</h2>
+  <div style="overflow-x:auto"><table id="tbl">
+    <thead><tr>
+      <th>IP 哈希</th><th class="num">总请求</th><th class="num">今日</th><th class="num">近 1 小时</th>
+      <th class="num">Token 入</th><th class="num">Token 出</th><th class="num">拒绝</th>
+      <th class="num">当前并发</th><th class="num">并发峰值</th><th>模型数</th><th>最后活跃</th>
+    </tr></thead><tbody></tbody>
+  </table></div>
+</div>
+
+<script>
+const QS = new URLSearchParams(location.search)
+let T = QS.get('t') ?? localStorage.getItem('eacStatsToken') ?? ''
+const PALETTE = ['#4f8cff','#38d1b2','#ffb648','#ff6f91','#a78bfa','#7ee081','#ff9f6e','#5ad0f0','#f072ae','#c2d94c']
+const esc = s => String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))
+const ago = ts => { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return Math.floor(s) + ' 秒前'; if (s < 3600) return Math.floor(s/60) + ' 分钟前'; if (s < 86400) return Math.floor(s/3600) + ' 小时前'; return Math.floor(s/86400) + ' 天前' }
+const fmt = n => Number(n ?? 0).toLocaleString('en-US')
+
+function showGate(message) {
+  document.getElementById('gate').style.display = 'flex'
+  if (message) document.getElementById('gateErr').textContent = message
+}
+function useGateToken() {
+  T = document.getElementById('gateToken').value.trim()
+  if (T === '') { document.getElementById('gateErr').textContent = '请输入令牌'; return }
+  load()
+}
+
+async function load() {
+  try {
+    const res = await fetch('stats-data?t=' + encodeURIComponent(T), { cache: 'no-store' })
+    if (res.status === 401 || res.status === 403) {
+      document.getElementById('gen').textContent = ''
+      showGate(res.status === 403 ? '看板未启用：服务器 .env 需要配置 ADMIN_TOKEN' : '')
+      if (res.status === 401) document.getElementById('gateErr').textContent = '令牌无效，请重新输入'
+      return
+    }
+    document.getElementById('gate').style.display = 'none'
+    if (T !== '') { try { localStorage.setItem('eacStatsToken', T) } catch { /* 隐私模式忽略 */ } }
+    const d = await res.json()
+    document.getElementById('err').textContent = ''
+    document.getElementById('gen').textContent = '生成于 ' + new Date(d.generatedAt).toLocaleTimeString('zh-CN')
+    renderCards(d); renderHeat(d.hourly); renderCurve(d.hourly)
+    renderPie('pieIp', 'pieIpL', d.ips.slice(0, 10).map(r => ({ label: r.hash.slice(0, 8), value: r.in + r.out })))
+    renderPie('pieModel', 'pieModelL', Object.entries(d.models ?? {}).map(([label, value]) => ({ label, value })).sort((a,b) => b.value - a.value))
+    renderTable(d)
+  } catch (e) { document.getElementById('err').textContent = '加载失败：' + e.message }
+}
+
+function renderCards(d) {
+  const t = d.totals
+  const today = (d.days ?? []).find(([day]) => day === d.day)
+  document.getElementById('cards').innerHTML = [
+    ['活跃 IP 数', t.ips], ['累计请求', fmt(t.req)], ['今日请求', fmt(today?.[1]?.req ?? 0)],
+    ['Token 入', fmt(t.in)], ['Token 出', fmt(t.out)],
+  ].map(([k, v]) => '<div class="card"><span>' + k + '</span><b>' + fmt(v) + '</b></div>').join('')
+}
+
+function renderHeat(hourly) {
+  const byKey = Object.fromEntries(hourly.map(([h, n]) => [h, n]))
+  const now = new Date(); const cells = []
+  for (let d = 6; d >= 0; d--) {
+    const base = new Date(now - d * 86400000)
+    for (let h = 0; h < 24; h++) {
+      const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), h)
+      cells.push({ key: dt.toISOString().slice(0, 13), dow: (dt.getDay() + 6) % 7, hour: h, n: byKey[dt.toISOString().slice(0, 13)] ?? 0 })
+    }
+  }
+  const max = Math.max(1, ...cells.map(c => c.n))
+  const cw = 22, ch = 15, left = 34, top = 14
+  let svg = '<svg width="' + (left + 24 * cw + 10) + '" height="' + (top + 7 * ch + 18) + '">'
+  for (let h = 0; h < 24; h += 3) svg += '<text x="' + (left + h * cw + 8) + '" y="' + 10 + '">' + String(h).padStart(2, '0') + '</text>'
+  const wd = ['一','二','三','四','五','六','日']
+  for (const c of cells) {
+    const a = c.n === 0 ? 0.05 : 0.12 + 0.88 * Math.sqrt(c.n / max)
+    svg += '<rect x="' + (left + c.hour * cw) + '" y="' + (top + c.dow * ch) + '" width="' + (cw - 3) + '" height="' + (ch - 3) + '" rx="3" fill="#4f8cff" fill-opacity="' + a.toFixed(2) + '"><title>周' + wd[c.dow] + ' ' + String(c.hour).padStart(2,'0') + ':00 — ' + c.n + ' 请求</title></rect>'
+  }
+  for (let d = 0; d < 7; d++) svg += '<text x="6" y="' + (top + d * ch + 11) + '">周' + wd[d] + '</text>'
+  document.getElementById('heat').innerHTML = svg + '</svg>'
+}
+
+function renderCurve(hourly) {
+  const rows = hourly.slice(-72)
+  if (rows.length < 2) { document.getElementById('curve').innerHTML = '<span class="muted">数据不足（需要至少两个小时的请求）。</span>'; return }
+  const W = 900, H = 200, padL = 46, padB = 30, padT = 12
+  const max = Math.max(1, ...rows.map(([, n]) => n))
+  const px = i => padL + i / (rows.length - 1) * (W - padL - 20)
+  const py = n => H - padB - n / max * (H - padB - padT)
+  let path = '', area = 'M' + px(0) + ',' + (H - padB)
+  rows.forEach(([, n], i) => { path += (i === 0 ? 'M' : 'L') + px(i).toFixed(1) + ',' + py(n).toFixed(1) + ' '; area += 'L' + px(i).toFixed(1) + ',' + py(n).toFixed(1) + ' ' })
+  area += 'L' + px(rows.length - 1) + ',' + (H - padB) + ' Z'
+  let grid = '', labels = ''
+  for (let g = 0; g <= 3; g++) { const v = Math.round(max / 3 * g); const y = py(v); grid += '<line x1="' + padL + '" x2="' + (W - 20) + '" y1="' + y + '" y2="' + y + '" stroke="#1f2940"/>'; labels += '<text x="4" y="' + (y + 3) + '">' + v + '</text>' }
+  rows.forEach(([h], i) => { if (i % 12 === 0) labels += '<text x="' + (px(i) - 14) + '" y="' + (H - 10) + '">' + h.slice(5, 13).replace('T', ' ') + '</text>' })
+  document.getElementById('curve').innerHTML = '<svg width="' + W + '" height="' + H + '">' + grid +
+    '<path d="' + area + '" fill="#4f8cff" fill-opacity="0.12"/><path d="' + path + '" fill="none" stroke="#4f8cff" stroke-width="1.8"/>' +
+    rows.map(([h, n], i) => '<circle cx="' + px(i) + '" cy="' + py(n) + '" r="2.4" fill="#4f8cff"><title>' + h + ' — ' + n + ' 请求</title></circle>').join('') + labels + '</svg>'
+}
+
+function renderPie(divId, legendId, rows) {
+  rows = rows.filter(r => r.value > 0)
+  const el = document.getElementById(divId)
+  if (rows.length === 0) { el.innerHTML = '<span class="muted">暂无数据。</span>'; document.getElementById(legendId).innerHTML = ''; return }
+  const total = rows.reduce((s, r) => s + r.value, 0)
+  const W = 220, R = 85, cx = W / 2, cy = 100
+  let a0 = -Math.PI / 2, svg = ''
+  rows.forEach((r, i) => {
+    const a1 = a0 + r.value / total * Math.PI * 2
+    const large = a1 - a0 > Math.PI ? 1 : 0
+    const x0 = cx + R * Math.cos(a0), y0 = cy + R * Math.sin(a0)
+    const x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1)
+    if (rows.length === 1) svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="' + PALETTE[0] + '"/>'
+    else svg += '<path d="M' + cx + ',' + cy + ' L' + x0.toFixed(1) + ',' + y0.toFixed(1) + ' A' + R + ',' + R + ' 0 ' + large + ' 1 ' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' Z" fill="' + PALETTE[i % PALETTE.length] + '"><title>' + esc(r.label) + ' — ' + fmt(r.value) + ' (' + (r.value / total * 100).toFixed(1) + '%)</title></path>'
+    a0 = a1
+  })
+  el.innerHTML = '<svg width="' + W + '" height="' + (cy + R + 8) + '">' + svg + '</svg>'
+  document.getElementById(legendId).innerHTML = rows.map((r, i) =>
+    '<span><i style="background:' + PALETTE[i % PALETTE.length] + '"></i>' + esc(r.label) + ' · ' + fmt(r.value) + ' (' + (r.value / total * 100).toFixed(1) + '%)</span>').join('')
+}
+
+function renderTable(d) {
+  const body = (d.ips ?? []).map(r => '<tr>' + [
+    '<code>' + esc(r.hash) + '</code>', fmt(r.req), fmt(r.today), fmt(r.freq1h), fmt(r.in), fmt(r.out), fmt(r.rej),
+    fmt(r.conc), fmt(r.concMax), Object.keys(r.models ?? {}).length, esc(ago(r.last)),
+  ].map((cell, i) => '<td' + (i >= 1 && i <= 8 ? ' class="num"' : '') + '>' + cell + '</td>').join('') + '</tr>').join('')
+  document.querySelector('#tbl tbody').innerHTML = body || '<tr><td colspan="11" class="muted">暂无请求。</td></tr>'
+}
+
+load()
+setInterval(load, 30000)
+</script>
+</body>
+</html>
