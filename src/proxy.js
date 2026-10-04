@@ -223,6 +223,12 @@ async function applyConfig(config) {
     scheme: parsed.scheme, host: parsed.host, port: parsed.port,
     username: parsed.username, password,
   }
+  // Optional TLS certificate pinning for the https:// proxy dialect. When set,
+  // the proxy's certificate SHA-256 fingerprint must match exactly — a swapped
+  // certificate is refused even though `rejectUnauthorized` stays lenient.
+  if (typeof config?.tlsFingerprint === 'string' && config.tlsFingerprint.trim() !== '') {
+    proxy.tlsFingerprint = config.tlsFingerprint.trim()
+  }
   active = { enabled: true, ...proxy, url: record.url, bypass, bypassText, secret, secretUnreadable }
   agents = { secure: createAgent(proxy, true), plain: createAgent(proxy, false) }
   return { ok: true, record }
@@ -269,11 +275,31 @@ export function disposeEgress() {
   active = null
 }
 
+/**
+ * Drop every pooled tunnel. Called on reconfigure and on plugin disposal.
+ *
+ * Existing requests that already hold a socket reference are not interrupted —
+ * the agent stops issuing new connections but lets in-flight streams finish.
+ * The sockets close naturally when those requests end.
+ */
 function teardown() {
   if (agents === null) return
-  agents.secure.destroy()
-  agents.plain.destroy()
+  // `destroy()` would kill in-flight SSE streams mid-token. Instead, drop idle
+  // pooled sockets and let in-flight requests finish on the sockets they
+  // already hold — the module reference goes away so no new request can pick
+  // the old configuration up.
+  const retiring = agents
   agents = null
+  retiring.secure.destroyFreeSockets?.()
+  retiring.plain.destroyFreeSockets?.()
+  // When the last in-flight request on either pool completes, destroy the pool
+  // itself so no socket lingers open past a reconfigure.
+  for (const pool of [retiring.secure, retiring.plain]) {
+    const sockets = pool.sockets ?? {}
+    const busy = Object.values(sockets).some(list => (list?.length ?? 0) > 0)
+    if (!busy) pool.destroy()
+    else pool.once('free', () => pool.destroy())
+  }
 }
 
 /**
@@ -446,7 +472,19 @@ function openConnect(proxy, target) {
         // on a personal VPS is the common case and must not make the feature
         // unusable. The session to the model gateway below keeps full
         // verification, so a wrong certificate there still fails the request.
-        rejectUnauthorized: false,
+        // When the user supplies `tlsFingerprint` (SHA-256 hex), pinning
+        // replaces the blanket trust: the certificate must match exactly.
+        rejectUnauthorized: proxy.tlsFingerprint === undefined ? false : true,
+        checkServerIdentity: proxy.tlsFingerprint === undefined
+          ? () => undefined
+          : (_servername, cert) => {
+            const expected = String(proxy.tlsFingerprint).toUpperCase().replace(/[^0-9A-F]/g, '')
+            const seen = String(cert?.fingerprint256 ?? '').toUpperCase().replace(/[^0-9A-F]/g, '')
+            if (seen === '' || seen !== expected) {
+              return new Error(`代理 TLS 证书指纹不匹配（期望 ${expected}，实际 ${seen}）`)
+            }
+            return undefined
+          },
         servername: net.isIP(proxy.host) === 0 ? proxy.host : undefined,
       })
       : net.connect({ host: proxy.host, port: proxy.port })

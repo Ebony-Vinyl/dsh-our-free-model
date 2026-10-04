@@ -18,11 +18,16 @@
  * harness-neutral codes the free lane uses, with the endpoint and every secret
  * absent from every message.
  *
+ * Like the free lane, every request leaves through `egressFetch` — `fetch`
+ * unless the user configured an exit proxy, in which case the EAC lane is
+ * proxied too.
+ *
  * @module src/eac.js
  */
 
 import crypto from 'node:crypto'
 import { CODE, UpstreamError, classifyFailure, classifyStreamFailure, readHead, readSse, replayStream, sniffBody } from './http.js'
+import { egressFetch } from './proxy.js'
 
 const LISTING_TIMEOUT_MS = 15000
 const TURN_TIMEOUT_MS = 300000
@@ -80,7 +85,7 @@ export async function fetchSealedListing(credential, { signal, timeoutMs = LISTI
   signal?.addEventListener('abort', onCallerAbort, { once: true })
   const listingUrl = `${credential.base}/models`
   try {
-    const response = await fetch(listingUrl, { headers: headersFor(credential, 'GET', listingUrl, ''), redirect: 'error', signal: controller.signal })
+    const response = await egressFetch(listingUrl, { headers: headersFor(credential, 'GET', listingUrl, ''), redirect: 'error', signal: controller.signal })
     const text = await response.text()
     let payload
     try { payload = JSON.parse(text) } catch { payload = { error: { message: errorPageMessage(text, response.status) } } }
@@ -110,7 +115,7 @@ export async function postSealedStreamed({ credential, body, signal, onData, tim
   const turnUrl = `${credential.base}/chat/completions`
   let response
   try {
-    response = await fetch(turnUrl, {
+    response = await egressFetch(turnUrl, {
       method: 'POST',
       headers: headersFor(credential, 'POST', turnUrl, bodyText),
       body: bodyText,

@@ -26,7 +26,7 @@ TLS_PORT=8443
 PROXY_USER=ofm
 PROXY_PASS=
 LISTEN=0.0.0.0
-ALLOW_CIDR=0.0.0.0/0
+ALLOW_CIDR=127.0.0.0/8
 TLS=0
 DRY=0
 UNINSTALL=0
@@ -88,8 +88,9 @@ usage() {
   --user NAME                代理用户名（默认 ofm）
   --pass PASS                代理密码（默认自动生成 16 位随机十六进制）
   --listen ADDR              监听地址（默认 0.0.0.0，即公网可达）
-  --allow-cidr CIDR          允许连接代理的来源网段（默认 0.0.0.0/0）
-                              建议在云厂商安全组里再加一层限制
+  --allow-cidr CIDR          允许连接代理的来源网段（默认收紧为本机回环 + 内网段，
+                              公网使用请显式指定你的出口 IP 网段，如 --allow-cidr 1.2.3.4/32）
+                              0.0.0.0/0 表示开放公网代理，存在安全风险
   --tls                      额外用 stunnel 把 HTTP 端口包一层 TLS，
                               插件里就可以填 https:// 开头的地址
   --uninstall                停止并删除本脚本部署的服务与配置
@@ -409,6 +410,8 @@ Allow $ALLOW_CIDR
 # 用户名/密码认证。tinyproxy 的 BasicAuth 只接受 a-z0-9._ 组成的用户名和密码
 BasicAuth $PROXY_USER $PROXY_PASS
 EOF
+  # 配置文件含明文密码，收紧权限
+  run chmod 600 "$CONF_TP"
 
   if [ "$DRY" = 1 ]; then
     printf '%s+ install -d -o nobody -g %s /var/log/tinyproxy%s\n' "$C_HEAD" "$group" "$C_OFF"
@@ -490,6 +493,8 @@ allow $PROXY_USER
 deny *
 socks -p$SOCKS_PORT
 EOF
+  # 配置文件含明文密码，收紧权限
+  run chmod 600 "$CONF_3P"
 
   head2 "3/4 写入 systemd 单元 $UNIT_3P"
   write_file "$UNIT_3P" <<EOF
@@ -582,6 +587,14 @@ fi
 
 detect_pkg_mgr
 prepare_credentials
+
+# ------------------------------------------------------------------ 安全检查 --
+if [ "$ALLOW_CIDR" = "0.0.0.0/0" ] || [ "$ALLOW_CIDR" = "::/0" ]; then
+  warn "ALLOW_CIDR=$ALLOW_CIDR 表示开放公网代理，任何来源都能连接。"
+  warn "仅靠密码保护的公网代理容易被扫描利用，建议收紧来源网段。"
+  warn "公网使用示例：--allow-cidr $(detect_public_ip 2>/dev/null || echo '你的IP')/32"
+  say ''
+fi
 
 case "$ENGINE" in
   tinyproxy) deploy_tinyproxy ;;
