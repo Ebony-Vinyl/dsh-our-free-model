@@ -362,8 +362,10 @@ export function verifyStaged(stageDir, manifest) {
  * `worker`/`vendor` ship for self-hosters — a sweep that treats them as "files
  * the new release dropped" would delete the pack's readiness records out from
  * under the harness's bundle validation on the first in-app upgrade.
+ * `tsconfig.json` is the same shape of top-level name: no release ships it,
+ * and `npm run typecheck` (package.json:21) reads it out of the clone.
  */
-const REPOSITORY_SCAFFOLDING = ['feed', 'scripts', 'docs', 'promo', 'node_modules', 'catalog', 'worker', 'vendor']
+const REPOSITORY_SCAFFOLDING = ['feed', 'scripts', 'docs', 'promo', 'node_modules', 'catalog', 'worker', 'vendor', 'tsconfig.json']
 
 /**
  * Walk a directory into relative file paths, skipping release scratch files and
