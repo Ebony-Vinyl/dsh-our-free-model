@@ -137,6 +137,10 @@ window.__ModuleLoader__.load({
         'egress.measuring': '测量中…',
         'egress.direct': '关闭时请求直连发出；订阅地址按密钥对待——只存在本机设置里，不随常规接口数据下发，仅点「显示」时读取，面板默认打码。',
         'egress.error': '出口启动失败：{message}',
+        'egress.bypass': '直连兜底 {seconds}s',
+        'egress.bypassNote': '出口连续几次没把请求带出去（{message}）。这段时间请求从本机直连发出，插件会自己重试出口，通了就自动切回去。',
+        'egress.probing': '正在重试出口',
+        'egress.probingNote': '正在试着回到出口（上次失效原因：{message}）。成功就继续走出口，失败就再退回直连一段时间，窗口逐次加倍。',
         'section.prefs': '插件设置',
         'section.prefsHint': '改动在下一次加载完全生效。',
         'heat.title': 'Token 热力图',
@@ -510,6 +514,10 @@ window.__ModuleLoader__.load({
         'egress.measuring': 'measuring…',
         'egress.direct': 'While off, requests go direct; the address is treated as a credential — kept in this machine\'s settings only, never sent down with the regular API payloads, readable only through the reveal button, masked here by default.',
         'egress.error': 'The outlet failed to start: {message}',
+        'egress.bypass': 'Direct fallback · {seconds}s',
+        'egress.bypassNote': 'The outlet stopped carrying requests ({message}). Until it is retried they go out from this machine direct; the plugin tests the outlet itself and moves back on its own.',
+        'egress.probing': 'Retrying the outlet',
+        'egress.probingNote': 'Trying the outlet again (last failure: {message}). It keeps carrying traffic if this works, and drops back to direct for a longer window if it does not.',
         'section.prefs': 'Plugin settings',
         'section.prefsHint': 'Changes take full effect on the next load.',
         'pool.levelOk': 'Healthy',
@@ -2326,6 +2334,22 @@ window.__ModuleLoader__.load({
       const node = typeof status?.node === 'string' ? status.node : ''
       const nodeDelayMs = Number(status?.nodeDelayMs ?? 0)
       const latencyMs = Number(status?.latencyMs ?? 0)
+      // What requests are actually doing, which is not the same question as
+      // whether the outlet is up: an outlet that stopped carrying traffic is
+      // benched onto the direct path, and the panel has to say that rather than
+      // keep showing "active" while nothing goes through it.
+      const lane = status?.lane ?? {}
+      const laneState = typeof lane.state === 'string' ? lane.state : ''
+      const laneReason = typeof lane.reason === 'string' ? lane.reason : ''
+      const laneSeconds = Math.max(0, Math.round((Number(lane.until ?? 0) - Date.now()) / 1000))
+      const laneTone = laneState === 'direct' || laneState === 'probing'
+        ? 'warn'
+        : draft?.active === true ? 'ok' : draft?.error ? 'err' : ''
+      const laneLabel = laneState === 'direct'
+        ? t('egress.bypass').replace('{seconds}', String(laneSeconds))
+        : laneState === 'probing' ? t('egress.probing') : draft?.active === true ? t('egress.active') : t('egress.inactive')
+      const laneNote = laneState === 'direct' ? t('egress.bypassNote')
+        : laneState === 'probing' ? t('egress.probingNote') : ''
       const subscription = draft?.mode !== 'client'
       const statusLine = text => h('code', { className: 'ofm_mono', style: { padding: '4px 8px', flex: 1, minWidth: 200 } }, text)
       // The stored address is never in the payload this panel was rendered
@@ -2357,7 +2381,7 @@ window.__ModuleLoader__.load({
       return h(Panel, null,
         h('div', { className: 'ofm_row' },
           h(Switch, { checked: draft?.enabled === true, label: t('egress.enabled'), onChange: () => setDraft(c => ({ ...c, enabled: !(c?.enabled === true) })) }),
-          h('span', { className: 'ofm_pill' }, h('span', { className: `ofm_dot ${draft?.active === true ? 'ok' : draft?.error ? 'err' : ''}` }), draft?.active === true ? t('egress.active') : t('egress.inactive'))),
+          h('span', { className: 'ofm_pill' }, h('span', { className: `ofm_dot ${laneTone}` }), laneLabel)),
         h('div', { className: 'ofm_row' },
           h(Switch, { checked: subscription, label: t('egress.modeSubscription'), onChange: () => setDraft(c => ({ ...c, mode: subscription ? 'client' : 'subscription' })) })),
         h('div', { className: 'ofm_row' },
@@ -2381,6 +2405,7 @@ window.__ModuleLoader__.load({
           field(t('egress.mihomoPath'), h('input', { className: 'ofm_input', style: { flex: 1, minWidth: 260 }, value: draft?.mihomoPath ?? '', placeholder: 'auto', onChange: e => setDraft(c => ({ ...c, mihomoPath: e.target.value })) })),
           h('span', { className: 'ofm_note' }, t('egress.mihomoHint'))) : null,
         draft?.error ? h('div', { className: 'ofm_callout ofm_error' }, t('egress.error').replace('{message}', draft.error)) : null,
+        laneNote !== '' ? h('div', { className: 'ofm_callout' }, laneNote.replace('{message}', laneReason)) : null,
         h('div', { className: 'ofm_note' }, t('egress.direct')),
         running ? h('div', { className: 'ofm_row' },
           h('span', { className: 'ofm_note' }, t('egress.outlet')),

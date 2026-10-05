@@ -31,6 +31,18 @@
  * The plugin's job is the seam: config in, local port out, `egressFetch`
  * unchanged between modes.
  *
+ * What happens when the outlet itself misbehaves is the other half of the job,
+ * and it is a ladder, cheapest rung first. A request that goes through the relay
+ * and never reaches response headers is a *strike*: the host hears about every
+ * one of them so it can step off the node that just failed, and a fault-marked
+ * failure is replayed once over the direct path — a tunnel that never opened
+ * cost the gateway nothing, so the replay spends no quota and the turn gets an
+ * answer instead of a 502. Three strikes in a row bench the outlet: requests
+ * leave direct from then on, and the first answer that comes back through the
+ * relay ends the bench. Nothing here covers a response body that dies
+ * mid-stream — the adapter already calls that a `STREAM_CUT`, and the retry it
+ * leads to is what lands the next strike.
+ *
  * Security notes that the settings route relies on:
  *
  *   - The relay binds `127.0.0.1` on an ephemeral port and is deliberately not
@@ -78,6 +90,23 @@ const CLIENT_SCHEMES = new Set(['http:', 'https:', 'socks5:', 'socks5h:'])
  *  the stream it is handed, and forwarding a foreign `chunked` marker would
  *  double-frame it. */
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'proxy-connection'])
+/** Marks the relay's own answer to a request the outlet never carried. Only the
+ *  relay writes it, and it never survives a real upstream hop: an upstream 502
+ *  comes back verbatim, with no marker, because the outlet did carry it. */
+const FAULT_HEADER = 'x-ofm-egress-fault'
+/** Requests that die before their headers, in a row, before the outlet is
+ *  benched. The first strike already asks the host for another node; this is the
+ *  point at which betting on the outlet at all stops being worth the wait. */
+const LANE_STRIKES = 3
+/** The first bench, and the cap its doubling settles under. A benched outlet is
+ *  re-tried on the next request after the window, so the cap is also the worst
+ *  case delay before a repaired exit is used again. */
+const LANE_BYPASS_MS = 60_000
+const LANE_BYPASS_MAX_MS = 10 * 60_000
+/** The marked failures that mean the gateway never saw the request, so re-sending
+ *  it from this machine cannot serve anything twice. `sent` is marked apart from
+ *  these for exactly that reason. */
+const PRE_SEND_FAULTS = new Set(['tunnel', 'no-outlet'])
 
 /**
  * The live relay, owned by whichever generation started it. Module-level on
@@ -99,6 +128,21 @@ export function egressActive() {
  * the target and this start's key in headers, and the path replaced by the
  * origin-form the loopback relay serves. Call sites keep `redirect: 'error'` in
  * `init`, so a 3xx is a response, never a second hop that would dodge the outlet.
+ *
+ * Two failures land here and they are not the same thing:
+ *
+ *   - `fetch` rejects: the relay itself is unreachable. Counted as a strike
+ *     (the local listener is the outlet's own front door) and rethrown.
+ *   - The relay answers its own fault-marked 502: the outlet did not carry the
+ *     request. Counted, and then replayed once over the direct path — but only
+ *     for the faults that mean the gateway never saw the request, so that a turn
+ *     which would otherwise die on a dead exit gets an answer from this
+ *     machine's own address without anything being served twice.
+ *
+ * …and a third that deliberately gets none of that: an outlet that answered the
+ * CONNECT with an authority verdict (401/403/407) is misconfigured, not unlucky,
+ * and failing over from it would be the plugin deciding on its own to send the
+ * owner's traffic out of the address they built the outlet to avoid.
  */
 export async function egressFetch(url, init) {
   const relay = activeRelay
@@ -107,10 +151,148 @@ export async function egressFetch(url, init) {
   if (target.protocol !== 'http:' && target.protocol !== 'https:') {
     throw new Error(`the egress relay only carries http(s) targets, got "${target.protocol}"`)
   }
+  // Benched: the outlet has not been carrying traffic, so it is not asked again
+  // until its window closes. Without this every turn would pay a dial timeout
+  // first, which is the "不切换直连" the caller can actually feel.
+  if (laneBenched(relay)) {
+    relay.faults.direct += 1
+    return fetch(url, init)
+  }
   const headers = new Headers(init?.headers ?? {})
   headers.set(TARGET_HEADER, target.href)
   headers.set(KEY_HEADER, relay.key)
-  return fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...init, headers })
+  let response
+  try {
+    response = await fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...init, headers })
+  } catch (error) {
+    laneFault(relay, error, init)
+    throw error
+  }
+  const fault = response.headers.get(FAULT_HEADER)
+  if (fault === null) {
+    laneHealthy(relay)
+    return response
+  }
+  // The outlet refused us on its own terms — a credential it demands and this
+  // plugin does not hold. No strike, no other node, no direct replay: the config
+  // is wrong, and quietly routing the owner's traffic out of the address they
+  // configured it to avoid would be a worse answer than the 502. The failure
+  // reaches the caller, which is where a misconfiguration belongs.
+  if (fault === 'refused') return response
+  laneFault(relay, new Error(`the outlet did not carry the request (${fault})`), init)
+  // Everything is counted as a strike — a node that eats the request and then
+  // dies is exactly the exit this ladder exists for — but only a failure that
+  // landed before the request was handed to the tunnel is re-sent: once it had
+  // been written out, the gateway may have served it, and the free lane charging
+  // for one turn twice is worse than the 502 the caller is handed instead.
+  if (!PRE_SEND_FAULTS.has(fault) || !replayable(init?.body)) return response
+  // The answer being thrown away is this relay's own local stub, with a tunnel
+  // socket already destroyed behind it. Nothing is owed to it, and leaving the
+  // body unread would keep its connection counted until the process wanted it
+  // back.
+  void response.body?.cancel?.().catch(() => {})
+  relay.faults.direct += 1
+  relay.log(`egress lane: the outlet did not carry this request (${fault}); replaying it direct`)
+  return fetch(url, init)
+}
+
+/**
+ * Whether a second attempt can re-send this body verbatim. A stream was already
+ * consumed by the first attempt, and half of it would be worse than the failure
+ * it is meant to paper over; every string, buffer and absent body replays.
+ */
+function replayable(body) {
+  return body === undefined || body === null
+    || typeof body === 'string' || Buffer.isBuffer(body) || body instanceof Uint8Array
+}
+
+/** True while the outlet is sitting out and requests leave direct instead. */
+function laneBenched(relay) {
+  return relay.faults.benchUntil > Date.now()
+}
+
+/**
+ * A response through the relay — any status, an upstream 5xx included — proves
+ * the outlet carried the request, which clears the whole ladder: the strikes,
+ * the bench and the doubling. Only a real state change is worth a log line. An
+ * upstream 502 has no fault marker, so it lands here rather than in the ladder:
+ * the outlet did its job and the gateway refused.
+ */
+function laneHealthy(relay) {
+  const faults = relay.faults
+  const recovering = faults.open === true
+  if (!recovering && faults.strikes === 0) return
+  faults.strikes = 0
+  faults.open = false
+  faults.benched = 0
+  faults.benchUntil = 0
+  faults.direct = 0
+  faults.reason = ''
+  faults.at = Date.now()
+  if (!recovering) return
+  relay.log('egress lane: the outlet answers again; back on the relay')
+  relay.onLane?.({ ...egressLaneOf(relay), transition: 'relay' })
+}
+
+/**
+ * One request that never got an answer through the outlet.
+ *
+ * The host hears about every strike — one bad node is worth stepping off long
+ * before the outlet as a whole is written off — and the bench opens once they
+ * pile up. A bench already open is reopened by the very next failure: the
+ * request that was let back in *is* the probe, and a probe that fails is an
+ * answer. The window doubles on each reopen, so an outlet that stays dead is
+ * re-tried at a settling rate instead of on every turn, and a repaired one is
+ * picked up within the cap.
+ */
+function laneFault(relay, error, init) {
+  // A caller that walked away learned nothing about the outlet. The harness
+  // aborts turns routinely, and not one of those aborts says the exit is down.
+  if (init?.signal?.aborted === true || error?.name === 'AbortError') return
+  const faults = relay.faults
+  faults.strikes += 1
+  faults.reason = String(error?.message ?? error)
+  faults.at = Date.now()
+  try {
+    relay.onFault?.(error)
+  } catch { /* a diagnostics callback cannot reroute a request */ }
+  if (faults.open === false && faults.strikes < relay.policy.strikes) return
+  faults.open = true
+  faults.benched += 1
+  faults.strikes = 0
+  const window = Math.min(relay.policy.bypassMs * 2 ** (faults.benched - 1), relay.policy.bypassMaxMs)
+  faults.benchUntil = Date.now() + window
+  relay.log(`egress lane: ${faults.reason}; going direct for ${Math.round(window / 1000)}s`)
+  relay.onLane?.({ ...egressLaneOf(relay), transition: 'bench' })
+}
+
+/**
+ * Which path requests are on right now.
+ *
+ * `relay` while the outlet carries them, `strained` after a strike or two,
+ * `direct` while it is benched, `probing` on the request that is allowed back in
+ * to test it, and `off` when nothing is running. The bench is the same reading
+ * the settings page shows, so the panel never claims the outlet is carrying
+ * traffic while it is not.
+ */
+export function egressLane() {
+  return egressLaneOf(activeRelay)
+}
+
+function egressLaneOf(relay) {
+  if (relay === null) {
+    return { state: 'off', strikes: 0, benched: 0, benchUntil: 0, direct: 0, reason: '', at: 0 }
+  }
+  const faults = relay.faults
+  return {
+    state: laneBenched(relay) ? 'direct' : faults.open ? 'probing' : faults.strikes > 0 ? 'strained' : 'relay',
+    strikes: faults.strikes,
+    benched: faults.benched,
+    benchUntil: faults.benchUntil,
+    direct: faults.direct,
+    reason: faults.reason,
+    at: faults.at,
+  }
 }
 
 /**
@@ -121,7 +303,7 @@ export async function egressFetch(url, init) {
  * idempotence — close the old one first — and this function only builds the
  * new one or fails.
  */
-export async function startEgressRelay({ config, dataDir, log = () => {}, onDead }) {
+export async function startEgressRelay({ config, dataDir, log = () => {}, onDead, onFault, onLane, policy }) {
   const cfg = { mode: 'subscription', url: '', mihomoPath: '', ...config() }
   const mode = cfg.mode === 'client' ? 'client' : 'subscription'
   const url = String(cfg.url ?? '').trim()
@@ -214,6 +396,20 @@ export async function startEgressRelay({ config, dataDir, log = () => {}, onDead
     log,
     /** Set when the managed child dies after startup; the settings page shows it. */
     dead: '',
+    /**
+     * The outlet's own health, as seen from the requests it actually carried:
+     * consecutive failures that never reached response headers, how many times
+     * that has benched it, until when requests are going direct, and how many
+     * took that path. Cleared wholesale by the first answer that comes back
+     * through the relay (see `laneHealthy`).
+     */
+    faults: { strikes: 0, open: false, benched: 0, benchUntil: 0, direct: 0, reason: '', at: 0 },
+    /** The ladder's thresholds. The host may tune them; the defaults are the policy. */
+    policy: { strikes: LANE_STRIKES, bypassMs: LANE_BYPASS_MS, bypassMaxMs: LANE_BYPASS_MAX_MS, ...policy },
+    /** Told about every strike, so the host can step off the failing node. */
+    onFault,
+    /** Told when the lane changes path, so the exit reading follows it. */
+    onLane,
     close: async () => {
       if (activeRelay === handle) activeRelay = null
       for (const socket of sockets) socket.destroy()
@@ -275,9 +471,12 @@ function relayRequest(req, res) {
   // (Gemini's ?key=… being the canonical case), and this line runs per request.
   activeRelay?.log?.(`relay: ${req.method} → ${upstream.protocol}//${upstream.host} (outlet ${outlet === null ? 'none' : 'ok'})`)
   if (outlet === null) {
-    sendLocal(res, 502, 'the egress relay is not running')
+    sendLocal(res, 502, 'the egress relay is not running', { [FAULT_HEADER]: 'no-outlet' })
     return
   }
+  // Whether the request has been handed to the tunnel. Until it has, a failure
+  // cost the gateway nothing; after it, the request may have been served.
+  let sent = false
   void (async () => {
     const socket = await openTunnel(upstream, outlet)
     const agent = new http.Agent({ keepAlive: false })
@@ -305,7 +504,7 @@ function relayRequest(req, res) {
     })
     outgoing.on('error', error => {
       activeRelay?.log?.(`egress relay: tunnel to ${upstream.host} failed: ${error?.message ?? error}`)
-      failOnce(res, error)
+      failOnce(res, error, sent ? 'sent' : 'tunnel')
     })
     // A client abort (the harness aborts a dead turn) must tear the upstream
     // side down too, or the socket idles until the outlet times it out. On a
@@ -321,10 +520,11 @@ function relayRequest(req, res) {
       }
     })
     req.on('error', () => { outgoing.destroy() })
+    sent = true
     req.pipe(outgoing)
   })().catch(error => {
     activeRelay?.log?.(`egress relay: ${upstream.host} failed: ${error?.message ?? error}`)
-    failOnce(res, error)
+    failOnce(res, error, sent ? 'sent' : 'tunnel')
   })
 }
 
@@ -334,17 +534,33 @@ function activeRelayOutlet() {
 }
 
 /** The relay is loopback-only: a non-2xx here is a local misconfiguration, answered as JSON like every other local refusal. */
-function sendLocal(res, status, message) {
+function sendLocal(res, status, message, extra) {
   if (res.headersSent) { activeRelay?.log?.(`relay: sendLocal(${status}) after headers, destroying`); res.destroy(); return }
   const body = JSON.stringify({ error: message })
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(body) })
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+    ...extra,
+  })
   res.end(body)
 }
 
 /** Last-word failure: 502 before headers, a dead socket after. */
-function failOnce(res, error) {
+function failOnce(res, error, fault) {
   if (res.headersSent) { res.destroy(); return }
-  sendLocal(res, 502, `egress tunnel failed: ${error?.message ?? error}`)
+  // Marked as the outlet's own failure: `egressFetch` reads the marker, not the
+  // status, to tell apart a request the outlet could not carry (a strike, and
+  // worth a direct replay when nothing was written out yet) from an upstream 502
+  // relayed verbatim (the outlet did its job). Without it a dead exit would look
+  // like a healthy one answering 502.
+  //
+  // Three kinds are marked apart: an outlet that refused us on its own terms is
+  // not a node to fail over from; a tunnel that never opened cost the gateway
+  // nothing and can be retried from here; one that died after the request had
+  // been handed to it may have been served, so it is counted but never re-sent.
+  const marked = error?.refusal === undefined ? fault : 'refused'
+  const detail = marked === 'sent' ? 'after the request was sent' : 'before the request went out'
+  sendLocal(res, 502, `egress tunnel failed ${detail}: ${error?.message ?? error}`, { [FAULT_HEADER]: marked })
 }
 
 /**
@@ -408,7 +624,20 @@ async function httpConnect(proxy, targetHost, targetPort) {
       const head = buffer.subarray(0, end).toString('latin1')
       const match = /^HTTP\/1\.[01] (\d{3})/.exec(head)
       if (match === null) throw new Error(`the proxy answered "${head.split('\r\n')[0] ?? ''}" to CONNECT`)
-      if (Number(match[1]) < 200 || Number(match[1]) >= 300) throw new Error(`the proxy refused CONNECT with ${match[1]}`)
+      if (Number(match[1]) < 200 || Number(match[1]) >= 300) {
+        // A status here is a verdict about this plugin, not a bad moment: an
+        // outlet that wants credentials it was not given refuses every request
+        // it will ever see, and stepping around it to the direct path would send
+        // the owner's traffic out of the very address they routed away from.
+        // Tagged so the lane hands it back as a failure instead of failing over
+        // (see `egressFetch`); anything that is not an authority verdict — a
+        // closed socket, a timeout, a 5xx from the outlet's own dialer — is the
+        // transient kind the ladder exists for.
+        const status = Number(match[1])
+        const refusal = new Error(`the proxy refused CONNECT with ${status}`)
+        if (status === 401 || status === 403 || status === 407) refusal.refusal = status
+        throw refusal
+      }
       return end + 4
     })
     if (rest.length > 0) socket.unshift(rest)
@@ -634,6 +863,14 @@ function sameSecret(given, expected) {
  * and url-test excludes it. That is the 429-penalty half of the health score,
  * delegated to the component that already measures every node anyway.
  *
+ * The group re-measures on a one-minute clock rather than the five it used to:
+ * that clock is the *only* re-ranking that happens without this plugin noticing
+ * anything, and five minutes of a node that went from 200 ms to 4 s is five
+ * minutes of a slow exit. `tolerance: 50` still holds the ranking still unless a
+ * candidate is meaningfully better, so the shorter clock does not turn into
+ * churn. The provider's own health-check stays on the slower clock: it decides
+ * liveness, not rank.
+ *
  * `auth` (when the caller supplies one) password-protects the mixed port, the
  * same way the relay key protects the loopback port in front of it: a listener
  * every local process can borrow is a listener that will be borrowed.
@@ -675,7 +912,7 @@ export function renderMihomoConfig({ subscription, mixedPort, apiPort, secret, a
     '    use:',
     '      - egress',
     '    url: "http://www.gstatic.com/generate_204"',
-    '    interval: 300',
+    '    interval: 60',
     '    tolerance: 50',
     'rules:',
     '  - MATCH,ofm-outlet',
