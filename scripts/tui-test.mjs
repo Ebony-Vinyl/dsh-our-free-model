@@ -130,6 +130,12 @@ check('the forward listener came up without a web server', forward.status, 401)
 const key = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'settings.json'), 'utf8')).forwardKey
 const rows = await (await fetch(`http://127.0.0.1:${forwardPort}/v1/models`, { headers: { authorization: `Bearer ${key}` } })).json()
 check('and lists the usable models with the real key', rows.data.map(row => row.id).sort(), ['mimo-v2.6-flash-free', 'space-bunny-free'])
+// The forwarding caller's effort knob: the ladder is this plugin's own ids, so
+// nothing but the roster can tell an API client what to ask for.
+check('the roster tells an API caller which thinking strengths a model takes',
+  rows.data.find(row => row.id === 'mimo-v2.6-flash-free')?.x_ofm_efforts, ['light', 'balanced', 'deep'])
+check('and which one applies when the caller names none',
+  rows.data.find(row => row.id === 'mimo-v2.6-flash-free')?.x_ofm_effort_default, 'balanced')
 const answered = await (await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/completions`, {
   method: 'POST',
   headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },

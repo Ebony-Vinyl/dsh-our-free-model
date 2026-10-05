@@ -188,6 +188,31 @@ POST /v1/chat/completions     streaming and non-streaming
 POST /v1/responses
 ```
 
+**Thinking strength.** A forwarded call picks the same real budget the in-app menu
+does, from the request body — the panel is not required:
+
+- `reasoning_effort` takes this plugin's own level ids (`light` / `balanced` / `deep`);
+- the OpenAI spellings work too: `minimal` and `low` → light, `medium` → balanced,
+  `high`, `xhigh` and `max` → deep, case- and space-insensitive;
+- the nested `reasoning: { effort: "high" }` a newer OpenAI-shaped client sends is
+  equivalent;
+- the `mimo-v2.6-flash-free (deep)` model suffix is the spelling the picker's label
+  uses, and an explicit field wins over it;
+- with none of them, the model's declared default applies. Every `GET /v1/models` row
+  carries `x_ofm_efforts` (the level ids that model takes) and
+  `x_ofm_effort_default` (the one that applies when the caller names none), so a
+  client can offer the choice instead of guessing;
+- there is no "thinking off" rung on this lane: `none` / `off` land on the smallest
+  level, `light`. A level is the only control this lane enforces — the output ceiling
+  thinking and the answer share (the numbers are on each model card). A spelling the
+  ladder does not know falls back to the default rather than quietly widening.
+
+```bash
+curl http://127.0.0.1:18899/v1/chat/completions \
+  -H "Authorization: Bearer <Key>" -H 'content-type: application/json' \
+  -d '{"model":"mimo-v2.6-flash-free","reasoning_effort":"deep","messages":[{"role":"user","content":"hi"}]}'
+```
+
 If another program holds the port, the listener does not die: it retries the same
 port for a few rounds (a listener that just closed, or a portproxy rule that was
 just removed, frees its port within a few hundred milliseconds), then walks to the

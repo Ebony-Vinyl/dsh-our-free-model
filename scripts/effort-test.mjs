@@ -75,6 +75,22 @@ check('no rung on a menu model means the default rung', resolveLevel(undefined, 
 check('a rung on a model with no menu is not applied', resolveLevel('light', UNION), undefined)
 check('a stale rung name still resolves to the default', resolveLevel('maximum', MIMO)?.id, 'balanced')
 
+// ── the spellings a forward caller may use ───────────────────────────────────
+// The local forward port serves OpenAI-shaped clients, and `reasoning_effort` is
+// the field they fill in — with the OpenAI adjectives, not with this ladder's
+// ids. Matching only the ids made every one of those resolve to the default, so
+// the thinking-strength knob read as absent from that side of the plugin.
+check('the low end of the OpenAI ladder lands on light',
+  ['minimal', 'low', 'light'].map(name => resolveLevel(name, MIMO)?.id), ['light', 'light', 'light'])
+check('the middle of it lands on this ladder’s default', resolveLevel('medium', MIMO)?.id, 'balanced')
+check('and the top of it lands on the whole window',
+  ['high', 'xhigh', 'max', 'deep'].map(name => resolveLevel(name, MIMO)?.id), ['deep', 'deep', 'deep', 'deep'])
+check('the spelling is case- and space-insensitive', resolveLevel('  HIGH ', MIMO)?.id, 'deep')
+check('a caller asking for no thinking gets the smallest rung, not an unbounded one',
+  ['none', 'off', 'disabled'].map(name => budgetFor(name, MIMO, undefined, DEFAULTS)), [4096, 4096, 4096])
+check('a word neither ladder knows still falls back to the default',
+  resolveLevel('turbo', MIMO)?.id, 'balanced')
+
 // ── what goes on the wire, through the real adapter ─────────────────────────
 const entry = MIMO
 const records = []
@@ -94,12 +110,19 @@ async function sentBudget(options) {
 check('balanced sends the doubled rung ceiling', (await sentBudget({ reasoningEffort: 'balanced' })).max_tokens, 16384)
 check('light sends its doubled rung', (await sentBudget({ reasoningEffort: 'light' })).max_tokens, 4096)
 check('deep sends the whole window', (await sentBudget({ reasoningEffort: 'deep' })).max_tokens, 32768)
+check('the OpenAI spellings reach the same rungs on the wire',
+  [(await sentBudget({ reasoningEffort: 'high' })).max_tokens,
+    (await sentBudget({ reasoningEffort: 'medium' })).max_tokens,
+    (await sentBudget({ reasoningEffort: 'minimal' })).max_tokens],
+  [32768, 16384, 4096])
 check('a caller that names no rung gets the default one, not an unbounded call',
   (await sentBudget({})).max_tokens, 16384)
 check('the recorded effort is the rung that ran', records.at(-1).effort, 'balanced')
 
 await sentBudget({ reasoningEffort: 'light' })
 check('a named rung is recorded as itself', records.at(-1).effort, 'light')
+await sentBudget({ reasoningEffort: 'high' })
+check('an OpenAI spelling is recorded as the rung it became', records.at(-1).effort, 'deep')
 await sentBudget({ reasoningEffort: 'turbo' })
 check('a rung the plugin does not declare is recorded as the default it became', records.at(-1).effort, 'balanced')
 
