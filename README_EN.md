@@ -275,11 +275,21 @@ still answers 204 for gstatic, so its latency — and its rank — do not move, 
 url-test hands the same exit back. The plugin is the component that catches the
 refusal, so it forces the outlet to re-measure every node and steps onto one that
 has not refused. At most one rotation a minute, and a node that refused stays out
-of the ranking for ten minutes. A single-proxy (`client`) outlet has no second
-exit to step onto, and the log says so rather than staging a rotation that cannot
-happen. The exit IP, its country and the region-gated verdicts all move with the
-new node, and the plugin re-reads them exactly as it does when the outlet is
-toggled.
+of the ranking for ten minutes. What is refused is an **address**, not a node, and
+one subscription's nodes share addresses: on a live outlet all five nodes
+presenting 5.34.220.113-117 were answered `Rate limit exceeded` together, while
+23.185.208.66, 155.254.104.158, 188.253.124.12 and 188.253.116.228 carried the
+same request — several of them slower than every refused node. So what the plugin
+remembers is the block that address belongs to (a /24 for IPv4, a /48 for IPv6),
+and a rotation skips that block whole. After every switch it measures the address
+it landed on: a landing back inside the refused block is stepped off again, up to
+three hops, and a node nobody has measured yet is believed once instead of being
+skipped. When every candidate lands in the refused block, the log says so instead
+of reporting a move that changed no address. A single-proxy (`client`) outlet has
+no second exit to step onto, and the log says so rather than staging a rotation
+that cannot happen. The exit IP, its country and the region-gated verdicts all
+move with the new node, and the plugin re-reads them exactly as it does when the
+outlet is toggled.
 
 **When the exit slows down or goes away.** The outlet's own health check answers
 "can this node be dialed", never "did this request get out, and how long did it

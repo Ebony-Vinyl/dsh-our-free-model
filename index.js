@@ -36,7 +36,7 @@ import { STATE, detectEgress, probeCatalog } from './src/probe.js'
 import { generateKey, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError, getJson } from './src/http.js'
-import { egressLane, outletLabel, readOutletSelection, refreshOutletExit, startEgressRelay } from './src/egress.js'
+import { addressBlock, egressLane, outletLabel, readOutletSelection, stepOffBlamedAddress, startEgressRelay } from './src/egress.js'
 import { directFetch, fetchSealedListing } from './src/eac.js'
 import { fetchKiloListing } from './src/kilo.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
@@ -469,7 +469,9 @@ export function apply(ctx, config) {
     recordTurn: record => recordTurn(stats, record),
     warn: message => logger.warn?.(message) ?? logger.log?.(message),
     onRegionBlocked: () => scheduleReprobe(),
-    onQuotaHit: () => scheduleOutletRotation(),
+    // A quota refusal is the one trigger that is an address verdict, so it is the
+    // one that may blame an address block and not just the node on it.
+    onQuotaHit: () => scheduleOutletRotation('the lane rate-limited this exit', { refusal: true }),
   })
 
   // ── registration ────────────────────────────────────────────────────────────
@@ -1194,38 +1196,75 @@ export function apply(ctx, config) {
   }
 
   /**
-   * A quota refusal — "Rate limit exceeded" — is a per-IP verdict, and mihomo's
-   * url-test cannot act on it: the health-check target still answers 204 through
-   * the node the lane just refused, so that node keeps its rank and keeps
-   * winning. The plugin is the only component that sees the refusal, so a
-   * refusal asks the outlet to re-measure every node now and steps onto one that
-   * has not refused.
+   * A quota refusal — "Rate limit exceeded" — is a verdict on the address the
+   * lane saw, not on the node that carried the request, and mihomo's url-test
+   * cannot act on it: the health-check target still answers 204 through the node
+   * the lane just refused, so that node keeps its rank and keeps winning. The
+   * plugin is the only component that sees the refusal, so a refusal asks the
+   * outlet to re-measure every node now and steps onto one that is off the
+   * refused address.
+   *
+   * The unit of avoidance is that address's block, because the nodes of one
+   * subscription share them. Measured on a live outlet: all five nodes
+   * presenting 5.34.220.113-117 were refused together, while 23.185.208.66,
+   * 155.254.104.158, 188.253.124.12 and 188.253.116.228 carried the same request
+   * — several of them slower than every refused node. Remembering only names
+   * therefore walked that block one node per cooldown and left the lane refused
+   * the whole time, which is the report this answers.
    *
    * The same call serves the other two things that say "this exit is the wrong
    * one": a request the outlet could not carry at all, and a measured path that
    * has gone slow (the 120-second watch below). All three want the same first
    * answer — re-measure, and move to a node that is not the one being blamed —
-   * so they share the guards rather than each growing their own.
+   * so they share the guards rather than each growing their own; only a refusal,
+   * which is about the address, is allowed to blame one.
    *
    * Three guards keep a burst of failed turns from thrashing the exit: one
-   * rotation a minute, one at a time, and a ten-minute memory of the nodes that
-   * refused — the very measurement that makes them look "fast" is what hands
-   * them back.
+   * rotation a minute, one at a time, and a ten-minute memory of the nodes and
+   * addresses that refused — the very measurement that makes them look "fast" is
+   * what hands them back.
    */
   const OUTLET_ROTATE_COOLDOWN_MS = 60_000
   const OUTLET_LIMITED_TTL_MS = 10 * 60_000
+  // A refused address is out for the same window, and it is the address that
+  // decides: leaving the block it belongs to can take more than one switch.
+  const OUTLET_MAX_HOPS = 3
+  // Which address each node presents, learned by measuring after every switch.
+  const OUTLET_ADDRESS_TTL_MS = 30 * 60_000
   const limitedNodes = new Map()
+  const limitedBlocks = new Map()
+  const outletAddresses = new Map()
   let outletRotateAt = 0
   let outletRotation = null
-  function scheduleOutletRotation(why = 'the lane rate-limited this exit') {
+  function scheduleOutletRotation(why = 'the lane rate-limited this exit', { refusal = false } = {}) {
     if (outletRotation !== null) return
     if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return
     outletRotateAt = Date.now()
-    outletRotation = rotateOutletExit(why)
+    outletRotation = rotateOutletExit(why, { refusal })
       .catch(error => logger.debug?.(`our-free-model: outlet re-measure failed (${error?.message ?? error})`))
       .finally(() => { outletRotation = null })
   }
-  async function rotateOutletExit(why) {
+
+  /** The address the outlet is presenting now, or `''` when that cannot be trusted. */
+  async function measureOutletAddress() {
+    const before = egressLane()
+    const seen = await detectEgress({ timeoutMs: 4_000 }).catch(() => undefined)
+    const after = egressLane()
+    // A reading the lane answered straight from this machine describes the host,
+    // not the exit: keeping it would blame the wrong address.
+    if (seen === undefined || after.state === 'direct' || after.direct !== before.direct) return ''
+    return typeof seen.ip === 'string' ? seen.ip : ''
+  }
+  function knownOutletAddress(node) {
+    const remembered = outletAddresses.get(node)
+    return remembered === undefined ? '' : remembered.address
+  }
+  function rememberOutletAddress(node, address) {
+    if (node === '' || address === '') return
+    outletAddresses.set(node, { address, at: Date.now() })
+  }
+
+  async function rotateOutletExit(why, { refusal = false } = {}) {
     const relay = outletRelay
     if (relay === null) return
     // A `client` outlet is the one proxy the user named: there is no node list to
@@ -1237,31 +1276,64 @@ export function apply(ctx, config) {
     }
     const now = Date.now()
     for (const [node, until] of limitedNodes) if (until <= now) limitedNodes.delete(node)
+    for (const [block, until] of limitedBlocks) if (until <= now) limitedBlocks.delete(block)
+    for (const [node, entry] of outletAddresses) if (entry.at + OUTLET_ADDRESS_TTL_MS <= now) outletAddresses.delete(node)
     const live = await readOutletSelection(relay).catch(() => null)
     const current = live?.node ?? outletNode.node
     const avoid = [...limitedNodes.keys()]
     if (current !== '') avoid.push(current)
-    const rotated = await refreshOutletExit(relay, { avoid })
+    // What the lane just refused is the address this exit presents. Measuring it
+    // now and keeping it is the whole difference: by the time the next rotation
+    // runs, the exit has moved and nothing remembers which address was blamed.
+    const refused = refusal ? await measureOutletAddress() : ''
+    const refusedBlock = addressBlock(refused)
     // The node we are leaving is out for the cooldown window whether or not a
     // replacement was found: leaving it out of the ranking is the whole point,
     // and the next rotation is not going to hand it back.
-    if (current !== '') limitedNodes.set(current, now + OUTLET_LIMITED_TTL_MS)
+    if (current !== '') {
+      limitedNodes.set(current, now + OUTLET_LIMITED_TTL_MS)
+      rememberOutletAddress(current, refused)
+    }
+    if (refusedBlock !== '') limitedBlocks.set(refusedBlock, now + OUTLET_LIMITED_TTL_MS)
+    const outcome = await stepOffBlamedAddress(relay, {
+      avoid,
+      blame: refusedBlock,
+      hops: OUTLET_MAX_HOPS,
+      addressOf: knownOutletAddress,
+      measure: () => measureOutletAddress(),
+      onHop: (node, address) => {
+        limitedNodes.set(node, Date.now() + OUTLET_LIMITED_TTL_MS)
+        rememberOutletAddress(node, address)
+        logger.debug?.(`our-free-model: the outlet landed on ${address} again; the lane refuses ${refusedBlock}`)
+      },
+    })
+    const rotated = outcome.rotation
     if (rotated === null) {
-      logger.warn?.(`our-free-model: ${why} and no other measured node is available; staying on it`)
+      // Every step of the way the group was moved somewhere, so the node the
+      // panel shows is re-read rather than assumed to be the one it started on.
+      if (outcome.hops > 0) await readOutletStatus().catch(() => {})
+      logger.warn?.(refusedBlock === ''
+        ? `our-free-model: ${why} and no other measured node is available; staying on it`
+        : `our-free-model: ${why}; every measured node sits on ${refusedBlock}, so there is no exit to step onto`)
+      return
+    }
+    if (!rotated.switched) {
+      logger.warn?.(`our-free-model: ${why}; re-measured the outlet and "${rotated.node}" is still the only node measured (${rotated.delayMs} ms)`)
       return
     }
     outletNode = { node: rotated.node, delayMs: rotated.delayMs, at: Date.now() }
     // The node left behind is named too: an exit that moved on its own is
     // exactly the one the owner will want to read back.
-    const left = rotated.previous === '' ? current : rotated.previous
-    logger.warn?.(rotated.switched
-      ? `our-free-model: ${why}; re-measured the outlet and moved from "${left}" to "${rotated.node}" (${rotated.delayMs} ms, best of ${rotated.candidates})`
-      : `our-free-model: ${why}; re-measured the outlet and "${rotated.node}" is still the only node measured (${rotated.delayMs} ms)`)
+    const left = current === '' ? rotated.previous : current
+    logger.warn?.(
+      `our-free-model: ${why}; re-measured the outlet and moved from "${left}" to "${rotated.node}" (${rotated.delayMs} ms, best of ${rotated.candidates})`
+      + (refusedBlock === '' ? '' : `; the lane refuses ${refusedBlock}`),
+    )
     // The way out changed under every reading the panel and the picker show: the
     // exit IP, its country, and the region-gated verdicts all belong to the old
     // node. This is the same watch the outlet's own start and stop run, and the
     // rotation cooldown is what keeps it from becoming a loop.
-    if (rotated.switched) void watchEgress().catch(() => {})
+    void watchEgress().catch(() => {})
   }
 
   /**

@@ -997,32 +997,97 @@ function lastDelay(proxy) {
 }
 
 /**
+ * The address block a rate limiter is counting in.
+ *
+ * A refusal is a verdict on the address the lane saw, not on the node that
+ * carried the request. Measured on a live outlet: every node presenting
+ * 5.34.220.113-117 — five adjacent addresses of one allocation — was answered
+ * `Rate limit exceeded`, while 23.185.208.66, 155.254.104.158, 188.253.124.12
+ * and 188.253.116.228 carried the same request fine, several of them slower
+ * than every refused node. So a rotation that remembers only names walks that
+ * one block node by node, one cooldown at a time, and the lane stays refused
+ * throughout — which is the report this exists to answer.
+ *
+ * Best effort by design: an address this cannot group returns `''`, and callers
+ * read that as "no grouping information" — never as "this one is blocked".
+ *
+ * @param {unknown} address
+ * @returns {string} `a.b.c.0/24`, or `xxxx:xxxx:xxxx::/48`, or `''`
+ */
+export function addressBlock(address) {
+  const text = typeof address === 'string' ? address.trim() : ''
+  if (text === '') return ''
+  if (text.includes(':')) {
+    const parts = text.split(':')
+    // Everything past a `::` is a gap, not an octet: only the groups the address
+    // states before it can be turned into a prefix.
+    const gap = parts.indexOf('')
+    const groups = gap === -1 ? parts : parts.slice(0, gap)
+    if (groups.length < 3 || groups.some(group => !/^[0-9a-f]{1,4}$/i.test(group))) return ''
+    return `${groups.slice(0, 3).join(':')}::/48`
+  }
+  const octets = text.split('.')
+  if (octets.length !== 4) return ''
+  if (octets.some(octet => !/^\d{1,3}$/.test(octet) || Number(octet) > 255)) return ''
+  return `${octets.slice(0, 3).join('.')}.0/24`
+}
+
+/**
+ * Rank the outlet's nodes the way a rotation wants them: measured and reachable,
+ * not already blamed by name, and not sitting on an address block the lane has
+ * already refused.
+ *
+ * `addressOf` is the caller's memory of which address each node presents. A node
+ * it has never measured has no answer, stays in the list, and gets verified
+ * after the switch instead — an unknown node is worth one attempt, a known
+ * refused address is worth none.
+ *
+ * @param {{proxies?: unknown[], avoid?: string[]|Set<string>, avoidBlocks?: string[]|Set<string>,
+ *   addressOf?: (name: string) => string}} [options]
+ * @returns {{name: string, delayMs: number}[]} fastest first
+ */
+export function rankOutletCandidates({ proxies, avoid = [], avoidBlocks = [], addressOf = () => '' } = {}) {
+  const avoided = avoid instanceof Set ? avoid : new Set(avoid)
+  const blamed = avoidBlocks instanceof Set ? avoidBlocks : new Set(avoidBlocks)
+  return (Array.isArray(proxies) ? proxies : [])
+    .map(proxy => ({ name: typeof proxy?.name === 'string' ? proxy.name : '', delayMs: lastDelay(proxy) ?? 0 }))
+    // A node with no positive delay is one the health-check could not reach; it
+    // is not a candidate however short the list is.
+    .filter(row => row.name !== '' && row.delayMs > 0 && !avoided.has(row.name))
+    .filter(row => {
+      const block = addressBlock(addressOf(row.name) ?? '')
+      return block === '' || !blamed.has(block)
+    })
+    .sort((a, b) => a.delayMs - b.delayMs)
+}
+
+/**
  * Make the outlet re-measure every node, and step off the one that just answered
  * a quota refusal.
  *
  * The provider and the url-test group both re-measure on their own 300 s clock,
- * and a per-IP rate limit is invisible to that clock: gstatic still answers 204
- * through the node the lane just refused, so its latency — and its rank — do not
- * move, and url-test hands back the same exit. The plugin is the only component
- * that sees the refusal, so it is the one that has to force the measurement and
- * then pick an exit the lane has not just refused.
+ * and a per-address rate limit is invisible to that clock: gstatic still answers
+ * 204 through the node the lane just refused, so its latency — and its rank — do
+ * not move, and url-test hands back the same exit. The plugin is the only
+ * component that sees the refusal, so it is the one that has to force the
+ * measurement and then pick an exit the lane has not just refused.
  *
  * Best effort by design: a `client` outlet has no controller to ask, and a
  * controller that will not answer leaves the outlet exactly as it was. A
  * rotation is an optimization, never a health requirement.
  *
  * @param {{managed?: {apiPort: number, secret: string}|null}} relay
- * @param {{avoid?: string[], timeoutMs?: number}} [options] - `avoid` names the
- *   exits not to come back to: the one that just refused, and any that refused
- *   inside the caller's cooldown window.
+ * @param {{avoid?: string[], avoidBlocks?: string[], addressOf?: (name: string) => string, timeoutMs?: number}} [options]
+ *   `avoid` names the exits not to come back to: the one that just refused, and
+ *   any that refused inside the caller's cooldown window. `avoidBlocks` names
+ *   the address blocks that are out for the same reason.
  * @returns {Promise<{node: string, delayMs: number, previous: string, switched: boolean, candidates: number}|null>}
  *   `null` when there is no controller, nothing measured, or no usable exit
  *   outside `avoid` — in which case the outlet is left as it was.
  */
-export async function refreshOutletExit(relay, { avoid = [], timeoutMs = 4000 } = {}) {
+export async function refreshOutletExit(relay, { avoid = [], avoidBlocks = [], addressOf, timeoutMs = 4000 } = {}) {
   const managed = relay?.managed
   if (managed === null || managed === undefined) return null
-  const avoided = new Set(avoid.filter(name => typeof name === 'string' && name !== ''))
   // The provider's own health-check is the "measure every node now" call. The
   // group's `/delay` would re-rank the nodes the group already holds, which is
   // the ranking that put the refused exit on top in the first place.
@@ -1030,17 +1095,61 @@ export async function refreshOutletExit(relay, { avoid = [], timeoutMs = 4000 } 
   const group = await controllerJson(managed, '/proxies/ofm-outlet', timeoutMs).catch(() => null)
   const previous = typeof group?.now === 'string' ? group.now : ''
   const provider = await controllerJson(managed, '/providers/proxies/egress', timeoutMs).catch(() => null)
-  const ranked = (Array.isArray(provider?.proxies) ? provider.proxies : [])
-    .map(proxy => ({ name: typeof proxy?.name === 'string' ? proxy.name : '', delayMs: lastDelay(proxy) ?? 0 }))
-    // A node with no positive delay is one the health-check could not reach; it
-    // is not a candidate however short the list is.
-    .filter(row => row.name !== '' && row.delayMs > 0 && !avoided.has(row.name))
-    .sort((a, b) => a.delayMs - b.delayMs)
+  const ranked = rankOutletCandidates({ proxies: provider?.proxies, avoid, avoidBlocks, addressOf })
   const best = ranked[0]
   if (best === undefined) return null
   if (best.name === previous) return { node: best.name, delayMs: best.delayMs, previous, switched: false, candidates: ranked.length }
   await controllerJson(managed, '/proxies/ofm-outlet', timeoutMs, { method: 'PUT', body: { name: best.name } })
   return { node: best.name, delayMs: best.delayMs, previous, switched: true, candidates: ranked.length }
+}
+
+/**
+ * Move the outlet off a blamed address, and check what it landed on.
+ *
+ * mihomo reports the switch as done the moment it accepts the PUT, but the lane
+ * counts the address behind the node, and one subscription's nodes are full of
+ * exits that share one. So a landing the caller cannot verify — an address it
+ * has never measured — is believed, and a landing back inside the blamed block
+ * is stepped off again, up to `hops` times, before the rotation gives up and
+ * says so instead of reporting a move that changed nothing.
+ *
+ * @param {{managed?: {apiPort: number, secret: string}|null}} relay
+ * @param {{avoid?: string[], blame?: string, hops?: number,
+ *   addressOf?: (name: string) => string, measure?: (node: string) => string|Promise<string>,
+ *   onHop?: (node: string, address: string) => void}} [options]
+ *   `blame` is the refused block (from {@link addressBlock}); `measure` reports
+ *   the address the outlet presents now, or `''` when that cannot be trusted;
+ *   `onHop` is how the caller keeps its memory of a landing it must not reuse.
+ * @returns {Promise<{rotation: {node: string, delayMs: number, previous: string, switched: boolean, candidates: number}|null,
+ *   hops: number, blocked: {node: string, address: string}[]}>}
+ *   `rotation` is `null` when nothing outside the blamed address could be
+ *   reached, and `hops` counts the switches it performed.
+ */
+export async function stepOffBlamedAddress(relay, { avoid = [], blame = '', hops = 3, addressOf, measure = () => '', onHop } = {}) {
+  const names = avoid.filter(name => typeof name === 'string' && name !== '')
+  const blocked = []
+  const attempts = Math.max(1, hops)
+  for (let hop = 0; hop < attempts; hop += 1) {
+    const rotation = await refreshOutletExit(relay, {
+      avoid: names,
+      // With nothing blamed there is nothing to skip, and nothing to verify
+      // either: the caller asked for a plain "step off this node".
+      avoidBlocks: blame === '' ? [] : [blame],
+      addressOf,
+    })
+    if (rotation === null) return { rotation: null, hops: hop, blocked }
+    // The node already carrying traffic is the only one measured: there is
+    // nothing to step onto, and nothing to check.
+    if (!rotation.switched) return { rotation, hops: hop, blocked }
+    names.push(rotation.node)
+    if (blame === '') return { rotation, hops: hop + 1, blocked }
+    const landed = await measure(rotation.node)
+    const block = addressBlock(landed)
+    if (block === '' || block !== blame) return { rotation, hops: hop + 1, blocked }
+    blocked.push({ node: rotation.node, address: landed })
+    onHop?.(rotation.node, landed)
+  }
+  return { rotation: null, hops: attempts, blocked }
 }
 
 function controllerJson(managed, path, timeoutMs, { method = 'GET', body } = {}) {

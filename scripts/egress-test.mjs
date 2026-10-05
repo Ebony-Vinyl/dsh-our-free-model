@@ -13,7 +13,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
-import { startEgressRelay, egressFetch, egressActive, renderMihomoConfig, findMihomoBinary, outletLabel, readOutletSelection, refreshOutletExit } from '../src/egress.js'
+import { startEgressRelay, egressFetch, egressActive, renderMihomoConfig, findMihomoBinary, outletLabel, readOutletSelection, refreshOutletExit, addressBlock, rankOutletCandidates, stepOffBlamedAddress } from '../src/egress.js'
 
 let checks = 0
 let failures = 0
@@ -461,6 +461,135 @@ async function main() {
   check([stayed?.node, stayed?.switched].join('|') === 'JP 4|false', 'a node already in use is not re-selected')
   check(same.calls.some(call => call.method === 'PUT') === false, 'so no switch is sent')
   await same.close()
+
+  // 14 — a refusal is a verdict on the address, and one subscription's nodes share
+  // addresses. Measured on a live outlet: all five nodes presenting
+  // 5.34.220.113-117 were answered "Rate limit exceeded" together, while
+  // 23.185.208.66, 155.254.104.158, 188.253.124.12 and 188.253.116.228 carried
+  // the same request — several of them slower than every refused node. A rotation
+  // that only remembered names walked that one block node by node, one cooldown
+  // each, and the lane was refused the whole time. So the block is what is
+  // avoided, and what a switch lands on is checked.
+  stage = 'address blame'
+  check(addressBlock('5.34.220.117') === '5.34.220.0/24', 'an IPv4 address is grouped into its /24')
+  check(addressBlock(' 5.34.220.117 ') === '5.34.220.0/24', 'padding does not change the grouping')
+  check(addressBlock('240e:398:1e31:cc21:2924:d8bd:c793:f004') === '240e:398:1e31::/48', 'an IPv6 address is grouped into its /48')
+  check(addressBlock('240e:398:1e31::1') === '240e:398:1e31::/48', 'a compressed address keeps only the groups it states')
+  check([addressBlock(''), addressBlock(undefined), addressBlock('not-an-address'), addressBlock('5.34.220'), addressBlock('5.34.220.999'), addressBlock('::1'), addressBlock('240e:398:zz::1')].join('|') === '||||||',
+    'an address that cannot be grouped carries no grouping, rather than blocking a block')
+
+  const addressOf = name => ({ 'JP 5': '5.34.220.117', 'JP 2': '5.34.220.114' })[name] ?? ''
+  const candidates = rankOutletCandidates({
+    proxies: [
+      { name: 'JP 5', history: [{ delay: 282 }] },
+      { name: 'JP 2', history: [{ delay: 288 }] },
+      { name: 'TW 4', history: [{ delay: 370 }] },
+      { name: 'US 1', history: [{ delay: 595 }] },
+      { name: 'DE 1', history: [] },
+      { name: '', history: [{ delay: 12 }] },
+    ],
+    avoid: ['JP 5'],
+    avoidBlocks: ['5.34.220.0/24'],
+    addressOf,
+  })
+  check(candidates.map(row => row.name).join(',') === 'TW 4,US 1',
+    'the refused block is skipped whole, and an exit nothing could measure is no candidate')
+  check(rankOutletCandidates({ proxies: [{ name: 'JP 2', history: [{ delay: 288 }] }], avoidBlocks: ['5.34.220.0/24'], addressOf }).length === 0,
+    'a node known to sit on a refused address is not a candidate at all')
+  check(rankOutletCandidates({ proxies: [{ name: 'TW 4', history: [{ delay: 370 }] }], avoidBlocks: ['5.34.220.0/24'], addressOf }).length === 1,
+    'a node nobody has measured is still worth one attempt')
+
+  const blamer = await startFakeController({
+    '/proxies/ofm-outlet': { now: 'JP 5', type: 'URLTest', history: [] },
+    '/providers/proxies/egress': { proxies: [
+      { name: 'JP 2', history: [{ delay: 288 }] },
+      { name: 'TW 4', history: [{ delay: 370 }] },
+    ] },
+    '/providers/proxies/egress/healthcheck': (req, res) => { res.writeHead(204); res.end() },
+  })
+  const escaped = await refreshOutletExit(
+    { managed: { mixedPort: 1, apiPort: blamer.port, secret: 'shh', dir: dataDir } },
+    { avoid: ['JP 5'], avoidBlocks: ['5.34.220.0/24'], addressOf })
+  check([escaped?.previous, escaped?.node, escaped?.switched].join('|') === 'JP 5|TW 4|true',
+    'the refused block is left as a whole, although it holds the faster node')
+  await blamer.close()
+
+  // A rotation that was not a refusal is still a plain "step off this node": it
+  // switches once, and with nothing blamed there is nothing to check.
+  const unblamed = await startFakeController({
+    '/proxies/ofm-outlet': { now: 'JP 5', history: [] },
+    '/providers/proxies/egress': { proxies: [{ name: 'JP 5', history: [{ delay: 282 }] }, { name: 'JP 2', history: [{ delay: 288 }] }] },
+  })
+  let measuredUnblamed = 0
+  const steppedPlain = await stepOffBlamedAddress(
+    { managed: { mixedPort: 1, apiPort: unblamed.port, secret: 'shh', dir: dataDir } },
+    { avoid: ['JP 5'], blame: '', hops: 3, measure: () => { measuredUnblamed += 1; return '5.34.220.113' } })
+  check([steppedPlain.rotation?.node, steppedPlain.hops, measuredUnblamed].join('|') === 'JP 2|1|0',
+    'without a blamed address the outlet switches once and checks nothing')
+  await unblamed.close()
+
+  // The switch is only a claim about a node; the lane counts the address behind
+  // it. A landing that measures back inside the blamed block is stepped off
+  // again — up to the hop limit — and a landing nobody has measured is believed,
+  // then verified by the measurement that follows it.
+  const puts = []
+  let held = 'JP 5'
+  const stateful = http.createServer((req, res) => {
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      if (req.url === '/providers/proxies/egress/healthcheck') {
+        res.writeHead(204)
+        res.end()
+        return
+      }
+      if (req.method === 'PUT') {
+        held = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}').name ?? held
+        puts.push(held)
+        res.writeHead(204)
+        res.end()
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(req.url === '/providers/proxies/egress'
+        ? { proxies: [
+          { name: 'JP 5', history: [{ delay: 282 }] },
+          { name: 'JP 2', history: [{ delay: 288 }] },
+          { name: 'TW 4', history: [{ delay: 370 }] },
+          { name: 'US 1', history: [{ delay: 595 }] },
+        ] }
+        : { now: held, type: 'URLTest', history: [] }))
+    })
+  })
+  const hopPort = await listen(stateful, '127.0.0.1')
+  const hopRelay = { managed: { mixedPort: 1, apiPort: hopPort, secret: 'shh', dir: dataDir } }
+  const landings = ['5.34.220.116', '188.253.116.228']
+  let measured = 0
+  const stepped = await stepOffBlamedAddress(hopRelay, {
+    avoid: ['JP 5'],
+    blame: '5.34.220.0/24',
+    hops: 3,
+    addressOf,
+    measure: () => landings[Math.min(measured++, landings.length - 1)],
+  })
+  check(puts.join(',') === 'TW 4,US 1', 'a landing back inside the refused block is stepped off again')
+  check([stepped.rotation?.node, stepped.hops, stepped.blocked.length].join('|') === 'US 1|2|1',
+    'the outlet settles on the first landing outside the blamed block')
+  check(stepped.blocked[0]?.node === 'TW 4' && stepped.blocked[0]?.address === '5.34.220.116',
+    'and the blocked landing is reported with the address it landed on')
+
+  // Every candidate lands in the refused block: the rotation gives up and says
+  // so, instead of reporting a move that changed no address.
+  const cornered = await stepOffBlamedAddress(hopRelay, {
+    avoid: [],
+    blame: '5.34.220.0/24',
+    hops: 2,
+    addressOf: () => '',
+    measure: () => '5.34.220.113',
+  })
+  check(cornered.rotation === null && cornered.hops === 2 && cornered.blocked.length === 2,
+    'an outlet whose every candidate lands in the refused block gives up instead of reporting a move')
+  await new Promise(resolve => stateful.close(resolve))
 
   fs.rmSync(dataDir, { recursive: true, force: true })
   console.log(`${failures === 0 ? 'PASS' : 'FAIL'}: egress ${checks - failures}/${checks} checks`)
