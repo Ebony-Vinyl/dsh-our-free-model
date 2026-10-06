@@ -463,13 +463,13 @@ async function main() {
   await same.close()
 
   // 14 — a refusal is a verdict on the address, and one subscription's nodes share
-  // addresses. Measured on a live outlet: all five nodes presenting
-  // 5.34.220.113-117 were answered "Rate limit exceeded" together, while
-  // 23.185.208.66, 155.254.104.158, 188.253.124.12 and 188.253.116.228 carried
-  // the same request — several of them slower than every refused node. A rotation
-  // that only remembered names walked that one block node by node, one cooldown
-  // each, and the lane was refused the whole time. So the block is what is
-  // avoided, and what a switch lands on is checked.
+  // addresses. Measured on a live outlet: the five nodes presenting 5.34.220.113-117
+  // sit in one /24, and in a single sweep .113, .115, .116 and .117 each answered
+  // "Rate limit exceeded" to the same request while .114 answered it — .114 having
+  // been refused itself a few minutes earlier. The wall is drawn per address and it
+  // moves, so what a rotation can act on is the *block*, and what it lands on has to
+  // be measured rather than assumed. Walking that block node by node instead, one
+  // cooldown each, left the lane refused the whole time.
   stage = 'address blame'
   check(addressBlock('5.34.220.117') === '5.34.220.0/24', 'an IPv4 address is grouped into its /24')
   check(addressBlock(' 5.34.220.117 ') === '5.34.220.0/24', 'padding does not change the grouping')
@@ -498,6 +498,52 @@ async function main() {
     'a node known to sit on a refused address is not a candidate at all')
   check(rankOutletCandidates({ proxies: [{ name: 'TW 4', history: [{ delay: 370 }] }], avoidBlocks: ['5.34.220.0/24'], addressOf }).length === 1,
     'a node nobody has measured is still worth one attempt')
+
+  // An unmeasured node is not an innocent one: the exit that was just refused has
+  // siblings in the same region, and the subscription numbers them in a row — five
+  // nodes presented 5.34.220.113-117. Ranking on delay alone walks into that block
+  // again, and each landing costs a hop and its measurement. The trailing number is
+  // what the name gives away, so a sibling of a refused exit waits behind every
+  // exit from another region; it is demoted rather than dropped, because the block
+  // is a guess and one unmeasured node is still an attempt.
+  const siblings = rankOutletCandidates({
+    proxies: [
+      { name: 'JP 3', history: [{ delay: 282 }] },
+      { name: 'JP 4', history: [{ delay: 288 }] },
+      { name: 'TW 1', history: [{ delay: 370 }] },
+    ],
+    avoid: ['JP 5'],
+    avoidBlocks: ['5.34.220.0/24'],
+    addressOf: () => '',
+  })
+  check(siblings.map(row => row.name).join(',') === 'TW 1,JP 3,JP 4',
+    'the siblings of a refused exit wait behind an exit from another region')
+  check(rankOutletCandidates({
+    proxies: [{ name: 'JP 3', history: [{ delay: 282 }] }],
+    avoid: ['JP 5'],
+    avoidBlocks: ['5.34.220.0/24'],
+    addressOf: () => '',
+  }).map(row => row.name).join(',') === 'JP 3',
+  'and are still a candidate when they are all that is left')
+  check(rankOutletCandidates({
+    proxies: [
+      { name: 'JP 3', history: [{ delay: 282 }] },
+      { name: 'JP-backup', history: [{ delay: 900 }] },
+    ],
+    avoid: ['JP 5'],
+    avoidBlocks: ['5.34.220.0/24'],
+    addressOf: () => '',
+  }).map(row => row.name).join(',') === 'JP-backup,JP 3',
+  'only a name that ends in the sibling number counts as one')
+  check(rankOutletCandidates({
+    proxies: [
+      { name: 'JP 3', history: [{ delay: 282 }] },
+      { name: 'TW 1', history: [{ delay: 370 }] },
+    ],
+    avoid: ['JP 5'],
+    addressOf: () => '',
+  }).map(row => row.name).join(',') === 'JP 3,TW 1',
+  'with no refusal behind it a slow exit is still ranked by its delay')
 
   const blamer = await startFakeController({
     '/proxies/ofm-outlet': { now: 'JP 5', type: 'URLTest', history: [] },

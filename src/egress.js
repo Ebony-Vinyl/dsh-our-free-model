@@ -1033,6 +1033,21 @@ export function addressBlock(address) {
 }
 
 /**
+ * The name a node shares with the region it belongs to: one subscription lists an
+ * exit per region as `JP 1`, `JP 2`, …, and those usually sit on neighbouring
+ * addresses — probing the live outlet found five nodes on 5.34.220.113-117 with
+ * four of them carrying the same refusal at once, while every exit from another
+ * region answered. So a trailing number is what is stripped to group siblings,
+ * and a name that does not end in one is nobody's sibling.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function siblingKey(name) {
+  return name.replace(/\s*\d+$/, '')
+}
+
+/**
  * Rank the outlet's nodes the way a rotation wants them: measured and reachable,
  * not already blamed by name, and not sitting on an address block the lane has
  * already refused.
@@ -1042,6 +1057,12 @@ export function addressBlock(address) {
  * after the switch instead — an unknown node is worth one attempt, a known
  * refused address is worth none.
  *
+ * A node whose name marks it as a sibling of an exit that was already refused is
+ * a suspect rather than a verdict: it has no measured address of its own, so it
+ * is sorted behind every exit from another region instead of being dropped. The
+ * region is a guess about addressing, and with nothing else left one unmeasured
+ * node is still worth one attempt.
+ *
  * @param {{proxies?: unknown[], avoid?: string[]|Set<string>, avoidBlocks?: string[]|Set<string>,
  *   addressOf?: (name: string) => string}} [options]
  * @returns {{name: string, delayMs: number}[]} fastest first
@@ -1049,6 +1070,8 @@ export function addressBlock(address) {
 export function rankOutletCandidates({ proxies, avoid = [], avoidBlocks = [], addressOf = () => '' } = {}) {
   const avoided = avoid instanceof Set ? avoid : new Set(avoid)
   const blamed = avoidBlocks instanceof Set ? avoidBlocks : new Set(avoidBlocks)
+  const suspect = blamed.size === 0 ? null : new Set([...avoided].map(siblingKey))
+  const suspected = row => (suspect !== null && suspect.has(siblingKey(row.name)) ? 1 : 0)
   return (Array.isArray(proxies) ? proxies : [])
     .map(proxy => ({ name: typeof proxy?.name === 'string' ? proxy.name : '', delayMs: lastDelay(proxy) ?? 0 }))
     // A node with no positive delay is one the health-check could not reach; it
@@ -1058,7 +1081,7 @@ export function rankOutletCandidates({ proxies, avoid = [], avoidBlocks = [], ad
       const block = addressBlock(addressOf(row.name) ?? '')
       return block === '' || !blamed.has(block)
     })
-    .sort((a, b) => a.delayMs - b.delayMs)
+    .sort((a, b) => suspected(a) - suspected(b) || a.delayMs - b.delayMs)
 }
 
 /**
