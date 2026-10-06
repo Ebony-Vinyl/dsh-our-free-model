@@ -409,24 +409,53 @@ export function restoreBackup(backupDir, pkgDir) {
   // Never let a missing rollback copy turn into a wipe: listPackageFiles
   // answers [] for a directory that does not exist, and an install that has
   // never applied an update has no rollback copy at all — walking into the
-  // delete loop with nothing to put back would empty the package (index.js,
-  // client.js, src/*) while the running process keeps going from memory.
+  // copy loop with nothing to put back would still sweep the package below.
   const backup = listPackageFiles(backupDir)
   if (backup.length === 0) throw new Error(`no rollback copy in ${backupDir} — leaving the installed package untouched`)
   const failures = []
-  for (const rel of listPackageFiles(pkgDir)) {
-    try { fs.rmSync(path.join(pkgDir, ...rel.split('/')), { force: true }) } catch { /* best effort */ }
-  }
+  // Copy first, over whatever is there. The old order emptied the package
+  // before the first copy, so one refusal the machine kept making (issue #93:
+  // EPERM on create while deletes were still allowed) turned "rollback
+  // failed" into "rollback deleted everything and then failed". Files on
+  // disk are worth exactly as much as their next copy — they stay until
+  // their replacement lands.
   for (const rel of backup) {
-    // Copy loop must survive a locked file: attempting every entry keeps the
+    // The loop must survive a locked file: attempting every entry keeps the
     // restore as complete as this machine allows instead of crashing halfway.
     try {
-      const target = path.join(pkgDir, ...rel.split('/'))
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.copyFileSync(path.join(backupDir, ...rel.split('/')), target)
+      copyOver(path.join(backupDir, ...rel.split('/')), path.join(pkgDir, ...rel.split('/')))
     } catch (error) { failures.push(`${rel} (${error?.message ?? error})`) }
   }
   if (failures.length > 0) throw new Error(`rollback incomplete: ${failures.slice(0, 3).join('; ')}${failures.length > 3 ? ` +${failures.length - 3} more` : ''}`)
+  // Only a restore that got every file back sweeps what the backup does not
+  // hold (files the new release added). A failed rollback deletes nothing:
+  // the bytes left on disk are all the next recovery attempt has.
+  for (const rel of listPackageFiles(pkgDir)) {
+    if (backup.includes(rel)) continue
+    try { fs.rmSync(path.join(pkgDir, ...rel.split('/')), { force: true }) } catch { /* best effort */ }
+  }
+}
+
+/**
+ * Copy one backup file over the installed one. A first refusal — a read-only
+ * target or a transient Windows lock — is retried after clearing the target,
+ * which is what the blanket delete used to hand every copy for free. The
+ * retry never fires when the target itself is the problem (a directory
+ * squatting on the path): that file cannot be put back, and taking the rest
+ * of the package down to reach it is the data loss this order exists to
+ * prevent.
+ */
+function copyOver(source, target) {
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.copyFileSync(source, target)
+  } catch (first) {
+    if (fs.statSync(target, { throwIfNoEntry: false })?.isDirectory()) throw first
+    try {
+      fs.rmSync(target, { force: true })
+      fs.copyFileSync(source, target)
+    } catch { throw first }
+  }
 }
 
 /** Windows can transiently refuse a rename while a file is scanned; retry briefly. */

@@ -376,6 +376,25 @@ await checkAsync('restoreBackup reports copy failures and still restores the res
   fs.rmSync(pkg, { recursive: true, force: true })
   fs.rmSync(data, { recursive: true, force: true })
 })
+await checkAsync('a failed restore deletes nothing it could not put back', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backupDir = path.join(data, 'rollback')
+  backupPackage(pkg, backupDir)
+  // A directory squatting where a backup file belongs makes that one copy
+  // fail (EISDIR) on every platform. The restore used to empty the package
+  // first and copy back second, so failing to reach one file cost every
+  // other one too — the shape of the damage reported in issue #93.
+  fs.rmSync(path.join(pkg, 'client.js'), { force: true })
+  fs.mkdirSync(path.join(pkg, 'client.js'), { recursive: true })
+  fs.writeFileSync(path.join(pkg, 'client.js', 'nested.js'), 'nested\n')
+  assert.throws(() => restoreBackup(backupDir, pkg), /rollback incomplete/)
+  assert.equal(fs.readFileSync(path.join(pkg, 'index.js'), 'utf8'), oldFiles['index.js'], 'the rest of the package was put back')
+  assert.equal(fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'), oldFiles['package.json'], 'including the manifest')
+  assert.equal(fs.readFileSync(path.join(pkg, 'client.js', 'nested.js'), 'utf8'), 'nested\n', 'a file the rollback could not replace was not deleted first')
+  fs.rmSync(pkg, { recursive: true, force: true })
+  fs.rmSync(data, { recursive: true, force: true })
+})
 await checkAsync('installStaged + verifyInstalled accept a good stage', async () => {
   const pkg = makePackage(OLD)
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-stage-'))
