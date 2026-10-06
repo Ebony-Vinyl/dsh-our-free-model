@@ -312,6 +312,10 @@ export function recordUsage(stats, record) {
       // (issue #10).
       ...record.truncated === true ? { truncated: true } : {},
       ...record.noUsage === true ? { noUsage: true } : {},
+      // A pass the lane refused before it delivered anything, kept apart from the
+      // pass that replaced it on the next exit: the refusal is what the rotation
+      // answered, and without the marker the two rows of one turn read alike.
+      ...record.refusal === true ? { refusal: true } : {},
       ...typeof record.recoveryId === 'string' ? { recoveryId: record.recoveryId } : {},
       ...Number.isSafeInteger(record.attempt) ? { attempt: record.attempt } : {},
       ...Number.isFinite(record.elapsedMs) ? { elapsedMs: record.elapsedMs } : {},

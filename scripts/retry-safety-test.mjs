@@ -22,6 +22,13 @@
  */
 import { chatFrames, stubUpstream } from './lib/fake-kernel.mjs'
 
+/** How many requests this model has been asked for: 1 on the first. */
+const attempts = new Map()
+const tries = model => {
+  attempts.set(model, (attempts.get(model) ?? 0) + 1)
+  return attempts.get(model)
+}
+
 const stub = await stubUpstream({
   answer: model => {
     if (model === 'socket-model-free') return { socket: true }
@@ -32,6 +39,21 @@ const stub = await stubUpstream({
     }
     if (model === 'quota-model-free') {
       return { pieces: ['data: {"type":"error","error":{"type":"FreeUsageLimitError","message":"Free usage limit reached. Try again later."}}\n\n'] }
+    }
+    if (model === 'quota-once-model-free' || model === 'quota-always-model-free') {
+      // The live shape of a refusal, measured through the forward port: the
+      // gateway answers the request itself with a 502 whose message is the lane's
+      // own words, and no stream ever opens.
+      const refused = { status: 502, body: JSON.stringify({ error: { type: 'server_error', message: 'Error from provider (Console): Rate limit exceeded. Please try again later.' } }) }
+      if (model === 'quota-always-model-free' || tries(model) === 1) return refused
+      return { body: chatFrames('fine') }
+    }
+    if (model === 'quota-late-model-free') {
+      // Refused only once the stream has already carried text to the caller.
+      return { pieces: [
+        'data: {"choices":[{"index":0,"delta":{"content":"partial"}}]}\n\n',
+        'data: {"type":"error","error":{"type":"FreeUsageLimitError","message":"Free usage limit reached. Try again later."}}\n\n',
+      ] }
     }
     if (model === 'slow-model-free') {
       // Content, and then nothing: the turn is open, text has been handed to the
@@ -67,7 +89,7 @@ function isLosslessJson(value, seen = new Set()) {
   return Object.values(value).every(item => isLosslessJson(item, seen))
 }
 
-const MODELS = ['test-model-free', 'socket-model-free', 'region-model-free', 'quota-model-free', 'slow-model-free', 'refusal-model-free']
+const MODELS = ['test-model-free', 'socket-model-free', 'region-model-free', 'quota-model-free', 'slow-model-free', 'refusal-model-free', 'quota-once-model-free', 'quota-always-model-free', 'quota-late-model-free']
 const CATALOG = MODELS.map(id => ({
   id, name: `Test ${id}`, availability: 'available',
   vision: false, reasoning: true, contextWindow: 128000, maxOutput: 8192,
@@ -202,6 +224,56 @@ await driveForHooks('socket-model-free')
 const quotaHookOk = quotaHits.length === 1 && quotaHits[0] === 'quota-model-free'
 console.log(`${quotaHookOk ? 'ok   ' : 'FAIL '} a quota refusal alone reaches the exit-rotation hook: ${JSON.stringify(quotaHits)}`)
 
+// A refusal is the one failure the exit can answer for: the lane rate-limits the
+// address it sees, so the host half moves the outlet and says whether it really
+// moved. When it did, the turn is worth one more try on the fresh exit instead of
+// being handed back to the user as an error they did not cause. The bounds matter
+// as much as the retry — one per turn, never after text has reached the caller, and
+// never without a move, because re-sending into the exit that just refused is the
+// loop the retry policy keeps out.
+async function driveQuota(model, onQuotaHit) {
+  const rows = []
+  const adapter = new FreeModelAdapter({
+    state: STATE,
+    recordUsage: row => rows.push(row),
+    warn: () => {},
+    onQuotaHit,
+  })
+  const before = stub.requests.length
+  let kind = null
+  let failure = null
+  for await (const chunk of adapter.stream({
+    provider: ROUTE_MAIN,
+    model,
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+  })) {
+    if (chunk.type === 'finish') {
+      kind = chunk.reason.kind
+      failure = chunk.reason.failure ?? null
+    }
+  }
+  return { kind, failure, rows, attempts: stub.requests.length - before }
+}
+
+const moved = []
+const once = await driveQuota('quota-once-model-free', id => { moved.push(id); return true })
+const onceOk = once.attempts === 2 && once.kind === 'stop' && once.failure === null
+  && moved.length === 1
+  && once.rows.length === 2 && once.rows[0].ok === false && once.rows[0].refusal === true && once.rows[1].ok === true
+console.log(`${onceOk ? 'ok   ' : 'FAIL '} a refused turn is re-sent once the exit moved: ${JSON.stringify({ attempts: once.attempts, kind: once.kind, rows: once.rows.map(row => (row.ok ? 'ok' : row.refusal === true ? 'refused' : 'failed')) })}`)
+
+const stuck = await driveQuota('quota-always-model-free', () => true)
+const stuckOk = stuck.attempts === 2 && stuck.failure?.code === CODE.quota
+console.log(`${stuckOk ? 'ok   ' : 'FAIL '} a second refusal ends the turn instead of walking the outlet: attempts=${stuck.attempts} code=${stuck.failure?.code}`)
+
+const kept = await driveQuota('quota-always-model-free', () => false)
+const keptOk = kept.attempts === 1 && kept.failure?.code === CODE.quota
+console.log(`${keptOk ? 'ok   ' : 'FAIL '} a refusal the outlet could not step off is not re-sent: attempts=${kept.attempts}`)
+
+const late = await driveQuota('quota-late-model-free', () => true)
+const lateOk = late.attempts === 1 && late.failure?.code === CODE.quota
+console.log(`${lateOk ? 'ok   ' : 'FAIL '} a refusal after text reached the caller is not re-sent: attempts=${late.attempts}`)
+
 // The provider policy is consumed verbatim by the kernel's backoff scheduler,
 // which reads these fields off the top level. A nested `backoff` makes the
 // scheduled delay NaN, and the durable session log rejects NaN outright.
@@ -258,7 +330,8 @@ await new Promise(resolve => setTimeout(resolve, 900))
 await stub.close()
 
 const ok = failed === 0 && policyShapeOk && usageOk && cachedOk && abortedNeverRetried && clientOk && quotaHookOk
+  && onceOk && stuckOk && keptOk && lateOk
 console.log(ok
   ? `\nretry-safety: all ${cases.length} failure shapes are classified, retried correctly, and durable-log safe`
-  : `\nretry-safety: ${failed + (policyShapeOk ? 0 : 1) + (usageOk ? 0 : 1) + (cachedOk ? 0 : 1) + (abortedNeverRetried ? 0 : 1) + (clientOk ? 0 : 1) + (quotaHookOk ? 0 : 1)} failure(s)`)
+  : `\nretry-safety: ${failed + (policyShapeOk ? 0 : 1) + (usageOk ? 0 : 1) + (cachedOk ? 0 : 1) + (abortedNeverRetried ? 0 : 1) + (clientOk ? 0 : 1) + (quotaHookOk ? 0 : 1) + (onceOk ? 0 : 1) + (stuckOk ? 0 : 1) + (keptOk ? 0 : 1) + (lateOk ? 0 : 1)} failure(s)`)
 process.exit(ok ? 0 : 1)

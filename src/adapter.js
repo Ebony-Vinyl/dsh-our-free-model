@@ -268,6 +268,15 @@ export class FreeModelAdapter {
       return payload
     }
 
+    // A refusal the lane reports is a fact about the exit, so the host half can
+    // move the outlet out of it; when it did, the same turn is worth one more try
+    // there before it is reported to the caller. One is the limit: a lane that
+    // refuses every exit has to end the turn rather than tick through them. The
+    // retry re-runs the attempt it came from — the counter is stepped back — so
+    // the continuation stays available for the turn itself.
+    const QUOTA_RETRY_LIMIT = 1
+    let refusals = 0
+    let refusalRetry = false
     for (let attempt = 0; attempt < 2; attempt += 1) {
       if (options.signal?.aborted === true) {
         finishTurn(false, false, attempt)
@@ -299,7 +308,9 @@ export class FreeModelAdapter {
           ? postKiloStreamed({ body: payload, signal: controller.signal, onData: value => channel.push(value) })
           : postStreamed({
           path: endpointFor(entry.id), body: payload, session,
-          requestId: attempt === 0 ? recoveryId : mintRequestId(),
+          // The retry after a refusal is a fresh request as far as the lane is
+          // concerned: the exit is what changed, not the body.
+          requestId: attempt === 0 && refusals === 0 ? recoveryId : mintRequestId(),
           attributionUserAgent: snapshot.attributionUserAgent,
           signal: controller.signal,
           onData: value => channel.push(value),
@@ -450,8 +461,30 @@ export class FreeModelAdapter {
         // health check cannot see it — gstatic still answers 204 through the node
         // that just ran out of quota — so the host half, which holds both the
         // refusal and the outlet, is the only place that can move the exit.
-        if (error?.code === CODE.quota) this.deps.onQuotaHit?.(entry.id)
+        const refused = error?.code === CODE.quota
         const aborted = options.signal?.aborted === true
+        // The turn is only re-sent once the outlet really moved: the host half
+        // answers `true` for a switch and `false` when it could not step off. It is
+        // never re-sent into the exit that refused it — that is the loop the retry
+        // policy keeps out (a refusal's retry-after grows, so re-sending the same
+        // exit turns one wall into several). Nothing already handed to the caller is
+        // re-sent either, and a second refusal ends the turn.
+        const mayRetry = refused && !aborted && !delivered && refusals < QUOTA_RETRY_LIMIT
+        refusalRetry = mayRetry && (await this.deps.onQuotaHit?.(entry.id)) === true
+        // Without a move worth waiting for, the next turn still needs the outlet
+        // looked at, and nothing here is waiting on the answer.
+        if (refused && !mayRetry) void this.deps.onQuotaHit?.(entry.id)
+        if (refusalRetry) {
+          refusals += 1
+          // One row per request the lane was sent, as everywhere else; the marker
+          // tells the refused pass apart from the pass that replaced it, which
+          // carries the same recoveryId and the same attempt number.
+          record(false, partialOutcome, { refusal: true })
+          // Re-run the attempt the refusal came from, so the continuation the turn
+          // may still need stays available and the retry is the same payload.
+          attempt -= 1
+          continue
+        }
         let failure = toFailure(error)
         if (!aborted && (recovering || expired)) {
           failure = { ...failure, code: recovering || delivered || partialOutcome?.sawToolCall === true ? 'STREAM_CUT' : CODE.timeout,
@@ -472,7 +505,10 @@ export class FreeModelAdapter {
         controller.abort()
         await request
         if (!recorded) record(false, partialOutcome, { aborted: true })
-        if (!continuationScheduled && !turnRecorded) finishTurn(false, false, attempt + 1)
+        // A retry that is about to run continues this turn; it must not report the
+        // attempt it came from as the end of it.
+        if (!continuationScheduled && !refusalRetry && !turnRecorded) finishTurn(false, false, attempt + 1)
+        refusalRetry = false
       }
     }
   }

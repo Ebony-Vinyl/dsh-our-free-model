@@ -1237,12 +1237,22 @@ export function apply(ctx, config) {
   let outletRotateAt = 0
   let outletRotation = null
   function scheduleOutletRotation(why = 'the lane rate-limited this exit', { refusal = false } = {}) {
-    if (outletRotation !== null) return
-    if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return
+    if (outletRotation !== null) return outletRotation
+    if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return null
     outletRotateAt = Date.now()
+    // The caller that reads this back is the refused turn itself, and it may only
+    // be re-sent once the outlet really moved: `true` means the exit changed,
+    // `false` that it could not, `null` that the cooldown declined to try. A
+    // rotation already in flight is handed back rather than dropped, so a burst of
+    // refused turns waits for the same move instead of each reporting the exit
+    // that just refused them.
     outletRotation = rotateOutletExit(why, { refusal })
-      .catch(error => logger.debug?.(`our-free-model: outlet re-measure failed (${error?.message ?? error})`))
+      .catch(error => {
+        logger.debug?.(`our-free-model: outlet re-measure failed (${error?.message ?? error})`)
+        return false
+      })
       .finally(() => { outletRotation = null })
+    return outletRotation
   }
 
   /** The address the outlet is presenting now, or `''` when that cannot be trusted. */
@@ -1266,13 +1276,13 @@ export function apply(ctx, config) {
 
   async function rotateOutletExit(why, { refusal = false } = {}) {
     const relay = outletRelay
-    if (relay === null) return
+    if (relay === null) return false
     // A `client` outlet is the one proxy the user named: there is no node list to
     // re-measure and no second exit to step onto. Saying so beats looking like a
     // rotation happened.
     if (relay.managed === null || relay.managed === undefined) {
       logger.info?.(`our-free-model: ${why}; a single-proxy outlet has no other node to measure`)
-      return
+      return false
     }
     const now = Date.now()
     for (const [node, until] of limitedNodes) if (until <= now) limitedNodes.delete(node)
@@ -1315,11 +1325,11 @@ export function apply(ctx, config) {
       logger.warn?.(refusedBlock === ''
         ? `our-free-model: ${why} and no other measured node is available; staying on it`
         : `our-free-model: ${why}; every measured node sits on ${refusedBlock}, so there is no exit to step onto`)
-      return
+      return false
     }
     if (!rotated.switched) {
       logger.warn?.(`our-free-model: ${why}; re-measured the outlet and "${rotated.node}" is still the only node measured (${rotated.delayMs} ms)`)
-      return
+      return false
     }
     outletNode = { node: rotated.node, delayMs: rotated.delayMs, at: Date.now() }
     // The node left behind is named too: an exit that moved on its own is
@@ -1334,6 +1344,7 @@ export function apply(ctx, config) {
     // node. This is the same watch the outlet's own start and stop run, and the
     // rotation cooldown is what keeps it from becoming a loop.
     void watchEgress().catch(() => {})
+    return true
   }
 
   /**
