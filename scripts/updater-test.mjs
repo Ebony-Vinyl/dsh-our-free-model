@@ -304,6 +304,9 @@ await checkAsync('apply() drops files the new release removed', async () => {
   fs.writeFileSync(path.join(pkg, 'worker', 'worker.js'), 'kept\n')
   fs.mkdirSync(path.join(pkg, 'vendor'), { recursive: true })
   fs.writeFileSync(path.join(pkg, 'vendor', 'lib.js'), 'kept\n')
+  // `tsconfig.json` is protected today by being a name in REPOSITORY_SCAFFOLDING,
+  // not by a rule. This pins the membership so the name stays reviewable.
+  fs.writeFileSync(path.join(pkg, 'tsconfig.json'), '{}\n')
   const data = makeDataDir()
   const updater = new PluginUpdater({ pkgDir: pkg, dataDir: data, settings: () => ({}), fetchImpl: fetch, defaultSources: [`${base}/repo/feed/manifest.json`], manifestPublicKey: TEST_PUBLIC_KEY })
   await updater.apply({})
@@ -313,6 +316,7 @@ await checkAsync('apply() drops files the new release removed', async () => {
   assert.equal(fs.existsSync(path.join(pkg, 'catalog', 'dsh-plugin.json')), true, 'the ecosystem pack records survive an upgrade')
   assert.equal(fs.existsSync(path.join(pkg, 'worker', 'worker.js')), true, 'the self-hosted gateway sources survive')
   assert.equal(fs.existsSync(path.join(pkg, 'vendor', 'lib.js')), true, 'vendored sources survive')
+  assert.equal(fs.existsSync(path.join(pkg, 'tsconfig.json')), true, 'the type-check configuration survives')
   assert.equal(fs.existsSync(path.join(pkg, '.git', 'HEAD')), true, 'and the git history')
   assert.equal(fs.existsSync(path.join(updater.backupDir, '.git', 'HEAD')), false, 'the rollback copy holds the package, not the repository')
   fs.rmSync(pkg, { recursive: true, force: true })
