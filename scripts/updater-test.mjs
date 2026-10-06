@@ -437,6 +437,26 @@ await checkAsync('restoreBackup reports copy failures and still restores the res
   fs.rmSync(pkg, { recursive: true, force: true })
   fs.rmSync(data, { recursive: true, force: true })
 })
+await checkAsync('restoreBackup replaces a file that refuses the write', async () => {
+  if (process.getuid?.() === 0) return // root ignores the read-only bit, so there is nothing to prove
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backupDir = path.join(data, 'rollback')
+  backupPackage(pkg, backupDir)
+  // The swap already rewrote index.js on a machine where the file carries the
+  // read-only attribute (a sync client or an attribute editor leaves it that
+  // way). Copying straight over it is denied; the target has to be cleared and
+  // tried again — which is what the old delete-everything-first order handed
+  // every copy for free, and losing it turned a recoverable rollback into
+  // `rollback incomplete`.
+  fs.writeFileSync(path.join(pkg, 'index.js'), newFiles['index.js'])
+  fs.chmodSync(path.join(pkg, 'index.js'), 0o444)
+  restoreBackup(backupDir, pkg)
+  assert.equal(fs.readFileSync(path.join(pkg, 'index.js'), 'utf8'), oldFiles['index.js'], 'the read-only file was put back')
+  assert.equal(fs.readFileSync(path.join(pkg, 'client.js'), 'utf8'), oldFiles['client.js'], 'and the rest of the package with it')
+  fs.rmSync(pkg, { recursive: true, force: true })
+  fs.rmSync(data, { recursive: true, force: true })
+})
 await checkAsync('installStaged + verifyInstalled accept a good stage', async () => {
   const pkg = makePackage(OLD)
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-stage-'))
