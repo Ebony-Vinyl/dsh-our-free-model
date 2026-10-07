@@ -47,6 +47,8 @@ export class FreeModelAdapter {
    * @param {(record: object) => void} dependencies.recordUsage
    * @param {(record: object) => void} [dependencies.recordTurn]
    * @param {(message: string) => void} [dependencies.warn]
+   * @param {(model: string) => void} [dependencies.onRegionBlocked]
+   * @param {(model: string) => void} [dependencies.onQuotaHit]
    */
   constructor(dependencies) {
     this.deps = dependencies
@@ -443,6 +445,12 @@ export class FreeModelAdapter {
         return
       } catch (error) {
         if (error?.code === CODE.region) this.deps.onRegionBlocked?.(entry.id)
+        // A quota refusal ("Rate limit exceeded") is a fact about the *exit*, not
+        // about the model: the lane rate-limits the IP it sees. The outlet's own
+        // health check cannot see it — gstatic still answers 204 through the node
+        // that just ran out of quota — so the host half, which holds both the
+        // refusal and the outlet, is the only place that can move the exit.
+        if (error?.code === CODE.quota) this.deps.onQuotaHit?.(entry.id)
         const aborted = options.signal?.aborted === true
         let failure = toFailure(error)
         if (!aborted && (recovering || expired)) {

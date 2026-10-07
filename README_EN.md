@@ -269,6 +269,45 @@ needs a few seconds before it carries traffic, and the plugin waits for the new
 exit to answer before regrouping, so region-gated models follow the new exit.
 Reprobe (below) does the same on demand.
 
+**When the exit is rate-limited.** `Rate limit exceeded` is a per-IP verdict, and
+the outlet's own health check cannot see it: the node that just ran out of quota
+still answers 204 for gstatic, so its latency — and its rank — do not move, and
+url-test hands the same exit back. The plugin is the component that catches the
+refusal, so it forces the outlet to re-measure every node and steps onto one that
+has not refused. At most one rotation a minute, and a node that refused stays out
+of the ranking for ten minutes. A single-proxy (`client`) outlet has no second
+exit to step onto, and the log says so rather than staging a rotation that cannot
+happen. The exit IP, its country and the region-gated verdicts all move with the
+new node, and the plugin re-reads them exactly as it does when the outlet is
+toggled.
+
+**When the exit slows down or goes away.** The outlet's own health check answers
+"can this node be dialed", never "did this request get out, and how long did it
+take" — so a node that accepts the tunnel and then carries nothing keeps its
+latency, keeps its rank, and url-test hands it straight back. The plugin keeps its
+own book instead: every request sent through the outlet that comes back without
+even a response head counts as one fault. The first one asks the outlet for
+another node at once (the same one-minute cooldown, and the node that failed
+stays out of the ranking for ten minutes); three in a row take the outlet out of
+the path entirely, and requests go out direct from this machine while the outlet
+is retried behind them — one request is let through after sixty seconds, a single
+answer clears the whole ladder and puts the lane back on the outlet, and a failure
+drops straight back to direct on a doubled window, up to ten minutes. One bad
+spell from the exit then costs the third turn rather than an open-ended stretch of
+them. The direct replay is only made when two things hold at once: the request was
+never handed to the outlet (the tunnel never opened, so the gateway never saw it)
+*and* its body can be re-sent verbatim. Once a request is under way it may already
+have been served, and the free lane charging one turn twice is worse than the
+honest failure; a real streaming upload is never replayed either. An outlet that
+turns you away at the CONNECT stage with a 401/403/407 is misconfiguration rather
+than a bad moment, and the plugin reports that failure instead of failing over
+from it: stepping off would send the traffic you routed into the outlet out of
+this machine's own address. Separately, the routine 120-second probe escalates a
+gateway round that took more than six seconds through the outlet — that one
+switches nodes only and never downgrades to direct. The light at the top of the
+settings panel reports which path a request actually takes: the outlet, the direct
+fallback (with the seconds it has left), or retrying the outlet.
+
 **Re-check geography.** `重新探测可用性` (Reprobe) re-runs availability against
 your current exit. Toggling a VPN and re-probing moves region-gated models
 between the two groups on its own.
