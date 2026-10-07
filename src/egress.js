@@ -339,6 +339,38 @@ export function benchOutletExit(reason) {
 }
 
 /**
+ * Let a benched outlet back in early, because the gateway has now refused the
+ * address that took its place.
+ *
+ * `benchOutletExit` is the host saying "every node of this subscription exits
+ * from a refused address, so this machine's own address carries the traffic".
+ * This is the rest of that sentence: a verdict that lands while the lane is
+ * already direct is about *this* address, and the outlet is the exit the verdict
+ * has not covered since it was benched. Waiting out the window would only prove
+ * the same thing twice, so the outlet goes back on the next request.
+ *
+ * The bench is not cleared — only shortened. `benched` keeps its count, so an
+ * outlet that is let back in and fails again re-opens on a doubled window: a pair
+ * of refused addresses settles into a slow alternation instead of a per-turn
+ * ping-pong. A request that does come back through the outlet clears the whole
+ * ladder the usual way (`laneHealthy`), which is the point of letting it in.
+ *
+ * @param {string} reason
+ * @returns {boolean} true when a benched outlet was put back on trial
+ */
+export function reopenOutletExit(reason) {
+  const relay = activeRelay
+  if (relay === null || !laneBenched(relay)) return false
+  const faults = relay.faults
+  faults.benchUntil = 0
+  faults.reason = String(reason)
+  faults.at = Date.now()
+  relay.log(`egress lane: ${faults.reason}; putting the outlet back on the next request`)
+  relay.onLane?.({ ...egressLaneOf(relay), transition: 'reopen' })
+  return true
+}
+
+/**
  * Start the relay for the current settings; throws with a message the settings
  * page can show when the configuration cannot run.
  *

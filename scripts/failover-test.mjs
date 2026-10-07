@@ -26,7 +26,7 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { startEgressRelay, egressFetch, egressActive, egressLane, benchOutletExit } from '../src/egress.js'
+import { startEgressRelay, egressFetch, egressActive, egressLane, benchOutletExit, reopenOutletExit } from '../src/egress.js'
 
 let checks = 0
 let failures = 0
@@ -300,6 +300,34 @@ async function main() {
     'and an outlet that answers again clears the refusal with it')
   check(fourth.lanes.join(',') === 'bench,bench,relay', 'the return to the relay is announced')
   await fourth.relay.close()
+
+  // 11 — the refusal that lands on a lane that is already direct. The verdict is
+  // about an address, and the address this request left from is this machine's
+  // own: the outlet is the exit the verdict has not covered since it was benched,
+  // so the host puts it back on the next request rather than waiting out a window
+  // that would say the same thing twice. Reporting the changed path is what makes
+  // the refused turn worth re-sending — and the count of benches is kept, so an
+  // outlet that fails again re-opens wider instead of ping-ponging per turn.
+  stage = 'refusal-reopen'
+  outlet.setMode('ok')
+  const fifth = await startLane({ dataDir, outlet })
+  const firstVerdict = 'the lane rate-limited this exit; no exit but 155.254.104.0/24'
+  benchOutletExit(firstVerdict)
+  check(egressLane().state === 'direct', 'the lane is benched before the second verdict lands')
+  const directVerdict = 'the lane rate-limited this exit; the direct lane is refused too'
+  check(reopenOutletExit(directVerdict) === true && egressLane().state === 'probing',
+    'a verdict against the direct lane puts the outlet back on trial')
+  check(egressLane().reason === directVerdict && egressLane().benched === 1,
+    'and the panel reads the new verdict back with the bench count kept')
+  check(fifth.lanes.join(',') === 'bench,reopen', 'the host is told the path changed again')
+  const dialledAgain = outlet.counts.connect
+  check((await post()).status === 200 && outlet.counts.connect > dialledAgain,
+    'the next request goes out through the outlet again')
+  const backOn = egressLane()
+  check(backOn.state === 'relay' && backOn.benched === 0 && backOn.reason === '',
+    'and an outlet that answers clears the refusal it was benched for')
+  check(reopenOutletExit('nothing is benched') === false, 'with no bench open there is nothing to reopen')
+  await fifth.relay.close()
 
   await outlet.close()
   fs.rmSync(dataDir, { recursive: true, force: true })

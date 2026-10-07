@@ -36,7 +36,7 @@ import { STATE, detectEgress, probeCatalog } from './src/probe.js'
 import { generateKey, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError, getJson } from './src/http.js'
-import { addressBlock, benchOutletExit, egressLane, outletLabel, readOutletSelection, stepOffBlamedAddress, startEgressRelay } from './src/egress.js'
+import { addressBlock, benchOutletExit, egressLane, outletLabel, readOutletSelection, reopenOutletExit, stepOffBlamedAddress, startEgressRelay } from './src/egress.js'
 import { directFetch, fetchSealedListing } from './src/eac.js'
 import { fetchKiloListing } from './src/kilo.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
@@ -1245,7 +1245,12 @@ export function apply(ctx, config) {
   let outletRotation = null
   function scheduleOutletRotation(why = 'the lane rate-limited this exit', { refusal = false } = {}) {
     if (outletRotation !== null) return outletRotation
-    if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return null
+    // The cooldown keeps the host from re-measuring the same node list on every
+    // refused turn — but a benched outlet is not that case: the lane is direct,
+    // there is no node list to walk, and the move being asked for is the one that
+    // has to happen before the refused turn can be re-sent at all.
+    const direct = egressLane().state === 'direct'
+    if (!direct && Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return null
     outletRotateAt = Date.now()
     // The caller that reads this back is the refused turn itself, and it may only
     // be re-sent once the outlet really moved: `true` means the exit changed,
@@ -1284,6 +1289,13 @@ export function apply(ctx, config) {
   async function rotateOutletExit(why, { refusal = false } = {}) {
     const relay = outletRelay
     if (relay === null) return false
+    // The other half of "nowhere left to step": the outlet is already benched, so
+    // the verdict is about this machine's own address — the one the bench handed
+    // the traffic to. A direct lane measures as no address at all (the reading
+    // would describe the host), so there is nothing here to compare or step off;
+    // the outlet is the move, and reporting it is what lets the refused turn be
+    // re-sent at all.
+    if (reopenOutletExit(`${why}; the direct lane is refused too`)) return true
     // A `client` outlet is the one proxy the user named: there is no node list to
     // re-measure and no second exit to step onto. Saying so beats looking like a
     // rotation happened.
