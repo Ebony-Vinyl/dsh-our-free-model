@@ -26,7 +26,7 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { startEgressRelay, egressFetch, egressActive, egressLane } from '../src/egress.js'
+import { startEgressRelay, egressFetch, egressActive, egressLane, benchOutletExit } from '../src/egress.js'
 
 let checks = 0
 let failures = 0
@@ -258,6 +258,49 @@ async function main() {
     'and it is neither a strike nor a reason to go direct')
   await third.relay.close()
   await gated.close()
+
+  // 10 — a refusal that outlives every node. The rotation's node list is a set of
+  // names and the verdict is about an address: once every node the subscription
+  // offers presents the same refused block there is nothing left to step onto,
+  // and the one exit that verdict does not cover is this machine's own. So the
+  // host benches the outlet instead of swapping one name for another — into the
+  // ladder that is already there, with its window, its doubling and its
+  // recovery, rather than a second mechanism beside it.
+  stage = 'refusal-bench'
+  outlet.setMode('ok')
+  const fourth = await startLane({ dataDir, outlet })
+  check(egressLane().state === 'relay', 'a fresh relay starts on the relay path before any verdict')
+  const verdict = 'the lane rate-limited this exit; no exit but 155.254.104.0/24'
+  const windowMs = benchOutletExit(verdict)
+  const refused = egressLane()
+  check(windowMs === BENCH.bypassMs && refused.state === 'direct' && refused.benched === 1,
+    'a refusal with nowhere left to step benches the outlet for the base window')
+  check(refused.reason === verdict, 'and the verdict is what the panel reads back')
+  check(fourth.lanes.join(',') === 'bench', 'the path change is announced to the host')
+  const dialled = outlet.counts.connect
+  check((await post()).status === 200 && outlet.counts.connect === dialled,
+    'the benched outlet is not dialled for the turn the refusal was about')
+  check(benchOutletExit(verdict) === 0, 'a second verdict inside the same window does not reopen it')
+
+  // The trial: the first request after the window is the probe, and a verdict
+  // that comes back again is an answer, so the bench re-opens wider.
+  stage = 'refusal-trial'
+  await wait(Math.max(0, egressLane().benchUntil - Date.now()) + 20)
+  check(egressLane().state === 'probing', 'once the window closes the lane is back on trial')
+  check(benchOutletExit(verdict) === BENCH.bypassMs * 2 && egressLane().benched === 2,
+    'a repeated verdict re-opens it on a doubled window')
+
+  // The repair: the first answer that comes back through the outlet clears the
+  // refusal the way it clears a strike.
+  stage = 'refusal-recover'
+  await wait(Math.max(0, egressLane().benchUntil - Date.now()) + 20)
+  check((await post()).status === 200, 'the trial request is answered whichever way it goes')
+  const carriedAgain = egressLane()
+  check(carriedAgain.state === 'relay' && carriedAgain.benched === 0 && carriedAgain.reason === '',
+    'and an outlet that answers again clears the refusal with it')
+  check(fourth.lanes.join(',') === 'bench,bench,relay', 'the return to the relay is announced')
+  await fourth.relay.close()
+
   await outlet.close()
   fs.rmSync(dataDir, { recursive: true, force: true })
 

@@ -257,13 +257,34 @@ function laneFault(relay, error, init) {
     relay.onFault?.(error)
   } catch { /* a diagnostics callback cannot reroute a request */ }
   if (faults.open === false && faults.strikes < relay.policy.strikes) return
+  openBench(relay, faults.reason)
+}
+
+/**
+ * Write the outlet off for a window: from the next request on, the lane leaves
+ * direct.
+ *
+ * The window doubles on every reopen, so an outlet that stays useless is
+ * re-tried at a settling rate instead of on every turn, and a repaired one is
+ * picked up within the cap. Both things that can say "this outlet is no use"
+ * share it: a request it never carried (`laneFault`), and a verdict about the
+ * address it exits from that no other node of the subscription escapes
+ * (`benchOutletExit`).
+ *
+ * @returns {number} the window in milliseconds
+ */
+function openBench(relay, reason) {
+  const faults = relay.faults
   faults.open = true
   faults.benched += 1
   faults.strikes = 0
+  faults.reason = reason
+  faults.at = Date.now()
   const window = Math.min(relay.policy.bypassMs * 2 ** (faults.benched - 1), relay.policy.bypassMaxMs)
   faults.benchUntil = Date.now() + window
-  relay.log(`egress lane: ${faults.reason}; going direct for ${Math.round(window / 1000)}s`)
+  relay.log(`egress lane: ${reason}; going direct for ${Math.round(window / 1000)}s`)
   relay.onLane?.({ ...egressLaneOf(relay), transition: 'bench' })
+  return window
 }
 
 /**
@@ -293,6 +314,28 @@ function egressLaneOf(relay) {
     reason: faults.reason,
     at: faults.at,
   }
+}
+
+/**
+ * Write the outlet off because of a verdict about the address it exits from.
+ *
+ * `laneFault` counts what the outlet failed to carry; this is the other half —
+ * requests it carried perfectly well and the gateway refused by address. Such a
+ * refusal only becomes usable once the host has measured every exit the
+ * subscription offers and found them all on the refused address (`index.js`'s
+ * outlet rotation does exactly that before calling this). With nowhere left to
+ * step, the one path that is not the refused address is this machine's own, and
+ * it is the same bench the strikes ladder opens: same window, same doubling,
+ * same recovery on the first answer that comes back through the outlet.
+ *
+ * @param {string} reason
+ * @returns {number} the window in milliseconds, or `0` when there is nothing to
+ *   bench or the outlet is already sitting one out
+ */
+export function benchOutletExit(reason) {
+  const relay = activeRelay
+  if (relay === null || laneBenched(relay)) return 0
+  return openBench(relay, String(reason))
 }
 
 /**

@@ -36,7 +36,7 @@ import { STATE, detectEgress, probeCatalog } from './src/probe.js'
 import { generateKey, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError, getJson } from './src/http.js'
-import { addressBlock, egressLane, outletLabel, readOutletSelection, stepOffBlamedAddress, startEgressRelay } from './src/egress.js'
+import { addressBlock, benchOutletExit, egressLane, outletLabel, readOutletSelection, stepOffBlamedAddress, startEgressRelay } from './src/egress.js'
 import { directFetch, fetchSealedListing } from './src/eac.js'
 import { fetchKiloListing } from './src/kilo.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
@@ -1223,6 +1223,13 @@ export function apply(ctx, config) {
    * rotation a minute, one at a time, and a ten-minute memory of the nodes and
    * addresses that refused — the very measurement that makes them look "fast" is
    * what hands them back.
+   *
+   * A refusal that outlives every node is the one case the node list cannot
+   * answer: the list is a set of names and the verdict is about an address, so
+   * when they all present the refused address there is nothing left to step
+   * onto, and the rotation benches the outlet instead — this machine's own
+   * address is the one exit the verdict does not cover, and that is what makes
+   * the refused turn worth re-sending.
    */
   const OUTLET_ROTATE_COOLDOWN_MS = 60_000
   const OUTLET_LIMITED_TTL_MS = 10 * 60_000
@@ -1325,6 +1332,15 @@ export function apply(ctx, config) {
       logger.warn?.(refusedBlock === ''
         ? `our-free-model: ${why} and no other measured node is available; staying on it`
         : `our-free-model: ${why}; every measured node sits on ${refusedBlock}, so there is no exit to step onto`)
+      // A refusal is a verdict about the address, and this subscription has no
+      // other address to offer: every node it lists presents the same refused
+      // block. Renaming the node cannot answer that, so the one path left that
+      // is not that address is this machine's own — the bench `src/egress.js`
+      // already runs for an outlet that stops carrying traffic, with the same
+      // window, the same doubling and the same recovery on the first answer
+      // that comes back through the outlet. It counts as a move because the
+      // exit really did change; it is just no longer the subscription's.
+      if (refusedBlock !== '' && benchOutletExit(`${why}; no exit but ${refusedBlock}`) > 0) return true
       return false
     }
     if (!rotated.switched) {
