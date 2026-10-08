@@ -39,6 +39,32 @@ export const ROUTE_LABELS = {
 
 const STYLE_FOR_WIRE = { chat: 'chat', responses: 'flat', messages: 'claude' }
 
+/**
+ * The kernel's in-history prompt-update mode, for the wires that can use it.
+ *
+ * The kernel reads this field off `resolveModel()` and validates it strictly —
+ * `LlmResolvedModelInfo.systemPromptUpdate` accepts only the string
+ * `'in-history'`, and anything else fails resolution with `INVALID_MODEL_INFO`
+ * — then carries it onto the prepared call, where the agent loop reads it to
+ * decide whether a changed prompt is appended after the cached history or
+ * written into the leading system node in place. The declarations that pin this
+ * down live beside the seam in `adapter/dsh-llm.d.ts`.
+ *
+ * `chat` and `responses` keep a system message exactly where it sits in the
+ * messages array, so a refreshed snapshot appended after the history is still
+ * read as the effective prompt and the prefix through that history stays
+ * reusable. The `messages` wire folds every system block into one top-level
+ * field ahead of history, where the same snapshot would land after everything
+ * it invalidates — declaring the mode there would buy a rewrite, not a cache
+ * hit, so it is left undeclared.
+ *
+ * @param {string} modelId
+ * @returns {{systemPromptUpdate?: 'in-history'}}
+ */
+function systemPromptUpdateFor(modelId) {
+  return wireFor(modelId) === 'messages' ? {} : { systemPromptUpdate: 'in-history' }
+}
+
 export class FreeModelAdapter {
   /**
    * @param {object} dependencies
@@ -127,6 +153,7 @@ export class FreeModelAdapter {
         name: baseModelId(model),
         context: { contextWindow: 131072 },
         defaultMaxTokens: 8192,
+        ...systemPromptUpdateFor(baseModelId(model)),
       }
     }
     const ceiling = Math.min(entry.maxOutput, state.settings.defaultMaxTokens ?? 32768)
@@ -139,6 +166,7 @@ export class FreeModelAdapter {
       context: { contextWindow: entry.contextWindow },
       defaultMaxTokens: ceiling,
       ...efforts === undefined ? {} : { reasoning: { efforts, defaultEffort: defaultEffortFor(entry) } },
+      ...systemPromptUpdateFor(entry.id),
     }
   }
 
