@@ -269,6 +269,18 @@ needs a few seconds before it carries traffic, and the plugin waits for the new
 exit to answer before regrouping, so region-gated models follow the new exit.
 Reprobe (below) does the same on demand.
 
+**When the exit is rate-limited.** `Rate limit exceeded` is a per-IP verdict, and
+the outlet's own health check cannot see it: the node that just ran out of quota
+still answers 204 for gstatic, so its latency — and its rank — do not move, and
+url-test hands the same exit back. The plugin is the component that catches the
+refusal, so it forces the outlet to re-measure every node and steps onto one that
+has not refused. At most one rotation a minute, and a node that refused stays out
+of the ranking for ten minutes. A single-proxy (`client`) outlet has no second
+exit to step onto, and the log says so rather than staging a rotation that cannot
+happen. The exit IP, its country and the region-gated verdicts all move with the
+new node, and the plugin re-reads them exactly as it does when the outlet is
+toggled.
+
 **Re-check geography.** `重新探测可用性` (Reprobe) re-runs availability against
 your current exit. Toggling a VPN and re-probing moves region-gated models
 between the two groups on its own.

@@ -13,7 +13,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
-import { startEgressRelay, egressFetch, egressActive, renderMihomoConfig, findMihomoBinary, outletLabel, readOutletSelection } from '../src/egress.js'
+import { startEgressRelay, egressFetch, egressActive, renderMihomoConfig, findMihomoBinary, outletLabel, readOutletSelection, refreshOutletExit } from '../src/egress.js'
 
 let checks = 0
 let failures = 0
@@ -55,24 +55,38 @@ function listen(server, host) {
   return new Promise(resolve => server.listen(0, host, () => resolve(server.address().port)))
 }
 
-/** Stand-in for mihomo's external-controller: serves the routes the node
- *  reading uses and remembers the bearer token it was called with. */
+/** Stand-in for mihomo's external-controller: serves the routes the node reading
+ *  and the exit rotation use, remembers the bearer token it was called with, and
+ *  records every call as `{method, path, body}`. A route may be a function
+ *  instead of a payload, which is how a 204 with no body — mihomo's shape for a
+ *  switch and for a forced health-check — is scripted. */
 function startFakeController(routes) {
+  const calls = []
   const server = http.createServer((req, res) => {
     server.lastAuth = req.headers.authorization ?? ''
-    const body = routes[req.url]
-    if (body === undefined) {
-      res.writeHead(404, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ message: 'not found' }))
-      return
-    }
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify(body))
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      calls.push({ method: req.method ?? 'GET', path: req.url ?? '', body: Buffer.concat(chunks).toString('utf8') })
+      const body = routes[req.url]
+      if (body === undefined) {
+        res.writeHead(404, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ message: 'not found' }))
+        return
+      }
+      if (typeof body === 'function') {
+        body(req, res)
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(body))
+    })
   })
   const port = listen(server, '127.0.0.1')
   return port.then(resolved => ({
     port: resolved,
     get lastAuth() { return server.lastAuth ?? '' },
+    get calls() { return calls },
     close: () => new Promise(resolve => server.close(() => resolve())),
   }))
 }
@@ -399,6 +413,54 @@ async function main() {
   const fallback = await readOutletSelection({ managed: { mixedPort: 1, apiPort: grouped.port, secret: 'shh', dir: dataDir } })
   check(fallback?.node === 'HK 1' && fallback?.delayMs === 210, 'the group history is used when the provider table has no row')
   await grouped.close()
+
+  // 13 — a quota refusal is about the exit, so the outlet re-measures and steps
+  // off the node that answered it. url-test cannot do this itself: gstatic keeps
+  // answering 204 through a node the lane just rate-limited, so its rank holds.
+  stage = 'outlet rotation'
+  check(await refreshOutletExit(null) === null, 'no outlet means nothing to re-measure')
+  check(await refreshOutletExit({}) === null, 'a single-proxy outlet has no controller to ask')
+  const rotator = await startFakeController({
+    '/proxies/ofm-outlet': { now: 'JP 5', type: 'URLTest', history: [] },
+    '/providers/proxies/egress': { proxies: [
+      { name: 'JP 5', history: [{ delay: 294 }] },
+      { name: 'JP 4', history: [{ delay: 380 }] },
+      { name: 'DE 1', history: [] },
+    ] },
+    '/providers/proxies/egress/healthcheck': (req, res) => { res.writeHead(204); res.end() },
+  })
+  const rotated = await refreshOutletExit(
+    { managed: { mixedPort: 1, apiPort: rotator.port, secret: 'shh', dir: dataDir } },
+    { avoid: ['JP 5'] })
+  check(rotator.calls[0]?.path === '/providers/proxies/egress/healthcheck', 'every node is measured again first')
+  check([rotated?.previous, rotated?.node, rotated?.delayMs, rotated?.switched, rotated?.candidates].join('|') === 'JP 5|JP 4|380|true|1',
+    'the refused exit is skipped for the best one still measured')
+  const switched = rotator.calls.find(call => call.method === 'PUT')
+  check(switched?.path === '/proxies/ofm-outlet' && JSON.parse(switched?.body ?? '{}').name === 'JP 4',
+    'and the group is moved onto it through the controller')
+  await rotator.close()
+
+  // Nothing else measured: the node that refused is all there is, and an exit the
+  // health check could not reach is not a replacement for it.
+  const lonely = await startFakeController({
+    '/proxies/ofm-outlet': { now: 'JP 5', history: [] },
+    '/providers/proxies/egress': { proxies: [{ name: 'JP 5', history: [{ delay: 294 }] }] },
+  })
+  check(await refreshOutletExit({ managed: { mixedPort: 1, apiPort: lonely.port, secret: 'shh', dir: dataDir } }, { avoid: ['JP 5'] }) === null,
+    'a refusal with no other usable exit changes nothing')
+  check(lonely.calls.some(call => call.method === 'PUT') === false, 'and nothing is switched')
+  await lonely.close()
+
+  // The best node is the one already carrying traffic: nothing to switch to, and
+  // no PUT to a group that already holds it.
+  const same = await startFakeController({
+    '/proxies/ofm-outlet': { now: 'JP 4', history: [] },
+    '/providers/proxies/egress': { proxies: [{ name: 'JP 4', history: [{ delay: 380 }] }, { name: 'DE 1', history: [] }] },
+  })
+  const stayed = await refreshOutletExit({ managed: { mixedPort: 1, apiPort: same.port, secret: 'shh', dir: dataDir } }, { avoid: ['JP 5'] })
+  check([stayed?.node, stayed?.switched].join('|') === 'JP 4|false', 'a node already in use is not re-selected')
+  check(same.calls.some(call => call.method === 'PUT') === false, 'so no switch is sent')
+  await same.close()
 
   fs.rmSync(dataDir, { recursive: true, force: true })
   console.log(`${failures === 0 ? 'PASS' : 'FAIL'}: egress ${checks - failures}/${checks} checks`)

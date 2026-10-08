@@ -759,14 +759,66 @@ function lastDelay(proxy) {
   return typeof delay === 'number' && delay > 0 ? delay : undefined
 }
 
-function controllerJson(managed, path, timeoutMs) {
+/**
+ * Make the outlet re-measure every node, and step off the one that just answered
+ * a quota refusal.
+ *
+ * The provider and the url-test group both re-measure on their own 300 s clock,
+ * and a per-IP rate limit is invisible to that clock: gstatic still answers 204
+ * through the node the lane just refused, so its latency — and its rank — do not
+ * move, and url-test hands back the same exit. The plugin is the only component
+ * that sees the refusal, so it is the one that has to force the measurement and
+ * then pick an exit the lane has not just refused.
+ *
+ * Best effort by design: a `client` outlet has no controller to ask, and a
+ * controller that will not answer leaves the outlet exactly as it was. A
+ * rotation is an optimization, never a health requirement.
+ *
+ * @param {{managed?: {apiPort: number, secret: string}|null}} relay
+ * @param {{avoid?: string[], timeoutMs?: number}} [options] - `avoid` names the
+ *   exits not to come back to: the one that just refused, and any that refused
+ *   inside the caller's cooldown window.
+ * @returns {Promise<{node: string, delayMs: number, previous: string, switched: boolean, candidates: number}|null>}
+ *   `null` when there is no controller, nothing measured, or no usable exit
+ *   outside `avoid` — in which case the outlet is left as it was.
+ */
+export async function refreshOutletExit(relay, { avoid = [], timeoutMs = 4000 } = {}) {
+  const managed = relay?.managed
+  if (managed === null || managed === undefined) return null
+  const avoided = new Set(avoid.filter(name => typeof name === 'string' && name !== ''))
+  // The provider's own health-check is the "measure every node now" call. The
+  // group's `/delay` would re-rank the nodes the group already holds, which is
+  // the ranking that put the refused exit on top in the first place.
+  await controllerJson(managed, '/providers/proxies/egress/healthcheck', timeoutMs).catch(() => null)
+  const group = await controllerJson(managed, '/proxies/ofm-outlet', timeoutMs).catch(() => null)
+  const previous = typeof group?.now === 'string' ? group.now : ''
+  const provider = await controllerJson(managed, '/providers/proxies/egress', timeoutMs).catch(() => null)
+  const ranked = (Array.isArray(provider?.proxies) ? provider.proxies : [])
+    .map(proxy => ({ name: typeof proxy?.name === 'string' ? proxy.name : '', delayMs: lastDelay(proxy) ?? 0 }))
+    // A node with no positive delay is one the health-check could not reach; it
+    // is not a candidate however short the list is.
+    .filter(row => row.name !== '' && row.delayMs > 0 && !avoided.has(row.name))
+    .sort((a, b) => a.delayMs - b.delayMs)
+  const best = ranked[0]
+  if (best === undefined) return null
+  if (best.name === previous) return { node: best.name, delayMs: best.delayMs, previous, switched: false, candidates: ranked.length }
+  await controllerJson(managed, '/proxies/ofm-outlet', timeoutMs, { method: 'PUT', body: { name: best.name } })
+  return { node: best.name, delayMs: best.delayMs, previous, switched: true, candidates: ranked.length }
+}
+
+function controllerJson(managed, path, timeoutMs, { method = 'GET', body } = {}) {
   return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : JSON.stringify(body)
     const request = http.request(
       {
         host: RELAY_HOST,
         port: managed.apiPort,
         path,
-        headers: { authorization: `Bearer ${managed.secret}` },
+        method,
+        headers: {
+          authorization: `Bearer ${managed.secret}`,
+          ...payload === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+        },
         timeout: timeoutMs,
       },
       response => {
@@ -774,20 +826,27 @@ function controllerJson(managed, path, timeoutMs) {
         response.setEncoding('utf8')
         response.on('data', chunk => { body += chunk })
         response.on('end', () => {
-          if (response.statusCode !== 200) {
-            reject(new Error(`mihomo controller ${path} answered ${response.statusCode}`))
+          // mihomo answers a switch and a forced health-check with 204 and no
+          // body, and the readings with 200 and JSON: anything else is a
+          // controller the caller must not read a verdict out of.
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            reject(new Error(`mihomo controller ${method} ${path} answered ${response.statusCode}`))
+            return
+          }
+          if (body === '') {
+            resolve(null)
             return
           }
           try {
             resolve(JSON.parse(body))
           } catch {
-            reject(new Error(`mihomo controller ${path} sent unparsable JSON`))
+            reject(new Error(`mihomo controller ${method} ${path} sent unparsable JSON`))
           }
         })
       },
     )
-    request.on('timeout', () => request.destroy(new Error(`mihomo controller ${path} timed out`)))
+    request.on('timeout', () => request.destroy(new Error(`mihomo controller ${method} ${path} timed out`)))
     request.on('error', reject)
-    request.end()
+    request.end(payload)
   })
 }

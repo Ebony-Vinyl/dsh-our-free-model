@@ -36,7 +36,7 @@ import { STATE, detectEgress, probeCatalog } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError, getJson } from './src/http.js'
-import { outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
+import { outletLabel, readOutletSelection, refreshOutletExit, startEgressRelay } from './src/egress.js'
 import { directFetch, fetchSealedListing } from './src/eac.js'
 import { fetchKiloListing } from './src/kilo.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
@@ -469,6 +469,7 @@ export function apply(ctx, config) {
     recordTurn: record => recordTurn(stats, record),
     warn: message => logger.warn?.(message) ?? logger.log?.(message),
     onRegionBlocked: () => scheduleReprobe(),
+    onQuotaHit: () => scheduleOutletRotation(),
   })
 
   // ── registration ────────────────────────────────────────────────────────────
@@ -1178,6 +1179,67 @@ export function apply(ctx, config) {
       void syncEgress().catch(() => {})
     }, delay)
     outletRestartTimer.unref?.()
+  }
+
+  /**
+   * A quota refusal — "Rate limit exceeded" — is a per-IP verdict, and mihomo's
+   * url-test cannot act on it: the health-check target still answers 204 through
+   * the node the lane just refused, so that node keeps its rank and keeps
+   * winning. The plugin is the only component that sees the refusal, so a
+   * refusal asks the outlet to re-measure every node now and steps onto one that
+   * has not refused.
+   *
+   * Three guards keep a burst of failed turns from thrashing the exit: one
+   * rotation a minute, one at a time, and a ten-minute memory of the nodes that
+   * refused — the very measurement that makes them look "fast" is what hands
+   * them back.
+   */
+  const OUTLET_ROTATE_COOLDOWN_MS = 60_000
+  const OUTLET_LIMITED_TTL_MS = 10 * 60_000
+  const limitedNodes = new Map()
+  let outletRotateAt = 0
+  let outletRotation = null
+  function scheduleOutletRotation() {
+    if (outletRotation !== null) return
+    if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return
+    outletRotateAt = Date.now()
+    outletRotation = rotateOutletExit()
+      .catch(error => logger.debug?.(`our-free-model: outlet re-measure failed (${error?.message ?? error})`))
+      .finally(() => { outletRotation = null })
+  }
+  async function rotateOutletExit() {
+    const relay = outletRelay
+    if (relay === null) return
+    // A `client` outlet is the one proxy the user named: there is no node list to
+    // re-measure and no second exit to step onto. Saying so beats looking like a
+    // rotation happened.
+    if (relay.managed === null || relay.managed === undefined) {
+      logger.info?.('our-free-model: the lane rate-limited this exit; a single-proxy outlet has no other node to measure')
+      return
+    }
+    const now = Date.now()
+    for (const [node, until] of limitedNodes) if (until <= now) limitedNodes.delete(node)
+    const live = await readOutletSelection(relay).catch(() => null)
+    const current = live?.node ?? outletNode.node
+    const avoid = [...limitedNodes.keys()]
+    if (current !== '') avoid.push(current)
+    const rotated = await refreshOutletExit(relay, { avoid })
+    // The node that refused is out for the cooldown window whether or not a
+    // replacement was found: leaving it out of the ranking is the whole point.
+    if (current !== '') limitedNodes.set(current, now + OUTLET_LIMITED_TTL_MS)
+    if (rotated === null) {
+      logger.warn?.('our-free-model: the lane rate-limited this exit and no other measured node is available; staying on it')
+      return
+    }
+    outletNode = { node: rotated.node, delayMs: rotated.delayMs, at: Date.now() }
+    logger.warn?.(rotated.switched
+      ? `our-free-model: the lane rate-limited "${rotated.previous === '' ? current : rotated.previous}"; re-measured the outlet and moved to "${rotated.node}" (${rotated.delayMs} ms, best of ${rotated.candidates})`
+      : `our-free-model: the lane rate-limited this exit; re-measured the outlet and "${rotated.node}" is still the only node measured (${rotated.delayMs} ms)`)
+    // The way out changed under every reading the panel and the picker show: the
+    // exit IP, its country, and the region-gated verdicts all belong to the old
+    // node. This is the same watch the outlet's own start and stop run, and the
+    // rotation cooldown is what keeps it from becoming a loop.
+    if (rotated.switched) void watchEgress().catch(() => {})
   }
 
   /**

@@ -176,6 +176,32 @@ for (const [name, model, fixture, wantKind, wantCode, wantRetryable, wantRegionF
   }
 }
 
+// A quota refusal has one consumer beyond the caller: the host half. "Rate limit
+// exceeded" is a per-IP verdict, and the outlet's own health check cannot see it
+// (gstatic keeps answering 204 through a node the lane just rate-limited), so
+// the plugin is the component that has to re-measure the outlet and step off
+// that exit. The hook has to fire on that code alone — a transport failure or a
+// geography refusal must never move the exit.
+const quotaHits = []
+async function driveForHooks(model) {
+  const adapter = new FreeModelAdapter({
+    state: STATE,
+    recordUsage: () => {},
+    warn: () => {},
+    onQuotaHit: id => quotaHits.push(id),
+  })
+  for await (const chunk of adapter.stream({
+    provider: ROUTE_MAIN,
+    model,
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+  })) void chunk
+}
+await driveForHooks('quota-model-free')
+await driveForHooks('region-model-free')
+await driveForHooks('socket-model-free')
+const quotaHookOk = quotaHits.length === 1 && quotaHits[0] === 'quota-model-free'
+console.log(`${quotaHookOk ? 'ok   ' : 'FAIL '} a quota refusal alone reaches the exit-rotation hook: ${JSON.stringify(quotaHits)}`)
+
 // The provider policy is consumed verbatim by the kernel's backoff scheduler,
 // which reads these fields off the top level. A nested `backoff` makes the
 // scheduled delay NaN, and the durable session log rejects NaN outright.
@@ -231,8 +257,8 @@ console.log(`${cachedOk ? 'ok   ' : 'FAIL '} a cache hit is taken out of the dis
 await new Promise(resolve => setTimeout(resolve, 900))
 await stub.close()
 
-const ok = failed === 0 && policyShapeOk && usageOk && cachedOk && abortedNeverRetried && clientOk
+const ok = failed === 0 && policyShapeOk && usageOk && cachedOk && abortedNeverRetried && clientOk && quotaHookOk
 console.log(ok
   ? `\nretry-safety: all ${cases.length} failure shapes are classified, retried correctly, and durable-log safe`
-  : `\nretry-safety: ${failed + (policyShapeOk ? 0 : 1) + (usageOk ? 0 : 1) + (cachedOk ? 0 : 1) + (abortedNeverRetried ? 0 : 1) + (clientOk ? 0 : 1)} failure(s)`)
+  : `\nretry-safety: ${failed + (policyShapeOk ? 0 : 1) + (usageOk ? 0 : 1) + (cachedOk ? 0 : 1) + (abortedNeverRetried ? 0 : 1) + (clientOk ? 0 : 1) + (quotaHookOk ? 0 : 1)} failure(s)`)
 process.exit(ok ? 0 : 1)
