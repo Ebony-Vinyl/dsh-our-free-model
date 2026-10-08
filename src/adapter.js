@@ -20,13 +20,14 @@
 import { applyFingerprint, baseModelId, endpointFor, mintRequestId, sessionForConversation, wireFor } from './upstream.js'
 import { toChatMessages, toClaudeMessages, toResponseInput, toToolDefs, repairToolPairing } from './messages.js'
 import { CODE, UpstreamError, postStreamed } from './http.js'
-import { postSealedStreamed } from './eac.js'
+import { authorizeSealedUser, postSealedStreamed } from './eac.js'
+import { postExoStreamed } from './exo.js'
 import { postKiloStreamed } from './kilo.js'
 import { finishReason, readStream, windowTokens } from './stream.js'
 import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
-import { isEacEntry, isKiloEntry } from './catalog.js'
+import { isEacEntry, isExoEntry, isKiloEntry } from './catalog.js'
 
 export const ROUTE_MAIN = 'our-free-model'
 export const ROUTE_REGION = 'our-free-model-region'
@@ -212,18 +213,22 @@ export class FreeModelAdapter {
       return
     }
 
-    const sealed = isEacEntry(entry)
+    const exo = isExoEntry(entry)
+    const sealed = isEacEntry(entry) && !exo
     const kilo = isKiloEntry(entry)
     // Both absorbed channels speak the Chat wire regardless of what their ids
     // resemble; only the free lane splits endpoints per model.
-    const wire = sealed || kilo ? 'chat' : wireFor(entry.id)
+    const wire = sealed || kilo || exo ? 'chat' : wireFor(entry.id)
     const style = STYLE_FOR_WIRE[wire]
     const warnings = []
     const resolveImage = this.deps.resolveImage
     const messages = repairToolPairing(options.messages ?? [])
     const budget = budgetFor(options.reasoningEffort, entry, options.maxTokens, settings.defaultMaxTokens)
     const declared = toToolDefs(options.tools, style)
+    // A selected Exo backend is never retried after its stream was released.
+    // Automatic continuation could select a different backend mid-answer.
     const policy = recoveryPolicy(settings.streamRecovery)
+    if (exo) policy.enabled = false
     const session = sessionForConversation(options.sessionId)
     const recoveryId = mintRequestId()
     let attemptMessages = messages
@@ -285,14 +290,16 @@ export class FreeModelAdapter {
       const remainingMs = Math.max(1, policy.totalTimeoutMs - (attemptStarted - started))
       let expired = false
       const timeoutMs = recovering ? Math.min(policy.maxContinuationMs, remainingMs) : remainingMs
-      const timer = policy.enabled ? setTimeout(() => {
+      const timer = policy.enabled || exo ? setTimeout(() => {
         expired = true
         controller.abort()
       }, timeoutMs) : undefined
       timer?.unref?.()
       const channel = createChannel()
-      const request = (sealed
-        ? postSealedTurn(this.deps, payload, controller.signal, value => channel.push(value))
+      const request = (exo
+        ? postExoTurn(this.deps, payload, session, attempt === 0 ? recoveryId : mintRequestId(), snapshot.attributionUserAgent, controller.signal, value => channel.push(value))
+        : sealed
+          ? postSealedTurn(this.deps, payload, controller.signal, value => channel.push(value))
         : kilo
           ? postKiloStreamed({ body: payload, signal: controller.signal, onData: value => channel.push(value) })
           : postStreamed({
@@ -414,14 +421,15 @@ export class FreeModelAdapter {
         if (outcome.sawFinish !== true || failedEnding || (recovering && (!sawAnswer
           || outcome.sawToolCall === true || reason.kind !== 'stop' || !normalEnding))) {
           const seconds = Math.round((Date.now() - started) / 1000)
-          const code = recovering || delivered || outcome.sawToolCall === true ? 'STREAM_CUT'
+          const code = exo ? 'EXO_STREAM_ERROR' : recovering || delivered || outcome.sawToolCall === true ? 'STREAM_CUT'
             : failedEnding ? CODE.server : CODE.transport
           const message = recovering
             ? `our free model continuation ended without a complete answer after ${seconds}s; automatic recovery exhausted`
             : failedEnding ? `our free model upstream response ended with status ${outcome.finish}`
             : delivered || outcome.sawToolCall === true
               ? `our free model closed the stream after ${seconds}s, before its finish token; automatic recovery was not safe`
-              : 'our free model closed the stream before its finish token, without answering; retrying'
+              : exo ? 'exo-free closed the accepted stream before its finish token, without answering'
+                : 'our free model closed the stream before its finish token, without answering; retrying'
           record(false, outcome, { truncated: true })
           finishTurn(false, false, attempt + 1)
           yield { type: 'usage', usage: totalUsage }
@@ -432,7 +440,7 @@ export class FreeModelAdapter {
           record(false, outcome)
           finishTurn(false, false, attempt + 1)
           yield { type: 'usage', usage: totalUsage }
-          yield { type: 'finish', reason: { kind: 'error', failure: { message: 'our free model returned an empty response', code: CODE.empty } } }
+          yield { type: 'finish', reason: { kind: 'error', failure: { message: 'our free model returned an empty response', code: exo ? 'EXO_EMPTY_RESPONSE' : CODE.empty } } }
           return
         }
         record(true, outcome, recovering ? { recovered: reason.kind === 'stop' } : {})
@@ -450,6 +458,11 @@ export class FreeModelAdapter {
             message: expired
               ? `our free model reached its ${Math.round(timeoutMs / 1000)}s time limit before its finish token${recovering ? ', during the continuation from its checkpoint' : ''}`
               : `our free model continuation failed: ${failure.message}` }
+        }
+        if (exo && !aborted && this.providerRetryPolicy().retryableCodes.includes(failure.code)) {
+          // HTTP failures and an accepted-but-empty stream must not cause the
+          // harness scheduler to multiply this lane's four-attempt bound.
+          failure = { ...failure, code: 'EXO_REQUEST_FAILED' }
         }
         if (!usageAdded) totalUsage = addUsage(totalUsage, partialOutcome?.usage, partialOutcome?.sawUsage)
         record(false, partialOutcome, { ...(recovering || expired) ? { truncated: true } : {}, ...aborted ? { aborted: true } : {} })
@@ -505,6 +518,13 @@ async function postSealedTurn(deps, payload, signal, onData) {
   const credential = await Promise.resolve(deps.sealedCredential?.())
   if (credential === null || credential === undefined) throw new UpstreamError('this model lane is not available on this host', 'LANE_LOCKED')
   return postSealedStreamed({ credential, body: payload, signal, onData })
+}
+
+async function postExoTurn(deps, payload, session, requestId, attributionUserAgent, signal, onData) {
+  const credential = await Promise.resolve(deps.sealedCredential?.())
+  if (credential === null || credential === undefined) throw new UpstreamError('this model lane is not available on this host', 'LANE_LOCKED')
+  await authorizeSealedUser(credential, { signal })
+  return postExoStreamed({ body: payload, session, requestId, attributionUserAgent, signal, onData })
 }
 
 function buildPayload(wire, modelId, messages, options, budget, resolveImage, warnings) {
@@ -576,6 +596,9 @@ function toFailure(error) {
  */
 function describe(entry, settings) {
   const parts = [entry.vision ? 'vision + text input' : 'text input', `${Math.round(entry.contextWindow / 1024)}K context`]
+  if (isExoEntry(entry)) {
+    parts.push('EAC authorization · local exo-free · msg_ filter · custom model ID, upstream version unverified')
+  }
   if (entry.reasoning === true) {
     // A declared menu is the model's own level list on the wire — naming the
     // levels is the honest detail line; "budget" would describe the free lane's

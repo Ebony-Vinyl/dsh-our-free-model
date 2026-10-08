@@ -31,7 +31,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { FreeModelAdapter, ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, DATA_DIR_NAME, MIN_DECODE_MS, decodeWindow, migrateStats, pruneDays, recordTurn, recordUsage, resolveDshHome } from './src/store.js'
-import { buildCatalog, buildEacCatalog, buildKiloCatalog, isEacEntry, isKiloEntry, parseListing, reviveKiloCatalog } from './src/catalog.js'
+import { buildCatalog, buildEacCatalog, buildEacExoCatalog, buildKiloCatalog, isEacEntry, isKiloEntry, parseListing, reviveKiloCatalog } from './src/catalog.js'
 import { STATE, detectEgress, probeCatalog } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
@@ -215,11 +215,17 @@ export function apply(ctx, config) {
   }
   const sealedCredentialOf = () => unlockSealedLane({ profileName: profileNameOf() })
   let sealedCatalog = sealedCredentialOf() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
+  // Older caches kept exo-free among the anonymous entries. Only a real
+  // listing observation can supply this roster; the static fallback cannot.
+  let exoListingIds = catalogStore.get().exoListingIds ?? catalogStore.get().entries ?? []
   // The Kilo channel needs no credential and no host gate, so its roster loads
   // from the persisted cache before the first listing round ever runs.
   let kiloCatalog = reviveKiloCatalog(catalogStore.get().kiloRows)
   const mergeCatalogs = () => {
+    catalog = catalog.filter(row => !isEacEntry(row) && !isKiloEntry(row) && row.id !== 'exo-free')
+    const exoCatalog = sealedCredentialOf()?.mode === 'worker' ? buildEacExoCatalog(exoListingIds) : []
     catalog = [...catalog, ...sealedCatalog.filter(row => !catalog.some(entry => entry.id === row.id))]
+    catalog = [...catalog, ...exoCatalog.filter(row => !catalog.some(entry => entry.id === row.id))]
     catalog = [...catalog, ...kiloCatalog.filter(row => !catalog.some(entry => entry.id === row.id))]
   }
   mergeCatalogs()
@@ -525,14 +531,22 @@ export function apply(ctx, config) {
     }
   }
   async function refreshCatalogOnce({ probe, force }) {
-    let ids = []
+    let ids = null
     try {
-      ids = parseListing(await fetchListing())
+      const payload = await fetchListing()
+      if (payload?.error || !(Array.isArray(payload?.data) || Array.isArray(payload?.models) || Array.isArray(payload))) {
+        throw new Error('invalid model listing')
+      }
+      ids = parseListing(payload)
     } catch (error) {
       logger.warn?.(`our-free-model: model listing refresh failed (${error?.message ?? error}); keeping the cached catalog`)
     }
-    if (ids.length > 0) {
-      catalog = buildCatalog(ids)
+    if (ids !== null) {
+      exoListingIds = buildEacExoCatalog(ids).map(entry => entry.upstreamModel)
+      catalogStore.update({ exoListingIds })
+    }
+    if (ids !== null && ids.length > 0) {
+      catalog = buildCatalog(ids).filter(entry => entry.id !== 'exo-free')
       catalogStore.update({ at: Date.now(), entries: catalog.map(entry => entry.id) })
       catalogStore.flush()
       settings.update({ catalogSyncedAt: Date.now() })
@@ -1865,7 +1879,7 @@ function computeMembership(catalog, availabilitySnapshot, settings) {
 
 function materializeCatalog(ids) {
   const rebuilt = buildCatalog(ids)
-  return rebuilt.length > 0 ? rebuilt : FALLBACK_CATALOG
+  return (rebuilt.length > 0 ? rebuilt : FALLBACK_CATALOG).filter(entry => entry.id !== 'exo-free')
 }
 
 /**

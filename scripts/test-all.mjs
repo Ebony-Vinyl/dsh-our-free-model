@@ -62,6 +62,8 @@ const suites = [
   ['catalog', 'catalog-test.mjs', mode === 'contributor' ? ['--contributor'] : []],
   ['vault', 'vault-test.mjs', []],
   ['eac-auth', 'eac-auth-test.mjs', []],
+  ['exo', 'exo-test.mjs', []],
+  ['exo-catalog', 'exo-catalog-test.mjs', []],
   ['eac-login', 'eac-login-test.mjs', []],
   ['kilo', 'kilo-test.mjs', []],
   ['offline', 'offline-test.mjs', []],

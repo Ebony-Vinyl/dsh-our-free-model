@@ -140,6 +140,29 @@ export function parseListing(payload) {
 
 export const EAC_CHANNEL = 'eac'
 export const EAC_TAG = 'EAC'
+export const EAC_EXO_MODEL_ID = 'EAC-claude opus 5.5'
+
+/** Present the listed local exo transport under the EAC authorization group. */
+export function buildEacExoCatalog(ids) {
+  if (!Array.isArray(ids) || !ids.some(id => typeof id === 'string' && id.trim() === 'exo-free')) return []
+  const source = buildCatalog(['exo-free'])[0]
+  return [{
+    ...source,
+    id: EAC_EXO_MODEL_ID,
+    name: EAC_EXO_MODEL_ID,
+    channel: EAC_CHANNEL,
+    transport: 'exo-local',
+    upstreamModel: 'exo-free',
+    wire: 'chat',
+  }]
+}
+
+/** A display channel alone must never select the local transport. */
+export function isExoEntry(entry) {
+  return entry?.channel === EAC_CHANNEL
+    && entry?.transport === 'exo-local'
+    && entry?.id === EAC_EXO_MODEL_ID
+}
 
 const EAC_DISPLAY_NAMES = {
   'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
@@ -240,7 +263,7 @@ export function buildEacCatalog(ids) {
   const entries = []
   for (const raw of ids) {
     const id = String(raw ?? '').trim()
-    if (id === '' || seen.has(id)) continue
+    if (id === '' || id === EAC_EXO_MODEL_ID || seen.has(id)) continue
     seen.add(id)
     const caps = eacCapabilitiesFor(id)
     entries.push({

@@ -82,6 +82,7 @@ export { laneFetch as directFetch }
  * sniff window, so first tokens still flow out unheld.
  */
 function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal } = {}) {
+  if (signal?.aborted === true) return Promise.reject(new UpstreamError('request aborted', CODE.aborted))
   if (typeof lane.fetch === 'function') return lane.fetch(url, { method, headers, body, signal })
   return new Promise((resolve, reject) => {
     const target = new URL(url)
@@ -117,6 +118,96 @@ function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal
     if (body !== undefined) request.write(body, 'utf8')
     request.end()
   })
+}
+
+/**
+ * Gate a local EAC turn using the same server-held GitHub/Star verdict as the
+ * existing lane. No UI cache or "local token exists" fallback can authorize a
+ * generation: a failed check stops before contacting the anonymous upstream.
+ * The token and sealed endpoint stay in this frame and never reach Exo.
+ */
+export async function authorizeSealedUser(credential, { signal, timeoutMs = LISTING_TIMEOUT_MS } = {}) {
+  if (signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
+  if (credential?.mode !== 'worker') {
+    throw new UpstreamError('this local EAC model requires the GitHub authorization gateway', 'LANE_LOCKED')
+  }
+  const token = laneUserToken()
+  if (typeof token !== 'string' || token === '') {
+    throw new UpstreamError('请先在 EAC 渠道完成 GitHub 登录并 Star 仓库', CODE.authorization)
+  }
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  signal?.addEventListener('abort', onAbort, { once: true })
+  if (signal?.aborted === true) onAbort()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  timer.unref?.()
+  let reader
+  try {
+    const root = credential.base.replace(/\/v1\/?$/, '')
+    const response = await authorizationStep(() => laneFetch(`${root}/auth/status`, {
+      headers: { accept: 'application/json', 'x-ofm-user': token },
+      signal: controller.signal,
+    }), controller.signal)
+    if (response.status === 401 || response.status === 403) {
+      throw new UpstreamError('EAC GitHub 授权已失效，请重新登录并确认已 Star', CODE.authorization)
+    }
+    if (!response.ok || response.body == null) throw new Error('authorization check unavailable')
+    reader = response.body.getReader()
+    const chunks = []
+    let bytes = 0
+    while (true) {
+      // Test transports and a stalled body must obey the same deadline as the
+      // real socket, including a signal already aborted before this read.
+      const row = await authorizationStep(() => reader.read(), controller.signal)
+      if (row.done) break
+      bytes += row.value.byteLength
+      if (bytes > 16 * 1024) throw new Error('authorization answer too large')
+      chunks.push(Buffer.from(row.value))
+    }
+    const verdict = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    if (controller.signal.aborted) throw new Error('authorization check aborted')
+    if (verdict?.configured !== true) throw new Error('authorization gateway not configured')
+    if (typeof verdict.authorized !== 'boolean'
+      || (verdict.authorized === true && typeof verdict.starred !== 'boolean')) {
+      throw new Error('invalid authorization verdict')
+    }
+    if (verdict.authorized !== true || verdict.starred !== true) {
+      throw new UpstreamError('EAC 需要 GitHub 登录并 Star 仓库，请在渠道页面完成授权', CODE.authorization)
+    }
+  } catch (error) {
+    if (signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
+    if (error instanceof UpstreamError) throw error
+    // Do not echo gateway payloads, URLs, tokens, or transport exception text.
+    throw new UpstreamError('暂时无法核验 EAC GitHub 授权，请稍后重试', 'EAC_AUTH_UNAVAILABLE')
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', onAbort)
+    controller.abort()
+    if (reader !== undefined) {
+      try { void Promise.resolve(reader.cancel()).catch(() => {}) } catch { /* already closed */ }
+      try { reader.releaseLock() } catch { /* pending read is unwinding */ }
+    }
+  }
+}
+
+async function authorizationStep(operation, signal) {
+  if (signal.aborted) throw new Error('authorization check aborted')
+  let onAbort
+  const cancelled = new Promise((_, reject) => {
+    onAbort = () => reject(new Error('authorization check aborted'))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => {
+        if (signal.aborted) throw new Error('authorization check aborted')
+        return operation()
+      }),
+      cancelled,
+    ])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+  }
 }
 
 /**
