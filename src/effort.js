@@ -47,6 +47,38 @@ export function supportsEffort(model) {
 }
 
 /**
+ * Every spelling of a rung a caller may use, mapped onto the declared ladder.
+ *
+ * The plugin's own ids come first, and the OpenAI-style adjectives — plus the
+ * `xhigh`/`max` a few OpenAI-shaped clients send — resolve onto the same rungs.
+ * This is the door the local forward port needs: a client that speaks
+ * `reasoning_effort: "high"`, which is the spelling every OpenAI-compatible SDK
+ * sends, used to match no rung and quietly fall back to the ladder default, so
+ * the knob looked absent from that side of the plugin.
+ *
+ * A caller asking for no thinking at all gets the smallest rung rather than an
+ * unbounded one: this lane's only control is the ceiling thinking and the answer
+ * share, so "off" is not expressible here — the rung nearest it is `light`, and
+ * the README says so where the budgets are listed.
+ */
+const LEVEL_ALIASES = new Map(Object.entries({
+  light: 'light', minimal: 'light', low: 'light', none: 'light', off: 'light', disabled: 'light',
+  balanced: 'balanced', medium: 'balanced',
+  deep: 'deep', high: 'deep', xhigh: 'deep', max: 'deep',
+}))
+
+/**
+ * Map any accepted spelling onto a declared rung id.
+ *
+ * @param {unknown} level
+ * @returns {string|undefined} the rung id, or undefined when the value names none
+ */
+export function normalizeLevel(level) {
+  if (typeof level !== 'string') return undefined
+  return LEVEL_ALIASES.get(level.trim().toLowerCase())
+}
+
+/**
  * The rung in force for one call, resolved the same way for the budget sent
  * upstream and the effort recorded against it.
  *
@@ -58,7 +90,7 @@ export function supportsEffort(model) {
  * rung sent the full capacity and *logged* the default — so the dashboard showed
  * 均衡 next to a 32K generation that 均衡 had never promised.
  *
- * @param {string|undefined} level - effort id from the harness, when it sent one
+ * @param {string|undefined} level - effort id from the harness or from a forward caller, in any spelling {@link normalizeLevel} accepts
  * @param {object} model - catalog entry
  * @returns {object|undefined} the declared level, or undefined when none applies
  */
@@ -71,7 +103,8 @@ export function resolveLevel(level, model) {
     return { id: chosen }
   }
   if (!supportsEffort(model)) return undefined
-  return LEVELS.find(candidate => candidate.id === level)
+  const wanted = normalizeLevel(level)
+  return LEVELS.find(candidate => candidate.id === wanted)
     ?? LEVELS.find(candidate => candidate.id === DEFAULT_LEVEL)
 }
 

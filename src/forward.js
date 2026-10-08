@@ -757,6 +757,29 @@ function createToolWire(body) {
   }
 }
 
+/**
+ * The thinking strength a forward caller asked for, in one spelling.
+ *
+ * Three doors, in the order they win: `reasoning_effort` (OpenAI's own field,
+ * and what this plugin's ladder ids ride in as), the nested `reasoning.effort`
+ * an OpenAI-shaped client sends, and this plugin's `model (deep)` suffix, which
+ * is the spelling the in-app picker labels a model with. Whichever arrives is
+ * lifted onto `reasoning_effort`, where the rest of the plugin reads it, and
+ * `src/effort.js` maps the adjectives onto the ladder — so `high` and `deep` are
+ * the same rung, and a word the ladder does not know still lands on the model's
+ * declared default instead of being dropped in silence.
+ *
+ * @param {object} body - the caller's request body
+ * @returns {string|undefined}
+ */
+function callerEffort(body) {
+  const flat = body?.reasoning_effort
+  if (typeof flat === 'string' && flat.trim() !== '') return flat.trim()
+  const nested = body?.reasoning?.effort
+  if (typeof nested === 'string' && nested.trim() !== '') return nested.trim()
+  return undefined
+}
+
 /** Drive one chat-completion through `complete`, in either response style. */
 async function chatCompletions(req, res, complete, options = {}) {
   const body = await readBody(req)
@@ -772,8 +795,9 @@ async function chatCompletions(req, res, complete, options = {}) {
   const wantsStream = body.stream === true
   // The trailing "(level)" rung is this plugin's own convention for thinking
   // budgets; honor it for callers that speak the spelling the picker uses,
-  // without overriding an explicit `reasoning_effort`.
-  if (effortSuffix !== null && body.reasoning_effort === undefined) body.reasoning_effort = effortSuffix[1].trim()
+  // without overriding an explicit effort field.
+  const asked = callerEffort(body) ?? (effortSuffix === null ? undefined : effortSuffix[1].trim())
+  if (asked !== undefined) body.reasoning_effort = asked
 
   const tools = createToolWire(body)
 
@@ -903,11 +927,12 @@ async function responsesEndpoint(req, res, complete, options = {}) {
   if (Array.isArray(body.input)) input.push(...body.input)
   else if (body.input !== undefined) input.push(body.input)
   else if (Array.isArray(body.messages)) input.push(...body.messages)
+  const asked = callerEffort(body) ?? (effortSuffix === null ? undefined : effortSuffix[1].trim())
   const openAi = {
     ...body,
     input,
     ...(typeof body.max_output_tokens === 'number' ? { max_tokens: body.max_output_tokens } : {}),
-    ...(body.reasoning_effort === undefined && effortSuffix !== null ? { reasoning_effort: effortSuffix[1].trim() } : {}),
+    ...asked === undefined ? {} : { reasoning_effort: asked },
   }
 
   const tools = createToolWire(openAi)

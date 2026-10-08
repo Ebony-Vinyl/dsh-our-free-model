@@ -188,6 +188,21 @@ git 执行 `git ls-remote`。若本机 git 配置了 `insteadOf` 重写（常见
 - POST /v1/chat/completions（流式与非流式）
 - POST /v1/responses
 
+**思考强度**：转发调用与面板档位是同一套真实预算，由请求体选择，不必依赖面板：
+
+- `reasoning_effort` 接受插件自己的档位 id（`light` / `balanced` / `deep`）；
+- OpenAI 习惯的写法同样生效：`minimal`、`low` → light，`medium` → balanced，`high`、`xhigh`、`max` → deep，大小写与前后空格不敏感；
+- 新版 OpenAI 客户端的嵌套写法 `reasoning: { effort: "high" }` 等同；
+- 模型名后缀 `mimo-v2.6-flash-free (deep)` 是面板标签的写法，显式字段优先于后缀；
+- 未指定时使用该模型声明的默认档位。`GET /v1/models` 每一行都带 `x_ofm_efforts`（可选档位 id）与 `x_ofm_effort_default`（不指定时生效的档位），调用方据此选择，无需猜；
+- 本车道没有"关闭思考"这一档，`none` / `off` 会落到最小的 light：档位是这条车道唯一能强制执行的手段（思考与正文共享的输出上限，数值见各模型卡）。认不出的写法落到默认档，不会静默放大。
+
+```bash
+curl http://127.0.0.1:18899/v1/chat/completions \
+  -H "Authorization: Bearer <Key>" -H 'content-type: application/json' \
+  -d '{"model":"mimo-v2.6-flash-free","reasoning_effort":"deep","messages":[{"role":"user","content":"hi"}]}'
+```
+
 端口被占用时插件不会静默失效：先在同一端口重试数轮（刚关闭的监听、刚删除的
 portproxy 规则通常在数百毫秒内释放），仍被占用则顺延至下一个可用端口，并在设置页标注
 "请求的 18899 不可用，实际监听 18900"，落盘的也是该实际端口。Windows 上最常见的占用

@@ -260,6 +260,50 @@ await checkAsync('a machine with nothing dialable reports an empty list', async 
   assert.deepEqual(rankLanAddresses(undefined), [])
 })
 
+// ── the caller's thinking strength ───────────────────────────────────────────
+// The forward port's effort knob. OpenAI's own field, the nested spelling a
+// newer client sends, and this plugin's `model (deep)` label all have to arrive
+// as one value the lane reads, with an explicit field beating the label — the
+// label is what an in-app picker would have copied, not a caller's own choice.
+await checkAsync('an OpenAI-shaped reasoning_effort reaches the lane', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({ chunks: [], outcome: { text: 'ok', toolCalls: [] } })
+  await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'hi' }], reasoning_effort: 'high',
+  })
+  assert.equal(lane.seen[0].openAi.reasoning_effort, 'high')
+})
+
+await checkAsync('the nested reasoning.effort a newer client sends is lifted onto it', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({ chunks: [], outcome: { text: 'ok', toolCalls: [] } })
+  await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'hi' }], reasoning: { effort: 'low' },
+  })
+  assert.equal(lane.seen[0].openAi.reasoning_effort, 'low')
+})
+
+await checkAsync('the picker’s `(deep)` label still works, and an explicit field wins over it', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({ chunks: [], outcome: { text: 'ok', toolCalls: [] } })
+  await authFetch(base, '/v1/chat/completions', { model: 'mimo-v2.6-flash-free (deep)', messages: [{ role: 'user', content: 'hi' }] })
+  await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free (deep)', messages: [{ role: 'user', content: 'hi' }], reasoning_effort: 'light',
+  })
+  assert.deepEqual(lane.seen.map(request => request.openAi.reasoning_effort), ['deep', 'light'])
+})
+
+await checkAsync('the responses endpoint carries the caller’s effort too', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({ chunks: [], outcome: { text: 'ok', toolCalls: [] } })
+  await authFetch(base, '/v1/responses', { model: 'mimo-v2.6-flash-free', input: 'hi', reasoning: { effort: 'high' } })
+  assert.equal(lane.seen[0].openAi.reasoning_effort, 'high')
+})
+
 // ── the responses endpoint (#20 / Codex-shaped clients) ──────────────────────
 await checkAsync('responses endpoint maps instructions and max_output_tokens', async () => {
   const lane = makeLane()
