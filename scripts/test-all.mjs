@@ -49,6 +49,7 @@ const suites = [
   ['channel-pack', 'channel-pack-test.mjs', []],
   ['forward-boot', 'forward-boot-test.mjs', []],
   ['egress', 'egress-test.mjs', []],
+  ['failover', 'failover-test.mjs', []],
   ['effort', 'effort-test.mjs', []],
   ['projection', 'projection-test.mjs', []],
   ['fingerprint', 'fingerprint-test.mjs', []],
