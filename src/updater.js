@@ -571,9 +571,7 @@ export function restoreBackup(backupDir, pkgDir) {
     // Copy loop must survive a locked file: attempting every entry keeps the
     // restore as complete as this machine allows instead of crashing halfway.
     try {
-      const target = path.join(pkgDir, ...rel.split('/'))
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.copyFileSync(path.join(backupDir, ...rel.split('/')), target)
+      copyIntoPackage(path.join(backupDir, ...rel.split('/')), path.join(pkgDir, ...rel.split('/')))
     } catch (error) { failures.push(`${rel} (${error?.message ?? error})`) }
   }
   // Restore first. Deleting every installed file before copying made a denied
@@ -587,6 +585,36 @@ export function restoreBackup(backupDir, pkgDir) {
     verifySnapshot(pkgDir, snapshot)
   } catch (error) { failures.push(String(error?.message ?? error)) }
   if (failures.length > 0) throw new Error(`rollback incomplete: ${failures.slice(0, 3).join('; ')}${failures.length > 3 ? ` +${failures.length - 3} more` : ''}`)
+}
+
+// Refusals a retry can actually clear: the read-only attribute (Windows keeps
+// denying writes until the bit is gone), a file an indexer or the AV is holding
+// open, or a sharing violation on the target.
+const RETRYABLE_COPY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY'])
+
+/**
+ * Copy one backed-up file over the installed one. Deleting the installed bytes
+ * first used to hand every copy a writable path for free; now that the restore
+ * copies in place, a target that refuses the write has to be made writable and
+ * tried again — otherwise one read-only file turns a recoverable rollback into
+ * `rollback incomplete` with the package left mixed.
+ *
+ * The retry clears the read-only bit instead of deleting the file: a refusal
+ * that survives it (a lock the retry cannot lift) is reported with the
+ * installed bytes still on disk. A target that is not a file at all (a
+ * directory squatting on the path) is not something a retry can fix, so that
+ * refusal is reported as it stands.
+ */
+function copyIntoPackage(source, target) {
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.copyFileSync(source, target)
+  } catch (error) {
+    if (!RETRYABLE_COPY_CODES.has(error?.code)) throw error
+    if (fs.statSync(target, { throwIfNoEntry: false })?.isDirectory()) throw error
+    try { fs.chmodSync(target, 0o666) } catch { throw error }
+    fs.copyFileSync(source, target)
+  }
 }
 
 /** Windows can transiently refuse a rename while a file is scanned; retry briefly. */
