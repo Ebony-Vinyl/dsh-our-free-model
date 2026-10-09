@@ -883,7 +883,7 @@ window.__ModuleLoader__.load({
     // colour, callouts lost their border. Every use of those two names carries a
     // fallback for exactly that reason.
     const CSS = `
-.ofm_root{--gap:14px;display:flex;flex-direction:column;gap:calc(var(--gap)*1.4);max-width:1080px;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary)}
+.ofm_root{--gap:14px;display:flex;flex-direction:column;gap:calc(var(--gap)*1.4);max-width:1080px;width:100%;margin-inline:auto;box-sizing:border-box;padding:20px 24px 40px;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary)}
 .ofm_root *{box-sizing:border-box}
 .ofm_hero{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-radius:16px;border:1px solid var(--dsw-alias-border-l2);background:linear-gradient(160deg,var(--dsw-alias-bg-layer-3),var(--dsw-alias-bg-layer-1))}
 .ofm_pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
