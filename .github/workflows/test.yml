@@ -35,6 +35,27 @@ jobs:
           TEST_MODE: ${{ github.event_name == 'pull_request' && 'contributor' || 'all' }}
         run: node scripts/test-all.mjs --mode "$TEST_MODE"
 
+  # The promo suites load the REAL TypeScript sources (a copy of their logic
+  # would not catch a projection that eats `promo`), which needs esbuild — and
+  # the job above is install-free by design. So they gate here: one install,
+  # then the same runner with `--only promo`. OFM_REQUIRE_ESBUILD=1 upgrades
+  # the suite's "no toolchain, visible SKIP" protocol to a hard failure, so a
+  # broken install can never masquerade as "the promo plumbing passed".
+  # The badge suite is install-free but shares the filter, so all four of its
+  # scenarios (structured render, no-carrier render, old-pack compat, negative
+  # control) run here too — this is where the badge contract is actually gated.
+  promo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: node scripts/test-all.mjs --only promo
+        env:
+          OFM_REQUIRE_ESBUILD: '1'
+
   # Keep this check required on main. A red result on a source PR means the
   # maintainer still has release preparation to do, not that the author needs
   # access to the publisher's private key.

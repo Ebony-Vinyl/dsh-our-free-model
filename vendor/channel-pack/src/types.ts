@@ -821,11 +821,71 @@ export interface RpcModelListEntry {
    * 恢复路径。这是「误判代价不对称」的必然要求：能藏，但必须能找回。
    */
   dead: boolean
+  /**
+   * 促销结构（**独立字段**），无促销时不写该键。
+   *
+   * ⚠️ 为什么单独一个字段而不是复用 `description`：`description` 是各适配器
+   * 共用的通用说明字段（Cline / lobsterai 往上写模型介绍），拿「字段非空」当
+   * 促销判据会把宣传语画成促销胶囊。促销有自己的语义（活动类型、双段价格、
+   * 多段时段、展示方式），故独立声明。
+   *
+   * 若为 `{ active: false, ... }` 表示有促销活动但**当前不在**每日时段窗口内。
+   * 结构定义见 `channel-pack-rpc.ts` 的 `ModelRowPromo`。
+   */
+  promo?: ModelRowPromo
 }
 
 /** RPC: 列出某 provider 的模型响应 */
 export interface RpcModelListResponse {
   models: RpcModelListEntry[]
+  /**
+   * **能力位**：本响应来自一个会把 `promo` 搬过行投影的 pack。
+   *
+   * ⚠️ 为什么需要它，而不是让消费端数「有没有行缺 `promo`」：一行模型**没有
+   * 促销**和**pack 不搬促销**是两件事，行样本分不清二者——按样本判定会让每次
+   * 展开 fold 都为兼容分支白付一次目录读取（绝大多数模型本来就没促销）。
+   * 能力位只回答一条：「我搬得动 promo」。老 pack 没有这个键，消费端据此
+   * 才走 `description` 兼容通路。缺失即不写键（与全仓约定一致）。
+   */
+  promoTransport?: true
+}
+
+/**
+ * 一行模型上挂的**促销结构**（独立字段 `promo` 的取值）。
+ *
+ * ⚠️ 为什么促销要独立成字段、而不复用 `description`：`description` 是各适配器
+ * 共用的通用说明字段——Cline / lobsterai 把上游模型介绍（`Mixture-of-Experts
+ * architecture with 309B total parameters`）原样写在上面，于是「字段非空即促销」
+ * 这种判据会把模型宣传语渲染成促销胶囊（用户报障「其他供应商出现奇怪的标签…
+ * 是不是识别有问题」）。促销有自己的语义（活动类型、双段价格、多段时段、展示
+ * 方式），塞进一个通用字符串既表达不了、又必然误伤。
+ *
+ * ⚠️ 本结构刻意声明为**宽松的已知键集合**：RPC 层只负责搬运，不理解促销语义，
+ * 故不在此重复生产端（buddy 的 `PromotionBadge`）的校验逻辑——两处定义漂移比
+ * 少几个字段更糟。生产端给什么就搬什么，缺键即不写。
+ */
+export interface ModelRowPromo {
+  /** 上游活动类型（`kind`），如 `discount`。 */
+  kind?: string
+  /** 展示方式：`strikethrough`（原价划掉）或 `replace`（只显示折后价）。 */
+  displayMode?: string
+  /** 价格两段：`effective` 为生效价、`original` 为原价（有折扣时才给）。 */
+  price?: { effective?: string; original?: string }
+  /** 每日时段，**多段保留**（`HH:MM` 原样，不压成字符串）。 */
+  windows?: { start: string; end: string }[]
+  /** IANA 时区（实测 `Asia/Shanghai`）。 */
+  timezone?: string
+  /** 活动生效日期范围（ISO 字符串）。 */
+  validFrom?: string
+  validUntil?: string
+  /** 当前是否处于某段每日窗口内（展示时实时判定，非采集时刻的冻结值）。 */
+  active: boolean
+  /** 状态词：（限免）/（错峰）/（常时）。 */
+  status?: string
+  /** 人读长标注，如「错峰时段23:00-08:00·限免·至11月1日」。 */
+  note?: string
+  /** 命中的活动 `priority`（同模型多活动时取最高者）。 */
+  priority?: number
 }
 
 /** RPC: 打开/关闭某个模型请求 */

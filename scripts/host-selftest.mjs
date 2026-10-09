@@ -234,6 +234,14 @@ else {
   console.log(`  GET  /stats    -> ${stats.status} requests=${stats.json?.requests} models=${stats.json?.models?.length} days=${stats.json?.days?.length}`)
   const announce = await call('GET', '/api/our-free-model/announcement')
   console.log(`  GET  /announcement -> ${announce.status} version=${announce.json?.version === ANNOUNCEMENT_VERSION} ack=${announce.json?.acknowledged}`)
+  // /models 兼容通路（老 pack 的徽标数据源）：行的 description 必须真的带出来。
+  // 这条路由问的是适配器注册表（`ctx.llm.listModels`，见 index.js 的
+  // `listModels` 依赖）；新 pack 的徽标走 `model.list` 的结构化 `promo`，不经
+  // 这里。selftest 里没有 llm.listModels 的假实现，于是正好落到本插件适配器的
+  // 回退分支上——两个分支都答得出来。
+  const notes = await call('GET', `/api/our-free-model/models?provider=${encodeURIComponent(target.provider ?? boot.routes[0])}`)
+  const noted = (notes.json?.models ?? []).filter(row => typeof row.description === 'string' && row.description !== '')
+  console.log(`  GET  /models   -> ${notes.status} provider=${JSON.stringify(notes.json?.provider)} ${notes.json?.models?.length ?? 0} rows, ${noted.length} with a description`)
   const bench = await call('POST', '/api/our-free-model/bench', { model: target.id, effort: 'light' })
   console.log(`  POST /bench    -> ${bench.status} ${JSON.stringify(bench.json?.ttftMs ?? bench.json?.error)}ms ttft, ${bench.json?.tokensPerSecond === null ? 'no measurable rate' : JSON.stringify(bench.json?.tokensPerSecond)} tok/s`)
 
