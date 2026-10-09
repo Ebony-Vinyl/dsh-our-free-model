@@ -33435,6 +33435,68 @@ function promotionActiveNow(item, now) {
     return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
   });
 }
+function parseModelTiers(record, now = /* @__PURE__ */ new Date()) {
+  const result = /* @__PURE__ */ new Map();
+  const chosen = /* @__PURE__ */ new Map();
+  const tiers = record.modelTiers;
+  if (!Array.isArray(tiers)) return result;
+  for (const item of tiers) {
+    if (typeof item !== "object" || item === null) continue;
+    const tier = item;
+    if (tier.enabled === false) continue;
+    if (!inDateWindow(tier, now)) continue;
+    const modelIds = tier.modelIds;
+    if (!Array.isArray(modelIds)) continue;
+    const priority = priorityOf(tier);
+    for (const id of modelIds) {
+      if (typeof id !== "string" || id.length === 0) continue;
+      const previous = chosen.get(id);
+      if (previous !== void 0 && previous > priority) continue;
+      chosen.set(id, priority);
+      result.set(id, tier);
+    }
+  }
+  return result;
+}
+function inDateWindow(promotion, now) {
+  const schedule = promotion.schedule;
+  if (typeof schedule !== "object" || schedule === null) return true;
+  const s = schedule;
+  const from = typeof s.validFrom === "string" ? Date.parse(s.validFrom) : Number.NaN;
+  const until = typeof s.validUntil === "string" ? Date.parse(s.validUntil) : Number.NaN;
+  if (Number.isFinite(from) && now.getTime() < from) return false;
+  if (Number.isFinite(until) && now.getTime() >= until) return false;
+  return true;
+}
+function parseDisplayDate(iso) {
+  if (typeof iso !== "string") return void 0;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(iso);
+  if (m === null) return void 0;
+  return `${Number(m[2])}\u6708${Number(m[3])}\u65E5`;
+}
+function buildPromotionNote(promotion, offPeakRate, isFree, active) {
+  const schedule = promotion.schedule;
+  if (typeof schedule !== "object" || schedule === null) return null;
+  const s = schedule;
+  const pieces = [];
+  if (Array.isArray(s.daily) && s.daily.length > 0) {
+    const slots = [];
+    for (const slot2 of s.daily) {
+      if (slot2 === null || typeof slot2 !== "object") continue;
+      if (typeof slot2.start !== "string" || typeof slot2.end !== "string") continue;
+      const st = parseHHMM(slot2.start);
+      const en = parseHHMM(slot2.end);
+      if (st === void 0 || en === void 0) continue;
+      slots.push(`${slot2.start}-${slot2.end}`);
+    }
+    if (slots.length > 0) pieces.push(`\u9519\u5CF0\u65F6\u6BB5${slots.join("/")}`);
+  }
+  if (isFree) pieces.push("\u9650\u514D");
+  else if (!active && offPeakRate !== void 0 && offPeakRate !== "x0") pieces.push(`\u975E\u9AD8\u5CF0${offPeakRate}`);
+  const until = typeof s.validUntil === "string" ? parseDisplayDate(s.validUntil) : void 0;
+  if (until !== void 0) pieces.push(`\u81F3${until}`);
+  return pieces.length > 0 ? pieces.join("\xB7") : null;
+}
 function parsePromotions(record, now = /* @__PURE__ */ new Date()) {
   const result = /* @__PURE__ */ new Map();
   const chosen = /* @__PURE__ */ new Map();
@@ -33445,43 +33507,156 @@ function parsePromotions(record, now = /* @__PURE__ */ new Date()) {
     if (typeof item !== "object" || item === null) continue;
     const promotion = item;
     if (promotion.enabled === false) continue;
-    if (!promotionActiveNow(promotion, now)) continue;
+    if (!inDateWindow(promotion, now)) continue;
     const discount = promotion.discount;
-    if (typeof discount !== "object" || discount === null) continue;
-    const detail = discount;
-    const factor = typeof detail.factor === "number" ? detail.factor : void 0;
+    const detail = typeof discount === "object" && discount !== null ? discount : void 0;
+    const factor = detail !== void 0 && typeof detail.factor === "number" ? detail.factor : void 0;
     const rawSchedule = promotion.schedule;
     const windowed = typeof rawSchedule === "object" && rawSchedule !== null && hasTimeWindow(rawSchedule);
-    let rate;
-    if (factor === 0) {
-      if (!windowed) continue;
-      rate = "\u514D\u8D39";
-    } else {
-      rate = normalizeDiscountedRate(detail.discountedCredits);
-      if (rate === "x0") continue;
+    const isFree = factor === 0;
+    const offPeakRate = isFree ? "\u514D\u8D39" : normalizeDiscountedRate(detail?.discountedCredits);
+    const active = promotionActiveNow(promotion, now);
+    const note = detail === void 0 ? null : buildPromotionNote(promotion, offPeakRate, isFree, active);
+    let rate = null;
+    if (detail !== void 0 && active) {
+      if (isFree) {
+        if (!windowed) continue;
+        rate = "\u514D\u8D39";
+      } else {
+        const r = normalizeDiscountedRate(detail.discountedCredits);
+        if (r === "x0" || r === void 0) continue;
+        rate = r;
+      }
     }
-    if (rate === void 0) continue;
     const modelIds = promotion.modelIds;
     if (!Array.isArray(modelIds)) continue;
     const priority = priorityOf(promotion);
+    const rank = { active: active ? 1 : 0, priority };
     for (const id of modelIds) {
       if (typeof id !== "string" || id.length === 0) continue;
       const previous = chosen.get(id);
-      if (previous !== void 0 && previous > priority) continue;
-      chosen.set(id, priority);
-      result.set(id, rate);
+      if (previous !== void 0 && (previous.active > rank.active || previous.active === rank.active && previous.priority > rank.priority)) continue;
+      chosen.set(id, rank);
+      result.set(id, { rate, note, promo: promotion });
     }
   }
   return result;
+}
+function promotionView(model, now = /* @__PURE__ */ new Date()) {
+  const promo = model.promotion;
+  const tier = model.modelTier;
+  if (typeof promo !== "object" || promo === null) {
+    return typeof tier === "object" && tier !== null && tier.enabled !== false && inDateWindow(tier, now) ? { badge: buildTierBadge(tier) } : {};
+  }
+  if (promo.enabled === false) return {};
+  if (!inDateWindow(promo, now)) return {};
+  const discount = promo.discount;
+  const detail = typeof discount === "object" && discount !== null ? discount : void 0;
+  const factor = detail !== void 0 && typeof detail.factor === "number" ? detail.factor : void 0;
+  const isFree = factor === 0;
+  const schedule = promo.schedule;
+  const hasDaily = typeof schedule === "object" && schedule !== null && Array.isArray(schedule.daily) && schedule.daily.length > 0;
+  const active = promotionActiveNow(promo, now);
+  const offPeakRate = isFree ? "\u514D\u8D39" : normalizeDiscountedRate(detail?.discountedCredits);
+  const note = detail === void 0 ? void 0 : buildPromotionNote(promo, offPeakRate, isFree, active) ?? void 0;
+  const effectiveRate = detail !== void 0 && active ? normalizeDiscountedRate(detail.discountedCredits) : model.creditsRate;
+  let status;
+  if (detail !== void 0) {
+    if (active) {
+      status = isFree && !hasDaily ? "\u9650\u514D" : "\u9519\u5CF0";
+    } else {
+      status = "\u5E38\u65F6";
+    }
+  }
+  const badge = buildPromotionBadge(promo, detail, model.creditsRate, active, status, note);
+  return { effectiveRate, status, note, badge };
+}
+function buildPromotionBadge(promotion, detail, creditsRate, active, status, note) {
+  const schedule = typeof promotion.schedule === "object" && promotion.schedule !== null ? promotion.schedule : {};
+  const windows = [];
+  if (Array.isArray(schedule.daily)) {
+    for (const slot2 of schedule.daily) {
+      if (slot2 === null || typeof slot2 !== "object") continue;
+      if (typeof slot2.start !== "string" || typeof slot2.end !== "string") continue;
+      if (parseHHMM(slot2.start) === void 0 || parseHHMM(slot2.end) === void 0) continue;
+      windows.push({ start: slot2.start, end: slot2.end });
+    }
+  }
+  const effective = detail === void 0 ? void 0 : normalizeDiscountedRate(detail.discountedCredits);
+  const original = detail === void 0 ? void 0 : creditsRate;
+  const price = effective === void 0 && original === void 0 ? void 0 : {
+    ...effective === void 0 ? {} : { effective },
+    ...original !== void 0 && original !== effective ? { original } : {}
+  };
+  const kind = typeof promotion.kind === "string" && promotion.kind.trim() !== "" ? promotion.kind : void 0;
+  const displayMode = detail !== void 0 && typeof detail.displayMode === "string" && detail.displayMode.trim() !== "" ? detail.displayMode : void 0;
+  const timezone = typeof schedule.timezone === "string" && schedule.timezone.trim() !== "" ? schedule.timezone : void 0;
+  const validFrom = typeof schedule.validFrom === "string" ? schedule.validFrom : void 0;
+  const validUntil = typeof schedule.validUntil === "string" ? schedule.validUntil : void 0;
+  const priority = typeof promotion.priority === "number" && Number.isFinite(promotion.priority) ? promotion.priority : void 0;
+  const upstream = readUpstreamBadge(promotion);
+  return {
+    ...kind === void 0 ? {} : { kind },
+    ...displayMode === void 0 ? {} : { displayMode },
+    ...price === void 0 ? {} : { price },
+    ...windows.length === 0 ? {} : { windows },
+    ...timezone === void 0 ? {} : { timezone },
+    ...validFrom === void 0 ? {} : { validFrom },
+    ...validUntil === void 0 ? {} : { validUntil },
+    active,
+    ...status === void 0 ? {} : { status },
+    ...note === void 0 ? {} : { note },
+    ...priority === void 0 ? {} : { priority },
+    ...upstream.id === void 0 ? {} : { id: upstream.id },
+    ...upstream.label === void 0 ? {} : { badgeLabel: upstream.label },
+    ...upstream.shortLabel === void 0 ? {} : { badgeShortLabel: upstream.shortLabel },
+    ...upstream.color === void 0 ? {} : { badgeColor: upstream.color },
+    ...upstream.display === void 0 ? {} : { badgeDisplay: upstream.display },
+    ...upstream.hoverText === void 0 ? {} : { hoverText: upstream.hoverText },
+    ...upstream.actionLabel === void 0 ? {} : { hoverActionLabel: upstream.actionLabel }
+  };
+}
+function buildTierBadge(tier) {
+  const upstream = readUpstreamBadge(tier);
+  const tierName = typeof tier.tier === "string" && tier.tier.trim() !== "" ? tier.tier.trim() : void 0;
+  const requiredUserType = typeof tier.requiredUserType === "string" && tier.requiredUserType.trim() !== "" ? tier.requiredUserType.trim() : void 0;
+  const priority = typeof tier.priority === "number" && Number.isFinite(tier.priority) ? tier.priority : void 0;
+  return {
+    kind: "tier",
+    // 档位恒为"生效"（它不是按时段闪断的折扣；要按档位显示与否的是会员身份，
+    // 那个判定不在本插件侧），故 active 恒 true。
+    active: true,
+    ...upstream.id === void 0 ? {} : { id: upstream.id },
+    ...upstream.label === void 0 ? {} : { badgeLabel: upstream.label },
+    ...upstream.shortLabel === void 0 ? {} : { badgeShortLabel: upstream.shortLabel },
+    ...upstream.color === void 0 ? {} : { badgeColor: upstream.color },
+    ...upstream.display === void 0 ? {} : { badgeDisplay: upstream.display },
+    ...upstream.hoverText === void 0 ? {} : { hoverText: upstream.hoverText },
+    ...upstream.actionLabel === void 0 ? {} : { hoverActionLabel: upstream.actionLabel },
+    ...tierName === void 0 ? {} : { tier: tierName },
+    ...requiredUserType === void 0 ? {} : { requiredUserType },
+    ...priority === void 0 ? {} : { priority }
+  };
+}
+function readUpstreamBadge(promotion) {
+  const str = (value) => typeof value === "string" && value.trim() !== "" ? value.trim() : void 0;
+  const badge = typeof promotion.badge === "object" && promotion.badge !== null ? promotion.badge : void 0;
+  const hover = typeof promotion.hover === "object" && promotion.hover !== null ? promotion.hover : void 0;
+  const action = hover !== void 0 && typeof hover.action === "object" && hover.action !== null ? hover.action : void 0;
+  return {
+    id: str(promotion.id),
+    label: str(badge?.label),
+    shortLabel: str(badge?.shortLabel),
+    color: str(badge?.color),
+    display: str(badge?.display),
+    hoverText: str(hover?.textZh),
+    actionLabel: str(action?.labelZh)
+  };
 }
 function priorityOf(item) {
   if (typeof item !== "object" || item === null) return 0;
   const priority = item.priority;
   return typeof priority === "number" && Number.isFinite(priority) ? priority : 0;
-}
-function formatCreditsRate(rate, discounted) {
-  if (rate === void 0) return discounted;
-  return discounted !== void 0 ? `${rate}\u2192${discounted}` : rate;
 }
 function parseModelsFromConfig(body) {
   if (typeof body !== "object" || body === null) return [];
@@ -33520,7 +33695,9 @@ function parseModelsFromConfig(body) {
       name: remoteName ?? displayNameForModel(id),
       ...parseModelMeta(meta),
       ...rate !== void 0 ? { creditsRate: rate } : {},
-      ...discounted !== void 0 ? { discountedCreditsRate: discounted } : {},
+      ...discounted !== void 0 && discounted.rate !== null ? { discountedCreditsRate: discounted.rate } : {},
+      ...discounted !== void 0 && discounted.note !== null ? { promotionNote: discounted.note } : {},
+      ...discounted !== void 0 ? { promotion: discounted.promo } : {},
       ...agentReferencedIds.has(id) ? { agentReferenced: true } : {}
     });
   };
@@ -33554,7 +33731,9 @@ function parseModelsFromConfig(body) {
       name: displayNameForModel(id),
       ...parseModelMeta(meta),
       ...rate !== void 0 ? { creditsRate: rate } : {},
-      ...discounted !== void 0 ? { discountedCreditsRate: discounted } : {},
+      ...discounted !== void 0 && discounted.rate !== null ? { discountedCreditsRate: discounted.rate } : {},
+      ...discounted !== void 0 && discounted.note !== null ? { promotionNote: discounted.note } : {},
+      ...discounted !== void 0 ? { promotion: discounted.promo } : {},
       // 试用横幅本身就是「服务端推荐可用」的信号，与 agent 引用同义。
       agentReferenced: true
     });
@@ -34387,7 +34566,8 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
     const meta = this.remoteMeta.get(modelId);
     if (meta === void 0) return false;
     const isZeroRate = (rate) => rate === "x0" || rate === "\u514D\u8D39";
-    return isZeroRate(meta.creditsRate) || isZeroRate(meta.discountedCreditsRate);
+    const view = promotionView(meta, /* @__PURE__ */ new Date());
+    return isZeroRate(meta.creditsRate) || isZeroRate(view.effectiveRate);
   }
   /**
    * 描述本适配器拥有的 provider 路由。
@@ -34490,7 +34670,11 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
         // 注意本函数是**白名单式重建**：不在这里显式搬运的字段会被静默丢弃，
         // 新增远端字段时必须同步加一行，否则 listModels 看不到它。
         ...remote?.creditsRate !== void 0 ? { creditsRate: remote.creditsRate } : {},
-        ...remote?.discountedCreditsRate !== void 0 ? { discountedCreditsRate: remote.discountedCreditsRate } : {}
+        ...remote?.discountedCreditsRate !== void 0 ? { discountedCreditsRate: remote.discountedCreditsRate } : {},
+        ...remote?.promotionNote !== void 0 ? { promotionNote: remote.promotionNote } : {},
+        // 原始促销记录：用于 listModels / isFreeModel 按当前时刻实时重算倍率
+        // 与状态（避免 config 拉取时刻的判定被冻结，见 promotionView）。
+        ...remote?.promotion !== void 0 ? { promotion: remote.promotion } : {}
       };
     });
     const known = new Set(reconciled.map((model) => model.id));
@@ -34568,7 +34752,14 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
    */
   listAllModels() {
     const source = this.remoteModels ?? this.staticFallbackModels();
-    return source.map((model) => ({ id: model.id, name: displayNameFor(model, source) }));
+    return source.map((model) => {
+      const badge = promotionView(model).badge;
+      return {
+        id: model.id,
+        name: displayNameFor(model, source),
+        ...badge === void 0 ? {} : { promo: badge }
+      };
+    });
   }
   async listModels(_provider) {
     if (!await providerCatalogVisible(this.options.accountPool, this.product.id)) return [];
@@ -34576,12 +34767,20 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
     const source = this.remoteModels ?? this.staticFallbackModels();
     const disabled = this.options.accountPool?.disabledModelsFor(this.product.id);
     const listed = disabled === void 0 || disabled.size === 0 ? source : source.filter((model) => !disabled.has(model.id));
-    return listed.map((model) => ({
-      provider: this.product.id,
-      id: model.id,
-      name: displayNameFor(model, listed),
-      inputModalities: this.inputModalitiesFor(model.id)
-    }));
+    return listed.map((model) => {
+      const view = promotionView(model);
+      return {
+        provider: this.product.id,
+        id: model.id,
+        name: displayNameFor(model, listed),
+        // `description` 仍下发：DSH 的 `/model` 弹窗副行读的就是它，这是**给人
+        // 读的那句话**，与结构化徽标（`promo`）同源不同用，两者都要有。
+        ...view.note !== void 0 && view.note.length > 0 ? { description: view.note } : {},
+        // 结构化促销（独立字段）：设置页据此画胶囊，不解析字符串。
+        ...view.badge === void 0 ? {} : { promo: view.badge },
+        inputModalities: this.inputModalitiesFor(model.id)
+      };
+    });
   }
   /**
    * 静态兜底模型目录：优先用产品自带的 `fallbackModels`，否则用通用默认表。
@@ -35222,8 +35421,10 @@ function displayNameFor(model, all) {
 }
 function displaySuffix(model, all) {
   const parts = [];
-  const rate = formatCreditsRate(model.creditsRate, model.discountedCreditsRate);
+  const view = promotionView(model);
+  const rate = view.effectiveRate ?? model.creditsRate;
   if (rate !== void 0) parts.push(rate);
+  if (view.status !== void 0) parts.push(`(${view.status})`);
   const variant = variantLabelFor(model, all);
   if (variant.length > 0) parts.push(variant);
   return parts.join(" ");
@@ -43342,7 +43543,7 @@ async function fetchModels(credential, fetcher = fetch, signal, product = CODEBU
   if (scoped !== void 0) {
     const config = await requestConfig(headers, fetcher, signal, product);
     const merged = mergeRemoteModels(scoped, config.models);
-    return config.promotions.size === 0 ? merged : applyPromotions(merged, config.promotions);
+    return config.promotions.size === 0 && config.tiers.size === 0 ? merged : applyPromotions(merged, config.promotions, config.tiers);
   }
   const url = `${product.endpoint}${CONFIG_PATH}`;
   try {
@@ -43362,7 +43563,7 @@ function mergeRemoteModels(primary, extra) {
   return [...primary, ...extra.filter((model) => !known.has(model.id))];
 }
 async function requestConfig(headers, fetcher, signal, product) {
-  const empty = { models: [], promotions: /* @__PURE__ */ new Map() };
+  const empty = { models: [], promotions: /* @__PURE__ */ new Map(), tiers: /* @__PURE__ */ new Map() };
   try {
     const { status, body } = await request("GET", `${product.endpoint}${CONFIG_PATH}`, headers, {
       fetcher,
@@ -43374,16 +43575,26 @@ async function requestConfig(headers, fetcher, signal, product) {
     if (typeof data !== "object" || data === null) return empty;
     return {
       models: parseModelsFromConfig(body),
-      promotions: parsePromotions(data)
+      promotions: parsePromotions(data),
+      tiers: parseModelTiers(data)
     };
   } catch {
     return empty;
   }
 }
-function applyPromotions(models, promotions) {
+function applyPromotions(models, promotions, tiers = /* @__PURE__ */ new Map()) {
   return models.map((model) => {
-    const discounted = promotions.get(model.id);
-    return discounted === void 0 ? model : { ...model, discountedCreditsRate: discounted };
+    const tier = tiers.get(model.id);
+    const promo = promotions.get(model.id);
+    if (promo === void 0 && tier === void 0) return model;
+    const next = { ...model };
+    if (tier !== void 0) next.modelTier = tier;
+    if (promo !== void 0) {
+      if (promo.rate !== null) next.discountedCreditsRate = promo.rate;
+      if (promo.note !== null) next.promotionNote = promo.note;
+      next.promotion = promo.promo;
+    }
+    return next;
   });
 }
 var ENTERPRISE_MODELS_SCOPE = "personal";

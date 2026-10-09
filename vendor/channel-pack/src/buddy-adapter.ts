@@ -34,8 +34,9 @@ import {
   HTTP_HEADER_PRODUCT_CODE,
   credentialExpiresAtMs,
   formatCreditsRate,
+  promotionView,
 } from './buddy.js'
-import type { BuddyCredential, BuddyRemoteModel } from './buddy.js'
+import type { BuddyCredential, BuddyRemoteModel, PromotionBadge } from './buddy.js'
 import { CODEBUDDY, resolveUserAgent, type BuddyFallbackModel, type BuddyProduct } from './product.js'
 import { normalizeHarnessMessages } from './message-shape.js'
 import { projectRequestImage, type ImageRequestTarget } from './image-budget.js'
@@ -909,7 +910,11 @@ export class BuddyAdapter extends LlmAdapter {
     const meta = this.remoteMeta.get(modelId)
     if (meta === undefined) return false
     const isZeroRate = (rate: string | undefined): boolean => rate === 'x0' || rate === '免费'
-    return isZeroRate(meta.creditsRate) || isZeroRate(meta.discountedCreditsRate)
+    // ⚠️ 实时重算：promotionView 按**当前时刻**判定促销是否生效，
+    // 取代冻结在 `discountedCreditsRate` 的 config 拉取时刻值——否则夜间拉取后
+    // 白天仍把付费模型误判成免费，绕过永久积分保护锁（真烧掉积分且不可撤回）。
+    const view = promotionView(meta, new Date())
+    return isZeroRate(meta.creditsRate) || isZeroRate(view.effectiveRate)
   }
 
   /**
@@ -1040,6 +1045,10 @@ export class BuddyAdapter extends LlmAdapter {
         ...remote?.discountedCreditsRate !== undefined
           ? { discountedCreditsRate: remote.discountedCreditsRate }
           : {},
+        ...remote?.promotionNote !== undefined ? { promotionNote: remote.promotionNote } : {},
+        // 原始促销记录：用于 listModels / isFreeModel 按当前时刻实时重算倍率
+        // 与状态（避免 config 拉取时刻的判定被冻结，见 promotionView）。
+        ...remote?.promotion !== undefined ? { promotion: remote.promotion } : {},
       }
     })
     // ⚠️ 追加「被 agent 引用但不在兜底表」的模型（见本方法注释的例外说明）。
@@ -1132,9 +1141,22 @@ export class BuddyAdapter extends LlmAdapter {
    * 而非 `listed`。用过滤后的集合会让「关掉其中一个同名模型」改变另一个的
    * 变体标记，名字随开关跳变。
    */
-  listAllModels(): readonly { id: string; name: string }[] {
+  listAllModels(): readonly { id: string; name: string; promo?: PromotionBadge }[] {
     const source = this.remoteModels ?? this.staticFallbackModels()
-    return source.map((model) => ({ id: model.id, name: displayNameFor(model, source) }))
+    // ⚠️ 促销徽标走**独立字段** `promo`（不再是 `description`）：设置页的行由
+    // `model.list` 拼出，那里会把这个字段原样搬给客户端。`description` 是宿主与
+    // 各适配器共用的通用字段（Cline / lobsterai 用它下发模型介绍），拿它当促销
+    // 判据会把宣传语画成促销胶囊（用户报障「其他供应商出现奇怪的标签」）。
+    // `promotionView` 是**展示时实时**重算的（见其注释），故这里不会把夜间
+    // 判定冻结进目录。
+    return source.map((model) => {
+      const badge = promotionView(model).badge
+      return {
+        id: model.id,
+        name: displayNameFor(model, source),
+        ...(badge === undefined ? {} : { promo: badge }),
+      }
+    })
   }
 
   async listModels(_provider: string): Promise<readonly LlmModelInfo[]> {
@@ -1150,12 +1172,20 @@ export class BuddyAdapter extends LlmAdapter {
     const listed = disabled === undefined || disabled.size === 0
       ? source
       : source.filter((model) => !disabled.has(model.id))
-    return listed.map((model) => ({
-      provider: this.product.id,
-      id: model.id,
-      name: displayNameFor(model, listed),
-      inputModalities: this.inputModalitiesFor(model.id),
-    }))
+    return listed.map((model) => {
+      const view = promotionView(model)
+      return {
+        provider: this.product.id,
+        id: model.id,
+        name: displayNameFor(model, listed),
+        // `description` 仍下发：DSH 的 `/model` 弹窗副行读的就是它，这是**给人
+        // 读的那句话**，与结构化徽标（`promo`）同源不同用，两者都要有。
+        ...(view.note !== undefined && view.note.length > 0 ? { description: view.note } : {}),
+        // 结构化促销（独立字段）：设置页据此画胶囊，不解析字符串。
+        ...(view.badge === undefined ? {} : { promo: view.badge }),
+        inputModalities: this.inputModalitiesFor(model.id),
+      }
+    })
   }
 
   /**
@@ -2333,20 +2363,27 @@ function isCredentialExpired(credential: BuddyCredential): boolean {
  * 安全性：`name` **纯属展示** —— DSH 的选择与持久化只用 `id`
  * （见 `selectionOf` 返回 `model: model.id`），故在名字里附加价格不会污染会话。
  *
- * 形如 `Deepseek-V4.1-Flash · x0.03`；有促销时 `· x0.17→x0.50`（用箭头而
- * 不是「（促销 …）」，避免在窄菜单里过长）。同名撞车时再加变体标记。
+ * 形如 `Deepseek-V4.1-Flash · x0.03`；有促销时 `· x0.29 (常时)` /
+ * `· x0 (错峰)` / `· x0.00 (限免)`——倍率与状态词按**当前时刻实时**推算、
+ * 显示在同一行短后缀里，长标注（活动截止日 + 时段窗口）改放 `description`
+ * 副行（见 listModels 与 promotionView）。同名撞车时再加变体标记。
  */
 function displayNameFor(model: BuddyRemoteModel, all: readonly BuddyRemoteModel[]): string {
   const suffix = displaySuffix(model, all)
   return suffix.length > 0 ? `${model.name} · ${suffix}` : model.name
 }
 
-/** 组装展示名的后缀部分：倍率 + 同名变体标记。 */
+/** 组装展示名的后缀部分：倍率 + 状态词 + 同名变体标记。 */
 function displaySuffix(model: BuddyRemoteModel, all: readonly BuddyRemoteModel[]): string {
   const parts: string[] = []
-  // 倍率：有促销时用 `原价→促销价` 一眼看出折扣幅度。
-  const rate = formatCreditsRate(model.creditsRate, model.discountedCreditsRate)
+  // 倍率与状态词按**当前时刻实时**推算（promotionView 内部用 new Date()），
+  // 不再把 config 拉取时刻的判定冻结进模型名——避免「大白天显示免费」。
+  // 长标注（活动截止日 + 时段窗口 + 窗口外错峰价）移到 listModels 的
+  // `description` 副行，不在模型名里塞长句。
+  const view = promotionView(model)
+  const rate = view.effectiveRate ?? model.creditsRate
   if (rate !== undefined) parts.push(rate)
+  if (view.status !== undefined) parts.push(`(${view.status})`)
   // 同名消歧：只在**确实撞车**时追加，避免影响其它模型。
   const variant = variantLabelFor(model, all)
   if (variant.length > 0) parts.push(variant)

@@ -37,6 +37,7 @@ import {
   credentialRequestHeaders,
   isRefreshable,
   parseAccountData,
+  parseModelTiers,
   parseModelsFromConfig,
   parsePromotions,
   parseTokenData,
@@ -404,7 +405,12 @@ export async function fetchModels(
     // 促销与补充模型都只是增强。
     const config = await requestConfig(headers, fetcher, signal, product)
     const merged = mergeRemoteModels(scoped, config.models)
-    return config.promotions.size === 0 ? merged : applyPromotions(merged, config.promotions)
+    // 档位（`modelTiers`）与促销（`modelPromotions`）是两个独立来源，任一为空
+    // 也要把另一个并进去 —— 早期这里只看 promotions，于是"只有档位标注"的模型
+    // （如 glm-5.3 的「订阅优先」）整条被跳过。
+    return config.promotions.size === 0 && config.tiers.size === 0
+      ? merged
+      : applyPromotions(merged, config.promotions, config.tiers)
   }
 
   // 第二优先：/v3/config（结果同样是 data.models / data.agents 结构）
@@ -439,11 +445,13 @@ function mergeRemoteModels(
 /** `/v3/config` 的解析结果：模型 + 促销表。 */
 interface BuddyConfigSnapshot {
   models: BuddyRemoteModel[]
-  promotions: Map<string, string>
+  promotions: Map<string, { rate: string | null; note: string | null; promo: Record<string, unknown> }>
+  /** 「模型 id → 会员档位记录」，来自 `modelTiers`（与促销是两套独立来源）。 */
+  tiers: Map<string, Record<string, unknown>>
 }
 
 /**
- * 取 `/v3/config` 的模型与促销表。
+ * 取 `/v3/config` 的模型、促销表与档位表。
  *
  * 只用于给 scoped 端点补「另一套 id 的模型」与促销信息（该端点两者都不全）。
  * 任何失败都返回空快照 —— 它们是展示增强，不该让整个模型列表失败。
@@ -454,7 +462,7 @@ async function requestConfig(
   signal: AbortSignal | undefined,
   product: BuddyProduct,
 ): Promise<BuddyConfigSnapshot> {
-  const empty: BuddyConfigSnapshot = { models: [], promotions: new Map() }
+  const empty: BuddyConfigSnapshot = { models: [], promotions: new Map(), tiers: new Map() }
   try {
     const { status, body } = await request('GET', `${product.endpoint}${CONFIG_PATH}`, headers, {
       fetcher, timeoutMs: REQUEST_TIMEOUT_MS, ...signal !== undefined ? { signal } : {},
@@ -465,20 +473,31 @@ async function requestConfig(
     return {
       models: parseModelsFromConfig(body),
       promotions: parsePromotions(data as Record<string, unknown>),
+      tiers: parseModelTiers(data as Record<string, unknown>),
     }
   } catch {
     return empty
   }
 }
 
-/** 把促销表并入模型列表（只补 `discountedCreditsRate`，其余字段不动）。 */
+/** 把促销表与档位表并入模型列表（补 `discountedCreditsRate`、`promotionNote`、原始 `promotion` 与 `modelTier`）。 */
 function applyPromotions(
   models: BuddyRemoteModel[],
-  promotions: Map<string, string>,
+  promotions: Map<string, { rate: string | null; note: string | null; promo: Record<string, unknown> }>,
+  tiers: Map<string, Record<string, unknown>> = new Map(),
 ): BuddyRemoteModel[] {
   return models.map((model) => {
-    const discounted = promotions.get(model.id)
-    return discounted === undefined ? model : { ...model, discountedCreditsRate: discounted }
+    const tier = tiers.get(model.id)
+    const promo = promotions.get(model.id)
+    if (promo === undefined && tier === undefined) return model
+    const next: BuddyRemoteModel = { ...model }
+    if (tier !== undefined) next.modelTier = tier
+    if (promo !== undefined) {
+      if (promo.rate !== null) next.discountedCreditsRate = promo.rate
+      if (promo.note !== null) next.promotionNote = promo.note
+      next.promotion = promo.promo
+    }
+    return next
   })
 }
 

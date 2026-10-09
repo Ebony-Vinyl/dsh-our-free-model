@@ -464,6 +464,35 @@ export interface BuddyRemoteModel {
    * 索引），活动结束后服务端会把它改成 `"0x"` 或移除。存在且非 `0x` 时才带上。
    */
   discountedCreditsRate?: string
+  /**
+   * 促销常驻标注（时段窗口 + 窗口内价格 + 活动截止日），例如
+   * 「错峰时段23:00-08:00·限免·至11月1日」「错峰时段09:00-12:00/14:00-18:00·
+   * 非高峰x0.11」。由 `parsePromotions` 依据调度数据生成，挂在 `description`
+   * （DSH 的 `/model` 弹窗副行），窗口外也常驻显示。
+   *
+   * ⚠️ 词序是「先时段、后价格、再截止日」：只写「限免」而不先说清时段，
+   * 读起来像**任何时候都免费**，与模型名上的「(常时)」互相打架（用户报障）。
+   * 价格词只在窗口内为免费时是「限免」，否则是窗口外错峰价「非高峰x…」。
+   *
+   * ⚠️ 注意：长标注**不再**拼进 `name`——composer 的模型切换菜单只渲染
+   * `name`（见 qoderDisplayName 的同款约束），把长句塞进名字会把选择器
+   * 撑得很长。模型名只保留「当前倍率 (状态)」短后缀。
+   */
+  promotionNote?: string
+  /**
+   * 匹配到的促销**原始记录**（用于 `listModels` 展示时按当前时刻重算倍率与
+   * 状态，避免 config 拉取时刻的促销判定被冻结进模型名）。详见 buddy-adapter
+   * 的 displaySuffix：`promotionActiveNow` 据此判断此刻是否生效。
+   */
+  promotion?: Record<string, unknown>
+  /**
+   * 命中的**会员档位**原始记录（`/v3/config` 的 `modelTiers[]`，见 `parseModelTiers`）。
+   *
+   * ⚠️ 与 `promotion` 是**两套独立来源**：促销在 `modelPromotions`、档位在
+   * `modelTiers`，同一模型可以只有其中一个、也可以两个都有（如 `glm-5.3` 有档位
+   * 无促销）。故不能合并成一个字段 —— 合并后就分不清"这条有价格吗"。
+   */
+  modelTier?: Record<string, unknown>
   /** 可选思考等级（data.models[].reasoning.supportedEfforts）；无等级可选的模型缺省。 */
   reasoningEfforts?: string[]
   /** 默认思考等级（data.models[].reasoning.defaultEffort）。 */
@@ -570,7 +599,7 @@ function zonedMinutes(now: Date, timeZone: unknown): number | undefined {
 }
 
 /** 活动是否带任何时间窗口（每日时段或有效期）。 */
-function hasTimeWindow(schedule: PromotionSchedule): boolean {
+export function hasTimeWindow(schedule: PromotionSchedule): boolean {
   return (Array.isArray(schedule.daily) && schedule.daily.length > 0)
     || schedule.validFrom !== undefined || schedule.validUntil !== undefined
 }
@@ -583,7 +612,7 @@ function hasTimeWindow(schedule: PromotionSchedule): boolean {
  * （夜间 `23:00–7:50` 带 `0.50x` 折扣、白天 `7:50–23:00` 只带角标），
  * 不看时段就会**全天**显示夜间折扣价（用户按折扣价预期、实际被按原价计费）。
  */
-function promotionActiveNow(item: Record<string, unknown>, now: Date): boolean {
+export function promotionActiveNow(item: Record<string, unknown>, now: Date): boolean {
   const raw = item.schedule
   if (typeof raw !== 'object' || raw === null) return true
   const schedule = raw as PromotionSchedule
@@ -605,6 +634,58 @@ function promotionActiveNow(item: Record<string, unknown>, now: Date): boolean {
     // 支持跨零点（如 23:00–7:50）。
     return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end
   })
+}
+
+/**
+ * 从 `/v3/config` 的 `modelTiers` 提取「模型 id → **会员档位标注**」。
+ *
+ * ## 为什么这是**第二套**数据、不能并进 `parsePromotions`
+ *
+ * 上游把「折扣/免费活动」与「会员调度优先级」放在**两个顶层键**里，字段结构
+ * 完全不同（实测 `acc-product-config-v3.json`）：
+ *
+ * ```json
+ * { "id": "tier-standard-2026q3", "enabled": true, "tier": "standard",
+ *   "requiredUserType": "standard", "priority": 20, "trackKey": "model_tier_standard",
+ *   "badge": { "label": "订阅优先" },
+ *   "hover": { "textZh": "资源紧张，旗舰版及高级版会员享优先调度。",
+ *              "action": { "labelZh": "去升级", "type": "upgrade" } },
+ *   "modelIds": ["glm-5.3", "glm-5.3-flash", "kimi-k2.8-preview"] }
+ * ```
+ *
+ * 它**没有** `discount` / `schedule` / `kind`，多了 `tier` / `requiredUserType` /
+ * `trackKey`。截图里 GLM-5.3 挂的「订阅优先」就是它 —— 此前整类标注从未被读取。
+ *
+ * ⚠️ 档位标注**不是折扣**：不该带价格，也不该参与「限免/错峰」状态词判定，
+ * 否则会把一个"资源调度优先级"说成"打折"。故这里产出的是独立记录，由
+ * `promotionView` 分支处理（见其 `tier` 相关注释）。
+ */
+export function parseModelTiers(
+  record: Record<string, unknown>,
+  now: Date = new Date(),
+): Map<string, Record<string, unknown>> {
+  const result = new Map<string, Record<string, unknown>>()
+  const chosen = new Map<string, number>()
+  const tiers = record.modelTiers
+  if (!Array.isArray(tiers)) return result
+  for (const item of tiers) {
+    if (typeof item !== 'object' || item === null) continue
+    const tier = item as Record<string, unknown>
+    if (tier.enabled === false) continue
+    // 档位也可能带日期/时段范围（上游当前这条没有，但结构上允许）。
+    if (!inDateWindow(tier, now)) continue
+    const modelIds = tier.modelIds
+    if (!Array.isArray(modelIds)) continue
+    const priority = priorityOf(tier)
+    for (const id of modelIds) {
+      if (typeof id !== 'string' || id.length === 0) continue
+      const previous = chosen.get(id)
+      if (previous !== undefined && previous > priority) continue
+      chosen.set(id, priority)
+      result.set(id, tier)
+    }
+  }
+  return result
 }
 
 /**
@@ -632,13 +713,88 @@ function promotionActiveNow(item: Record<string, unknown>, now: Date): boolean {
  * 作为防御：**无任何时间窗口**的 `factor: 0` 仍按「已结束占位」跳过 ——
  * 免费额度必然是限时的，没有窗口的 `0x` 更可能是遗留占位。
  */
+/**
+ * 只看活动日期范围（validFrom/validUntil），忽略每日时段窗口。
+ * 用于决定一条促销是否「在其活动期内」——活动期内即使当前不在每日时段
+ * 窗口，也给出常驻标注（错峰价 / 活动截止日），对标 Qoder 的「22点后x0.2」。
+ */
+function inDateWindow(promotion: Record<string, unknown>, now: Date): boolean {
+  const schedule = promotion.schedule
+  if (typeof schedule !== 'object' || schedule === null) return true
+  const s = schedule as PromotionSchedule
+  const from = typeof s.validFrom === 'string' ? Date.parse(s.validFrom) : Number.NaN
+  const until = typeof s.validUntil === 'string' ? Date.parse(s.validUntil) : Number.NaN
+  if (Number.isFinite(from) && now.getTime() < from) return false
+  if (Number.isFinite(until) && now.getTime() >= until) return false
+  return true
+}
+
+/** 把 ISO 日期（YYYY-MM-DD）格式化为「M月D日」用于截止日标注。 */
+function parseDisplayDate(iso: unknown): string | undefined {
+  if (typeof iso !== 'string') return undefined
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(iso)
+  if (m === null) return undefined
+  return `${Number(m[2])}月${Number(m[3])}日`
+}
+
+/**
+ * 为一条促销生成常驻标注文案，例如：
+ *   factor:0 + 夜间窗口 + 截止日 →「错峰时段23:00-08:00·限免·至11月1日」
+ *   折扣 + 工作日时段           →「错峰时段09:00-12:00/14:00-18:00·非高峰x0.11」
+ *
+ * 词序固定为**时段 → 价格 → 截止日**：价格只在窗口内成立，先说时段才不会
+ * 被读成「任何时候都免费」（模型名上的「(常时)」正是「现在窗口外」）。
+ * `active` 为 false 时（当前不在每日时段窗口）额外把错峰价带上，让用户
+ * 在窗口外也能看见「到点后能便宜到多少」，与 Qoder 常驻标注同款体验。
+ */
+function buildPromotionNote(
+  promotion: Record<string, unknown>,
+  offPeakRate: string | undefined,
+  isFree: boolean,
+  active: boolean,
+): string | null {
+  const schedule = promotion.schedule
+  if (typeof schedule !== 'object' || schedule === null) return null
+  const s = schedule as PromotionSchedule
+  const pieces: string[] = []
+  if (Array.isArray(s.daily) && s.daily.length > 0) {
+    const slots: string[] = []
+    for (const slot of s.daily) {
+      if (slot === null || typeof slot !== 'object') continue
+      if (typeof slot.start !== 'string' || typeof slot.end !== 'string') continue
+      const st = parseHHMM(slot.start)
+      const en = parseHHMM(slot.end)
+      if (st === undefined || en === undefined) continue
+      slots.push(`${slot.start}-${slot.end}`)
+    }
+    // 「错峰时段」而不是「夜间/每日」：夜间窗口（23:00-08:00 跨零点）与日内
+    // 窗口（09:00-12:00）说的是同一件事——便宜只在**这个**时段生效，两个词
+    // 拆开写反而让用户以为夜间和日内的活动规则不同。
+    if (slots.length > 0) pieces.push(`错峰时段${slots.join('/')}`)
+  }
+  if (isFree) pieces.push('限免')
+  else if (!active && offPeakRate !== undefined && offPeakRate !== 'x0') pieces.push(`非高峰${offPeakRate}`)
+  const until = typeof s.validUntil === 'string' ? parseDisplayDate(s.validUntil) : undefined
+  if (until !== undefined) pieces.push(`至${until}`)
+  return pieces.length > 0 ? pieces.join('·') : null
+}
+
 export function parsePromotions(
   record: Record<string, unknown>,
   now: Date = new Date(),
-): Map<string, string> {
-  const result = new Map<string, string>()
-  /** id → 已写入的 priority（同 id 多活动时高优先级覆盖）。 */
-  const chosen = new Map<string, number>()
+): Map<string, { rate: string | null; note: string | null; promo: Record<string, unknown> }> {
+  const result = new Map<string, { rate: string | null; note: string | null; promo: Record<string, unknown> }>()
+  /**
+   * id → 已写入那条的排序键。
+   *
+   * ⚠️ 排序键**不是**裸 `priority`：实测 `glm-5.2` / `hy4-preview` 各有两条
+   * 互补活动（夜间 `priority:100` 带折扣、白天 `priority:50` 只挂角标，两者的
+   * `daily` 互不重叠），只按 priority 取高者会让**白天那半段整条消失**——
+   * 而白天那条存在的唯一目的就是在白天显示。故先按「此刻是否生效」分层，
+   * 再在层内按 priority 取高者：生效的永远压过不生效的，两条互不重叠时
+   * 各自在自己的时段里胜出。
+   */
+  const chosen = new Map<string, { active: number; priority: number }>()
   const promotions = record.modelPromotions
   if (!Array.isArray(promotions)) return result
   // 按 priority 升序排序后依次写入，使高 priority 覆盖低 priority。
@@ -647,39 +803,399 @@ export function parsePromotions(
     if (typeof item !== 'object' || item === null) continue
     const promotion = item as Record<string, unknown>
     if (promotion.enabled === false) continue
-    if (!promotionActiveNow(promotion, now)) continue
+    // 活动日期范围外（含未开始 / 已过期）整条忽略；活动期内即使当前不在
+    // 每日时段窗口，也给出常驻标注（见下）。
+    if (!inDateWindow(promotion, now)) continue
+    // ⚠️ **`discount` 不是必需的**：实测三条活动只带 `badge` 而不带 `discount`
+    // （`glm-52-night-discount-daytime-badge-202607`、`ds-discount-daytime-badge-202608`、
+    // `hy4-night-discount-daytime-badge-202609`），它们负责「在白天把这个标挂上」，
+    // 本就不含价格。早期版本在这里 `continue`，于是白天没有任何促销标记。
     const discount = promotion.discount
-    if (typeof discount !== 'object' || discount === null) continue
-    const detail = discount as Record<string, unknown>
-    const factor = typeof detail.factor === 'number' ? detail.factor : undefined
+    const detail = typeof discount === 'object' && discount !== null
+      ? discount as Record<string, unknown>
+      : undefined
+    const factor = detail !== undefined && typeof detail.factor === 'number' ? detail.factor : undefined
     const rawSchedule = promotion.schedule
     const windowed = typeof rawSchedule === 'object' && rawSchedule !== null
       && hasTimeWindow(rawSchedule as PromotionSchedule)
-
-    let rate: string | undefined
-    if (factor === 0) {
-      // 免费额度必须限时；无窗口的 `0x` 视为「已结束」占位（保持旧行为）。
-      if (!windowed) continue
-      rate = '免费'
-    } else {
-      rate = normalizeDiscountedRate(detail.discountedCredits)
-      // 归一化后仍是 `x0` 说明是无 factor 的 `0x` 占位，同样跳过。
-      if (rate === 'x0') continue
+    const isFree = factor === 0
+    const offPeakRate = isFree ? '免费' : normalizeDiscountedRate(detail?.discountedCredits)
+    const active = promotionActiveNow(promotion, now)
+    const note = detail === undefined ? null : buildPromotionNote(promotion, offPeakRate, isFree, active)
+    // 仅当处于每日时段窗口内才把折扣价写进 rate；窗口外保留原价（与历史
+    // 行为一致），错峰价由 note 常驻标注。无 `discount` 的活动（纯角标）
+    // 永远不带 rate —— 它没有价格可言。
+    let rate: string | null = null
+    if (detail !== undefined && active) {
+      if (isFree) {
+        // 免费额度必须限时；无窗口的 `0x` 视为「已结束」占位（保持旧行为）。
+        if (!windowed) continue
+        rate = '免费'
+      } else {
+        const r = normalizeDiscountedRate(detail.discountedCredits)
+        // 归一化后仍是 `x0` 说明是无 factor 的 `0x` 占位，同样跳过。
+        if (r === 'x0' || r === undefined) continue
+        rate = r
+      }
     }
-    if (rate === undefined) continue
-
     const modelIds = promotion.modelIds
     if (!Array.isArray(modelIds)) continue
     const priority = priorityOf(promotion)
+    const rank = { active: active ? 1 : 0, priority }
     for (const id of modelIds) {
       if (typeof id !== 'string' || id.length === 0) continue
       const previous = chosen.get(id)
-      if (previous !== undefined && previous > priority) continue
-      chosen.set(id, priority)
-      result.set(id, rate)
+      // 生效的压过不生效的；同为生效（或同为不生效）时再比 priority。
+      if (previous !== undefined
+        && (previous.active > rank.active
+          || (previous.active === rank.active && previous.priority > rank.priority))) continue
+      chosen.set(id, rank)
+      result.set(id, { rate, note, promo: promotion })
     }
   }
   return result
+}
+
+/**
+ * 促销徽标的**结构化**数据（独立字段，不走 `description`）。
+ *
+ * ## 为什么必须是独立字段
+ *
+ * `description` 是宿主与各适配器共用的通用字段：buddy 往它写促销标注，Cline /
+ * lobsterai 却把上游模型介绍（`Mixture-of-Experts architecture…`）原样透传，
+ * 于是「字段非空就是促销」的判据会把模型宣传语渲染成促销胶囊（用户报障
+ * 「其他供应商出现奇怪的标签」）。促销有自己的一套语义（活动类型、双段价格、
+ * 多段时段、展示方式），塞进一个通用字符串字段既表达不了、又必然误伤，
+ * 故单独声明 `promo`，由 `model.list` 原样搬运、客户端按结构渲染。
+ *
+ * ## 字段来源（`/v3/config` 的 `modelPromotions[]`，实测结构）
+ *
+ * ```json
+ * [{ "kind": "discount", "enabled": true, "priority": 100,
+ *    "discount": { "discountedCredits": "0.50x", "displayMode": "strikethrough", "factor": 0.5 },
+ *    "schedule": { "daily": [{"start":"23:00","end":"08:00"}], "timezone": "Asia/Shanghai",
+ *                  "validFrom": "2026-10-01", "validUntil": "2026-11-01" },
+ *    "modelIds": ["glm-5.2"] }]
+ * ```
+ *
+ * ⚠️ **`daily` 是数组**：一个活动可以有多段时段（如工作日 `09:00-12:00/14:00-18:00`），
+ * 故这里原样保留数组，不压成字符串——压平之后客户端再也无法逐段判断当下是否在
+ * 某个窗口内，也就画不出「当前处于第几段」。
+ *
+ * ⚠️ **价格是两段**：`displayMode: "strikethrough"` 表示上游要求「原价划掉 +
+ * 折后价」（`factor` 给倍率、`discountedCredits` 给展示串），`"replace"` 表示
+ * 只显示折后价。只留一个数会丢掉原价，用户看不出折扣幅度；只留原价又会按
+ * 原价预期、实际被按折后价计费。故 `price` 同时带 `effective` 与 `original`。
+ */
+export interface PromotionBadge {
+  /** 上游活动类型（`kind`），如 `discount`。缺失时不写。 */
+  kind?: string
+  /** 展示方式：`strikethrough`（原价划掉）或 `replace`（只显示折后价）。 */
+  displayMode?: string
+  /** 价格两段：`effective` 为生效价、`original` 为原价（有折扣时才给）。 */
+  price?: { effective?: string; original?: string }
+  /** 每日时段，**保留多段**（`HH:MM` 原样）。无 daily 窗口时不写。 */
+  windows?: { start: string; end: string }[]
+  /** IANA 时区（实测 `Asia/Shanghai`）。 */
+  timezone?: string
+  /** 活动生效日期范围（ISO 字符串）。 */
+  validFrom?: string
+  validUntil?: string
+  /** 当前是否处于某段每日窗口内（展示时实时判定，非采集时刻的冻结值）。 */
+  active: boolean
+  /** 状态词：（限免）/（错峰）/（常时）。 */
+  status?: string
+  /** 人读长标注，如「错峰时段23:00-08:00·限免·至11月1日」。 */
+  note?: string
+  /** 命中的活动 `priority`（同模型多活动时取最高者）。 */
+  priority?: number
+  /** 上游活动 `id`（如 `glm-52-night-discount-202607`）。 */
+  id?: string
+  /**
+   * 上游自带的展示标签（`badge.label`，如「夜间折扣」「限时免费」「订阅优先」）。
+   *
+   * ⚠️ 这是**权威展示串**：有它时消费端应优先用它，而不是自己拼的状态词——
+   * 上游口径（含它自己的不一致）才是用户能在官方 UI 里对上号的东西。
+   */
+  badgeLabel?: string
+  /** 上游短标签（`badge.shortLabel`，如「折扣」），窄容器用。 */
+  badgeShortLabel?: string
+  /** 上游指定颜色（`badge.color`，如 `#1E90FF` / `#FF0000` / `#009273`）。 */
+  badgeColor?: string
+  /** 上游显示策略（`badge.display`）：`activeOnly` = 仅活动生效时显示。 */
+  badgeDisplay?: string
+  /** 上游悬停说明（`hover.textZh`）。 */
+  hoverText?: string
+  /** 上游悬停动作文案（`hover.action.labelZh`，如「去使用」「去升级」）。 */
+  hoverActionLabel?: string
+  /**
+   * 会员档位（仅 `kind === 'tier'`，来自 `modelTiers`）：`standard` 等。
+   *
+   * 档位标注**没有**价格与状态词 —— 它表达的是"资源紧张时谁先被调度"，
+   * 不是折扣。消费端据此走"只显示标签"的分支。
+   */
+  tier?: string
+  /** 档位要求的会员类型（`modelTiers[].requiredUserType`，如 `standard`）。 */
+  requiredUserType?: string
+}
+
+/** `promotionView` 的展示结果：当前生效倍率、状态词、常驻长标注。 */
+export interface PromotionView {
+  /** 当前生效倍率（促销窗口内取折扣价/免费，否则取原价）。无促销或活动期外为 undefined。 */
+  effectiveRate?: string
+  /** 状态词：（限免）/（错峰）/（常时）；无促销或活动期外为 undefined。 */
+  status?: string
+  /** 常驻长标注（活动截止日 + 时段窗口 + 窗口外错峰价），用于 description 副行。 */
+  note?: string
+  /**
+   * 结构化促销徽标（独立字段）。无促销或活动期外为 undefined。
+   *
+   * ⚠️ 这是**新的**下发行，`note` 保留给历史调用方（`description` 副行）；
+   * `model.list` 搬的是本字段，客户端不从 `note` 反推结构。
+   */
+  badge?: PromotionBadge
+}
+
+/**
+ * 按 `now` 实时推算某模型的促销展示信息。
+ *
+ * ⚠️ **必须展示时调用（而非 config 解析时烘焙）**：远端目录是懒加载且只拉一次，
+ * 若在 `parsePromotions` 里就把 `discountedCreditsRate` / `promotionNote` 写死，
+ * 判定结果会被冻结进模型名与 `isFreeModel`——夜间拉取后白天仍显示「免费」，
+ * 既让模型选择器误导，又会让 `isFreeModel` 把付费模型误判成免费、绕过永久积分
+ * 的保护锁（见 #155 复盘的「白天显示免费」）。本函数每次调用都按当前时刻重算，
+ * 到点自动翻面。
+ *
+ * 状态词口径：
+ * - `限免`：factor:0 且**无每日时段窗口**（活动期内任意时刻免费，如 Hy3）；
+ * - `错峰`：当前处于促销每日时段窗口内（含免费或折扣，如 Hy4 夜间免费）；
+ * - `常时`：促销在活动期内但当前不在每日时段窗口（原价常驻，到点自动转错峰）。
+ * 无促销或活动期外不返回任何信息（模型名退化为仅显示原价）。
+ */
+export function promotionView(
+  model: { creditsRate?: string; promotion?: Record<string, unknown>; modelTier?: Record<string, unknown> },
+  now: Date = new Date(),
+): PromotionView {
+  const promo = model.promotion
+  const tier = model.modelTier
+  // 档位标注（`modelTiers`）是**独立于促销**的第二套来源：无促销时它照样要出标。
+  if (typeof promo !== 'object' || promo === null) {
+    return typeof tier === 'object' && tier !== null && tier.enabled !== false && inDateWindow(tier, now)
+      ? { badge: buildTierBadge(tier) }
+      : {}
+  }
+  if (promo.enabled === false) return {}
+  // 活动日期范围外（未开始 / 已过期）→ 视为无促销，模型名退化为原价。
+  if (!inDateWindow(promo, now)) return {}
+  // ⚠️ **`discount` 可以缺失**：实测 `glm-5.2` / `hy4-preview` / `deepseek-v4.1-flash`
+  // 各有一条「白天挂标」活动只有 `badge` 而没有 `discount`，它的职责只是把标挂上。
+  // 早期版本在这里 `return {}`，于是白天这些模型的徽标整条消失（而白天正是它
+  // 存在的意义）。缺 `discount` 表示「没有价格」，不是「没有活动」。
+  const discount = promo.discount
+  const detail = typeof discount === 'object' && discount !== null
+    ? discount as Record<string, unknown>
+    : undefined
+  const factor = detail !== undefined && typeof detail.factor === 'number' ? detail.factor : undefined
+  const isFree = factor === 0
+  const schedule = promo.schedule
+  // 状态词只看「每日时段窗口」：有 daily 窗口的免费促销是「错峰」（仅窗口内免费），
+  // 仅日期范围、无 daily 窗口的免费促销是「限免」（活动期内任意时刻免费，如 Hy3）。
+  // 注意不能用 hasTimeWindow（它把 validFrom/validUntil 也算作窗口），否则会把
+  // 日期范围的限免误判成错峰。
+  const hasDaily = typeof schedule === 'object' && schedule !== null
+    && Array.isArray(schedule.daily) && schedule.daily.length > 0
+  const active = promotionActiveNow(promo, now)
+  const offPeakRate = isFree ? '免费' : normalizeDiscountedRate(detail?.discountedCredits)
+  // 无价格的活动没有 `note` 可言（那个函数是绕着价格写的），但仍有徽标。
+  const note = detail === undefined ? undefined : buildPromotionNote(promo, offPeakRate, isFree, active) ?? undefined
+  // 当前生效倍率：促销窗口内取折扣价/免费，否则取原价。无 `discount` 时恒为原价。
+  const effectiveRate = detail !== undefined && active
+    ? normalizeDiscountedRate(detail.discountedCredits)
+    : model.creditsRate
+  // 状态词。无 `discount` 的活动不参与状态词判定 —— 它没有折后价，
+  // 写「限免/错峰」都是在编造一个不存在的价格。
+  let status: string | undefined
+  if (detail !== undefined) {
+    if (active) {
+      status = isFree && !hasDaily ? '限免' : '错峰'
+    } else {
+      status = '常时'
+    }
+  }
+  const badge = buildPromotionBadge(promo, detail, model.creditsRate, active, status, note)
+  return { effectiveRate, status, note, badge }
+}
+
+/**
+ * 把一条原始促销装配成**结构化**徽标数据（独立字段 `promo` 的取值）。
+ *
+ * 与 `buildPromotionNote` 的分工：那个函数只产出**一句话**（给人读、也被
+ * `/model` 弹窗当 description 副行用）；本函数产出**结构**（给客户端渲染与
+ * 逐段判定用，不再要求它去解析字符串）。两者共用同一份原始 `promotion`，
+ * 故文案与结构永远同源、不会各说各话。
+ *
+ * ⚠️ 双段价格只在**真有折扣**时给 `original`：`factor: 0` 的免费活动，
+ * 原价就是 `model.creditsRate`（如 `x0.29`），带上它才能画出「x0.29→x0」
+ * 的划掉效果；如果上游没给原价（既无 displayMode 也无 creditsRate），
+ * 就只给 `effective`，不编造。
+ */
+function buildPromotionBadge(
+  promotion: Record<string, unknown>,
+  detail: Record<string, unknown> | undefined,
+  creditsRate: string | undefined,
+  active: boolean,
+  status: string | undefined,
+  note: string | undefined,
+): PromotionBadge {
+  const schedule = (typeof promotion.schedule === 'object' && promotion.schedule !== null
+    ? promotion.schedule
+    : {}) as PromotionSchedule
+  // 时段**逐段保留**（不 join 成字符串）：客户端要能判断"现在处于第几段"。
+  const windows: { start: string; end: string }[] = []
+  if (Array.isArray(schedule.daily)) {
+    for (const slot of schedule.daily) {
+      if (slot === null || typeof slot !== 'object') continue
+      if (typeof slot.start !== 'string' || typeof slot.end !== 'string') continue
+      if (parseHHMM(slot.start) === undefined || parseHHMM(slot.end) === undefined) continue
+      windows.push({ start: slot.start, end: slot.end })
+    }
+  }
+  const effective = detail === undefined ? undefined : normalizeDiscountedRate(detail.discountedCredits)
+  // ⚠️ 只有**两段价格真的不同**时才给 `original`：`factor: 0` 且原价本就是
+  // `x0.00` 的活动（Hy3 这类"活动期内随时免费"）两段同值，带上它会渲染出
+  // 「x0.00→x0.00」这种既不表达折扣、又占宽度的胶囊。判据用**值**而不是
+  // `factor`：factor 只说明"有活动"，说明不了"原价与折后价不同"。
+  const original = detail === undefined ? undefined : creditsRate
+  const price = effective === undefined && original === undefined
+    ? undefined
+    : {
+        ...effective === undefined ? {} : { effective },
+        ...original !== undefined && original !== effective ? { original } : {},
+      }
+  const kind = typeof promotion.kind === 'string' && promotion.kind.trim() !== '' ? promotion.kind : undefined
+  const displayMode = detail !== undefined && typeof detail.displayMode === 'string' && detail.displayMode.trim() !== ''
+    ? detail.displayMode
+    : undefined
+  const timezone = typeof schedule.timezone === 'string' && schedule.timezone.trim() !== '' ? schedule.timezone : undefined
+  const validFrom = typeof schedule.validFrom === 'string' ? schedule.validFrom : undefined
+  const validUntil = typeof schedule.validUntil === 'string' ? schedule.validUntil : undefined
+  const priority = typeof promotion.priority === 'number' && Number.isFinite(promotion.priority)
+    ? promotion.priority
+    : undefined
+  // 上游自己给的展示标签与悬停说明，**原样透传**（见 PromotionBadge 的 badgeLabel 注释）。
+  const upstream = readUpstreamBadge(promotion)
+  return {
+    ...kind === undefined ? {} : { kind },
+    ...displayMode === undefined ? {} : { displayMode },
+    ...price === undefined ? {} : { price },
+    ...windows.length === 0 ? {} : { windows },
+    ...timezone === undefined ? {} : { timezone },
+    ...validFrom === undefined ? {} : { validFrom },
+    ...validUntil === undefined ? {} : { validUntil },
+    active,
+    ...status === undefined ? {} : { status },
+    ...note === undefined ? {} : { note },
+    ...priority === undefined ? {} : { priority },
+    ...upstream.id === undefined ? {} : { id: upstream.id },
+    ...upstream.label === undefined ? {} : { badgeLabel: upstream.label },
+    ...upstream.shortLabel === undefined ? {} : { badgeShortLabel: upstream.shortLabel },
+    ...upstream.color === undefined ? {} : { badgeColor: upstream.color },
+    ...upstream.display === undefined ? {} : { badgeDisplay: upstream.display },
+    ...upstream.hoverText === undefined ? {} : { hoverText: upstream.hoverText },
+    ...upstream.actionLabel === undefined ? {} : { hoverActionLabel: upstream.actionLabel },
+  }
+}
+
+/**
+ * 把一条 `modelTiers` 记录装配成徽标（第二套来源，**不带价格、不带状态词**）。
+ *
+ * 与 `buildPromotionBadge` 的分工：那个处理的是"折扣/免费"（要双段价格、要
+ * 时段窗口、要 active 判定）；本函数处理的是"会员档位"（只有标签与说明）。
+ * 两者产出同一个 `PromotionBadge` 形状，是为了让消费端只认一个字段 ——
+ * 但档位**不写** `price` / `status` / `displayMode`：它没有价格可言，
+ * 写上去就等于把"调度优先级"说成"打折"。
+ */
+function buildTierBadge(tier: Record<string, unknown>): PromotionBadge {
+  const upstream = readUpstreamBadge(tier)
+  const tierName = typeof tier.tier === 'string' && tier.tier.trim() !== '' ? tier.tier.trim() : undefined
+  const requiredUserType = typeof tier.requiredUserType === 'string' && tier.requiredUserType.trim() !== ''
+    ? tier.requiredUserType.trim()
+    : undefined
+  const priority = typeof tier.priority === 'number' && Number.isFinite(tier.priority) ? tier.priority : undefined
+  return {
+    kind: 'tier',
+    // 档位恒为"生效"（它不是按时段闪断的折扣；要按档位显示与否的是会员身份，
+    // 那个判定不在本插件侧），故 active 恒 true。
+    active: true,
+    ...upstream.id === undefined ? {} : { id: upstream.id },
+    ...upstream.label === undefined ? {} : { badgeLabel: upstream.label },
+    ...upstream.shortLabel === undefined ? {} : { badgeShortLabel: upstream.shortLabel },
+    ...upstream.color === undefined ? {} : { badgeColor: upstream.color },
+    ...upstream.display === undefined ? {} : { badgeDisplay: upstream.display },
+    ...upstream.hoverText === undefined ? {} : { hoverText: upstream.hoverText },
+    ...upstream.actionLabel === undefined ? {} : { hoverActionLabel: upstream.actionLabel },
+    ...tierName === undefined ? {} : { tier: tierName },
+    ...requiredUserType === undefined ? {} : { requiredUserType },
+    ...priority === undefined ? {} : { priority },
+  }
+}
+
+/**
+ * 读取上游自己给的展示标签（`badge` / `hover` / `id`）。
+ *
+ * ## 为什么必须透传而不是我们自编
+ *
+ * 上游**已经**为每条活动准备了展示串，而且比我们能推断的更准：
+ *
+ * ```json
+ * { "id": "glm-52-night-discount-202607",
+ *   "badge": { "color": "#1E90FF", "label": "夜间折扣" },
+ *   "hover": { "textZh": "每晚 23:00—次日 8:00 积分限时立减，错峰用更省",
+ *              "action": { "labelZh": "去使用" } } }
+ * ```
+ *
+ * 我们此前只留 `factor` 与 `daily`，然后**自己拼**一个状态词（`限免`/`错峰`）
+ * 和一句 note，结果是同一条活动在两处各说各话（用户看到的「错峰时段…限免」
+ * 并非上游文案）。上游给什么就显示什么，既省掉一套推断、也不会与官方口径冲突。
+ *
+ * ⚠️ **上游的标签与说明可能自相矛盾，也照样透传**：实测
+ * `ds-discount-daytime-badge-202608`（`deepseek-v4.1-flash` 那条）的 label 是
+ * 「夜间折扣」，而 `hover.textZh` 说的是「周一至周五 09:00–12:00、14:00–18:00
+ * 属高峰原价，非高峰期积分5折」。纠正它就得编造一套"更正确"的说法，
+ * 那比照抄一个已知不一致的官方说法更糟（用户对不上官方 UI 就无从判断）。
+ *
+ * `badge.display === 'activeOnly'` 表示**仅在活动生效时**显示该标（`hy3` 用它）；
+ * 该语义由消费端结合 `active` 判定，这里只搬运。
+ */
+function readUpstreamBadge(promotion: Record<string, unknown>): {
+  id?: string
+  label?: string
+  shortLabel?: string
+  color?: string
+  display?: string
+  hoverText?: string
+  actionLabel?: string
+} {
+  const str = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+  const badge = typeof promotion.badge === 'object' && promotion.badge !== null
+    ? promotion.badge as Record<string, unknown>
+    : undefined
+  const hover = typeof promotion.hover === 'object' && promotion.hover !== null
+    ? promotion.hover as Record<string, unknown>
+    : undefined
+  const action = hover !== undefined && typeof hover.action === 'object' && hover.action !== null
+    ? hover.action as Record<string, unknown>
+    : undefined
+  return {
+    id: str(promotion.id),
+    label: str(badge?.label),
+    shortLabel: str(badge?.shortLabel),
+    color: str(badge?.color),
+    display: str(badge?.display),
+    hoverText: str(hover?.textZh),
+    actionLabel: str(action?.labelZh),
+  }
 }
 
 /** 读取促销项的 priority；缺失或非法时按 0（最低）处理。 */
@@ -779,7 +1295,9 @@ export function parseModelsFromConfig(body: unknown): BuddyRemoteModel[] {
       name: remoteName ?? displayNameForModel(id),
       ...parseModelMeta(meta),
       ...rate !== undefined ? { creditsRate: rate } : {},
-      ...discounted !== undefined ? { discountedCreditsRate: discounted } : {},
+      ...discounted !== undefined && discounted.rate !== null ? { discountedCreditsRate: discounted.rate } : {},
+      ...discounted !== undefined && discounted.note !== null ? { promotionNote: discounted.note } : {},
+      ...discounted !== undefined ? { promotion: discounted.promo } : {},
       ...agentReferencedIds.has(id) ? { agentReferenced: true } : {},
     })
   }
@@ -824,7 +1342,9 @@ export function parseModelsFromConfig(body: unknown): BuddyRemoteModel[] {
       name: displayNameForModel(id),
       ...parseModelMeta(meta),
       ...rate !== undefined ? { creditsRate: rate } : {},
-      ...discounted !== undefined ? { discountedCreditsRate: discounted } : {},
+      ...discounted !== undefined && discounted.rate !== null ? { discountedCreditsRate: discounted.rate } : {},
+      ...discounted !== undefined && discounted.note !== null ? { promotionNote: discounted.note } : {},
+      ...discounted !== undefined ? { promotion: discounted.promo } : {},
       // 试用横幅本身就是「服务端推荐可用」的信号，与 agent 引用同义。
       agentReferenced: true,
     })
