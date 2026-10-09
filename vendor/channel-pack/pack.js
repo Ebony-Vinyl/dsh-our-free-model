@@ -42535,6 +42535,28 @@ function encryptRaccoonPhone(phone, iv) {
   const ciphertext = Buffer.concat([cipher.update(Buffer.from(phone, "utf8")), cipher.final()]);
   return Buffer.concat([nonce, ciphertext]).toString("base64");
 }
+function raccoonPromoBadge(model) {
+  if (model.status !== "discount" && model.status !== "limited_free") return void 0;
+  const effective = model.effectiveMultiplier;
+  if (typeof effective !== "number" || !Number.isFinite(effective) || effective < 0) return void 0;
+  const base = model.baseMultiplier;
+  const hasBase = typeof base === "number" && Number.isFinite(base) && base > 0;
+  if (!hasBase || base <= effective) return void 0;
+  const note = model.statusNote.trim();
+  return {
+    kind: "discount",
+    price: { effective: `x${formatMultiplier(effective)}`, original: `x${formatMultiplier(base)}` },
+    // `limited_free` 是「限时免费」；`discount` 是常规折扣。上游没给展示标签，
+    // 故按状态给一个中性措辞（buddy/qoder 用上游 label，这里没有可取）。
+    badgeLabel: model.status === "limited_free" ? "\u9650\u65F6\u514D\u8D39" : "\u9650\u65F6\u6298\u6263",
+    // 生效价 0 就是免费；两端都非 0 时仍是折扣。状态词与 buddy 口径一致。
+    status: effective === 0 ? "\u9650\u514D" : "\u9519\u5CF0",
+    // 网关只说「当前处于该状态」，没有可判定的窗口，故此刻即生效。
+    active: true,
+    // 自由文本原文进 tooltip（如「限免一个月」）——不解析、不编造时段。
+    ...note === "" ? {} : { hoverText: note }
+  };
+}
 function formatMultiplier(value) {
   return String(Number(value.toFixed(4)));
 }
@@ -42727,7 +42749,10 @@ var RaccoonAdapter = class extends LlmAdapter8 {
    */
   listAllModels() {
     const source = this.remoteModels ?? this.product.fallbackModels.map(fallbackToRemote2);
-    return source.map((model) => ({ id: model.id, name: model.name }));
+    return source.map((model) => {
+      const promo = model.meta === void 0 ? void 0 : raccoonPromoBadge(model.meta);
+      return { id: model.id, name: model.name, ...promo === void 0 ? {} : { promo } };
+    });
   }
   /**
    * 取远端模型目录；**失败时不把兜底表写进缓存**。
@@ -42760,13 +42785,17 @@ var RaccoonAdapter = class extends LlmAdapter8 {
     const all = await this.loadModels();
     const disabled = this.options.accountPool?.disabledModelsFor(this.product.id);
     const listed = disabled === void 0 || disabled.size === 0 ? all : all.filter((model) => !disabled.has(model.id));
-    return listed.map((model) => ({
-      provider: this.product.id,
-      id: model.id,
-      // 倍率拼进 name（不是 description）：composer 的模型切换菜单只渲染 name。
-      name: model.name,
-      inputModalities: this.inputModalitiesFor(model)
-    }));
+    return listed.map((model) => {
+      const promo = model.meta === void 0 ? void 0 : raccoonPromoBadge(model.meta);
+      return {
+        provider: this.product.id,
+        id: model.id,
+        // 倍率拼进 name（不是 description）：composer 的模型切换菜单只渲染 name。
+        name: model.name,
+        ...promo === void 0 ? {} : { promo },
+        inputModalities: this.inputModalitiesFor(model)
+      };
+    });
   }
   async resolveModel(provider, model, _signal) {
     const all = await this.loadModels();
@@ -49276,6 +49305,10 @@ function normalizeRemoteModel(entry) {
   return {
     id,
     name: raccoonDisplayName(meta),
+    // ⚠️ 原始计费字段一并带上：展示名把促销压成了一个字符串
+    // （`x0.5→x0.25`），而设置页要画**结构化**胶囊（独立字段 `promo`），
+    // 从名字反解析正是这套改造要消灭的做法。见 `raccoonPromoBadge`。
+    meta,
     contextWindow: readPositiveInt(params.context_window ?? entry.context_window),
     maxTokens: readPositiveInt(params.max_tokens),
     // ⚠️ **不能只看 tags**：`vision` 是客户端「Raccoon-Auto 选模」的偏好标签，

@@ -20,6 +20,7 @@
  */
 
 import { createCipheriv, randomBytes } from 'node:crypto'
+import type { PromotionBadge } from './buddy.js'
 
 /** API 基址。 */
 export const RACCOON_API_BASE = 'https://xiaohuanxiong.com'
@@ -214,6 +215,58 @@ export interface RaccoonModelMeta {
   status: 'normal' | 'discount' | 'limited_free'
   /** 状态角标文案（远端 `billing_status_note`，如「限免一个月」）。 */
   statusNote: string
+}
+
+/**
+ * 把 Raccoon 网关的计费状态装配成**独立字段** `promo`（与 buddy/qoder/trae 同一契约）。
+ *
+ * ## 上游结构（`model_catalog` 的 `categories[].models[]`，实测）
+ *
+ * ```json
+ * { "name": "glm-5-3", "billing_status": "discount" | "limited_free" | "normal",
+ *   "billing_multiplier": 0.5,              // 原价（list price）
+ *   "billing_effective_multiplier": 0.25,   // 生效价（effective）
+ *   "billing_status_note": "限免一个月" }
+ * ```
+ *
+ * 网关**同时**下发原价与生效价（`dsh-connect-sensenova-token-plan` 的
+ * `raccoonEffectiveMultiplier` 已把这套解析用在实际产品里），故双段价格是现成的。
+ *
+ * ## 三个判据
+ *
+ * 1. **`status` 必须是 `discount` / `limited_free`**：`normal` 行没有促销
+ *    （`billing_status_note` 缺失、两端同价），给它挂胶囊就是把常态说成活动。
+ * 2. **两端必须真的不同**：网关在 `discount` 态下也可能给出 `base === effective`
+ *    （无实际降价的占位），照显会得到 `x0.5→x0.5` 这种假折扣。
+ * 3. **`limited_free` 的生效价通常是 0** → 写作 `x0`（与 `raccoonDisplayName`
+ *    的 `免费` 同源；那边显示「免费」，这里给结构化价格，消费端自己决定措辞）。
+ *
+ * ⚠️ 网关**不下发时段窗口**：`billing_status_note` 是自由文本（如「限免一个月」），
+ * 有时效但**没有可解析的起始/结束时间**。故本函数**不编造 `windows` /
+ * `validUntil`** —— 把自由文本原文放进 `hoverText`，让用户看到官方说法。
+ */
+export function raccoonPromoBadge(model: RaccoonModelMeta): PromotionBadge | undefined {
+  if (model.status !== 'discount' && model.status !== 'limited_free') return undefined
+  const effective = model.effectiveMultiplier
+  if (typeof effective !== 'number' || !Number.isFinite(effective) || effective < 0) return undefined
+  const base = model.baseMultiplier
+  const hasBase = typeof base === 'number' && Number.isFinite(base) && base > 0
+  // 没有原价、或两端同价 → 没有真正的降价，不挂胶囊（见判据 2）。
+  if (!hasBase || base <= effective) return undefined
+  const note = model.statusNote.trim()
+  return {
+    kind: 'discount',
+    price: { effective: `x${formatMultiplier(effective)}`, original: `x${formatMultiplier(base)}` },
+    // `limited_free` 是「限时免费」；`discount` 是常规折扣。上游没给展示标签，
+    // 故按状态给一个中性措辞（buddy/qoder 用上游 label，这里没有可取）。
+    badgeLabel: model.status === 'limited_free' ? '限时免费' : '限时折扣',
+    // 生效价 0 就是免费；两端都非 0 时仍是折扣。状态词与 buddy 口径一致。
+    status: effective === 0 ? '限免' : '错峰',
+    // 网关只说「当前处于该状态」，没有可判定的窗口，故此刻即生效。
+    active: true,
+    // 自由文本原文进 tooltip（如「限免一个月」）——不解析、不编造时段。
+    ...note === '' ? {} : { hoverText: note },
+  }
 }
 
 /** 倍率格式化：去掉浮点噪声，`0.75` → `0.75`、`1` → `1`、`0.1` → `0.1`。 */

@@ -32,7 +32,8 @@ import type {
 import { AccountPool, providerCatalogVisible } from './account-pool.js'
 import { RemoteCatalogGate } from './remote-catalog-gate.js'
 import { settingsNamespaceFor } from './settings-compat.js'
-import { isRaccoonExpired, type RaccoonCredential } from './raccoon.js'
+import { isRaccoonExpired, raccoonPromoBadge, type RaccoonCredential, type RaccoonModelMeta } from './raccoon.js'
+import type { PromotionBadge } from './buddy.js'
 import {
   RACCOON,
   RACCOON_DEFAULT_EFFORT,
@@ -135,6 +136,15 @@ export interface RaccoonRemoteModel {
   contextWindow: number
   maxTokens: number
   supportsImage: boolean
+  /**
+   * 网关的计费状态（`billing_status` / 两端倍率 / `billing_status_note`）。
+   *
+   * ⚠️ 为什么把整份 meta 也带上、而不只带拼好的 `name`：展示名把促销信息
+   * 压成了一个字符串（`x0.5→x0.25`），设置页要画**结构化**胶囊（独立字段
+   * `promo`）就必须拿到原始字段——从名字反解析正是这套改造要消灭的做法。
+   * 缺省表示「远端没给计费信息」（兜底表路径），此时不产出 `promo`。
+   */
+  meta?: RaccoonModelMeta
 }
 
 /**
@@ -232,9 +242,13 @@ export class RaccoonAdapter extends LlmAdapter {
    * 设置页需要它渲染被关闭的模型 —— 否则那些条目只能凭 `disabledMap` 的 key
    * 补回，而那条路径拿不到展示名，会退化成裸 id（倍率与模型名随之丢失）。
    */
-  listAllModels(): readonly { id: string; name: string }[] {
+  listAllModels(): readonly { id: string; name: string; promo?: PromotionBadge }[] {
     const source = this.remoteModels ?? this.product.fallbackModels.map(fallbackToRemote)
-    return source.map((model) => ({ id: model.id, name: model.name }))
+    return source.map((model) => {
+      // 促销走**独立字段** `promo`（与 buddy/qoder/trae 同一契约）。
+      const promo = model.meta === undefined ? undefined : raccoonPromoBadge(model.meta)
+      return { id: model.id, name: model.name, ...promo === undefined ? {} : { promo } }
+    })
   }
 
   /**
@@ -277,13 +291,18 @@ export class RaccoonAdapter extends LlmAdapter {
       ? all
       : all.filter((model) => !disabled.has(model.id))
 
-    return listed.map((model) => ({
-      provider: this.product.id,
-      id: model.id,
-      // 倍率拼进 name（不是 description）：composer 的模型切换菜单只渲染 name。
-      name: model.name,
-      inputModalities: this.inputModalitiesFor(model),
-    }))
+    return listed.map((model) => {
+      // 促销走独立字段（与 `listAllModels` 同源）：设置页据此画结构化胶囊。
+      const promo = model.meta === undefined ? undefined : raccoonPromoBadge(model.meta)
+      return {
+        provider: this.product.id,
+        id: model.id,
+        // 倍率拼进 name（不是 description）：composer 的模型切换菜单只渲染 name。
+        name: model.name,
+        ...promo === undefined ? {} : { promo },
+        inputModalities: this.inputModalitiesFor(model),
+      }
+    })
   }
 
   async resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
