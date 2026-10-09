@@ -1052,7 +1052,17 @@ export function apply(ctx, config) {
     logger.warn?.(`our-free-model: ${surface} admission rejected status=${status} source=${source} reason=${reason}`)
   }
   const api = createApiRoutes({
-    settings, stats, availability, catalog: () => modelRuntime.catalog, state,
+    settings, stats, availability, catalog: () => modelRuntime.catalog, state, adapter,
+    // `/models` 的数据来源：适配器注册表。`ctx.llm.listModels()` 会逐字段复制
+    // `description`（促销长标注），这条路由要的就是它；pack 自有的 `model.list`
+    // 搬的是结构化 `promo`，与这条**给人读的那句话**同源不同用。
+    listModels: async provider => {
+      try {
+        const listed = await ctx.llm?.listModels?.(provider)
+        if (Array.isArray(listed)) return listed
+      } catch { /* 不是注册过的路由时退回本插件自己的适配器 */ }
+      return await adapter.listModels(provider)
+    },
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress,
     pool: fetchPoolSnapshot,
     eacAuth,
@@ -1557,6 +1567,23 @@ function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())
+      }
+      // 促销长标注的**兼容通路**（老 pack）：新 pack 的标注走独立 `promo` 字段、
+      // 由 `model.list` 原样搬运，用不到这里。本路由直接问适配器注册表
+      // （`deps.listModels` → `ctx.llm.listModels()`，逐字段复制 description），
+      // 供宿主目录读不到时的第二来源（见 client.js 的 legacyPromoNotes）。
+      // 设置页模型行据此渲染徽标胶囊。provider 取 model.list 同款参数。
+      if (method === 'GET' && routePath === '/models') {
+        const provider = url.searchParams.get('provider') ?? ROUTE_MAIN
+        try {
+          const listed = await deps.listModels(provider)
+          return send(200, {
+            provider,
+            models: listed.map(m => ({ id: m.id, description: (m.description ?? '').toString() })),
+          })
+        } catch (error) {
+          return send(500, { error: String(error?.message ?? error) })
+        }
       }
       if (method === 'GET' && routePath === '/meta') {
         return send(200, { ...deps.meta(), feed: { fetchedAt: deps.announcements.view().fetchedAt, source: deps.announcements.view().source, error: deps.announcements.view().error }, update: deps.update.status() })
