@@ -39262,33 +39262,109 @@ function readActivityDiscount(entry, nowSec = Math.floor(Date.now() / 1e3)) {
   if (typeof raw !== "string" || raw.length === 0) return void 0;
   const config = parseJsonObject(raw);
   if (config === void 0) return void 0;
-  const discount = config.activity_discount ?? config.ActivityDiscount;
-  if (typeof discount !== "object" || discount === null) return void 0;
-  const discountRecord = discount;
-  if (readBooleanField(discountRecord, "enable") === false) return void 0;
-  const data = discountRecord.data ?? discountRecord.Data;
+  const activity = config.activity_discount ?? config.ActivityDiscount;
+  const fromActivity = readDiscountBlock(activity, ACTIVITY_KIND_KEYS, nowSec);
+  if (fromActivity !== void 0) return fromActivity;
+  const member = config.discount ?? config.Discount;
+  const fromMember = readDiscountBlock(member, MEMBER_KIND_KEYS, nowSec);
+  if (fromMember !== void 0) return fromMember;
+  return void 0;
+}
+var ACTIVITY_KIND_KEYS = {
+  off_peak_discount: "off_peak",
+  off_peak_member_discount: "off_peak",
+  subsidy_discount: "subsidy",
+  subsidy_member_discount: "subsidy",
+  limited_discount: "limited"
+};
+var MEMBER_KIND_KEYS = {
+  member_discount: "member"
+};
+function readDiscountBlock(block, kindKeys, nowSec) {
+  if (typeof block !== "object" || block === null) return void 0;
+  const record = block;
+  if (readBooleanField(record, "enable") === false) return void 0;
+  const subKey = readStringField3(record, "subKey") || readStringField3(record, "sub_key");
+  if (subKey === "") return void 0;
+  const data = record.data ?? record.Data;
   if (typeof data !== "object" || data === null) return void 0;
   const dataRecord = data;
+  const windowKey = kindKeys[subKey];
+  const windowBlock = windowKey === void 0 ? void 0 : dataRecord[windowKey];
   const current = dataRecord.current ?? dataRecord.Current;
-  if (typeof current !== "object" || current === null) return void 0;
-  const currentRecord = current;
-  const type = (readStringField3(currentRecord, "discount_type") || readStringField3(currentRecord, "discountType")).trim().toLowerCase();
-  if (type.length === 0 || type === "none") return void 0;
-  const before = readNumberField3(currentRecord, "before_consumption_rate") ?? readNumberField3(currentRecord, "beforeConsumptionRate");
-  const after = readNumberField3(currentRecord, "consumption_rate") ?? readNumberField3(currentRecord, "consumptionRate");
-  if (before === void 0 || before <= 0) return void 0;
-  if (after !== void 0 && before <= after) return void 0;
-  let endsAtSec;
-  for (const value of Object.values(dataRecord)) {
-    if (typeof value !== "object" || value === null) continue;
-    const end = readNumberField3(value, "end_at") ?? readNumberField3(value, "endAt");
-    if (end !== void 0 && end > 0) {
-      endsAtSec = end;
+  const currentRecord = typeof current === "object" && current !== null ? current : void 0;
+  let before;
+  let after;
+  let appliedNow = false;
+  if (currentRecord !== void 0) {
+    const curBefore = readNumberField3(currentRecord, "before_consumption_rate") ?? readNumberField3(currentRecord, "beforeConsumptionRate");
+    const curAfter = readNumberField3(currentRecord, "consumption_rate") ?? readNumberField3(currentRecord, "consumptionRate");
+    if (curBefore !== void 0 && curAfter !== void 0 && curBefore > curAfter) {
+      before = curBefore;
+      after = curAfter;
+      appliedNow = true;
+    }
+  }
+  if (before === void 0 && windowBlock !== void 0 && typeof windowBlock === "object") {
+    before = readNumberField3(windowBlock, "before_consumption_rate") ?? readNumberField3(windowBlock, "beforeConsumptionRate");
+    after = readNumberField3(windowBlock, "after_consumption_rate") ?? readNumberField3(windowBlock, "afterConsumptionRate");
+  }
+  if (before === void 0) {
+    before = readNumberField3(dataRecord, "original_consumption_rate") ?? readNumberField3(dataRecord, "originalConsumptionRate");
+    after = readNumberField3(dataRecord, "consumption_rate") ?? readNumberField3(dataRecord, "consumptionRate");
+  }
+  let fallbackBlock;
+  if (before === void 0) {
+    for (const [name2, value] of Object.entries(dataRecord)) {
+      if (name2 === "current" || name2 === "Current") continue;
+      if (value === null || typeof value !== "object") continue;
+      const record2 = value;
+      const candidateBefore = readNumberField3(record2, "before_consumption_rate") ?? readNumberField3(record2, "beforeConsumptionRate");
+      if (candidateBefore === void 0) continue;
+      before = candidateBefore;
+      after = readNumberField3(record2, "after_consumption_rate") ?? readNumberField3(record2, "consumptionRate");
+      fallbackBlock = record2;
       break;
     }
   }
-  if (endsAtSec !== void 0 && endsAtSec <= nowSec) return void 0;
-  return endsAtSec === void 0 ? { originalRate: before } : { originalRate: before, endsAtSec };
+  if (before === void 0 || before <= 0) return void 0;
+  const discountRate = after === void 0 ? before : after;
+  const effectiveWindowBlock = windowBlock ?? fallbackBlock;
+  const windows = readTimeWindows(effectiveWindowBlock);
+  let endsAtSec;
+  const endAtSource = typeof effectiveWindowBlock === "object" && effectiveWindowBlock !== null ? effectiveWindowBlock : dataRecord;
+  const end = readNumberField3(endAtSource, "end_at") ?? readNumberField3(endAtSource, "endAt");
+  if (end !== void 0 && end > 0) {
+    if (end <= nowSec) return void 0;
+    endsAtSec = end;
+  }
+  const matched = readBooleanField(dataRecord, "is_discount_matched");
+  const applied = appliedNow || (matched === void 0 ? false : matched);
+  return {
+    originalRate: before,
+    discountRate,
+    subKey,
+    appliedNow: applied,
+    ...windows === void 0 ? {} : { windows },
+    ...endsAtSec === void 0 ? {} : { endsAtSec },
+    ...matched === void 0 ? {} : { matched }
+  };
+}
+function readTimeWindows(block) {
+  if (block === null || typeof block !== "object") return void 0;
+  const windows = block.time_windows ?? block.timeWindows;
+  if (!Array.isArray(windows)) return void 0;
+  const out = [];
+  for (const slot2 of windows) {
+    if (slot2 === null || typeof slot2 !== "object") continue;
+    const record = slot2;
+    const start = readNumberField3(record, "start_minute") ?? readNumberField3(record, "startMinute");
+    const end = readNumberField3(record, "end_minute") ?? readNumberField3(record, "endMinute");
+    if (start === void 0 || end === void 0) continue;
+    const weekdays = Array.isArray(record.weekdays) ? record.weekdays.filter((day) => typeof day === "number") : void 0;
+    out.push({ startMinute: start, endMinute: end, ...weekdays === void 0 || weekdays.length === 0 ? {} : { weekdays } });
+  }
+  return out.length === 0 ? void 0 : out;
 }
 function parseJsonObject(raw) {
   try {
@@ -39337,7 +39413,12 @@ function parseTraeConfigEntry(entry, channel) {
     ...maxOutputTokens === void 0 ? {} : { maxOutputTokens },
     ...creditsRate === void 0 ? {} : { creditsRate },
     ...discount === void 0 ? {} : { originalCreditsRate: discount.originalRate },
-    ...discount?.endsAtSec === void 0 ? {} : { discountEndsAtSec: discount.endsAtSec }
+    ...discount === void 0 ? {} : { discountRate: discount.discountRate },
+    ...discount === void 0 ? {} : { discountSubKey: discount.subKey },
+    ...discount?.windows === void 0 ? {} : { discountWindows: discount.windows },
+    ...discount?.endsAtSec === void 0 ? {} : { discountEndsAtSec: discount.endsAtSec },
+    ...discount?.matched === void 0 ? {} : { discountMatched: discount.matched },
+    ...discount === void 0 ? {} : { discountAppliedNow: discount.appliedNow }
   };
 }
 function parseTraeBatchModelList(body, channelPriority = TRAE_CHANNELS) {
@@ -39883,6 +39964,91 @@ function traeDisplayName(model) {
   }
   return `${model.name} \xB7 ${current}`;
 }
+function traePromoBadge(model) {
+  const original = model.originalCreditsRate;
+  const subKey = model.discountSubKey;
+  if (original === void 0 || subKey === void 0) return void 0;
+  const after = model.discountRate ?? original;
+  const effective = after === 0 ? "x0" : `x${after}`;
+  const before = `x${original}`;
+  const fold = { before: original, after };
+  const label = traeDiscountLabel(subKey, fold);
+  const title = traeDiscountTitle(subKey, fold);
+  const windows = traeWindowsToClock(model.discountWindows);
+  return {
+    kind: "discount",
+    // 双段价：`x0.80→x0.08`（与 traeDisplayName 同源，两处口径一致）。
+    price: { effective, original: before },
+    ...label === void 0 ? {} : { badgeLabel: label },
+    ...title === void 0 ? {} : { hoverText: title },
+    ...windows === void 0 || windows.length === 0 ? {} : { windows },
+    // `limited` 型带 `end_at` 截止时间。
+    ...model.discountEndsAtSec === void 0 ? {} : { validUntil: new Date(model.discountEndsAtSec * 1e3).toISOString() },
+    // ⚠️ **`active` 取"此刻是否真在打折"**，不是一律 true：闲时段外上游把
+    // `data.current` 写成 `none`（before===after），非会员也拿不到会员价
+    // （`is_discount_matched: false`）。这两种情况下折扣**存在但此刻不适用**，
+    // 徽标照挂（官方也挂）但必须灰显 —— 否则 `x0.78→x0.39` 会被读成"我现在
+    // 付 0.39"，正是本仓反复修的「按折扣价预期、实际按原价计费」事故。
+    // 缺字段（老数据）按"生效"处理：宁可少灰一次，也不把在跑的折扣说成没跑。
+    active: model.discountAppliedNow ?? true,
+    status: model.discountAppliedNow === false ? "\u5E38\u65F6" : "\u9519\u5CF0"
+  };
+}
+function traeWindowsToClock(windows) {
+  if (windows === void 0 || windows.length === 0) return void 0;
+  const out = [];
+  for (const slot2 of windows) {
+    if (typeof slot2.startMinute !== "number" || typeof slot2.endMinute !== "number") continue;
+    const toClock = (minutes, isEnd) => {
+      if (isEnd && minutes === 1440) return "24:00";
+      const clamped = (minutes % 1440 + 1440) % 1440;
+      const hh = String(Math.floor(clamped / 60)).padStart(2, "0");
+      const mm = String(clamped % 60).padStart(2, "0");
+      return `${hh}:${mm}`;
+    };
+    out.push({ start: toClock(slot2.startMinute, false), end: toClock(slot2.endMinute, true) });
+  }
+  return out.length === 0 ? void 0 : out;
+}
+function traeDiscountLabel(subKey, price) {
+  switch (subKey) {
+    case "off_peak_discount":
+    case "off_peak_member_discount":
+      return "\u95F2\u65F6\u6298\u6263";
+    case "subsidy_discount":
+    case "subsidy_member_discount":
+      return "\u4E13\u5C5E\u8865\u8D34";
+    case "member_discount":
+      return traeFoldLabel("\u4F1A\u5458", price);
+    case "limited_discount":
+      return traeFoldLabel("\u9650\u65F6", price);
+    // 未知/新增类型：不猜（宁可不带标签，也不编一个官方没说的说法）。
+    default:
+      return void 0;
+  }
+}
+function traeFoldLabel(prefix, price) {
+  if (price === void 0 || price.before <= 0) return void 0;
+  if (price.after === 0) return `${prefix}\u514D\u8D39`;
+  const fold = price.after / price.before * 10;
+  const rounded = Math.round(fold * 10) / 10;
+  if (Math.abs(fold - rounded) > 1e-3) return void 0;
+  if (rounded <= 0 || rounded >= 10) return void 0;
+  return `${prefix}${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}\u6298`;
+}
+function traeDiscountTitle(subKey, price) {
+  switch (subKey) {
+    case "off_peak_discount":
+    case "off_peak_member_discount":
+      return "\u95F2\u65F6\u6298\u6263";
+    case "limited_discount":
+      return "\u9650\u65F6\u7279\u60E0";
+    case "member_discount":
+      return traeFoldLabel("\u4F1A\u5458\u4E13\u4EAB", price) ?? "\u4F1A\u5458\u4E13\u4EAB";
+    default:
+      return void 0;
+  }
+}
 var TraeAdapter = class extends LlmAdapter5 {
   constructor(options) {
     super();
@@ -40076,7 +40242,27 @@ var TraeAdapter = class extends LlmAdapter5 {
    */
   listAllModels() {
     const source = this.remoteModels === void 0 ? this.staticFallbackModels() : this.remoteModels.filter((model) => isTraeModelCallable(model) && model.isHidden !== true);
-    return source.map((model) => ({ id: model.id, name: traeDisplayName(model) }));
+    return source.map((model) => {
+      const promo = traePromoBadge(model);
+      return { id: model.id, name: traeDisplayName(model), ...promo === void 0 ? {} : { promo } };
+    });
+  }
+  /**
+   * 确保远端目录已加载（`model.list` 在读行前 await 的这个钩子）。
+   *
+   * ⚠️ **TRAE 特别需要它**：本适配器的静态兜底表（`product.fallbackModels`）只有
+   * `id` / `name` / `contextWindow`，**没有倍率、也没有活动折扣** —— 促销数据
+   * 100% 来自远端 `batch_get_detail_param`。而 `listAllModels()` 按契约是同步的，
+   * 只能读已加载目录；冷启动时它返回静态行，于是设置页既没有倍率箭头、也没有
+   * 促销徽标（实测复现：冷读 0 个 promo，拉取后 5 个）。
+   *
+   * buddy / qoder 不受影响，是因为它们的**产品静态表自带**促销数据。
+   *
+   * 幂等（`ensureRemoteModels` 内部去重）且不抛（失败留给 `listAllModels` 退回
+   * 静态表；设置页不能因为一次目录拉取失败而打不开）。
+   */
+  async ensureCatalog() {
+    await this.ensureRemoteModels();
   }
   async listModels(_provider) {
     if (!await providerCatalogVisible(this.options.accountPool, this.product.id)) return [];
@@ -40088,6 +40274,12 @@ var TraeAdapter = class extends LlmAdapter5 {
       provider: this.product.id,
       id: model.id,
       name: model.name,
+      // ⚠️ `promo` 由 `listAllModels()` 算好，这里**必须原样搬**，不能再算一次：
+      // `model` 到这里已经是 `{id, name, promo}` 的**行**（不是 `TraeRemoteModel`），
+      // 没有 `creditsRate`，再调一次 `traePromoBadge(model)` 只会恒得 undefined，
+      // 把上游辛苦解析出来的促销**静默丢掉**（实测：listModels 返回 0 个 promo，
+      // 而 listAllModels 有 5 个）。
+      ...model.promo === void 0 ? {} : { promo: model.promo },
       // ⚠️ 逐模型判定（远端 `display_config.multimodal`）—— 早期这里硬编码
       // `['text']`，导致 DSH 在附件准入阶段就拒掉图片（Issue #IKHDKC）。
       inputModalities: this.inputModalitiesFor(model.id)
