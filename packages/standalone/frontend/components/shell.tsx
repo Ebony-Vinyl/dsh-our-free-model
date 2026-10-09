@@ -31,8 +31,11 @@ function useTheme() {
 
 export function ThemeToggle() {
   const { theme, toggle } = useTheme()
-  return <Button variant="ghost" aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'} title={theme === 'dark' ? '浅色' : '深色'} onClick={toggle}>
-    {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+  return <Button variant="ghost" className="theme-toggle" aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'} title={theme === 'dark' ? '浅色' : '深色'} onClick={toggle}>
+    <span className="theme-toggle-track" data-theme={theme}>
+      <span className="theme-toggle-icon theme-toggle-sun" aria-hidden="true"><Sun size={16} /></span>
+      <span className="theme-toggle-icon theme-toggle-moon" aria-hidden="true"><Moon size={16} /></span>
+    </span>
   </Button>
 }
 
@@ -54,6 +57,7 @@ export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary
       <span className="nav-group-label">{group.label}</span>
       {group.items.map(item => <button key={item.id} className={`console-nav-item ${page === item.id ? 'selected' : ''}`}
         aria-current={page === item.id ? 'page' : undefined} onClick={() => host.navigate(item.id)}>
+        <span className="console-nav-indicator" aria-hidden="true" />
         <item.icon size={18} strokeWidth={1.7} /><span>{item.name}</span>
         {item.id === 'models' && <span className="count-badge">{summary?.catalog.length ?? '—'}</span>}
       </button>)}
@@ -64,6 +68,6 @@ export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary
   </>
 }
 export function Topbar({ page, summary }: { page: Page; summary?: Summary }) {
-  return <><div className="console-breadcrumb"><span>工作空间</span><ChevronRight size={14} /><strong>{pageNames[page]}</strong></div>
+  return <><div className="console-breadcrumb"><span>工作空间</span><ChevronRight size={14} /><strong key={page} className="console-breadcrumb-current">{pageNames[page]}</strong></div>
     <div className="console-topbar-status"><span className="status-dot" /><span>{summary?.settings.enabled === false ? '推理已暂停' : '本地服务'}</span><span className="topbar-divider" /><span>LOCAL</span></div></>
 }

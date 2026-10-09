@@ -976,3 +976,361 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f0f2f6; borde
 [data-theme="dark"] .settings-field small { color: var(--muted); }
 [data-theme="dark"] .settings-field strong { color: var(--ink); }
 [data-theme="dark"] .ui-switch:checked span { background: #fff; }
+
+/* ==========================================================================
+   组件系统与骨架层精修（redesign-a）
+   范围：ui.tsx / shell.tsx / app.tsx 对应的样式
+   原则：只新增 class 与增强，不删除任何既有 class；昼夜双主题都覆盖
+   动画：只动 transform / opacity；分级 100-150ms / 150-300ms / 300-500ms
+   ========================================================================== */
+
+/* ---------- 主题切换过渡（避免生硬闪变） ---------- */
+body, .app-shell, .sidebar, .topbar, .ui-card, .login-card, .login-shell, .loading-screen {
+  transition: background-color 300ms var(--ease-out-expo), color 300ms var(--ease-out-expo), border-color 300ms var(--ease-out-expo);
+}
+
+/* ---------- Spinner（旋转指示器，只动 transform） ---------- */
+.ui-spinner {
+  display: inline-block; flex-shrink: 0; width: 14px; height: 14px;
+  border: 2px solid rgba(37, 99, 235, 0.18); border-top-color: currentColor;
+  border-radius: 50%; animation: ui-spin 0.8s linear infinite; vertical-align: -2px;
+}
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+.ui-button-spinner { width: 13px; height: 13px; border-width: 2px; }
+.primary .ui-spinner, .ui-button-default .ui-spinner { border-color: rgba(255, 255, 255, 0.28); border-top-color: #fff; }
+
+/* ---------- Button 精修：状态分层 + 按压感 ---------- */
+.ui-button, .primary, .secondary {
+  position: relative;
+  transition: background 150ms var(--ease-out-expo), color 150ms var(--ease-out-expo),
+    border-color 150ms var(--ease-out-expo), box-shadow 150ms var(--ease-out-expo),
+    transform 120ms var(--ease-out-expo);
+}
+.ui-button:active, .primary:active, .secondary:active, .danger-button:active { transform: scale(0.97); }
+.ui-button:focus-visible, .primary:focus-visible, .secondary:focus-visible {
+  outline: 2px solid var(--green); outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+.ui-button:disabled, .primary:disabled, .secondary:disabled {
+  opacity: 0.5; transform: none; box-shadow: none;
+}
+.ui-button.is-busy { pointer-events: none; }
+/* 尺寸变体（默认 md 保持原样） */
+.ui-button-sm { min-height: 28px; padding: 4px 10px; font-size: 11px; gap: 6px; }
+.ui-button-lg { min-height: 42px; padding: 11px 18px; font-size: 13px; }
+.ui-button-icon { min-height: 32px; min-width: 32px; padding: 7px; justify-content: center; }
+/* 昼主题 hover 微浮雕 */
+.ui-button-default:hover:not(:disabled), .primary:hover:not(:disabled) {
+  box-shadow: 0 1px 3px rgba(32, 35, 41, 0.12), 0 4px 12px -4px rgba(37, 99, 235, 0.3);
+}
+.ui-button-outline:hover:not(:disabled), .secondary:hover:not(:disabled) {
+  box-shadow: 0 1px 2px rgba(32, 35, 41, 0.05);
+}
+
+/* ---------- Card 精修：双层 bezel（外壳 hairline + 内芯高光） ---------- */
+.ui-card {
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: transform 200ms var(--ease-out-expo), box-shadow 200ms var(--ease-out-expo), border-color 200ms var(--ease-out-expo);
+}
+.ui-card::before { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9) 18%, rgba(255, 255, 255, 0.9) 82%, transparent); }
+.ui-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.95); }
+.ui-card-interactive { cursor: pointer; }
+.ui-card-interactive:active { transform: translateY(0) scale(0.995); transition-duration: 100ms; }
+
+/* ---------- Badge 精修：字重/状态点 ---------- */
+.ui-badge { font-weight: 500; letter-spacing: 0.01em; }
+.ui-badge-dot {
+  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0; opacity: 0.85;
+}
+.ui-badge-success .ui-badge-dot { box-shadow: 0 0 0 2px rgba(22, 128, 90, 0.14); }
+.ui-badge-blue .ui-badge-dot { box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14); }
+
+/* ---------- Input 精修：聚焦光晕 / invalid / placeholder ---------- */
+.ui-input:focus-visible {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 0 16px -4px rgba(37, 99, 235, 0.15);
+}
+.ui-input.is-invalid, .ui-input[aria-invalid="true"] {
+  border-color: #c03c4b;
+}
+.ui-input.is-invalid:focus-visible, .ui-input[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px rgba(192, 60, 75, 0.12);
+}
+.ui-input::placeholder { color: #9aa2b1; opacity: 1; }
+input, textarea { caret-color: var(--green); }
+
+/* ---------- Kbd ---------- */
+.ui-kbd {
+  display: inline-block; padding: 1px 6px 2px; border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 4px; background: #f4f5f7;
+  font-family: Consolas, "SFMono-Regular", monospace; font-size: 11px; line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ---------- Tooltip（纯 CSS，无需定位依赖） ---------- */
+.ui-tooltip { position: relative; display: inline-flex; }
+.ui-tooltip::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 7px);
+  transform: translateX(-50%) translateY(2px); padding: 4px 9px; border-radius: 5px;
+  background: #202329; color: #f4f5f7; font-size: 11px; font-weight: 400; line-height: 1.4;
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  transition: opacity 150ms var(--ease-out-expo), transform 150ms var(--ease-out-expo);
+  z-index: 60; box-shadow: 0 3px 10px rgba(32, 35, 41, 0.18);
+}
+.ui-tooltip:hover::after, .ui-tooltip:focus-within::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- 侧边栏：导航选中指示器（左侧小竖条） ---------- */
+.console-nav-item { position: relative; }
+.console-nav-indicator {
+  position: absolute; left: 0; top: 50%; width: 3px; height: 0; border-radius: 0 2px 2px 0;
+  background: var(--green); transform: translateY(-50%);
+  transition: height 200ms var(--ease-out-expo), opacity 200ms var(--ease-out-expo);
+  opacity: 0;
+}
+.console-nav-item.selected .console-nav-indicator { height: 20px; opacity: 1; }
+.console-nav-item:hover .console-nav-indicator { height: 10px; opacity: 0.4; }
+.console-nav-item.selected:hover .console-nav-indicator { height: 20px; opacity: 1; }
+@media (max-width: 700px) {
+  .console-nav-indicator { display: none; }
+}
+
+/* ---------- 侧边栏：导航分组标签质感 ---------- */
+.nav-group-label {
+  font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: 10px; color: #8b91a0;
+}
+
+/* ---------- 侧边栏底部状态区：呼吸效果 ---------- */
+.console-sidebar-footer .status-dot { animation: status-breathe 2.6s ease-in-out infinite; }
+@keyframes status-breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(29, 154, 107, 0.25); }
+  50% { opacity: 0.65; box-shadow: 0 0 0 3px rgba(29, 154, 107, 0); }
+}
+
+/* ---------- ThemeToggle：Sun/Moon 旋转缩放过渡 ---------- */
+.theme-toggle { overflow: hidden; }
+.theme-toggle-track { position: relative; display: grid; width: 16px; height: 16px; }
+.theme-toggle-icon {
+  grid-area: 1 / 1; display: grid; place-items: center;
+  transition: transform 260ms var(--ease-out-expo), opacity 200ms var(--ease-out-expo);
+}
+.theme-toggle-track[data-theme="light"] .theme-toggle-sun { transform: rotate(90deg) scale(0.4); opacity: 0; }
+.theme-toggle-track[data-theme="light"] .theme-toggle-moon { transform: rotate(0deg) scale(1); opacity: 1; }
+.theme-toggle-track[data-theme="dark"] .theme-toggle-moon { transform: rotate(-90deg) scale(0.4); opacity: 0; }
+.theme-toggle-track[data-theme="dark"] .theme-toggle-sun { transform: rotate(0deg) scale(1); opacity: 1; }
+
+/* ---------- 顶栏：面包屑当前页入场 ---------- */
+.console-breadcrumb-current { display: inline-block; animation: crumb-in 220ms var(--ease-out-expo); }
+@keyframes crumb-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ---------- 页面切换入场（key=page 触发） ---------- */
+section.page { animation: page-enter 260ms var(--ease-out-expo); }
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 通知条进入动画（slide + fade，只动 transform/opacity） ---------- */
+.notice-enter { animation: notice-in 280ms var(--ease-out-expo); }
+@keyframes notice-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 登录页：昼主题呼吸纸面 ---------- */
+.login-shell {
+  background:
+    radial-gradient(900px 420px at 50% 30%, rgba(37, 99, 235, 0.035), transparent 65%),
+    var(--paper);
+}
+.login-card {
+  position: relative;
+  box-shadow:
+    0 1px 2px rgba(32, 35, 41, 0.04),
+    0 12px 40px -12px rgba(32, 35, 41, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: box-shadow 300ms var(--ease-out-expo), transform 300ms var(--ease-out-expo);
+}
+.login-card:hover {
+  box-shadow:
+    0 1px 2px rgba(32, 35, 41, 0.04),
+    0 20px 56px -14px rgba(32, 35, 41, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+.login-card-glow {
+  content: ""; position: absolute; top: -1px; left: 8%; right: 8%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.35), transparent);
+  pointer-events: none;
+}
+.login-card-enter { animation: login-in 420ms var(--ease-out-expo); }
+@keyframes login-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* 品牌字标精修 */
+.brand-mark { letter-spacing: -0.035em; }
+.login-card .brand-mark {
+  font-size: 34px; letter-spacing: -0.04em;
+  animation: brand-breathe 4.5s ease-in-out infinite;
+}
+@keyframes brand-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.88; }
+}
+/* 登录提交按钮 busy 态：隐藏文字留 spinner（结构不变） */
+.primary.is-busy .login-submit-label { opacity: 0.75; }
+.primary.is-busy > span[aria-hidden="true"]:last-child { display: none; }
+/* 错误提示出现动画 */
+.login-error-enter { animation: error-in 240ms var(--ease-out-expo); }
+@keyframes error-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* 登录输入框聚焦光晕 */
+.login-card input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 0 20px -4px rgba(37, 99, 235, 0.18);
+}
+
+/* ---------- LoadingScreen 设计感 ---------- */
+.loading-inner { display: grid; place-items: center; gap: 14px; animation: login-in 320ms var(--ease-out-expo); }
+.loading-brand { animation: brand-breathe 2.6s ease-in-out infinite; margin-bottom: 0; }
+.loading-bar {
+  width: 148px; height: 3px; border-radius: 3px; overflow: hidden;
+  background: rgba(37, 99, 235, 0.1);
+}
+.loading-bar-fill {
+  display: block; width: 42%; height: 100%; border-radius: 3px;
+  background: var(--green);
+  animation: loading-slide 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes loading-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(380%); }
+}
+
+/* ---------- footer 排版细节 ---------- */
+footer { letter-spacing: 0.04em; }
+
+/* ==========================================================================
+   组件系统与骨架层精修 —— 夜主题（深海仪器）覆盖
+   ========================================================================== */
+
+/* ---------- Spinner 夜主题 ---------- */
+[data-theme="dark"] .ui-spinner { border-color: rgba(91, 141, 239, 0.18); border-top-color: var(--green); }
+[data-theme="dark"] .primary .ui-spinner, [data-theme="dark"] .ui-button-default .ui-spinner { border-color: rgba(10, 15, 30, 0.25); border-top-color: #0a0f1e; }
+
+/* ---------- Button 夜主题 focus 光晕 ---------- */
+[data-theme="dark"] .ui-button:focus-visible, [data-theme="dark"] .primary:focus-visible, [data-theme="dark"] .secondary:focus-visible {
+  outline-color: var(--green);
+  box-shadow: 0 0 0 4px rgba(91, 141, 239, 0.16), 0 0 16px rgba(91, 141, 239, 0.12);
+}
+
+/* ---------- Card 夜主题：仪器面板嵌入面板槽 ---------- */
+[data-theme="dark"] .ui-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .ui-card::before { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05) 20%, rgba(255, 255, 255, 0.05) 80%, transparent); }
+[data-theme="dark"] .ui-card:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 32px -10px rgba(0, 0, 0, 0.55), 0 0 20px -6px rgba(91, 141, 239, 0.06);
+}
+[data-theme="dark"] .ui-card-interactive:active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 2px 8px rgba(0, 0, 0, 0.4); }
+
+/* ---------- Badge 夜主题状态点 ---------- */
+[data-theme="dark"] .ui-badge-success .ui-badge-dot { box-shadow: 0 0 0 2px rgba(62, 207, 160, 0.18), 0 0 5px rgba(62, 207, 160, 0.35); }
+[data-theme="dark"] .ui-badge-blue .ui-badge-dot { box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.18), 0 0 5px rgba(91, 141, 239, 0.35); }
+[data-theme="dark"] .ui-badge-warning .ui-badge-dot { box-shadow: 0 0 0 2px rgba(242, 166, 90, 0.18), 0 0 5px rgba(242, 166, 90, 0.3); }
+
+/* ---------- Input 夜主题聚焦光晕 ---------- */
+[data-theme="dark"] .ui-input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.14), 0 0 18px -2px rgba(91, 141, 239, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+[data-theme="dark"] .ui-input.is-invalid, [data-theme="dark"] .ui-input[aria-invalid="true"] { border-color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .ui-input.is-invalid:focus-visible, [data-theme="dark"] .ui-input[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px rgba(227, 106, 106, 0.14);
+}
+
+/* ---------- Kbd 夜主题 ---------- */
+[data-theme="dark"] .ui-kbd {
+  background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(255, 255, 255, 0.12); color: var(--dsw-alias-label-secondary);
+}
+
+/* ---------- Tooltip 夜主题 ---------- */
+[data-theme="dark"] .ui-tooltip::after { background: #1a1f2a; color: #dfe6f2; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05); }
+
+/* ---------- 侧边栏选中指示器夜主题（带微光） ---------- */
+[data-theme="dark"] .console-nav-item.selected .console-nav-indicator {
+  box-shadow: 0 0 6px rgba(91, 141, 239, 0.5);
+}
+[data-theme="dark"] .nav-group-label { color: var(--dsw-alias-label-tertiary); letter-spacing: 0.06em; }
+
+/* ---------- 侧边栏底部状态呼吸夜主题 ---------- */
+[data-theme="dark"] .console-sidebar-footer .status-dot { animation: status-breathe-dark 2.8s ease-in-out infinite; }
+@keyframes status-breathe-dark {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(62, 207, 160, 0.35), 0 0 0 0 rgba(62, 207, 160, 0.2); }
+  50% { opacity: 0.7; box-shadow: 0 0 8px rgba(62, 207, 160, 0.5), 0 0 0 3px rgba(62, 207, 160, 0); }
+}
+
+/* ---------- 登录页夜主题：仪器开机画面 ---------- */
+[data-theme="dark"] .login-shell {
+  background:
+    radial-gradient(900px 460px at 50% 34%, rgba(91, 141, 239, 0.05), transparent 62%),
+    var(--paper);
+}
+[data-theme="dark"] .login-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 48px -12px rgba(0, 0, 0, 0.55),
+    0 0 48px -6px rgba(91, 141, 239, 0.06);
+}
+[data-theme="dark"] .login-card:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 22px 60px -14px rgba(0, 0, 0, 0.6),
+    0 0 56px -4px rgba(91, 141, 239, 0.09);
+}
+[data-theme="dark"] .login-card-glow {
+  background: linear-gradient(90deg, transparent, rgba(91, 141, 239, 0.5), transparent);
+  box-shadow: 0 0 8px rgba(91, 141, 239, 0.35);
+}
+[data-theme="dark"] .login-card .brand-mark { animation: brand-breathe-dark 4.5s ease-in-out infinite; }
+@keyframes brand-breathe-dark {
+  0%, 100% { opacity: 1; text-shadow: 0 0 18px rgba(91, 141, 239, 0); }
+  50% { opacity: 0.9; text-shadow: 0 0 24px rgba(91, 141, 239, 0.14); }
+}
+[data-theme="dark"] .login-card input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.14), 0 0 22px -2px rgba(91, 141, 239, 0.14), inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- LoadingScreen 夜主题 ---------- */
+[data-theme="dark"] .loading-bar { background: rgba(91, 141, 239, 0.12); }
+[data-theme="dark"] .loading-bar-fill { background: var(--green); box-shadow: 0 0 8px rgba(91, 141, 239, 0.4); }
+[data-theme="dark"] .loading-brand { animation: brand-breathe-dark 2.6s ease-in-out infinite; }
+
+/* ---------- 页面切换/通知 夜主题保持同动画（无需覆盖） ---------- */
+
+/* ---------- 减弱动效降级（两主题通用，放最后确保生效） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .login-card-enter, .notice-enter, .login-error-enter,
+  section.page, .console-breadcrumb-current, .loading-inner {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .ui-spinner, .loading-bar-fill, .brand-mark, .login-card .brand-mark,
+  .console-sidebar-footer .status-dot, .theme-toggle-icon {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ui-spinner { border-top-color: currentColor; opacity: 0.6; }
+  body, .app-shell, .sidebar, .topbar, .ui-card, .login-card { transition: none !important; }
+}
+
+/* ---------- 对比度红线修正（redesign-a 复审） ---------- */
+/* 占位文字 ≥ 4.5:1；小字标签按正文标准处理 */
+.ui-input::placeholder { color: #6e7683; }
+input::placeholder, textarea::placeholder { color: #6e7683; opacity: 1; }
+.nav-group-label { color: #69707d; }
+[data-theme="dark"] .ui-input::placeholder,
+[data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder { color: #76839b; }
+[data-theme="dark"] .nav-group-label { color: #7d8aa2; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { CircleAlert, RotateCcw, Save, Settings2, RefreshCw } from 'lucide-react'
+import { CircleAlert, Check, LoaderCircle, RotateCcw, Save, Settings2, RefreshCw } from 'lucide-react'
 import { Badge, Button, Card, Input } from './components/ui'
 import { settingsDraft, settingsChanged, syncSettings, validateSettingsDraft } from './settings-data.mjs'
 import type { Host, Summary } from './types'
@@ -75,10 +75,12 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
       <div className="settings-number"><Input id={`setting-${name}`} name={name} type="number" min={min} max={max} step={1}
         value={state.draft[name]} onChange={event => update(name, event.target.value)}
         aria-invalid={!!errors[name]} aria-describedby={errors[name] ? `setting-error-${name}` : undefined} />
-        {errors[name] && <p id={`setting-error-${name}`} className="settings-field-error" role="alert">{errors[name]}</p>}
+        {errors[name] ? <p id={`setting-error-${name}`} className="settings-field-error" role="alert"><CircleAlert size={12} />{errors[name]}</p>
+          : <span className="settings-hint">{min}–{max}</span>}
       </div>
     </div>
   if (!active) return null
+  const statusClass = saving ? 'settings-status-saving' : dirty ? 'settings-status-dirty' : message ? 'settings-status-saved' : ''
   return <div className="settings-browser" data-testid="settings-ready">
     <header className="dashboard-heading"><div><div className="heading-eyebrow">MANAGEMENT / SETTINGS</div>
       <h1>服务设置</h1><p>调整本机推理与模型刷新，保存后生效。</p></div>
@@ -86,25 +88,25 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
     </header>
     <form onSubmit={event => { void submit(event) }} noValidate>
       <fieldset disabled={saving} className="settings-fieldset">
-        <Card className="settings-card"><div className="settings-card-heading"><Settings2 size={18} /><div><h2>推理与模型</h2><p>控制客户端调用与模型展示。</p></div></div>
+        <Card className="settings-card"><div className="settings-card-heading"><Settings2 size={16} /><div><h2>推理与模型</h2><p>控制客户端调用与模型展示。</p></div></div>
           {toggle('enabled', '启用推理服务', '关闭后暂停 API 推理，管理页面仍可访问。')}
           {toggle('exposeRegionModels', '显示地区受限模型', '保留受当前出口地区限制的模型供客户端选择。')}
           {toggle('streamRecovery', '自动恢复断流', '允许从已生成的检查点继续回答。')}
           {numeric('defaultMaxTokens', '单次最大输出 Token', '512–131072，实际输出还受模型能力限制。', 512, 131072)}
         </Card>
-        <Card className="settings-card"><div className="settings-card-heading"><RefreshCw size={18} /><div><h2>模型刷新</h2><p>管理模型清单的周期更新与探测。</p></div></div>
+        <Card className="settings-card"><div className="settings-card-heading"><RefreshCw size={16} /><div><h2>模型刷新</h2><p>管理模型清单的周期更新与探测。</p></div></div>
           {numeric('probeIntervalMinutes', '刷新间隔（分钟）', '1–1440 分钟，保存后重新安排下一轮。', 1, 1440)}
           {toggle('standaloneProbe', '自动探测可用性', '周期刷新时发送探测请求，消耗上游额度；遇到限流会自动退避。')}
           <p className="settings-note" role="note"><CircleAlert size={15} /><span>{summary.automaticRefresh
             ? '自动刷新已启用，保存间隔后会重新安排下一轮。'
             : '当前以 --no-refresh 启动。设置会保存，但自动任务保持暂停；手动刷新仍可用。'}</span></p>
         </Card>
-        <div className="settings-footer"><span role="status" aria-live="polite">{saving ? '正在保存，请稍候…' : dirty ? '有尚未保存的修改' : message || '当前设置已同步'}</span>
+        <div className="settings-footer"><span role="status" aria-live="polite" className={statusClass}><span className="settings-status-dot" aria-hidden="true" />{saving ? '正在保存，请稍候…' : dirty ? '有尚未保存的修改' : message || '当前设置已同步'}</span>
           <div className="settings-actions"><Button variant="outline" disabled={!dirty || saving} onClick={() => {
             setState(previous => ({ ...previous, draft: settingsDraft(previous.saved) }))
             setErrors({}); setError(''); setMessage('')
           }}><RotateCcw size={15} />撤销修改</Button>
-            <Button type="submit" disabled={!dirty || saving}><Save size={15} />{saving ? '正在保存' : '保存设置'}</Button></div>
+            <Button type="submit" disabled={!dirty || saving}>{saving ? <LoaderCircle size={15} className="spinning" /> : message && !dirty ? <Check size={15} /> : <Save size={15} />}{saving ? '正在保存' : '保存设置'}</Button></div>
         </div>
       </fieldset>
       {error && <p className="settings-save-error" role="alert"><CircleAlert size={16} /><span>{error}</span></p>}
