@@ -684,3 +684,114 @@ pre ::selection, code ::selection { background: rgba(124, 158, 255, 0.3); }
 .login-help summary::before { content: "▸"; transition: transform var(--dur) var(--ease); display: inline-block; }
 .login-help details[open] summary::before { transform: rotate(90deg); }
 .login-help summary::-webkit-details-marker { display: none; }
+
+/* ==========================================================================
+   质感跃升层（第二轮）：双圈层次 + 物理动效 + SVG 图标 + 签名细节
+   设计令牌与主层完全一致，只做质感增强
+   ========================================================================== */
+
+/* ---------- 1. 双圈卡片层次（Double-Bezel） ----------
+   外圈高光描边 + 顶部受光线 + 内圈深色核心，让卡片"浮"起来 */
+.panel, .metric-card, .model-card, .welcome-panel {
+  position: relative;
+  border: 1px solid var(--hairline);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    var(--shadow-md);
+  transition: transform 220ms var(--ease), border-color 220ms var(--ease), box-shadow 220ms var(--ease);
+}
+.panel::before, .metric-card::before, .model-card::before, .welcome-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), transparent 30%, transparent 70%, rgba(124, 158, 255, 0.08));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.panel:hover, .metric-card:hover, .model-card:hover {
+  border-color: rgba(124, 158, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 34px -8px rgba(0, 0, 0, 0.6),
+    0 0 24px -6px rgba(124, 158, 255, 0.18);
+}
+
+/* ---------- 2. 指标卡签名细节 ---------- */
+.metric-card strong { background: linear-gradient(180deg, #f2f5fa, #aeb9c9); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; transition: transform 220ms var(--ease); }
+.metric-card:hover strong { transform: scale(1.04); transform-origin: left center; }
+.metric-card { overflow: hidden; }
+.metric-card::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(124, 158, 255, 0.5), transparent); opacity: 0; transition: opacity 220ms var(--ease); }
+.metric-card:hover::after { opacity: 1; }
+
+/* ---------- 3. SVG 图标系统 ---------- */
+.ic { width: 16px; height: 16px; flex: none; display: inline-block; vertical-align: -3px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.nav-item .ic { width: 17px; height: 17px; opacity: 0.75; transition: opacity 200ms var(--ease), transform 200ms var(--ease); }
+.nav-item:hover .ic { opacity: 1; transform: translateX(1px); }
+.nav-item.active .ic { opacity: 1; color: var(--accent-strong); filter: drop-shadow(0 0 5px rgba(124, 158, 255, 0.6)); }
+
+/* ---------- 4. 按钮物理化 ---------- */
+.primary, .secondary, .danger-button { position: relative; overflow: hidden; }
+.primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(160deg, rgba(255,255,255,0.28), transparent 45%); opacity: 0; transition: opacity 200ms var(--ease); }
+.primary:hover::after { opacity: 1; }
+.primary:active, .secondary:active, .danger-button:active { transform: translateY(0) scale(0.965); transition-duration: 60ms; }
+.primary, .secondary, .danger-button, .text-button { transition: transform 200ms cubic-bezier(.32,.72,0,1), background 200ms var(--ease), border-color 200ms var(--ease), box-shadow 200ms var(--ease), color 200ms var(--ease), opacity 200ms var(--ease); }
+
+/* ---------- 5. 导航选中态精修 ---------- */
+.nav-item { overflow: hidden; }
+.nav-item::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(120deg, transparent, rgba(124, 158, 255, 0.1), transparent); opacity: 0; transition: opacity 220ms var(--ease); pointer-events: none; }
+.nav-item.active::after { opacity: 1; }
+
+/* ---------- 6. 品牌字标呼吸光 ---------- */
+.brand-mark span { display: inline-block; animation: dotPulse 2.8s ease-in-out infinite; }
+@keyframes dotPulse { 0%, 100% { text-shadow: 0 0 0 rgba(124,158,255,0); opacity: 1; } 50% { text-shadow: 0 0 12px rgba(124,158,255,0.9); opacity: 0.85; } }
+
+/* ---------- 7. 顶栏状态点脉冲 ---------- */
+.topbar-right .dot, .local-status .dot { animation: dotGlow 2.4s ease-in-out infinite; }
+@keyframes dotGlow { 0%, 100% { box-shadow: 0 0 4px var(--success); } 50% { box-shadow: 0 0 11px var(--success), 0 0 3px var(--success); } }
+
+/* ---------- 8. gateway-node 数据环呼吸 ---------- */
+.gateway-node { animation: nodeBreath 3.6s ease-in-out infinite; }
+@keyframes nodeBreath { 0%, 100% { box-shadow: var(--shadow-glow), 0 16px 40px -8px rgba(0,0,0,0.6); } 50% { box-shadow: 0 0 0 1px var(--accent-ring), 0 0 34px -2px rgba(124,158,255,0.5), 0 16px 40px -8px rgba(0,0,0,0.6); } }
+.orbit::after { content: ""; position: absolute; top: -3px; left: 50%; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent), 0 0 4px var(--accent); }
+
+/* ---------- 9. endpoint 复制态 ---------- */
+.endpoint { box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), var(--shadow-sm); }
+.endpoint button { position: relative; }
+
+/* ---------- 10. 模型卡 channel-mark 发光 ---------- */
+.channel-mark { box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 0 rgba(124,158,255,0); transition: box-shadow 220ms var(--ease), transform 220ms var(--ease); }
+.model-card:hover .channel-mark { box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 0 16px rgba(124,158,255,0.5); transform: scale(1.05); }
+
+/* ---------- 11. 图表柱子顶部高光 ---------- */
+.chart-bar { position: relative; }
+.chart-bar::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 5px 5px 0 0; background: linear-gradient(90deg, rgba(255,255,255,0.5), rgba(255,255,255,0.1)); }
+.chart-column:hover .chart-value { color: var(--accent-strong); }
+
+/* ---------- 12. 滑块开关物理回弹 ---------- */
+.switch::after { transition: transform 240ms cubic-bezier(.32,.72,0,1), background 200ms var(--ease); box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.switch:checked::after { box-shadow: 0 0 10px rgba(124,158,255,0.7), 0 1px 3px rgba(0,0,0,0.5); }
+.switch:active::after { transform: scale(0.88); }
+.switch:checked:active::after { transform: translateX(16px) scale(0.88); }
+
+/* ---------- 13. 输入框聚焦呼吸 ---------- */
+input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 18px -4px rgba(124,158,255,0.4); }
+
+/* ---------- 14. 页面错峰入场 ---------- */
+.page > * { animation: fadeUp 480ms cubic-bezier(.32,.72,0,1) both; }
+.page > *:nth-child(2) { animation-delay: 60ms; }
+.page > *:nth-child(3) { animation-delay: 120ms; }
+.page > *:nth-child(4) { animation-delay: 180ms; }
+.page > *:nth-child(5) { animation-delay: 240ms; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); filter: blur(3px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+
+/* ---------- 15. 表格行 hover 光带 ---------- */
+tbody tr { position: relative; }
+tbody tr:hover td { background: linear-gradient(90deg, rgba(124,158,255,0.05), rgba(124,158,255,0.1), rgba(124,158,255,0.05)); }
+
+/* ---------- 16. 登录卡玻璃高光 ---------- */
+.login-card { box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), var(--shadow-lg); }
+.login-card .primary { margin-top: 8px; }

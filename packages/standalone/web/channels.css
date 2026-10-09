@@ -755,3 +755,264 @@
 @media (prefers-reduced-motion:reduce){
   .ofm_root .ofm_hero::before{animation:none}
 }
+/* ================================================================
+   质感跃升精雕层（子智能体 E · 第二轮追加）
+   目标：从"深色正确"到"高级定制"
+   原则：只追加，同优先级靠源码顺序胜出；动画仅 transform/opacity/filter
+   ================================================================ */
+
+/* ---------- E1) 卡片双圈层次（Double-Bezel） ----------
+   外圈 1px 高光描边 + 顶部受光线(inset) + 内圈深色渐变核心。
+   对 card / chan / panel / acct / stat / newsitem 统一生效。 */
+.ofm_root .ofm_card,
+.ofm_root .ofm_chan,
+.ofm_root .ofm_panel,
+.ofm_root .ofm_acct,
+.ofm_root .ofm_stat,
+.ofm_root .ofm_newsitem{
+  background:linear-gradient(168deg,rgba(255,255,255,.045) 0%,rgba(255,255,255,0) 30%),
+             linear-gradient(180deg,rgba(24,28,35,.92),rgba(13,16,21,.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    inset 0 0 0 1px rgba(255,255,255,.028),
+    0 4px 14px -6px rgba(0,0,0,.5);
+  transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .2s ease,box-shadow .26s ease;
+}
+.ofm_root .ofm_card:hover,
+.ofm_root .ofm_acct:hover,
+.ofm_root .ofm_stat:hover{
+  transform:translateY(-2px);
+  border-color:rgba(124,158,255,.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.09),
+    inset 0 0 0 1px rgba(124,158,255,.06),
+    0 14px 34px -10px rgba(0,0,0,.66),
+    0 0 22px -6px rgba(124,158,255,.18);
+}
+/* panel 是容器，不做上浮，仅提亮描边 */
+.ofm_root .ofm_panel:hover{border-color:rgba(255,255,255,.1)}
+
+/* ---------- E2) 13 渠道卡 hover 品牌光晕 ----------
+   ::before 已被顶部品牌色条占用 → 光晕用 ::after 径向光斑（品牌色呼吸）。
+   logo 加品牌色微光环。 */
+.ofm_root .ofm_chan::after{
+  content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:radial-gradient(120% 90% at 18% 0%,
+    color-mix(in srgb,var(--chan-accent,#7c9eff) 20%,transparent),
+    transparent 58%);
+  opacity:0;transition:opacity .3s cubic-bezier(.2,.8,.2,1);
+}
+.ofm_root .ofm_chan:hover::after{opacity:1}
+.ofm_root .ofm_chan:hover{
+  transform:translateY(-3px);
+  border-color:color-mix(in srgb,var(--chan-accent,#7c9eff) 62%,transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 0 0 1px color-mix(in srgb,var(--chan-accent,#7c9eff) 12%,transparent),
+    0 18px 40px -12px rgba(0,0,0,.72),
+    0 0 30px -4px color-mix(in srgb,var(--chan-accent,#7c9eff) 46%,transparent);
+}
+.ofm_root .ofm_chanlogo{
+  box-shadow:0 0 0 1px rgba(255,255,255,.1),
+             0 6px 16px -2px color-mix(in srgb,var(--chan-accent,#7c9eff) 40%,transparent);
+  transition:box-shadow .24s ease;
+}
+.ofm_root .ofm_chan:hover .ofm_chanlogo{
+  box-shadow:0 0 0 1px rgba(255,255,255,.16),
+             0 0 18px 0 color-mix(in srgb,var(--chan-accent,#7c9eff) 62%,transparent),
+             0 8px 20px -4px color-mix(in srgb,var(--chan-accent,#7c9eff) 50%,transparent);
+}
+
+/* ---------- E3) 签到 / 开关物理滑动 ----------
+   轨道内微光；圆点滑动换重物理回弹曲线；选中圆点发光。 */
+.ofm_root .ofm_switch i{
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5),inset 0 -1px 0 rgba(255,255,255,.04);
+  transition:background .24s cubic-bezier(.2,.8,.2,1),border-color .24s ease,box-shadow .24s ease;
+}
+.ofm_root .ofm_switch i::after{
+  transition:transform .32s cubic-bezier(.32,.72,0,1),background .24s ease,box-shadow .24s ease;
+}
+.ofm_root .ofm_switch:hover i{border-color:rgba(124,158,255,.4)}
+.ofm_root .ofm_switch[aria-checked="true"] i{
+  box-shadow:0 0 16px -1px rgba(124,158,255,.6),
+             inset 0 1px 0 rgba(255,255,255,.32),
+             inset 0 -1px 0 rgba(0,0,0,.15);
+}
+.ofm_root .ofm_switch[aria-checked="true"] i::after{
+  box-shadow:0 0 10px rgba(255,255,255,.85),
+             0 0 18px rgba(124,158,255,.5),
+             0 1px 3px rgba(0,0,0,.4);
+}
+
+/* ---------- E4) EAC 水位缸波光 ----------
+   tankwater 是 JS 驱动 height 的元素 → 波光动画放子元素 .ofm_wave（纯 transform 位移）。
+   tankrays 保留但压暗防过曝；给缸底 tankdeep 补一点纵深。 */
+.ofm_root .ofm_wave{opacity:.95;filter:drop-shadow(0 -1px 2px rgba(157,182,255,.35))}
+.ofm_root .ofm_wave.w2{opacity:.4}
+.ofm_root .ofm_tank.ok .ofm_tankwater{
+  box-shadow:0 -1px 22px rgba(124,158,255,.6),
+             0 -6px 30px -6px rgba(124,158,255,.35),
+             inset 0 1px 0 rgba(255,255,255,.5);
+}
+.ofm_root .ofm_tank.busy .ofm_tankwater{
+  box-shadow:0 -1px 22px rgba(242,166,90,.55),
+             0 -6px 30px -6px rgba(242,166,90,.3),
+             inset 0 1px 0 rgba(255,255,255,.4);
+}
+.ofm_root .ofm_tank.over .ofm_tankwater{
+  box-shadow:0 -1px 22px rgba(227,106,106,.6),
+             0 -6px 30px -6px rgba(227,106,106,.35),
+             inset 0 1px 0 rgba(255,255,255,.4);
+}
+.ofm_root .ofm_tankrays{opacity:.26;mix-blend-mode:screen}
+.ofm_root .ofm_tankdeep{
+  background:linear-gradient(180deg,transparent,rgba(3,5,9,.5));
+}
+.ofm_root .ofm_bubble{box-shadow:0 0 4px rgba(255,255,255,.4)}
+
+/* ---------- E5) tab 滑动指示器弹性 ----------
+   glider 换重物理回弹曲线（transform/width/height 是 JS 驱动，只换曲线不破坏）。
+   选中 tab 文字点亮已在深色块，这里补一层更亮的辉光。 */
+.ofm_root .ofm_tabglider{
+  transition:transform .42s cubic-bezier(.32,.72,0,1),
+             width .42s cubic-bezier(.32,.72,0,1),
+             height .42s cubic-bezier(.32,.72,0,1);
+  box-shadow:
+    0 0 0 1px rgba(124,158,255,.12),
+    0 4px 18px -2px rgba(124,158,255,.42),
+    inset 0 1px 0 rgba(255,255,255,.14);
+}
+.ofm_root .ofm_tab{transition:color .2s ease,text-shadow .28s ease}
+.ofm_root .ofm_tab[data-on="true"]{text-shadow:0 0 16px rgba(124,158,255,.5)}
+/* seg 玻璃容器 */
+.ofm_root .ofm_seg{
+  background:rgba(255,255,255,.028);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),inset 0 0 0 1px rgba(255,255,255,.02);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+}
+.ofm_root .ofm_seg button{transition:color .18s ease,background .2s ease,box-shadow .2s ease}
+.ofm_root .ofm_seg button:hover{color:#e8ebef}
+
+/* ---------- E6) 按钮物理化 ----------
+   hover 上浮 + 内发光；active scale(.97)；禁用 .38。 */
+.ofm_root .ofm_btn{
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),border-color .18s ease,
+             box-shadow .22s ease,background .18s ease,opacity .18s ease;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+}
+.ofm_root .ofm_btn:hover:not(:disabled){
+  transform:translateY(-1px);
+  border-color:rgba(124,158,255,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),
+             inset 0 0 12px rgba(124,158,255,.08),
+             0 6px 16px -4px rgba(0,0,0,.5),
+             0 0 14px -2px rgba(124,158,255,.22);
+}
+.ofm_root .ofm_btn:active:not(:disabled){transform:scale(.97)}
+.ofm_root .ofm_btn:disabled{opacity:.38;box-shadow:none}
+.ofm_root .ofm_btn.primary{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 4px 14px -4px rgba(124,158,255,.4);
+}
+.ofm_root .ofm_btn.primary:hover:not(:disabled){
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),
+             0 8px 22px -6px rgba(124,158,255,.55),
+             0 0 20px -2px rgba(124,158,255,.4);
+}
+.ofm_root .ofm_minibtn{
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),border-color .16s ease,
+             color .16s ease,box-shadow .2s ease,opacity .16s ease;
+}
+.ofm_root .ofm_minibtn:hover:not(:disabled){
+  box-shadow:inset 0 0 10px rgba(124,158,255,.08),0 0 12px -2px rgba(124,158,255,.25);
+}
+.ofm_root .ofm_minibtn:active:not(:disabled){transform:scale(.96)}
+.ofm_root .ofm_minibtn:disabled{opacity:.38}
+
+/* ---------- E7) 热力图精致化 ----------
+   格子已是 2px 圆角；空态压到 .04；l1-l4 递进发光；hover 单格提亮放大。 */
+.ofm_root .ofm_cell{transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .18s ease,background .18s ease}
+.ofm_root .ofm_cell.l2{box-shadow:0 0 4px rgba(124,158,255,.16)}
+.ofm_root .ofm_cell.l3{box-shadow:0 0 7px rgba(124,158,255,.34)}
+.ofm_root .ofm_cell.l4{box-shadow:0 0 11px rgba(124,158,255,.6),0 0 3px rgba(157,182,255,.5)}
+.ofm_root .ofm_cell:hover{
+  transform:scale(1.18);
+  box-shadow:0 0 10px rgba(157,182,255,.55),0 0 0 1px rgba(157,182,255,.4);
+  z-index:1;
+}
+
+/* ---------- E8) 表格：sticky 表头 + 光带 hover + 失败行红晕 ---------- */
+.ofm_root .ofm_tablewrap{position:relative}
+.ofm_root .ofm_table thead th{
+  position:sticky;top:0;z-index:2;
+  background:#101318;
+  color:#5d6672;
+  letter-spacing:.02em;
+  box-shadow:0 1px 0 rgba(255,255,255,.08);
+}
+.ofm_root .ofm_table tbody tr{transition:background .18s ease}
+.ofm_root .ofm_table tbody tr:hover td{
+  background:linear-gradient(90deg,rgba(124,158,255,.09),rgba(124,158,255,.05) 60%,rgba(124,158,255,.02));
+}
+.ofm_root .ofm_logfailed td{
+  background:rgba(227,106,106,.07);
+  box-shadow:inset 2px 0 0 rgba(227,106,106,.5);
+}
+.ofm_root .ofm_logfailed:hover td{background:rgba(227,106,106,.13)}
+
+/* ---------- E9) toast / modal / 公告弹入物理 ---------- */
+.ofm_toast{animation:ofm-toast-pop .34s cubic-bezier(.32,.72,0,1)}
+@keyframes ofm-toast-pop{
+  0%{opacity:0;transform:translateY(14px) scale(.96)}
+  60%{opacity:1;transform:translateY(-2px) scale(1.005)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+.ofm_root .ofm_ann,.ofm_root .ofm_modal{animation:ofm-modal-pop .38s cubic-bezier(.32,.72,0,1)}
+@keyframes ofm-modal-pop{
+  0%{opacity:0;transform:translateY(18px) scale(.965)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+.ofm_root .ofm_scrim{animation:ofm-scrim-fade .26s ease}
+@keyframes ofm-scrim-fade{from{opacity:0}to{opacity:1}}
+
+/* ---------- E10) 状态徽标发光点 ---------- */
+.ofm_root .ofm_dot{transition:box-shadow .2s ease}
+.ofm_root .ofm_dot.ok{background:#3ecfa0;box-shadow:0 0 8px rgba(62,207,160,.7)}
+.ofm_root .ofm_dot.warn{background:#f2a65a;box-shadow:0 0 8px rgba(242,166,90,.7)}
+.ofm_root .ofm_dot.err{background:#e36a6a;box-shadow:0 0 8px rgba(227,106,106,.75)}
+.ofm_root .ofm_badge.available{box-shadow:0 0 10px -2px rgba(62,207,160,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+.ofm_root .ofm_badge.region-blocked{box-shadow:0 0 10px -2px rgba(242,166,90,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+.ofm_root .ofm_badge.throttled,.ofm_root .ofm_badge.unavailable{box-shadow:0 0 10px -2px rgba(227,106,106,.4),inset 0 1px 0 rgba(255,255,255,.06)}
+.ofm_root .ofm_pill{transition:border-color .18s ease,box-shadow .2s ease}
+.ofm_root .ofm_pill.strong{border-color:rgba(124,158,255,.4);box-shadow:0 0 10px -3px rgba(124,158,255,.3)}
+
+/* ---------- E11) hero 签名微交互（克制） ----------
+   顶部受光线已在深色块；这里补一个缓慢呼吸的背景微光斑，做视觉记忆点。 */
+.ofm_root .ofm_hero{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 0 80px rgba(124,158,255,.06),
+    0 22px 55px -14px rgba(0,0,0,.7),
+    0 0 40px -18px rgba(124,158,255,.22);
+}
+.ofm_root .ofm_hero::after{
+  animation:ofm-hero-breathe 5.5s cubic-bezier(.2,.8,.2,1) infinite alternate;
+}
+@keyframes ofm-hero-breathe{
+  from{opacity:.55;filter:blur(0px)}
+  to{opacity:1;filter:blur(.4px)}
+}
+
+/* ---------- E12) 输入框聚焦更精致（补一层聚焦外发光递进） ---------- */
+.ofm_root .ofm_input:focus,.ofm_root input:focus,.ofm_root select:focus,.ofm_root textarea:focus{
+  border-color:rgba(124,158,255,.75);
+  box-shadow:0 0 0 3px rgba(124,158,255,.16),
+             0 0 18px -4px rgba(124,158,255,.3),
+             inset 0 1px 3px rgba(0,0,0,.35);
+}
+
+/* ---------- reduced-motion：关掉精雕层的呼吸/弹入 ---------- */
+@media (prefers-reduced-motion:reduce){
+  .ofm_root .ofm_hero::after{animation:none}
+  .ofm_toast,.ofm_root .ofm_ann,.ofm_root .ofm_modal,.ofm_root .ofm_scrim{animation:none}
+}
