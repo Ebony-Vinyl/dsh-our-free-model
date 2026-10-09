@@ -1205,6 +1205,98 @@ window.__ModuleLoader__.load({
 .ofm_poolstats .ofm_stat.hot b{color:var(--dsw-alias-state-error-primary,#ec1313)}
 .ofm_poolmeta{display:flex;gap:8px 18px;align-items:baseline;flex-wrap:wrap;justify-content:space-between}
 @media (max-width:760px){.ofm_tank.xl{width:100%;max-width:340px}.ofm_tab{flex:1 1 auto;text-align:center}}
+
+/* ── 第四轮 · 细节极致打磨 ─────────────────────────────────────────────── */
+/* EAC Star 按钮形状统一 */
+.ofm_starbtn{
+  border-radius:7px !important;
+  padding:9px 15px !important;
+  font-weight:500 !important;
+  background:rgba(124,158,255,.08) !important;
+  border:1px solid rgba(124,158,255,.35) !important;
+  color:#9db6ff !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06) !important;
+  transition:background 160ms cubic-bezier(.32,.72,0,1),color 160ms cubic-bezier(.32,.72,0,1),box-shadow 160ms cubic-bezier(.32,.72,0,1) !important;
+  overflow:visible !important;
+}
+.ofm_starbtn:hover{
+  background:#7c9eff !important;
+  color:#0a0f1e !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15) !important;
+  transform:none !important;
+}
+.ofm_starbtn::after{display:none !important}
+.ofm_starbtn svg{transition:none !important}
+.ofm_starbtn:hover svg{transform:none !important}
+/* 渠道卡片 hover 更克制 */
+.ofm_root .ofm_card:hover{
+  transform:none !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4) !important;
+}
+/* 渠道页标题去渐变文字 */
+.ofm_pagetitle h2{
+  background:none !important;
+  -webkit-text-fill-color:var(--dsw-alias-label-primary) !important;
+}
+/* 按钮按压反馈 */
+.ofm_root .ofm_btn:active:not(:disabled),.ofm_root .ofm_minibtn:active:not(:disabled){
+  transform:translateY(1px) !important;
+}
+/* 开关精修 */
+.ofm_root .ofm_switch i{
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.2) !important;
+}
+.ofm_root .ofm_switch i::after{
+  box-shadow:0 1px 3px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.1) !important;
+}
+/* 输入框精修 */
+.ofm_root .ofm_input,.ofm_root input,.ofm_root select,.ofm_root textarea{
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.15) !important;
+}
+.ofm_root .ofm_input:focus,.ofm_root input:focus,.ofm_root select:focus,.ofm_root textarea:focus{
+  box-shadow:0 0 0 3px rgba(124,158,255,.12),inset 0 1px 2px rgba(0,0,0,.1) !important;
+}
+/* 标签页精修 */
+.ofm_root .ofm_tabs{
+  gap:2px !important;
+  padding:3px !important;
+  background:var(--dsw-alias-bg-layer-1) !important;
+  border-radius:9px !important;
+  border:1px solid var(--dsw-alias-border-l1) !important;
+}
+.ofm_root .ofm_tab{
+  border-radius:7px !important;
+  padding:6px 14px !important;
+}
+.ofm_root .ofm_tab[data-on="true"]{
+  background:var(--dsw-alias-bg-layer-3) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.25) !important;
+}
+/* Toast/模态框圆角统一 */
+.ofm_root .ofm_toast{border-radius:11px !important}
+.ofm_root .ofm_modal,.ofm_root .ofm_ann{border-radius:15px !important}
+/* 表格精修 */
+.ofm_root .ofm_table thead th{
+  font-size:10px !important;
+  letter-spacing:.05em !important;
+  text-transform:uppercase !important;
+  font-weight:600 !important;
+}
+/* 渠道卡片底部信息行分隔线 */
+.ofm_root .ofm_metrics{
+  padding-top:4px !important;
+  border-top:1px solid rgba(255,255,255,.04) !important;
+  font-size:10.5px !important;
+}
+/* 禁用态去饱和 */
+.ofm_root button:disabled,.ofm_root input:disabled,.ofm_root select:disabled{
+  opacity:.35 !important;
+  filter:saturate(.5) !important;
+}
+/* 选中文字颜色 */
+.ofm_root ::selection{background:rgba(124,158,255,.25) !important;color:#f0f4ff !important}
+/* 骨架屏 shimmer 保留 */
+.ofm_root .ofm_skel{animation:ofm-matte-shimmer 1.4s linear infinite !important}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
