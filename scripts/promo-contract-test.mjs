@@ -20,11 +20,10 @@
  * Run: node scripts/promo-contract-test.mjs
  */
 import assert from 'node:assert/strict'
-import { createRequire } from 'node:module'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { loadEsbuildOrSkip, ESM_REQUIRE_BANNER } from './lib/esbuild-loader.mjs'
 
 const repoRoot = path.join(fileURLToPath(new URL('..', import.meta.url)))
 
@@ -32,11 +31,7 @@ const repoRoot = path.join(fileURLToPath(new URL('..', import.meta.url)))
 // specifiers for `.ts` files, which Node cannot resolve on its own. Bundling the
 // module with esbuild (the same tool `build-channel-pack.mjs` uses) is the
 // shortest path to loading the REAL handler rather than a copy of its logic.
-const require = createRequire(import.meta.url)
-const esbuildPath = require.resolve('esbuild', {
-  paths: [process.env.OFM_ESBUILD_DIR, process.cwd(), repoRoot].filter(Boolean),
-})
-const esbuild = await import(pathToFileURL(esbuildPath).href)
+const esbuild = await loadEsbuildOrSkip('promo-contract-test')
 const built = await esbuild.build({
   entryPoints: [path.join(repoRoot, 'vendor/channel-pack/src/channel-pack-rpc.ts')],
   bundle: true,
@@ -47,18 +42,15 @@ const built = await esbuild.build({
   write: false,
   logLevel: 'warning',
   // Bundled CJS deps (undici) call require() for node builtins; in an ESM bundle
-  // esbuild's helper throws unless a real `require` is in scope. Same banner the
-  // real pack build uses (see scripts/build-channel-pack.mjs).
-  banner: {
-    js: [
-      "import { createRequire as __ofmCreateRequire } from 'node:module'",
-      'const require = __ofmCreateRequire(import.meta.url)',
-    ].join('\n'),
-  },
+  // esbuild's helper throws unless a real `require` is in scope.
+  banner: { js: ESM_REQUIRE_BANNER },
 })
 // Written INSIDE the repo (not os.tmpdir()): a stray `package.json` in the temp
 // root makes Node refuse to resolve the bundle's bare specifiers.
 const tmpDir = mkdtempSync(path.join(repoRoot, '.ofm-rpc-'))
+// Clean up even when a check throws: an uncaught error skips the tail of the
+// script and leaves a scratch dir in the repo, polluting `git status`.
+process.on('exit', () => { try { rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best effort */ } })
 const tmp = path.join(tmpDir, 'rpc.mjs')
 writeFileSync(tmp, built.outputFiles[0].text)
 const { registerChannelPackRpc } = await import(pathToFileURL(tmp).href)
@@ -174,9 +166,7 @@ if (route !== undefined) {
 
 if (problems.length === 0) {
   console.log('\nALL PASS — promo survives the model.list projection')
-  rmSync(tmpDir, { recursive: true, force: true })
   process.exit(0)
 }
 console.error(`\n${problems.length} FAILURE(S)`)
-rmSync(tmpDir, { recursive: true, force: true })
 process.exit(1)

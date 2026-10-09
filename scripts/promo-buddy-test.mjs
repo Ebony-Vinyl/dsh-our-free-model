@@ -16,22 +16,21 @@
  *
  * Run: node scripts/promo-buddy-test.mjs
  */
-import { createRequire } from 'node:module'
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
+import { loadEsbuildOrSkip } from './lib/esbuild-loader.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(scriptDir, '..')
 
 // ── transpile buddy.ts on the fly (zero runtime deps) ───────────────────────
-const require = createRequire(import.meta.url)
-const esbuildPath = require.resolve('esbuild', {
-  paths: [process.env.OFM_ESBUILD_DIR, process.cwd(), repoRoot].filter(Boolean),
-})
-const esbuild = await import(pathToFileURL(esbuildPath).href)
+// esbuild comes from the shared resolver; with no install there is nothing to
+// load the REAL source with, so the suite prints a visible SKIP and exits —
+// the runner counts it, and the CI promo job (which installs) fails instead.
+const esbuild = await loadEsbuildOrSkip('promo-buddy-test')
 const src = readFileSync(path.join(repoRoot, 'vendor/channel-pack/src/buddy.ts'), 'utf8')
 const { code } = await esbuild.transform(src, { loader: 'ts', format: 'esm', target: 'node22' })
 const tmp = path.join(mkdtempSync(path.join(os.tmpdir(), 'ofm-promo-')), 'buddy.mjs')

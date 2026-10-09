@@ -23,17 +23,13 @@
  * Run: node scripts/promo-raccoon-test.mjs
  */
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { loadEsbuildOrSkip, ESM_REQUIRE_BANNER } from './lib/esbuild-loader.mjs'
 
 const repoRoot = path.join(fileURLToPath(new URL('..', import.meta.url)))
 
-const require = (await import('node:module')).createRequire(import.meta.url)
-const esbuildPath = require.resolve('esbuild', {
-  paths: [process.env.OF_ESBUILD_DIR, process.env.OFM_ESBUILD_DIR, process.cwd(), repoRoot].filter(Boolean),
-})
-const esbuild = await import(pathToFileURL(esbuildPath).href)
+const esbuild = await loadEsbuildOrSkip('promo-raccoon-test')
 
 /** Bundle a pack module for import (same banner the real pack build uses). */
 async function loadModule(relPath, name) {
@@ -41,12 +37,7 @@ async function loadModule(relPath, name) {
     entryPoints: [path.join(repoRoot, 'vendor/channel-pack/src', relPath)],
     bundle: true, format: 'esm', platform: 'node', target: ['node22'],
     external: ['@deepseek-ai/*', 'node:*'], write: false, logLevel: 'warning',
-    banner: {
-      js: [
-        "import { createRequire as __ofmCreateRequire } from 'node:module'",
-        'const require = __ofmCreateRequire(import.meta.url)',
-      ].join('\n'),
-    },
+    banner: { js: ESM_REQUIRE_BANNER },
   })
   const file = path.join(tmpDir, name)
   writeFileSync(file, built.outputFiles[0].text)

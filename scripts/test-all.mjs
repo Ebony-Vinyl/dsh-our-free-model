@@ -67,6 +67,21 @@ const suites = [
   ['eac-auth', 'eac-auth-test.mjs', []],
   ['eac-login', 'eac-login-test.mjs', []],
   ['kilo', 'kilo-test.mjs', []],
+  // The promo plumbing: contract projection, four producer shapes, the client
+  // render in all four scenarios. Six of these load real TypeScript and need
+  // esbuild; without an install they print a visible SKIP line instead of
+  // silently not existing — the CI `promo` job installs the toolchain and
+  // (via OFM_REQUIRE_ESBUILD=1) turns any skip into a failure.
+  ['promo-contract', 'promo-contract-test.mjs', []],
+  ['promo-buddy', 'promo-buddy-test.mjs', []],
+  ['promo-qoder', 'promo-qoder-test.mjs', []],
+  ['promo-raccoon', 'promo-raccoon-test.mjs', []],
+  ['promo-trae', 'promo-trae-test.mjs', []],
+  ['promo-trae-transport', 'promo-trae-transport-test.mjs', []],
+  ['promo-badge-remote', 'promo-badge-test.mjs', ['remote']],
+  ['promo-badge-fallback', 'promo-badge-test.mjs', ['fallback']],
+  ['promo-badge-legacy', 'promo-badge-test.mjs', ['legacy']],
+  ['promo-badge-none', 'promo-badge-test.mjs', ['none']],
   ['offline', 'offline-test.mjs', []],
 ].filter(([name]) => (mode === 'contributor' ? !['manifest', 'release'].includes(name)
   : mode === 'release' ? releaseSuites.has(name) : true)
@@ -135,8 +150,13 @@ for (const [name, script, args] of suites) {
   const output = `${run.stdout}${run.stderr}`.trimEnd().split('\n')
   const hung = run.timedOut || run.error !== null || run.signal !== null
   const ok = !hung && run.status === 0
-  results.push({ name, ok, ms: run.ms, output })
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${name.padEnd(14)} ${String(run.ms).padStart(5)} ms`)
+  // The skip protocol: a suite that could not run for a declared environmental
+  // reason prints `SKIP <name> (<reason>)` and exits 0. It is neither a pass
+  // (nothing was verified) nor a failure (the reason is legitimate in an
+  // install-free checkout) — but it must be VISIBLE, and the summary says so.
+  const skipped = ok && output.some(line => line.startsWith('SKIP '))
+  results.push({ name, ok, skipped: skipped === true, ms: run.ms, output })
+  console.log(`${ok ? (skipped ? 'SKIP' : 'ok  ') : 'FAIL'} ${name.padEnd(22)} ${String(run.ms).padStart(5)} ms`)
   if (!ok) {
     if (run.timedOut) console.log(`       killed at the ${SUITE_TIMEOUT_MS / 1000}s deadline — the live output above is the last diagnostic from the suite`)
     else if (hung) console.log(`       never finished (${run.error?.message ?? `signal ${run.signal}`})`)
@@ -146,5 +166,13 @@ for (const [name, script, args] of suites) {
 }
 
 const failed = results.filter(result => !result.ok)
-console.log(`\n${results.length - failed.length}/${results.length} suites passed${failed.length > 0 ? ` — ${failed.map(f => f.name).join(', ')} failed` : ''}`)
+const skipped = results.filter(result => result.skipped)
+const notes = []
+if (failed.length > 0) notes.push(` — ${failed.map(f => f.name).join(', ')} failed`)
+// A skip is not a pass. In an install-free checkout it is expected and honest;
+// where the runner declares the suites non-optional (OFM_REQUIRE_ESBUILD=1 —
+// the CI `promo` job), the suite itself already failed, so reaching this line
+// with skips means the environment lied, and saying it loudly is the point.
+if (skipped.length > 0) notes.push(` — ${skipped.length} skipped (${skipped.map(f => f.name).join(', ')}) — not verified in this environment`)
+console.log(`\n${results.length - failed.length - skipped.length}/${results.length} suites passed${notes.join('')}`)
 process.exitCode = failed.length === 0 ? 0 : 1

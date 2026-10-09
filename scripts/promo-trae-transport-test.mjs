@@ -21,15 +21,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { loadEsbuildOrSkip, ESM_REQUIRE_BANNER } from './lib/esbuild-loader.mjs'
 
 const repoRoot = path.join(fileURLToPath(new URL('..', import.meta.url)))
 
 // ── bundle the real sources ─────────────────────────────────────────────────
-const require = (await import('node:module')).createRequire(import.meta.url)
-const esbuildPath = require.resolve('esbuild', {
-  paths: [process.env.OF_ESBUILD_DIR, process.env.OFM_ESBUILD_DIR, process.cwd(), repoRoot].filter(Boolean),
-})
-const esbuild = await import(pathToFileURL(esbuildPath).href)
+const esbuild = await loadEsbuildOrSkip('promo-trae-transport-test')
 const tmpDir = mkdtempSync(path.join(repoRoot, '.ofm-traet-'))
 // Clean up even when a check throws (an uncaught error skips the tail of the
 // script and leaves a scratch dir in the repo, polluting `git status`).
@@ -39,12 +36,7 @@ const load = async (entry, name) => {
     entryPoints: [path.join(repoRoot, entry)],
     bundle: true, format: 'esm', platform: 'node', target: ['node22'],
     external: ['@deepseek-ai/*', 'node:*'], write: false, logLevel: 'warning',
-    banner: {
-      js: [
-        "import { createRequire as __ofmCreateRequire } from 'node:module'",
-        'const require = __ofmCreateRequire(import.meta.url)',
-      ].join('\n'),
-    },
+    banner: { js: ESM_REQUIRE_BANNER },
   })
   const file = path.join(tmpDir, `${name}.mjs`)
   writeFileSync(file, built.outputFiles[0].text)
