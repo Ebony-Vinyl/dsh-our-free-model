@@ -32,6 +32,7 @@ import { isQoderExpired, type QoderCredential } from './qoder.js'
 import { QoderEncryptedInfer, type QoderInferMessage, type QoderInferRequest, type QoderInferTool, type QoderInferToolCall } from './qoder-wasm.js'
 import { unwrapQoderEnvelopeStream } from './qoder-envelope.js'
 import { QODER, type QoderFallbackModel, type QoderModelPromotion, type QoderProduct } from './qoder-product.js'
+import type { PromotionBadge } from './buddy.js'
 import { projectRequestImage, type ImageRequestTarget } from './image-budget.js'
 import {
   registerAdapterIdempotent,
@@ -525,8 +526,12 @@ export class QoderAdapter extends LlmAdapter {
    * 黑名单过滤掉它们 —— RPC 层只能凭裸 id 补回，展示名与倍率随之丢失
    * （用户报障：「关闭的就没有显示倍率」）。详见 `model.list` 端点的注释。
    */
-  listAllModels(): readonly { id: string; name: string }[] {
-    return this.product.fallbackModels.map((model) => ({ id: model.id, name: qoderDisplayName(model) }))
+  listAllModels(): readonly { id: string; name: string; promo?: PromotionBadge }[] {
+    return this.product.fallbackModels.map((model) => {
+      // 促销走**独立字段** `promo`（与 buddy 同一契约），不借 `description`。
+      const promo = qoderPromoBadge(model)
+      return { id: model.id, name: qoderDisplayName(model), ...promo === undefined ? {} : { promo } }
+    })
   }
 
   async listModels(_provider: string): Promise<readonly LlmModelInfo[]> {
@@ -541,14 +546,21 @@ export class QoderAdapter extends LlmAdapter {
     const listed = disabled === undefined || disabled.size === 0
       ? source
       : source.filter((model) => !disabled.has(model.id))
-    return listed.map((model) => ({
-      provider: this.product.id,
-      id: model.id,
-      // 倍率拼进 `name`（**不是** `description`）：composer 的模型切换菜单
-      // 只渲染 name，description 仅用于 /model 弹窗。见 qoderDisplayName。
-      name: qoderDisplayName(model),
-      inputModalities: this.inputModalitiesFor(model.id),
-    }))
+    return listed.map((model) => {
+      // 错峰促销走**独立字段** `promo`（与 buddy 同一契约）：设置页据此画胶囊。
+      // 模型名里的箭头（`x0.5→x0.2`）保留 —— composer 的切换菜单只渲染 name，
+      // 移走它会让不在设置页的用户看不到折扣，两者是补充而非替代。
+      const promo = qoderPromoBadge(model)
+      return {
+        provider: this.product.id,
+        id: model.id,
+        // 倍率拼进 `name`（**不是** `description`）：composer 的模型切换菜单
+        // 只渲染 name，description 仅用于 /model 弹窗。见 qoderDisplayName。
+        name: qoderDisplayName(model),
+        ...promo === undefined ? {} : { promo },
+        inputModalities: this.inputModalitiesFor(model.id),
+      }
+    })
   }
 
   /**
@@ -1038,6 +1050,75 @@ export class QoderAdapter extends LlmAdapter {
       }
       throw error
     }
+  }
+}
+
+/**
+ * 把 Qoder 的错峰促销装配成**独立字段** `promo`（与 buddy 同一契约）。
+ *
+ * ## 与 buddy 的关系：同一契约、各自生产
+ *
+ * `PromotionBadge`（见 `buddy.ts`）是**共用形状**，渲染端只认这一个字段；
+ * 生产端各家自己写一次，因为上游结构本来就不同：buddy 是 `modelPromotions[]`
+ * 带 `discount.factor` + `daily[]`，Qoder 是单条 `promotion` 带
+ * `discountFactor` + `windowStart/windowEnd`。这里做的是**翻译**，不是复用解析。
+ *
+ * ## 三个必须按 Qoder 语义处理的点
+ *
+ * 1. **`active` 用本地推算**，不用目录快照：目录的 `promotion.active` 是采集
+ *    那一刻的值，客户端长时间不重启就过期（见 `promotionActiveNow` 的注释）。
+ * 2. **双段价格**：`priceFactor` 是**采集时刻的生效价**，窗口切换后即失真；
+ *    原价取 `beforePromotionPriceFactor`。两者都在时才给 `original` ——
+ *    只有一端时给 `x0.5→x0.5` 这种无意义的"折扣"。
+ * 3. **`badgeZh` 是上游自带的角标文案**（如「错峰 4 折」），映射到契约的
+ *    `badgeLabel`。模型名那边因与箭头冗余而不用它（见 `qoderDisplayName`），
+ *    但徽标是独立元素，用它反而比自拼更贴官方口径。
+ *
+ * ⚠️ 本函数**只读** `model.promotion`，不碰 `description` —— 与 buddy 一样，
+ * 促销不借通用字段。
+ */
+export function qoderPromoBadge(
+  model: QoderFallbackModel,
+  now: Date = new Date(),
+): PromotionBadge | undefined {
+  const promo = model.promotion
+  if (promo === undefined) return undefined
+  const active = promotionActiveNow(promo, now)
+  const before = promo.beforePromotionPriceFactor
+  const discount = promo.discountFactor
+  // 生效价：窗口内取 before×discount（与 qoderDisplayName 同源，避免两处口径
+  // 打架）；窗口外就是原价 before。都没有时退回目录的 priceFactor。
+  const effectiveRaw = before !== undefined && discount !== undefined
+    ? (active ? Number((before * discount).toFixed(4)) : before)
+    : model.priceFactor
+  const effective = effectiveRaw === undefined ? undefined : `x${effectiveRaw}`
+  const original = before === undefined ? undefined : `x${before}`
+  const price = effective === undefined && original === undefined
+    ? undefined
+    : {
+        ...effective === undefined ? {} : { effective },
+        // ⚠️ 只有两段真的不同才给 original：`x0.04→x0.04` 既不表达折扣又占宽度。
+        ...original !== undefined && original !== effective ? { original } : {},
+      }
+  // 时段：Qoder 每条促销只有**一段**（`windowStart`/`windowEnd`），契约仍是
+  // 数组 —— 形状统一，消费端不必分provider 处理。
+  const windows = typeof promo.windowStart === 'string' && typeof promo.windowEnd === 'string'
+    && promo.windowStart.trim() !== '' && promo.windowEnd.trim() !== ''
+    ? [{ start: promo.windowStart, end: promo.windowEnd }]
+    : []
+  // 免费（priceFactor 0）优先于一切；否则用上游角标。
+  const isFree = model.priceFactor === 0
+  const label = isFree ? '免费' : (typeof promo.badgeZh === 'string' && promo.badgeZh.trim() !== '' ? promo.badgeZh : undefined)
+  return {
+    kind: 'discount',
+    ...price === undefined ? {} : { price },
+    ...windows.length === 0 ? {} : { windows },
+    // 目录时区实测 `Asia/Singapore`，与用户所在 UTC+8 同一墙上时间
+    // （见 promotionActiveNow 的注释），故按项目惯例写 Asia/Shanghai。
+    timezone: 'Asia/Shanghai',
+    active,
+    ...active ? { status: '错峰' } : { status: '常时' },
+    ...label === undefined ? {} : { badgeLabel: label },
   }
 }
 
