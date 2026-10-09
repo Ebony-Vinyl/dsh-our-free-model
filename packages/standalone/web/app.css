@@ -996,3 +996,274 @@ tbody tr:hover { background: none; }
 /* 表格数字右对齐等宽，更专业 */
 td { font-weight: 500; }
 td:first-child { font-weight: 550; }
+
+
+/* ==========================================================================
+   第四轮 · 细节极致打磨
+   目标：消灭所有影响大局体感的小瑕疵 —— 窄屏溢出、控件层次、动画丝滑
+   ========================================================================== */
+
+/* ---------- 1. 修复哑光层的动画混乱：明确恢复需要的过渡 ---------- */
+/* 哑光层用 0.01ms 杀死了所有动画，这里精确恢复"过渡"（transition）该有的时长 */
+.nav-item, .primary, .secondary, .danger-button, .text-button,
+.panel, .metric-card, .model-card, .welcome-panel,
+input, select, textarea, .switch, .switch::after,
+.endpoint button, .endpoint, .pill,
+th, td, tbody tr, .chart-bar, .channel-mark, .model-badges span,
+.login-card, .confirm-panel, .notice, .copy-field .secondary {
+  transition-duration: 160ms !important;
+  transition-timing-function: cubic-bezier(.32, .72, 0, 1) !important;
+}
+/* 页面入场动画恢复 */
+.page > * {
+  animation-duration: 320ms !important;
+  animation-iteration-count: 1 !important;
+}
+@keyframes mFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+/* loading 脉冲恢复 */
+.loading-screen .brand-mark { animation: pulse 1.8s ease-in-out infinite !important; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* 骨架屏 shimmer 恢复 */
+.ofm_root .ofm_skel { animation: ofm-matte-shimmer 1.4s linear infinite !important; }
+
+/* ---------- 2. 窄屏布局修复（800px 以下） ---------- */
+@media (max-width: 800px) {
+  /* topbar 不再重叠：LOCAL INSTANCE 改为更小的在线状态点 */
+  .topbar-right { font-size: 8px; letter-spacing: 1.2px; }
+  /* 页面标题区：按钮换行到标题下方，不挤压 */
+  .page-heading { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .page-heading .actions { width: 100%; justify-content: flex-start; }
+  /* 渠道页子导航允许横向滚动 */
+  #page-channel .page-heading { margin-bottom: 14px; }
+  /* 欢迎面板内元素纵向排列 */
+  .welcome-panel { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .welcome-panel .endpoint { max-width: 100%; overflow-x: auto; }
+  /* 设置页面输入框不溢出 */
+  .setting-row { flex-wrap: wrap; }
+  .setting-row > span { flex: 1; min-width: 200px; }
+  /* API 接入页 copy-field 纵向 */
+  .copy-field { flex-direction: column; }
+  .copy-field .secondary { width: 100%; }
+  /* footer 缩小 */
+  footer { font-size: 8px; letter-spacing: 1px; padding: 20px 14px 24px; }
+}
+@media (max-width: 480px) {
+  .metric-grid { grid-template-columns: 1fr; gap: 10px; }
+  .metric-card strong { font-size: 26px; }
+  /* 模型卡 footer 按钮换行 */
+  .model-card-footer { flex-wrap: wrap; }
+  .model-card-footer .actions { width: 100%; justify-content: flex-end; }
+  /* 渠道卡片 grid 单列 */
+  .ofm_grid { grid-template-columns: 1fr !important; }
+  /* 登录卡片更紧凑 */
+  .login-card { padding: 28px 22px 22px; }
+  .login-card h1 { font-size: 19px; }
+}
+
+/* ---------- 3. 按钮质感精修 ---------- */
+/* 主按钮：微妙的顶部受光 + 底部阴影，按压下沉 */
+.primary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 3px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+.primary:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.primary:active {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transform: translateY(1px);
+}
+/* 次要按钮：微妙的内阴影 */
+.secondary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.secondary:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.secondary:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+/* 危险按钮 */
+.danger-button:active { transform: translateY(1px); }
+/* 文字按钮增加下划线动效 */
+.text-button {
+  position: relative;
+  text-decoration: none;
+}
+.text-button::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -2px;
+  height: 1px;
+  background: var(--m-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 160ms cubic-bezier(.32, .72, 0, 1);
+}
+.text-button:hover::after { transform: scaleX(1); }
+
+/* ---------- 4. 开关精修 ---------- */
+.switch {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.switch::after {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+.switch:checked::after {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+}
+.switch:hover { border-color: rgba(255, 255, 255, 0.14); }
+.switch:checked:hover { background: #8cadff; }
+
+/* ---------- 5. 输入框精修 ---------- */
+input, select {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+input:hover, select:hover { border-color: rgba(255, 255, 255, 0.12); }
+input:focus, select:focus, textarea:focus {
+  box-shadow: 0 0 0 3px var(--m-accent-dim), inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+/* select 下拉箭头自定义 */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239aa3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+/* ---------- 6. 标签页（渠道页子导航）精修 ---------- */
+.ofm_root .ofm_tabs {
+  gap: 2px;
+  padding: 3px;
+  background: var(--m-panel);
+  border-radius: 9px;
+  border: 1px solid var(--m-line-soft);
+}
+.ofm_root .ofm_tab {
+  border-radius: 7px;
+  padding: 6px 14px;
+}
+.ofm_root .ofm_tab[data-on="true"] {
+  background: var(--m-card-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.ofm_root .ofm_tabglider { display: none; }
+
+/* ---------- 7. 徽章/标签精修 ---------- */
+.model-badges span {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.pill {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.small-tag {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+/* ---------- 8. 渠道卡片信息行精修 ---------- */
+.ofm_root .ofm_cardhead { gap: 10px; }
+.ofm_root .ofm_cardname { font-weight: 600; letter-spacing: -0.01em; }
+.ofm_root .ofm_metrics {
+  font-size: 10.5px;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.ofm_root .ofm_metrics b { font-weight: 600; }
+
+/* ---------- 9. 图表空态优化 ---------- */
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--m-text-3);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 10. EAC 页面按钮统一 ---------- */
+.eac-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.eac-actions .primary, .eac-actions .secondary { min-width: 140px; justify-content: center; text-align: center; }
+
+/* ---------- 11. 表格精修 ---------- */
+th { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+td { font-size: 12px; }
+/* 表格斑马纹更微妙 */
+tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.012); }
+
+/* ---------- 12. 滚动条更细更隐形 ---------- */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); }
+*::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* ---------- 13. 选中文字颜色 ---------- */
+::selection { background: rgba(124, 158, 255, 0.25); color: #f0f4ff; }
+
+/* ---------- 14. 登录页精修 ---------- */
+.login-card .brand-mark { font-size: 36px; }
+.login-card .eyebrow { margin-bottom: 4px; }
+.login-card input { box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25); }
+.login-card input:focus { box-shadow: 0 0 0 3px var(--m-accent-dim), inset 0 1px 2px rgba(0, 0, 0, 0.2); }
+.login-card .primary { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 3px rgba(0, 0, 0, 0.35); }
+.login-card details summary { transition: color 160ms cubic-bezier(.32, .72, 0, 1); }
+.login-card code { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+
+/* ---------- 15. 面包屑导航精修 ---------- */
+.breadcrumb { font-size: 10.5px; }
+.breadcrumb strong { font-weight: 550; }
+
+/* ---------- 16. 通知条精修 ---------- */
+.notice { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+
+/* ---------- 17. 确认面板精修 ---------- */
+.confirm-panel { box-shadow: var(--m-light-top), 0 16px 48px -12px rgba(0, 0, 0, 0.6); }
+
+/* ---------- 18. 概览页"复制"按钮精修 ---------- */
+.endpoint button { transition: all 160ms cubic-bezier(.32, .72, 0, 1); }
+.endpoint button:hover { background: rgba(255, 255, 255, 0.08); }
+.endpoint button:active { transform: scale(0.97); }
+
+/* ---------- 19. 模型卡片 footer 分隔线更柔和 ---------- */
+.model-card-footer { border-top-color: rgba(255, 255, 255, 0.04); }
+
+/* ---------- 20. 侧边栏底部状态更精致 ---------- */
+.sidebar-bottom { padding-top: 18px; }
+.local-status { display: flex; align-items: center; gap: 5px; }
+
+/* ---------- 21. 渠道页 hero 区域精修 ---------- */
+.ofm_root .ofm_hero {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.ofm_root .ofm_pill {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ---------- 22. Toast 精修 ---------- */
+.ofm_root .ofm_toast {
+  box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+/* ---------- 23. 模态框精修 ---------- */
+.ofm_root .ofm_modal {
+  box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ---------- 24. 禁用状态更明确 ---------- */
+button:disabled, input:disabled, select:disabled {
+  opacity: 0.35 !important;
+  filter: saturate(0.5);
+}
+
+/* ---------- 25. 减少动效偏好时的完整覆盖 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

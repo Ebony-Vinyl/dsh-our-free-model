@@ -1352,3 +1352,142 @@
 @media (prefers-reduced-motion:reduce){
   .ofm_toast,.ofm_root .ofm_ann,.ofm_root .ofm_modal,.ofm_root .ofm_scrim{animation:none}
 }
+
+
+/* ---------- EAC Star 按钮形状统一（第四轮修复） ---------- */
+.ofm_root .ofm_starbtn {
+  border-radius: 7px !important;
+  padding: 9px 15px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+.ofm_root .ofm_starbtn:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+.ofm_root .ofm_starbtn::after { display: none !important; }
+.ofm_root .ofm_starbtn svg { transition: none !important; }
+.ofm_root .ofm_starbtn:hover svg { transform: none !important; }
+.ofm_root .ofm_starbtn:hover { transform: none !important; }
+
+/* ---------- 图表空态提示 ---------- */
+.usage-chart:empty::after,
+.usage-chart .chart-empty {
+  content: "暂无用量数据";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #5f6875;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 渠道页子导航标签页统一风格 ---------- */
+.ofm_root .ofm_tabs {
+  gap: 2px !important;
+  padding: 3px !important;
+  background: #0e1013 !important;
+  border-radius: 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+.ofm_root .ofm_tab {
+  border-radius: 7px !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+}
+.ofm_root .ofm_tab[data-on="true"] {
+  background: #161a20 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+}
+.ofm_root .ofm_tabglider { display: none !important; }
+
+/* ---------- 渠道页 hero 区域 pills 更紧凑 ---------- */
+.ofm_root .ofm_pills { gap: 5px !important; }
+.ofm_root .ofm_pill {
+  font-size: 9px !important;
+  padding: 3px 8px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+/* ---------- 渠道卡片底部操作按钮统一 ---------- */
+.ofm_root .ofm_card .ofm_btn,
+.ofm_root .ofm_card .ofm_minibtn {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+.ofm_root .ofm_card .ofm_btn:active:not(:disabled),
+.ofm_root .ofm_card .ofm_minibtn:active:not(:disabled) {
+  transform: translateY(1px) !important;
+}
+
+/* ---------- 渠道页开关统一 ---------- */
+.ofm_root .ofm_switch i {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+.ofm_root .ofm_switch i::after {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ---------- 模态框/公告框圆角统一 ---------- */
+.ofm_root .ofm_modal, .ofm_root .ofm_ann {
+  border-radius: 15px !important;
+}
+
+/* ---------- Toast 圆角统一 ---------- */
+.ofm_root .ofm_toast { border-radius: 11px !important; }
+
+/* ---------- 渠道页输入框统一 ---------- */
+.ofm_root .ofm_input, .ofm_root input, .ofm_root select, .ofm_root textarea {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15) !important;
+}
+.ofm_root .ofm_input:focus, .ofm_root input:focus, .ofm_root select:focus, .ofm_root textarea:focus {
+  box-shadow: 0 0 0 3px rgba(124, 158, 255, 0.12), inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ---------- 渠道页表格统一 ---------- */
+.ofm_root .ofm_table thead th {
+  font-size: 10px !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  font-weight: 600 !important;
+}
+
+/* ---------- 骨架屏 shimmer 恢复（被哑光层杀掉的） ---------- */
+.ofm_root .ofm_skel {
+  animation: ofm-matte-shimmer 1.4s linear infinite !important;
+}
+
+
+/* ---------- EAC Star 按钮：覆盖 JS 内嵌样式（第四轮修复·补丁） ---------- */
+/* JS 内嵌的 .ofm_starbtn 是 999px 胶囊，需要更高特异性覆盖 */
+#channel-root .ofm_starbtn,
+.ofm_root .ofm_starbtn,
+a.ofm_starbtn {
+  border-radius: 7px !important;
+  padding: 9px 15px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  background: rgba(124, 158, 255, 0.08) !important;
+  border: 1px solid rgba(124, 158, 255, 0.35) !important;
+  color: #9db6ff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  transition: background 160ms cubic-bezier(.32,.72,0,1), color 160ms cubic-bezier(.32,.72,0,1), box-shadow 160ms cubic-bezier(.32,.72,0,1) !important;
+  overflow: visible !important;
+}
+#channel-root .ofm_starbtn:hover,
+.ofm_root .ofm_starbtn:hover,
+a.ofm_starbtn:hover {
+  background: #7c9eff !important;
+  color: #0a0f1e !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  transform: none !important;
+}
+#channel-root .ofm_starbtn::after,
+.ofm_root .ofm_starbtn::after,
+a.ofm_starbtn::after { display: none !important; }
+#channel-root .ofm_starbtn svg,
+.ofm_root .ofm_starbtn svg,
+a.ofm_starbtn svg { transition: none !important; }
+#channel-root .ofm_starbtn:hover svg,
+.ofm_root .ofm_starbtn:hover svg,
+a.ofm_starbtn:hover svg { transform: none !important; }
