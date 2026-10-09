@@ -1034,6 +1034,13 @@ function registerChannelPackEndpoints(
   const pendingSmsMsgid = new Map<string, { phone: string; msgid: string }>()
 
   /**
+   * 登录后台失败的终态（账号占位条目会被清掉，所以不能再靠 account.list
+   * 判断失败）。短暂保留失败原因，让前端下一次 login.poll 能收到可读反馈，
+   * 而不是继续等待十分钟直到超时。
+   */
+  const pendingLoginFailures = new Map<string, string>()
+
+  /**
    * 用量徽标的显示偏好（`$DSH_HOME/channel-pack/ui-preferences.json`）。
    *
    * ⚠️ 与账号池**分开**的独立文档：`state.json` 是整体替换语义，同机另一条工作区
@@ -1905,6 +1912,7 @@ function registerChannelPackEndpoints(
             refreshable: false,
             createdAt: Date.now(),
           })
+          pendingLoginFailures.delete(id)
 
           let geminiStarted: StartedGeminiLoginFlow
           try {
@@ -1935,8 +1943,11 @@ function registerChannelPackEndpoints(
               // 必定下发；这里仍按凭据本体如实判定，不写死 true。
               refreshable: isGeminiRefreshable(credential),
             })
+            pendingLoginFailures.delete(id)
           }).catch((error: unknown) => {
-            ctx.logger.warn(`[channel-pack] background ${GEMINI.id} login failed for ${id}: ${String(error)}`)
+            const reason = error instanceof Error ? error.message : String(error)
+            ctx.logger.warn(`[channel-pack] background ${GEMINI.id} login failed for ${id}: ${reason}`)
+            pendingLoginFailures.set(id, reason.slice(0, 500))
             // 登录失败：移除占位条目，避免留下无凭据的幽灵账号
             void pool.removeAccount(id).catch(() => {})
           })
@@ -2141,6 +2152,11 @@ function registerChannelPackEndpoints(
 
       case 'login.poll': {
         const req = payload as RpcPollLoginRequest
+        const failure = pendingLoginFailures.get(req.accountId)
+        if (failure !== undefined) {
+          pendingLoginFailures.delete(req.accountId)
+          return { ok: true, value: { done: true, success: false, error: failure } }
+        }
         const accounts = await pool.listAllAccounts()
         const entry = accounts.find((a) => a.id === req.accountId)
         if (!entry) return { ok: true, value: { done: false } }

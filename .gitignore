@@ -22,3 +22,7 @@ scripts/eac-vault-mint.mjs
 worker/.env
 c3099.txt
 stats.json
+
+# AOCI agent host integration (machine-bound; do not commit)
+.codex/config.toml
+.codex/config.toml.backup.*

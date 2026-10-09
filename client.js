@@ -2854,11 +2854,15 @@ window.__ModuleLoader__.load({
             if (!alive) return
             if (value?.done === true) {
               setLogin(null)
-              setNotice(t('chan.login.done').replace('{login}', value.login ?? ''))
-              onChanged()
-              void loadAccounts()
-              void loadCredits()
-              void loadBalances()
+              if (value.success === false) {
+                setNotice(t('chan.login.failed').replace('{reason}', value.error ?? '未知原因'))
+              } else {
+                setNotice(t('chan.login.done').replace('{login}', value.login ?? ''))
+                onChanged()
+                void loadAccounts()
+                void loadCredits()
+                void loadBalances()
+              }
             } else if (typeof value?.error === 'string' && value.error !== '') {
               setLogin(null)
               setNotice(t('chan.login.failed').replace('{reason}', value.error))

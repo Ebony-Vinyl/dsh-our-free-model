@@ -95,6 +95,36 @@ try {
   assert.equal(writes.length, 0, 'rejected RPCs leave credentials untouched')
   console.log('ok  generated pack: 13 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused')
 
+  // A failed browser callback must become a terminal, readable poll result.
+  // Before this regression check, the Gemini placeholder was removed and
+  // `login.poll` returned `{ done: false }` forever, so the UI could only show
+  // its ten-minute timeout even when Google had already rejected the exchange.
+  const fetchBeforeGemini = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    if (String(input).startsWith('https://oauth2.googleapis.com/token')) {
+      return new Response(JSON.stringify({ error: 'invalid_grant', error_description: 'fixture token exchange failed' }), {
+        status: 400, headers: { 'content-type': 'application/json' },
+      })
+    }
+    return savedFetch(input, init)
+  }
+  try {
+    const started = (await call('account.create', { provider: 'gemini' })).value
+    assert.ok(started.accountId && started.loginUrl)
+    const authorization = new URL(started.loginUrl)
+    const callback = new URL(authorization.searchParams.get('redirect_uri'))
+    callback.searchParams.set('state', authorization.searchParams.get('state'))
+    callback.searchParams.set('code', 'fixture-code')
+    const callbackResponse = await savedFetch(callback)
+    assert.equal(callbackResponse.status, 200)
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const failed = (await call('login.poll', { accountId: started.accountId, provider: 'gemini' })).value
+    assert.deepEqual(failed, { done: true, success: false, error: 'invalid_grant: fixture token exchange failed' })
+    console.log('ok  Gemini OAuth failure: login.poll returns a terminal reason instead of waiting forever')
+  } finally {
+    globalThis.fetch = fetchBeforeGemini
+  }
+
   let bundle
   const window = { __ModuleLoader__: { load: record => { bundle = record } } }
   const react = {
