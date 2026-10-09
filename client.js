@@ -1200,8 +1200,9 @@ window.__ModuleLoader__.load({
 .ofm_poolbadge.over{color:var(--dsw-alias-state-error-primary,#ec1313)}
 .ofm_poolbadge.over .ofm_pooldot{background:var(--dsw-alias-state-error-primary,#ec1313);animation:ofmpulse .8s ease-in-out infinite}
 @keyframes ofmpulse{50%{opacity:.3}}
-.ofm_poolstats{display:flex;gap:22px;flex-wrap:wrap}
-.ofm_poolstats .ofm_stat b{font-size:19px}
+.ofm_poolstats{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ofm_poolstats .ofm_stat{display:flex;align-items:baseline;gap:6px;padding:6px 12px}
+.ofm_poolstats .ofm_stat b{font-size:15px}
 .ofm_poolstats .ofm_stat.hot b{color:var(--dsw-alias-state-error-primary,#ec1313)}
 .ofm_poolmeta{display:flex;gap:8px 18px;align-items:baseline;flex-wrap:wrap;justify-content:space-between}
 @media (max-width:760px){.ofm_tank.xl{width:100%;max-width:340px}.ofm_tab{flex:1 1 auto;text-align:center}}
