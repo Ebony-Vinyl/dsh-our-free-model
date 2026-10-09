@@ -15,15 +15,15 @@
 .usage-day { flex: 1; min-width: 0; display: flex; align-items: center; flex-direction: column; gap: 10px; font-variant-numeric: tabular-nums; }
 .usage-day:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .usage-day-track { height: 154px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.usage-day-bar { width: 50%; max-width: 32px; background: #4c82f0; border-radius: 3px 3px 0 0; min-height: 2px; }
+.usage-day-bar { width: 50%; max-width: 32px; background: #4c82f0; border-radius: 3px 3px 0 0; min-height: 2px; transition: background 150ms var(--ease-out-expo); }
 .usage-day-bar.zero { background: #d8e2f5; }
 .usage-day span { color: #808793; font-size: 10px; white-space: nowrap; }
 .usage-window-empty { font-size: 12px; padding: 0 0 16px; }
 .usage-model-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 19px 0; }
 .usage-model-search { position: relative; min-width: 0; flex: 1; }
 .usage-model-search > svg { position: absolute; left: 12px; top: 12px; color: #7c8593; pointer-events: none; }
-.usage-model-search input { width: 100%; height: 40px; padding-left: 37px; font-size: 13px; }
-.usage-model-filters select { height: 40px; font-size: 12px; }
+.usage-model-search input { width: 100%; height: 40px; padding-left: 37px; font-size: 13px; transition: border-color 150ms var(--ease-out-expo), box-shadow 150ms var(--ease-out-expo); }
+.usage-model-filters select { height: 40px; font-size: 12px; transition: border-color 150ms var(--ease-out-expo), box-shadow 150ms var(--ease-out-expo); }
 .usage-model-scroll { overflow-x: auto; }
 .usage-model-table { min-width: 1000px; font-variant-numeric: tabular-nums; }
 .usage-model-table th { background: #f7f8fa; white-space: nowrap; font-size: 11px; }
@@ -33,7 +33,7 @@
 .usage-model-table td:first-child strong { display: block; font-weight: 550; font-size: 12px; }
 .usage-model-table td:first-child code { display: block; color: #7b8594; font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
 .usage-model-table td small { display: block; margin-top: 3px; font-size: 10px; color: #8a929e; }
-.usage-model-table tbody tr:hover { background: #f9fbff; }
+.usage-model-table tbody tr:hover { background: #f9fbff; transition: background 150ms var(--ease-out-expo); }
 .usage-empty { padding: 45px 15px; text-align: center; border-top: 1px solid var(--line); }
 .usage-empty > svg { color: #9ba4b3; margin: 0 auto 12px; }
 .usage-empty h3 { font-size: 14px; }

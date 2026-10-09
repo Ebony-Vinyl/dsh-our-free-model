@@ -9,14 +9,14 @@
 .settings-field > span, .settings-field > label { min-width: 0; }
 .settings-field strong { display: block; font-size: 13px; font-weight: 550; }
 .settings-field small { display: block; font-size: 12px; line-height: 1.7; color: var(--muted); margin-top: 5px; }
-.settings-toggle { appearance: none; width: 36px; height: 21px; flex-shrink: 0; border: 0; border-radius: 12px; background: #d1d5dd; position: relative; padding: 0; cursor: pointer; }
-.settings-toggle:after { content: ""; width: 15px; height: 15px; position: absolute; top: 3px; left: 3px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.settings-toggle { appearance: none; width: 36px; height: 21px; flex-shrink: 0; border: 0; border-radius: 12px; background: #d1d5dd; position: relative; padding: 0; cursor: pointer; transition: background 200ms var(--ease-out-expo); }
+.settings-toggle:after { content: ""; width: 15px; height: 15px; position: absolute; top: 3px; left: 3px; border-radius: 50%; background: #fff; transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 0 1px 2px rgba(32,35,41,0.08); }
 .settings-toggle:checked { background: #2563eb; }
 .settings-toggle:checked:after { transform: translateX(15px); }
 .settings-toggle:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
 .settings-fieldset:disabled .settings-toggle { cursor: wait; opacity: .6; }
 .settings-number { width: 180px; flex-shrink: 0; }
-.settings-number input { width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.settings-number input { width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; transition: border-color 150ms var(--ease-out-expo), box-shadow 150ms var(--ease-out-expo); }
 .settings-number input[aria-invalid=true] { border-color: #c84949; }
 .settings-field-error { font-size: 11px; color: #b63647; margin-top: 6px; }
 .settings-note { display: flex; align-items: flex-start; gap: 8px; background: #f5f8fd; color: #617089; padding: 12px; border-radius: 6px; font-size: 12px; margin-top: 16px; }
