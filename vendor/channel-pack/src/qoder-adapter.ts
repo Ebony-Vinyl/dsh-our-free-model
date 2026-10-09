@@ -1114,9 +1114,16 @@ export function qoderDisplayName(model: QoderFallbackModel, now: Date = new Date
     return `${model.name} · x${before}→x${effective}`
   }
 
-  // 窗口外用**原价**（有 promotion 时原价就是 before，而非采集到的折后价）；
+  // 窗口外：常驻标注闲时价，让用户随时可见「到点后能便宜到多少」
+  // （对标 connect-qoder 的「22点切换为闲时价 + 标注」体验）。
+  if (hasPromo) {
+    const effective = Number((before * discount).toFixed(4))
+    return `${model.name} · x${before} · 22点后x${effective}`
+  }
+
+  // 窗口外用**原价**（无 promotion 时原价就是 priceFactor）；
   // 窗口外显示折后价会让用户按折扣价预期、实际被按原价计费。
-  const price = hasPromo ? before : model.priceFactor
+  const price = model.priceFactor
   return price !== undefined ? `${model.name} · x${price}` : model.name
 }
 

@@ -2752,6 +2752,29 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener('ofm:channels', onEvent)
       }, [open, loadAccounts, loadModels])
 
+      // 闲时价（Qoder 22:00–08:00 UTC+8）切换时，让展开的模型列表自动翻面，
+      // 否则箭头/标注会卡在窗口边界前的旧价，直到手动重新展开。只在模型折叠
+      // 区打开时挂起，到最近的边界（08:00 或 22:00）触发一次刷新后重新挂起，
+      // 整轮最多一次/边界，开销极低。
+      useEffect(() => {
+        if (open !== 'models' || !rpc) return undefined
+        let timer
+        const arm = () => {
+          const local = new Date(Date.now() + 8 * 3600_000) // 以 UTC+8 计边界
+          const minutes = local.getUTCHours() * 60 + local.getUTCMinutes()
+          const dayMs = 24 * 60 * 60 * 1000
+          let best = Infinity
+          for (const t of [8 * 60, 22 * 60]) { // 窗口边界 08:00 / 22:00
+            let delta = (t - minutes) * 60_000 - local.getUTCSeconds() * 1000 - local.getUTCMilliseconds()
+            if (delta <= 0) delta += dayMs
+            best = Math.min(best, delta)
+          }
+          timer = setTimeout(() => { void loadModels(); arm() }, best + 1500)
+        }
+        arm()
+        return () => clearTimeout(timer)
+      }, [open, rpc, loadModels, channel.id])
+
       const toggle = async fold => {
         if (open === fold) { setOpen(null); return }
         setOpen(fold)
