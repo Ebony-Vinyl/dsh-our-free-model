@@ -333,3 +333,396 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f0f2f6; borde
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ==========================================================================
+   深色主题（夜）
+   ========================================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e9ecf1;
+  --muted: #9aa3af;
+  --line: rgba(255, 255, 255, 0.07);
+  --paper: #060708;
+  --dsw-alias-label-primary: #e9ecf1;
+  --dsw-alias-label-secondary: #9aa3af;
+  --dsw-alias-label-tertiary: #5f6875;
+  --dsw-alias-bg-layer-1: #12151a;
+  --dsw-alias-bg-layer-2: #0e1013;
+  --dsw-alias-bg-layer-3: #161a20;
+  --dsw-alias-border-l1: rgba(255, 255, 255, 0.07);
+  --dsw-alias-border-l2: rgba(255, 255, 255, 0.1);
+  --dsw-alias-state-success-primary: #3ecfa0;
+  --dsw-alias-state-error-primary: #e36a6a;
+  --dsw-alias-state-business-primary: #7c9eff;
+  --dsw-alias-accent-primary: #7c9eff;
+  --dsw-alias-accent-secondary: rgba(124, 158, 255, 0.12);
+  --green: #7c9eff;
+}
+
+/* ---------- 全局深色基底 ---------- */
+[data-theme="dark"] body { background: var(--paper); color: var(--ink); }
+[data-theme="dark"] body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(255,255,255,0.014), transparent 180px); pointer-events: none; }
+
+/* ---------- 侧边栏深色 ---------- */
+[data-theme="dark"] .sidebar { background: #0e1013; border-right-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .console-brand { color: var(--ink); }
+[data-theme="dark"] .console-brand small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .console-mark { color: var(--ink); }
+[data-theme="dark"] .console-mark span { color: var(--green); }
+[data-theme="dark"] .workspace-switch { border-color: rgba(255,255,255,0.045); color: var(--ink); }
+[data-theme="dark"] .workspace-switch small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .workspace-avatar { background: rgba(124,158,255,0.12); color: var(--green); }
+[data-theme="dark"] .nav-group-label { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .console-nav-item { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .console-nav-item:hover { background: rgba(255,255,255,0.03); color: var(--ink); }
+[data-theme="dark"] .console-nav-item.selected { background: rgba(124,158,255,0.12); color: var(--green); }
+[data-theme="dark"] .count-badge { background: rgba(124,158,255,0.16); color: var(--green); }
+[data-theme="dark"] .sidebar-support { border-top-color: rgba(255,255,255,0.045); color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .sidebar-support strong { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .sidebar-support button { color: var(--green); }
+[data-theme="dark"] .console-sidebar-footer { border-top-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .console-sidebar-footer > div { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .status-dot { background: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .status-dot.paused { background: #d39319; }
+
+/* ---------- 顶栏深色 ---------- */
+[data-theme="dark"] .topbar { background: #0e1013; border-bottom-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .console-breadcrumb { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .console-breadcrumb strong { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .console-topbar-status { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .topbar-divider { background: rgba(255,255,255,0.1); }
+
+/* ---------- 卡片深色 ---------- */
+[data-theme="dark"] .ui-card { background: #12151a; border-color: rgba(255,255,255,0.045); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4); }
+[data-theme="dark"] .ui-card:hover { background: #15181d; border-color: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 24px -12px rgba(0,0,0,0.55); }
+
+/* ---------- 标题深色 ---------- */
+[data-theme="dark"] h1, [data-theme="dark"] h2 { color: var(--ink); }
+[data-theme="dark"] .heading-eyebrow { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .dashboard-heading p, [data-theme="dark"] .page-heading p { color: var(--dsw-alias-label-secondary); }
+
+/* ---------- 指标卡深色 ---------- */
+[data-theme="dark"] .dashboard-metric > div > span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .dashboard-metric strong { color: var(--ink); }
+[data-theme="dark"] .dashboard-metric p { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .dashboard-metric svg { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 按钮深色 ---------- */
+[data-theme="dark"] .ui-button-default, [data-theme="dark"] .primary { background: var(--green); color: #0a0f1e; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 3px rgba(0,0,0,0.35); }
+[data-theme="dark"] .ui-button-default:hover, [data-theme="dark"] .primary:hover { background: #8cadff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 6px rgba(0,0,0,0.4); }
+[data-theme="dark"] .ui-button-default:active, [data-theme="dark"] .primary:active { box-shadow: inset 0 1px 2px rgba(0,0,0,0.2); transform: translateY(1px); }
+[data-theme="dark"] .ui-button-outline, [data-theme="dark"] .secondary { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.07); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04); }
+[data-theme="dark"] .ui-button-outline:hover, [data-theme="dark"] .secondary:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.12); }
+[data-theme="dark"] .ui-button-outline:active, [data-theme="dark"] .secondary:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0,0,0,0.15); }
+[data-theme="dark"] .ui-button-ghost { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ui-button-ghost:hover { background: rgba(255,255,255,0.05); color: var(--ink); }
+
+/* ---------- Badge 深色 ---------- */
+[data-theme="dark"] .ui-badge { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.045); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ui-badge-success { background: rgba(62,207,160,0.1); border-color: rgba(62,207,160,0.22); color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .ui-badge-warning { background: rgba(242,166,90,0.1); border-color: rgba(242,166,90,0.22); color: #f2a65a; }
+[data-theme="dark"] .ui-badge-blue { background: rgba(124,158,255,0.1); border-color: rgba(124,158,255,0.22); color: var(--green); }
+
+/* ---------- 输入框深色 ---------- */
+[data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea, [data-theme="dark"] .ui-input { background: #12151a; border-color: rgba(255,255,255,0.07); color: var(--ink); box-shadow: inset 0 1px 2px rgba(0,0,0,0.2); }
+[data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] input:hover, [data-theme="dark"] select:hover { border-color: rgba(255,255,255,0.12); }
+[data-theme="dark"] input:focus, [data-theme="dark"] select:focus, [data-theme="dark"] textarea:focus, [data-theme="dark"] .ui-input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(124,158,255,0.12), inset 0 1px 2px rgba(0,0,0,0.15); background: #161a20; }
+[data-theme="dark"] input, [data-theme="dark"] textarea { caret-color: var(--green); }
+[data-theme="dark"] select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239aa3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; appearance: none; -webkit-appearance: none; }
+
+/* ---------- 开关深色 ---------- */
+[data-theme="dark"] .settings-toggle { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.07); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); }
+[data-theme="dark"] .settings-toggle:after { background: var(--dsw-alias-label-secondary); box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
+[data-theme="dark"] .settings-toggle:checked { background: var(--green); border-color: var(--green); }
+[data-theme="dark"] .settings-toggle:checked:after { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3); }
+[data-theme="dark"] .settings-toggle:hover { border-color: rgba(255,255,255,0.14); }
+[data-theme="dark"] .settings-toggle:checked:hover { background: #8cadff; }
+[data-theme="dark"] .settings-toggle:focus-visible { box-shadow: 0 0 0 3px rgba(124,158,255,0.12); outline: none; }
+
+/* ---------- 通知条深色 ---------- */
+[data-theme="dark"] .notice { background: rgba(124,158,255,0.1); border-color: rgba(124,158,255,0.2); color: var(--green); }
+[data-theme="dark"] .test-mode-notice { background: rgba(242,166,90,0.1); border-color: rgba(242,166,90,0.22); color: #f2a65a; }
+[data-theme="dark"] .error-notice { background: rgba(227,106,106,0.1); border-color: rgba(227,106,106,0.25); color: var(--dsw-alias-state-error-primary); }
+
+/* ---------- 图表深色 ---------- */
+[data-theme="dark"] .dashboard-chart-bar { background: var(--green); }
+[data-theme="dark"] .dashboard-chart-bar.zero { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .chart-grid-lines span { border-color: rgba(255,255,255,0.04); }
+[data-theme="dark"] .dashboard-chart-column span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .chart-empty { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .chart-empty svg { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 用量页深色 ---------- */
+[data-theme="dark"] .usage-day-bar { background: #4c82f0; }
+[data-theme="dark"] .usage-day-bar.zero { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .usage-day span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-trend-chart { border-bottom-color: rgba(255,255,255,0.04); }
+[data-theme="dark"] .usage-model-table th { background: #161a20; color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-model-table td { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .usage-model-table td:first-child strong { color: var(--ink); }
+[data-theme="dark"] .usage-model-table td:first-child code { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-model-table td small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-model-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+[data-theme="dark"] .usage-scope { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-scope strong { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .usage-estimated { background: rgba(242,166,90,0.08); border-color: rgba(242,166,90,0.15); color: #f2a65a; }
+[data-theme="dark"] .usage-window-total strong { color: var(--ink); }
+[data-theme="dark"] .usage-window-total span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-scroll-hint { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-pagination { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-empty { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .usage-empty svg { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 模型页深色 ---------- */
+[data-theme="dark"] .model-summary { border-bottom-color: rgba(255,255,255,0.045); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .model-summary > span:last-child { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-search > svg { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-list-toolbar > span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-table { background: #12151a; border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .model-table-header { background: #161a20; color: var(--dsw-alias-label-tertiary); border-bottom-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .model-table-row { background: #12151a; border-bottom-color: rgba(255,255,255,0.03); }
+[data-theme="dark"] .model-table-row:hover, [data-theme="dark"] .model-table-row:focus-within { background: #15181d; }
+[data-theme="dark"] .model-identity strong { color: var(--ink); }
+[data-theme="dark"] .model-identity code { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-limits { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .model-limits small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-state > small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-feedback { color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .model-test-result { border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .model-test-heading strong { color: var(--ink); }
+[data-theme="dark"] .model-test-heading span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-test-result pre { background: #0a0c0e; color: #b7c5d8; border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .model-test-success strong { color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .model-test-error strong, [data-theme="dark"] .model-test-error > p { color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .model-empty { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-empty svg { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .model-empty h2 { color: var(--ink); }
+
+/* ---------- 设置页深色 ---------- */
+[data-theme="dark"] .settings-field { border-bottom-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .settings-field strong { color: var(--ink); }
+[data-theme="dark"] .settings-field small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .settings-card-heading > svg { color: var(--green); }
+[data-theme="dark"] .settings-note { background: rgba(124,158,255,0.08); color: var(--dsw-alias-label-secondary); border: 1px solid rgba(124,158,255,0.12); }
+[data-theme="dark"] .settings-footer > span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .settings-save-error { background: rgba(227,106,106,0.08); border-color: rgba(227,106,106,0.2); color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .settings-number input[aria-invalid=true] { border-color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .settings-field-error { color: var(--dsw-alias-state-error-primary); }
+
+/* ---------- API 接入页深色 ---------- */
+[data-theme="dark"] .quick-connect { border-color: rgba(124,158,255,0.15); }
+[data-theme="dark"] .quick-icon { background: rgba(124,158,255,0.1); color: var(--green); }
+[data-theme="dark"] .quick-endpoint { background: #0a0c0e; border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .quick-endpoint code { color: var(--green); }
+[data-theme="dark"] .connect-steps span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .connect-button { width: 100%; }
+[data-theme="dark"] .connection-footnote { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .copy-field input { background: #0a0c0e; color: var(--green); }
+[data-theme="dark"] .copy-feedback { color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .rotate-panel { border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .confirm-panel { background: #12151a; border-color: rgba(227,106,106,0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 48px -12px rgba(0,0,0,0.6); }
+
+/* ---------- 来源列表深色 ---------- */
+[data-theme="dark"] .source-row { border-bottom-color: rgba(255,255,255,0.03); }
+[data-theme="dark"] .source-row:hover { background: rgba(255,255,255,0.02); }
+[data-theme="dark"] .source-icon { background: rgba(255,255,255,0.04); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .source-row strong { color: var(--ink); }
+[data-theme="dark"] .source-row small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .source-row svg { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 运行检查深色 ---------- */
+[data-theme="dark"] .runtime-check { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .runtime-check svg { color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .runtime-check strong { color: var(--ink); }
+[data-theme="dark"] .runtime-empty { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .runtime-empty svg { color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .failure-list > div { border-bottom-color: rgba(255,255,255,0.03); }
+[data-theme="dark"] .failure-list span { color: var(--ink); }
+[data-theme="dark"] .failure-list small { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 渠道页深色 ---------- */
+[data-theme="dark"] .channel-summary-strip { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .channel-search > svg { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .channel-results-meta { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .provider-card { background: #12151a; border-color: rgba(255,255,255,0.045); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4); }
+[data-theme="dark"] .provider-card:hover { background: #15181d; border-color: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 24px -12px rgba(0,0,0,0.55); }
+[data-theme="dark"] .provider-card.dim { opacity: 0.6; }
+[data-theme="dark"] .provider-name { color: var(--ink); }
+[data-theme="dark"] .provider-vendor { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .provider-description { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .provider-stats { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .provider-stats b { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .provider-icon { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .provider-detail-sidebar { border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .detail-provider-link { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .detail-provider-link:hover { background: rgba(255,255,255,0.03); }
+[data-theme="dark"] .detail-provider-link.selected { background: rgba(124,158,255,0.12); color: var(--green); }
+[data-theme="dark"] .checkin-control { color: var(--dsw-alias-label-secondary); }
+
+/* ---------- 渠道页内嵌组件深色 ---------- */
+[data-theme="dark"] .ofm_root { color: var(--ink); }
+[data-theme="dark"] .ofm_hero { background: #0e1013; border-color: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.35); }
+[data-theme="dark"] .ofm_pill { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.045); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_pill.strong { color: var(--ink); border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .ofm_dot { background: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_dot.ok { background: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .ofm_dot.warn { background: #f2a65a; }
+[data-theme="dark"] .ofm_dot.err { background: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .ofm_card { background: #12151a; border-color: rgba(255,255,255,0.07); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4); }
+[data-theme="dark"] .ofm_card:hover { background: #15181d; border-color: rgba(255,255,255,0.1); transform: none; }
+[data-theme="dark"] .ofm_cardname { color: var(--ink); }
+[data-theme="dark"] .ofm_id { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_tag { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.045); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_chantag { border-color: rgba(255,255,255,0.07); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_metrics { color: var(--dsw-alias-label-tertiary); border-top-color: rgba(255,255,255,0.04); }
+[data-theme="dark"] .ofm_metrics b { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_note { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_panel { background: #0e1013; border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_badge { border-color: rgba(255,255,255,0.07); color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_badge.available { color: var(--dsw-alias-state-success-primary); border-color: rgba(62,207,160,0.22); }
+[data-theme="dark"] .ofm_badge.region-blocked { color: #f2a65a; border-color: rgba(242,166,90,0.22); }
+[data-theme="dark"] .ofm_badge.throttled, [data-theme="dark"] .ofm_badge.unavailable { color: var(--dsw-alias-state-error-primary); border-color: rgba(227,106,106,0.22); }
+[data-theme="dark"] .ofm_badge.unknown { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_sec_title { color: var(--ink); }
+[data-theme="dark"] .ofm_sec_hint { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_sechead { border-bottom-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .ofm_seg { background: #0e1013; border-color: rgba(255,255,255,0.05); }
+[data-theme="dark"] .ofm_seg button { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_seg button[aria-pressed="true"] { background: #161a20; color: var(--ink); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.25); }
+[data-theme="dark"] .ofm_tabs { background: #0e1013; border-color: rgba(255,255,255,0.05); }
+[data-theme="dark"] .ofm_tab { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_tab:hover { color: var(--ink); }
+[data-theme="dark"] .ofm_tab[data-on="true"] { color: var(--ink); background: #161a20; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.25); }
+[data-theme="dark"] .ofm_tab[data-on="true"] .ofm_tabnum { color: var(--green); }
+[data-theme="dark"] .ofm_tabnum { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_acct { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
+[data-theme="dark"] .ofm_acct:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .ofm_acctname { color: var(--ink); }
+[data-theme="dark"] .ofm_modelrow:hover { background: rgba(255,255,255,0.03); }
+[data-theme="dark"] .ofm_chip { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.045); color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ofm_chip:hover { border-color: rgba(255,255,255,0.14); color: var(--ink); }
+[data-theme="dark"] .ofm_cell { background: rgba(255,255,255,0.04); outline-color: rgba(255,255,255,0.04); }
+[data-theme="dark"] .ofm_cell.l1 { background: rgba(124,158,255,0.18); }
+[data-theme="dark"] .ofm_cell.l2 { background: rgba(124,158,255,0.34); }
+[data-theme="dark"] .ofm_cell.l3 { background: rgba(124,158,255,0.56); }
+[data-theme="dark"] .ofm_cell.l4 { background: #7c9eff; }
+[data-theme="dark"] .ofm_scale { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_skel::after { background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,0.05) 50%, transparent 80%); }
+[data-theme="dark"] .ofm_prog i { background: var(--green); }
+[data-theme="dark"] .ofm_switch i { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.07); box-shadow: inset 0 1px 3px rgba(0,0,0,0.2); }
+[data-theme="dark"] .ofm_switch i::after { background: var(--dsw-alias-label-secondary); box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1); }
+[data-theme="dark"] .ofm_switch[aria-checked="true"] i { background: var(--green); border-color: var(--green); }
+[data-theme="dark"] .ofm_switch[aria-checked="true"] i::after { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3); }
+[data-theme="dark"] .ofm_input, [data-theme="dark"] .ofm_root input, [data-theme="dark"] .ofm_root select, [data-theme="dark"] .ofm_root textarea { background: #12151a; border-color: rgba(255,255,255,0.07); color: var(--ink); box-shadow: inset 0 1px 2px rgba(0,0,0,0.15); }
+[data-theme="dark"] .ofm_input:focus, [data-theme="dark"] .ofm_root input:focus, [data-theme="dark"] .ofm_root select:focus, [data-theme="dark"] .ofm_root textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(124,158,255,0.12), inset 0 1px 2px rgba(0,0,0,0.1); }
+[data-theme="dark"] .ofm_table thead th { background: #161a20; color: var(--dsw-alias-label-tertiary); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
+[data-theme="dark"] .ofm_table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+[data-theme="dark"] .ofm_logfailed td { color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .ofm_logfailed:hover td { background: rgba(227,106,106,0.1); }
+[data-theme="dark"] .ofm_toast { background: #161a20; border-color: rgba(255,255,255,0.07); color: var(--ink); border-radius: 11px; box-shadow: 0 12px 40px -8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05); }
+[data-theme="dark"] .ofm_toast.warn { border-color: rgba(242,166,90,0.4); }
+[data-theme="dark"] .ofm_toast.err, [data-theme="dark"] .ofm_toast.error { border-color: rgba(227,106,106,0.4); }
+[data-theme="dark"] .ofm_toast.ok, [data-theme="dark"] .ofm_toast.success { border-color: rgba(62,207,160,0.35); }
+[data-theme="dark"] .ofm_modal { background: #12151a; border-color: rgba(255,255,255,0.07); border-radius: 15px; box-shadow: 0 24px 64px -16px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05); }
+[data-theme="dark"] .ofm_ann { background: #12151a; border-color: rgba(255,255,255,0.07); border-radius: 15px; }
+[data-theme="dark"] .ofm_annhead { background: rgba(255,255,255,0.02); border-bottom-color: rgba(255,255,255,0.05); }
+[data-theme="dark"] .ofm_scrim { background: rgba(0,0,0,0.5); }
+[data-theme="dark"] .ofm_glass { background: rgba(18,21,26,0.9); border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_newsitem { background: #12151a; border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_newsitem.unread { border-color: rgba(124,158,255,0.2); }
+[data-theme="dark"] .ofm_stat { background: #12151a; border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_step { border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_step[data-on="true"] { border-color: rgba(124,158,255,0.2); }
+[data-theme="dark"] .ofm_poolbadge { border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_level.urgent { border-color: rgba(227,106,106,0.3); }
+[data-theme="dark"] .ofm_tank { border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .ofm_tankglass { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14), inset 0 16px 30px rgba(255,255,255,0.05), inset 0 -10px 22px rgba(0,0,0,0.07); }
+[data-theme="dark"] .ofm_tankdeep { background: linear-gradient(180deg, transparent, rgba(3,4,6,0.4)); }
+[data-theme="dark"] .ofm_tankshine { background: linear-gradient(196deg, rgba(255,255,255,0.06) 0%, transparent 28%); }
+[data-theme="dark"] .ofm_bubble { background: rgba(255,255,255,0.35); }
+[data-theme="dark"] .ofm_fish svg { fill: rgba(255,255,255,0.7); }
+[data-theme="dark"] .ofm_starbtn { border-radius: 7px !important; background: rgba(124,158,255,0.08) !important; border-color: rgba(124,158,255,0.35) !important; color: #9db6ff !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) !important; }
+[data-theme="dark"] .ofm_starbtn:hover { background: #7c9eff !important; color: #0a0f1e !important; }
+[data-theme="dark"] .ofm_starbtn::after { display: none !important; }
+[data-theme="dark"] .ofm_newsdot { background: var(--green); }
+[data-theme="dark"] .ofm_pooldot { background: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .ofm_poolbadge.busy .ofm_pooldot { background: #f2a65a; }
+[data-theme="dark"] .ofm_poolbadge.over .ofm_pooldot { background: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .ofm_svg { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .ofm_root ::selection { background: rgba(124,158,255,0.25); color: #f0f4ff; }
+[data-theme="dark"] .ofm_root ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .ofm_root ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* ---------- 登录页深色 ---------- */
+[data-theme="dark"] .login-shell, [data-theme="dark"] .loading-screen { background: var(--paper); }
+[data-theme="dark"] .login-card { background: #12151a; border-color: rgba(255,255,255,0.045); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 24px -12px rgba(0,0,0,0.55); }
+[data-theme="dark"] .login-card .brand-mark { color: var(--ink); }
+[data-theme="dark"] .login-card .brand-mark span { color: var(--green); }
+[data-theme="dark"] .login-card .eyebrow { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .login-card h1 { color: var(--ink); }
+[data-theme="dark"] .login-card p, [data-theme="dark"] .login-card label { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .login-card small { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .login-card input { background: #12151a; box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); }
+[data-theme="dark"] .login-card input:focus { box-shadow: 0 0 0 3px rgba(124,158,255,0.12), inset 0 1px 2px rgba(0,0,0,0.2); background: #161a20; }
+[data-theme="dark"] .login-help { border-top-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .login-help h2 { color: var(--ink); }
+[data-theme="dark"] .login-help p { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .login-help summary { color: var(--green); }
+[data-theme="dark"] .login-help code { background: rgba(255,255,255,0.04); color: var(--green); }
+[data-theme="dark"] .login-help textarea { background: #0a0c0e; color: #b7c5d8; border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .login-help textarea:focus-visible { outline-color: var(--green); }
+[data-theme="dark"] #login-help-status { color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .error { color: var(--dsw-alias-state-error-primary) !important; }
+[data-theme="dark"] .loading-screen .brand-mark { color: var(--ink); }
+[data-theme="dark"] .loading-screen p { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 焦点环深色 ---------- */
+[data-theme="dark"] button:focus-visible, [data-theme="dark"] a:focus-visible, [data-theme="dark"] input:focus-visible, [data-theme="dark"] select:focus-visible, [data-theme="dark"] textarea:focus-visible, [data-theme="dark"] summary:focus-visible { outline-color: var(--green); }
+
+/* ---------- 滚动条深色 ---------- */
+[data-theme="dark"] * { scrollbar-color: rgba(255,255,255,0.16) transparent; }
+[data-theme="dark"] *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* ---------- footer 深色 ---------- */
+[data-theme="dark"] footer { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] footer span { color: var(--green); }
+
+/* ---------- 过渡恢复 ---------- */
+[data-theme="dark"] .console-nav-item, [data-theme="dark"] .ui-button, [data-theme="dark"] .primary, [data-theme="dark"] .secondary, [data-theme="dark"] .ui-card, [data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] .settings-toggle, [data-theme="dark"] .settings-toggle:after, [data-theme="dark"] .ofm_card, [data-theme="dark"] .ofm_acct, [data-theme="dark"] .ofm_chip, [data-theme="dark"] .source-row, [data-theme="dark"] .provider-card, [data-theme="dark"] .ofm_tab { transition-duration: 160ms; transition-timing-function: cubic-bezier(.32, .72, 0, 1); }
+
+/* ---------- 补充遗漏：图表容器背景深色 ---------- */
+[data-theme="dark"] .dashboard-chart { background: transparent; }
+[data-theme="dark"] .usage-panel .dashboard-chart { background: transparent; }
+[data-theme="dark"] .usage-total { color: var(--ink); }
+[data-theme="dark"] .usage-total span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .card-foot { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .card-foot button { color: var(--green); }
+[data-theme="dark"] .card-heading h2 { color: var(--ink); }
+[data-theme="dark"] .card-heading p { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .card-heading svg { color: var(--dsw-alias-label-tertiary); }
+
+/* ---------- 修复 chart-empty 白色背景遗漏 ---------- */
+[data-theme="dark"] .chart-empty { background: rgba(18, 21, 26, 0.85); color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .chart-empty span { color: var(--dsw-alias-label-tertiary); }
+[data-theme="dark"] .chart-empty small { color: var(--dsw-alias-label-tertiary); opacity: 0.7; }
+
+/* ---------- 补充遗漏的白色背景元素（第二轮修补） ---------- */
+[data-theme="dark"] .quick-connect { background: #12151a; border-top-color: var(--green); }
+[data-theme="dark"] .source-row:nth-child(3) .source-icon { background: rgba(155,91,137,0.12); color: #c88bbd; }
+[data-theme="dark"] .source-row:nth-child(2) .source-icon { background: rgba(62,207,160,0.1); color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] .source-row:nth-child(1) .source-icon { background: rgba(124,158,255,0.1); color: var(--green); }
+[data-theme="dark"] .ui-switch span { background: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .ui-switch:checked span { background: #fff; }
+[data-theme="dark"] .channel-filters button[aria-pressed=true] { background: #161a20; color: var(--ink); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.25); }
+[data-theme="dark"] .channel-error { background: rgba(227,106,106,0.08); border-color: rgba(227,106,106,0.2); color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .ofm_root .ofm_chanstate { background: rgba(62,207,160,0.08); color: var(--dsw-alias-state-success-primary); }
+[data-theme="dark"] pre { background: #0a0c0e; color: #b7c5d8; border-color: rgba(255,255,255,0.045); }
+[data-theme="dark"] .danger-button { background: rgba(227,106,106,0.1); border-color: rgba(227,106,106,0.25); color: var(--dsw-alias-state-error-primary); }
+[data-theme="dark"] .danger-button:hover { background: rgba(227,106,106,0.16); }
+[data-theme="dark"] .confirm-panel { background: rgba(227,106,106,0.08); border-color: rgba(227,106,106,0.35); }
+[data-theme="dark"] .text-button { color: var(--green); }
+[data-theme="dark"] .text-button:hover { color: #8cadff; }
+[data-theme="dark"] .spinning { animation: spin 1s linear infinite !important; }
+@keyframes spin { to { transform: rotate(360deg); } }
