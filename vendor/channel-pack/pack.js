@@ -62174,7 +62174,12 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
             // 根因。促销有独立语义（双段价格 / 多段时段 / 展示方式），不该借用
             // 通用字段，故在此显式透传 `promo`；缺失就不写键（与上面 isFree 同约定）。
             ...model.promo === void 0 ? {} : { promo: model.promo }
-          }))
+          })),
+          // 能力位：声明「本 pack 把 promo 搬过了上面的行投影」。消费端的兼容
+          // 分支（老 pack 只能从 description 取标注）**只在这个键缺失时**才跑。
+          // 不能靠数「有没有行缺 promo」判定——没有促销的行和 pack 不搬 promo
+          // 是两回事，按行样本判定等于每次展开 fold 都白付一次目录读取。
+          promoTransport: true
         };
         return { ok: true, value };
       }
