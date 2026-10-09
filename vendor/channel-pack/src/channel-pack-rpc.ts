@@ -29,7 +29,7 @@ import {
   setGatewayDesiredEnabled,
 } from './openai-gateway/runtime.js'
 import type { CodeArtsAuth } from './service.js'
-import type { CodeArtsCredential } from './types.js'
+import type { CodeArtsCredential, ModelRowPromo } from './types.js'
 import type { BuddyAuth } from './buddy-auth.js'
 import type { LobsteraiAuth } from './lobsterai-auth.js'
 import type { QoderAuth } from './qoder-auth.js'
@@ -895,9 +895,25 @@ export function registerChannelPackRpc(
  * 「显示列表」所需的最小适配器接口：能给出**不套用户黑名单**的完整目录。
  *
  * 只声明用到的方法（结构化类型），避免让本模块依赖五个具体适配器类。
+ *
+ * ⚠️ `promo` 是**促销专用**的独立字段（结构见 `types.ts` 的 `ModelRowPromo`，
+ * 生产端在 `buddy.ts` 的 `PromotionBadge`）：设置页据此画促销胶囊，故它必须
+ * 从这里一路搬到 `model.list` 的响应里。用结构化类型（而非 import 具体适配器
+ * 类型）保持本模块与各适配器解耦——任何适配器只要能给出这个形状即可。
  */
 export interface ModelCatalogSource {
-  listAllModels(): readonly { id: string; name: string; isFree?: boolean }[]
+  listAllModels(): readonly { id: string; name: string; isFree?: boolean; promo?: ModelRowPromo }[]
+  /**
+   * 可选的"确保目录已加载"钩子：`model.list` 在读行**之前**会 await 它一次。
+   *
+   * 为什么需要：`listAllModels()` 按契约是同步的，只能读已加载的目录；若适配器的
+   * 静态兜底表**不含**倍率/促销（TRAE 就是），冷启动时设置页会拿到没有促销的行，
+   * 用户看不到官方客户端明明有的徽标。
+   *
+   * 实现方应当**幂等且不抛**（失败即返回，由 `listAllModels()` 退回现有目录）。
+   * 不实现该钩子 = 维持既有同步语义（buddy / qoder 的静态表自带促销，无需它）。
+   */
+  ensureCatalog?(): Promise<void>
 }
 
 /**
@@ -3455,8 +3471,20 @@ function registerChannelPackEndpoints(
         // （DSH 的 `ctx.llm` 只保证 `listModels`，不透传自定义方法）。
         // 对话框模型选择器读的仍是过滤后的 `listModels`，可见性行为完全不变。
         const catalogSource = modelAdapters?.[req.provider]
+        // ⚠️ **先给适配器一次"把目录拉起来"的机会**（可选钩子）：`listAllModels()`
+        // 是**同步**的（契约如此，`provider.status` 等热路径也靠它），故它只能读
+        // 已加载的目录。对 TRAE 这类**静态兜底表不含倍率/促销**的适配器，冷启动时
+        // 它返回的是没有促销的静态行 —— 设置页于是看不到徽标，而用户明明在官方
+        // 客户端看得到（实测复现：冷读 0 个 promo，拉取后 5 个）。
+        // buddy / qoder 不受影响是因为它们的**产品静态表自带** `promotion`/`credits`。
+        // 钩子缺失或抛错都只降级为"用现有目录"，绝不让设置页打不开。
+        if (typeof catalogSource?.ensureCatalog === 'function') {
+          try {
+            await catalogSource.ensureCatalog()
+          } catch { /* 目录加载失败：用当前已加载的（可能是静态表） */ }
+        }
         const all = catalogSource?.listAllModels()
-        let catalog: Array<{ id: string; name: string; isFree?: boolean }>
+        let catalog: Array<{ id: string; name: string; isFree?: boolean; promo?: ModelRowPromo }>
         if (all !== undefined) {
           catalog = [...all]
           // 全量目录里若仍有黑名单命中却缺失者，一并补上（保底，正常不会发生）。
@@ -3504,7 +3532,18 @@ function registerChannelPackEndpoints(
             // 模型列表按「计费/来源」分组，把「适配器没报」当成「按量计费」是
             // 保守归组，但字段本身仍保持「未知」语义（与全仓约定一致）。
             ...model.isFree === undefined ? {} : { isFree: model.isFree },
+            // ⚠️ **促销结构必须原样搬过去**（2026-10-09）：这里过去只搬
+            // id/name/disabled/dead/isFree，适配器写下的任何其它字段都会在拼行时
+            // 消失——这正是「设置页拿不到促销标注、只能绕道宿主的 description」的
+            // 根因。促销有独立语义（双段价格 / 多段时段 / 展示方式），不该借用
+            // 通用字段，故在此显式透传 `promo`；缺失就不写键（与上面 isFree 同约定）。
+            ...model.promo === undefined ? {} : { promo: model.promo },
           })),
+          // 能力位：声明「本 pack 把 promo 搬过了上面的行投影」。消费端的兼容
+          // 分支（老 pack 只能从 description 取标注）**只在这个键缺失时**才跑。
+          // 不能靠数「有没有行缺 promo」判定——没有促销的行和 pack 不搬 promo
+          // 是两回事，按行样本判定等于每次展开 fold 都白付一次目录读取。
+          promoTransport: true,
         }
         return { ok: true, value }
       }
