@@ -795,3 +795,204 @@ tbody tr:hover td { background: linear-gradient(90deg, rgba(124,158,255,0.05), r
 /* ---------- 16. 登录卡玻璃高光 ---------- */
 .login-card { box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), var(--shadow-lg); }
 .login-card .primary { margin-top: 8px; }
+
+/* ==========================================================================
+   哑光重构层（第三轮 · 去塑料感）
+   方向：Linear/Raycast 式哑光克制。去光晕、去渐变字、去呼吸动画，
+        靠真实光照层次 + 排版层级 + 留白节奏建立高级感。
+   ========================================================================== */
+
+:root {
+  /* 哑光表面分级：靠 2% 亮度差分层，不靠边框发光 */
+  --m-bg: #060708;
+  --m-panel: #0e1013;
+  --m-card: #12151a;
+  --m-card-2: #161a20;
+  --m-line: rgba(255, 255, 255, 0.07);
+  --m-line-soft: rgba(255, 255, 255, 0.045);
+  --m-text: #e9ecf1;
+  --m-text-2: #9aa3af;
+  --m-text-3: #5f6875;
+  --m-accent: #7c9eff;
+  --m-accent-dim: rgba(124, 158, 255, 0.12);
+  /* 真实光照：顶部受光 + 底部微阴影 */
+  --m-light-top: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --m-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --m-shadow-lift: 0 8px 24px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- 全局哑光底色 ---------- */
+body { background: var(--m-bg); }
+/* 去掉彩色氛围光斑，改极微弱的顶部中性受光 */
+body::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.014), transparent 180px);
+}
+
+/* ---------- 排版驱动（高级感核心） ---------- */
+body { font-size: 13px; letter-spacing: -0.005em; }
+h1 { font-size: 25px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.2; }
+h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.015em; }
+.eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.22em; color: var(--m-text-3); text-transform: uppercase; }
+.page-heading p { font-size: 12.5px; color: var(--m-text-2); }
+.muted, .footnote { color: var(--m-text-3); }
+
+/* ---------- 去渐变文字，靠字重/字号 ---------- */
+.metric-card strong {
+  background: none;
+  -webkit-text-fill-color: var(--m-text);
+  color: var(--m-text);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.03em;
+}
+
+/* ---------- 去彩色光晕与呼吸动画（塑料感根源） ---------- */
+*, *::before, *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+/* 单独恢复真正需要的入场与 hover 过渡（在下方重定义） */
+
+/* ---------- 卡片哑光真实层次 ---------- */
+.panel, .metric-card, .model-card, .welcome-panel, .confirm-panel {
+  background: var(--m-card);
+  border: 1px solid var(--m-line-soft);
+  box-shadow: var(--m-light-top), var(--m-shadow);
+}
+/* 删掉双圈里的彩色渐变边框光 */
+.panel::before, .metric-card::before, .model-card::before, .welcome-panel::before {
+  background: none;
+  -webkit-mask: none;
+  mask: none;
+}
+.metric-card::after { display: none; }  /* 删顶部彩色流光 */
+.panel:hover, .metric-card:hover, .model-card:hover {
+  background: var(--m-card-2);
+  border-color: var(--m-line);
+  box-shadow: var(--m-light-top), var(--m-shadow-lift);
+  transform: none;  /* 无上浮，哑光克制 */
+}
+.metric-card:hover strong { transform: none; }
+.metric-card:hover .channel-mark, .model-card:hover .channel-mark { box-shadow: none; transform: none; }
+
+/* ---------- 导航哑光 + 选中层次 ---------- */
+.sidebar { background: var(--m-panel); border-right: 1px solid var(--m-line-soft); }
+.nav-item { color: var(--m-text-2); }
+.nav-item:hover { background: rgba(255, 255, 255, 0.03); color: var(--m-text); }
+.nav-item.active { background: var(--m-accent-dim); color: var(--m-accent); }
+.nav-item.active::before { background: var(--m-accent); box-shadow: none; }
+.nav-item.active .ic { color: var(--m-accent); filter: none; }
+.nav-item::after { display: none; }  /* 删导航扫光 */
+.nav-item.active .nav-count { background: rgba(124, 158, 255, 0.16); color: var(--m-accent); }
+
+/* ---------- 字标/状态点去呼吸 ---------- */
+.brand-mark span, .topbar-right .dot, .local-status .dot, .gateway-node { animation: none !important; }
+.dot { box-shadow: none; }
+
+/* ---------- 顶栏哑光 ---------- */
+.topbar { background: var(--m-panel); backdrop-filter: none; border-bottom: 1px solid var(--m-line-soft); }
+
+/* ---------- 按钮哑光物理 ---------- */
+.primary {
+  background: var(--m-accent);
+  color: #0a0f1e;
+  box-shadow: none;
+}
+.primary:hover { background: #8cadff; box-shadow: none; transform: none; }
+.primary::after { display: none; }
+.secondary { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--m-line); color: var(--m-text); }
+.secondary:hover { background: rgba(255, 255, 255, 0.07); }
+.danger-button { background: rgba(227, 106, 106, 0.1); border: 1px solid rgba(227, 106, 106, 0.25); color: var(--danger); }
+.danger-button:hover { background: rgba(227, 106, 106, 0.16); }
+.primary:active, .secondary:active, .danger-button:active { transform: scale(0.98); }
+
+/* ---------- 欢迎面板：哑光 + 真实受光 ---------- */
+.welcome-panel {
+  background: var(--m-card);
+  border: 1px solid var(--m-line-soft);
+  box-shadow: var(--m-light-top), var(--m-shadow-lift);
+}
+.pill { background: rgba(62, 207, 160, 0.1); border: 1px solid rgba(62, 207, 160, 0.22); color: var(--success); }
+.endpoint { background: #0a0c0e; border: 1px solid var(--m-line); box-shadow: none; }
+.endpoint code { color: var(--m-accent); }
+
+/* ---------- gateway-node 哑光（去呼吸光晕） ---------- */
+.gateway-node {
+  background: var(--m-card-2);
+  border: 1px solid var(--m-line);
+  box-shadow: var(--m-light-top), var(--m-shadow-lift);
+}
+.orbit { border-color: rgba(255, 255, 255, 0.08); animation: none !important; }
+.orbit::after { display: none; }  /* 删轨道光点 */
+.orbit-one, .orbit-two { animation: none !important; }
+.satellite { background: var(--m-card-2); border: 1px solid var(--m-line); box-shadow: var(--m-shadow); color: var(--m-text-2); }
+
+/* ---------- 输入框哑光聚焦 ---------- */
+input, select { background: var(--m-card); border: 1px solid var(--m-line); }
+input:focus, select:focus, textarea:focus {
+  border-color: var(--m-accent);
+  box-shadow: 0 0 0 3px var(--m-accent-dim);
+  background: var(--m-card-2);
+}
+
+/* ---------- 图表哑光 ---------- */
+.chart-bar { background: var(--m-accent); box-shadow: none; }
+.chart-bar::after { display: none; }
+.chart-bar.chart-zero { background: rgba(255, 255, 255, 0.08); }
+
+/* ---------- 模型卡 channel-mark 哑光 ---------- */
+.channel-mark { background: var(--m-accent-dim); color: var(--m-accent); border: 1px solid rgba(124, 158, 255, 0.2); box-shadow: none; }
+.model-badges span { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--m-line-soft); color: var(--m-text-2); }
+.availability::before { box-shadow: none !important; }
+
+/* ---------- 滑块开关哑光 ---------- */
+.switch { background: rgba(255, 255, 255, 0.1); border: 1px solid var(--m-line); }
+.switch:checked { background: var(--m-accent); border-color: var(--m-accent); }
+.switch::after { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important; }
+.switch:checked::after { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important; }
+
+/* ---------- 表格哑光 ---------- */
+th { color: var(--m-text-3); border-bottom: 1px solid var(--m-line); }
+tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
+tbody tr:hover { background: none; }
+
+/* ---------- 通知条哑光 ---------- */
+.notice { background: var(--m-accent-dim); border: 1px solid rgba(124, 158, 255, 0.2); color: var(--m-accent); }
+.test-mode-notice { background: rgba(242, 166, 90, 0.1); border-color: rgba(242, 166, 90, 0.22); color: var(--warn); }
+.error-notice { background: rgba(227, 106, 106, 0.1); border-color: rgba(227, 106, 106, 0.25); color: var(--danger); }
+
+/* ---------- 登录卡哑光 ---------- */
+.login-card { background: var(--m-card); border: 1px solid var(--m-line-soft); box-shadow: var(--m-light-top), var(--m-shadow-lift); }
+
+/* ---------- 克制的入场（去模糊、更快、更小位移） ---------- */
+.page > * { animation: mFadeUp 320ms cubic-bezier(.32, .72, 0, 1) both !important; }
+.page > *:nth-child(2) { animation-delay: 50ms !important; }
+.page > *:nth-child(3) { animation-delay: 100ms !important; }
+.page > *:nth-child(4) { animation-delay: 150ms !important; }
+.page > *:nth-child(5) { animation-delay: 200ms !important; }
+@keyframes mFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.notice { animation: mFadeUp 200ms cubic-bezier(.32,.72,0,1) !important; }
+.page { animation: none !important; }
+
+/* ---------- 焦点环保留（可达性） ---------- */
+:focus-visible { outline: 2px solid var(--m-accent); outline-offset: 2px; }
+
+/* ---------- 排版精修（哑光层的最后一公里） ---------- */
+/* 大标题更突出，与正文拉开层级 */
+.page-heading h1 { font-size: 27px; font-weight: 650; letter-spacing: -0.035em; }
+/* 指标卡：标签更小更灰、数字更优雅、副标题更弱 */
+.metric-card > span { font-size: 11px; color: var(--m-text-3); font-weight: 500; letter-spacing: 0.01em; }
+.metric-card strong { font-size: 32px; font-weight: 600; margin: 10px 0 4px; }
+.metric-card small { font-size: 10px; color: var(--m-text-3); }
+/* 破指标卡等宽对称：间距更大，卡片更透气 */
+.metric-grid { gap: 18px; }
+.metric-card { padding: 22px 24px; }
+/* 模型卡更挺：标题字重、ID更弱 */
+.model-card-header h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+/* 面板标题与内容间距更舒服 */
+.panel h2 { letter-spacing: -0.02em; }
+/* 设置项标题更挺 */
+.setting-row strong { font-weight: 550; letter-spacing: -0.01em; }
+/* 表格数字右对齐等宽，更专业 */
+td { font-weight: 500; }
+td:first-child { font-weight: 550; }

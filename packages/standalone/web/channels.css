@@ -1016,3 +1016,339 @@
   .ofm_root .ofm_hero::after{animation:none}
   .ofm_toast,.ofm_root .ofm_ann,.ofm_root .ofm_modal,.ofm_root .ofm_scrim{animation:none}
 }
+
+/* ================================================================
+   哑光克制覆盖层（子智能体 F · 第三轮追加）
+   目标：去塑料感 → Linear/Raycast 式哑光高级感（做减法）
+   原则：只追加，同优先级靠源码顺序胜出；不改前面任何规则（深色底保留）
+   令牌：底 #050607 / panel #0e1013 / card #12151a / 边框 rgba(255,255,255,.07)
+        文字 #e9ecf1 / #9aa3af / #5f6875 / accent #7c9eff（仅交互）
+        状态 #3ecfa0 / #f2a65a / #e36a6a（仅小面积点/徽标，不发光）
+   动画：仅 transform/opacity，时长 ≤200ms；装饰性无限动画全部关停
+   ================================================================ */
+
+/* ---------- M0) 哑光表面令牌：把表面分级收敛到 2% 亮度差 ---------- */
+.ofm_root{
+  --dsw-alias-bg-layer-1:#0e1013;
+  --dsw-alias-bg-layer-2:#12151a;
+  --dsw-alias-bg-layer-3:#15181d;
+  --dsw-alias-border-l1:rgba(255,255,255,.05);
+  --dsw-alias-border-l2:rgba(255,255,255,.07);
+}
+
+/* ---------- M1) 去全局彩色光晕 / 极光 / 扫光 / 呼吸 ---------- */
+.ofm_root .ofm_aurora,
+.ofm_root .ofm_aurora i{display:none}
+.ofm_root .ofm_scanline{display:none}
+.ofm_root .ofm_tankrays{animation:none;opacity:0;mix-blend-mode:normal}
+.ofm_root .ofm_wave{animation:none;opacity:.35;filter:none}
+.ofm_root .ofm_wave.w2{animation:none;opacity:.22}
+
+/* ---------- M2) Hero 区：静态顶部受光线 + 哑光渐变，克制 ---------- */
+.ofm_root .ofm_hero{
+  background:linear-gradient(170deg,#14171c 0%,#0e1013 55%,#0b0d10 100%);
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 8px 24px -12px rgba(0,0,0,.5);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.ofm_root .ofm_hero::before{display:none;animation:none}
+.ofm_root .ofm_hero::after{
+  content:"";position:absolute;left:8%;right:8%;top:0;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);
+  animation:none;filter:none;opacity:1;
+}
+
+/* ---------- M3) 卡片 / 面板：表面亮度差分层，不靠边框发光 ---------- */
+.ofm_root .ofm_card,.ofm_root .ofm_newsitem,.ofm_root .ofm_stat{
+  background:#12151a;
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+  transition:background .15s ease,border-color .15s ease;
+}
+.ofm_root .ofm_card:hover,.ofm_root .ofm_acct:hover,.ofm_root .ofm_stat:hover{
+  background:#15181d;
+  border-color:rgba(255,255,255,.1);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+  transform:none;
+}
+.ofm_root .ofm_panel{
+  background:#0e1013;
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 1px 2px rgba(0,0,0,.4);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.ofm_root .ofm_panel:hover{border-color:rgba(255,255,255,.09)}
+.ofm_root .ofm_glass{
+  background:rgba(18,21,26,.9);
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+}
+
+/* ---------- M4) 13 渠道卡：品牌色只留 logo 与小徽标点，去卡片光晕 ---------- */
+.ofm_root .ofm_chan{
+  background:#12151a;
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+  transition:background .15s ease,border-color .15s ease;
+}
+.ofm_root .ofm_chan::before{
+  content:"";position:absolute;left:0;right:0;top:0;height:2px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--chan-accent,#7c9eff) 55%,transparent),transparent 72%);
+  opacity:.55;
+}
+.ofm_root .ofm_chan::after{display:none}
+.ofm_root .ofm_chan:hover{
+  background:#15181d;
+  border-color:rgba(255,255,255,.12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+  transform:none;
+}
+.ofm_root .ofm_chanlogo{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 2px rgba(0,0,0,.4);
+  transition:none;
+}
+.ofm_root .ofm_chan:hover .ofm_chanlogo{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 1px 2px rgba(0,0,0,.4);
+}
+
+/* ---------- M5) 按钮：哑光实色，按压 scale(.98)，150ms ---------- */
+.ofm_root .ofm_btn{
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.09);
+  color:#e9ecf1;
+  box-shadow:none;
+  transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease;
+}
+.ofm_root .ofm_btn:hover:not(:disabled){
+  background:rgba(255,255,255,.08);
+  border-color:rgba(255,255,255,.14);
+  box-shadow:none;
+  transform:none;
+}
+.ofm_root .ofm_btn:active:not(:disabled){transform:scale(.98);box-shadow:none}
+.ofm_root .ofm_btn:disabled{opacity:.38;box-shadow:none}
+.ofm_root .ofm_btn.primary{
+  background:#7c9eff;
+  border-color:#7c9eff;
+  color:#0a0f1e;
+  box-shadow:none;
+}
+.ofm_root .ofm_btn.primary:hover:not(:disabled){
+  background:#8cabff;
+  border-color:#8cabff;
+  box-shadow:none;
+}
+.ofm_root .ofm_btn.ghost{background:transparent;box-shadow:none}
+.ofm_root .ofm_minibtn{
+  background:rgba(255,255,255,.04);
+  border-color:rgba(255,255,255,.08);
+  color:#9aa3af;
+  box-shadow:none;
+  transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease;
+}
+.ofm_root .ofm_minibtn:hover:not(:disabled){
+  background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.13);
+  color:#e9ecf1;
+  box-shadow:none;
+  transform:none;
+}
+.ofm_root .ofm_minibtn:active:not(:disabled){transform:scale(.98)}
+.ofm_root .ofm_minibtn.danger:hover:not(:disabled){
+  background:rgba(227,106,106,.1);
+  border-color:rgba(227,106,106,.4);
+  color:#e36a6a;
+  box-shadow:none;
+}
+
+/* ---------- M6) 开关：去发光，哑光轨道 ---------- */
+.ofm_root .ofm_switch i{
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.3);
+  transition:background .15s ease,border-color .15s ease;
+}
+.ofm_root .ofm_switch i::after{
+  background:#8a93a1;
+  box-shadow:0 1px 2px rgba(0,0,0,.35);
+  transition:transform .2s cubic-bezier(.2,.8,.2,1),background .15s ease;
+}
+.ofm_root .ofm_switch:hover i{border-color:rgba(255,255,255,.18)}
+.ofm_root .ofm_switch[aria-checked="true"] i{
+  background:#7c9eff;
+  border-color:#7c9eff;
+  box-shadow:none;
+}
+.ofm_root .ofm_switch[aria-checked="true"] i::after{
+  background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.3);
+}
+
+/* ---------- M7) 输入框：focus 只留哑光描边环，无外发光 ---------- */
+.ofm_root .ofm_input,.ofm_root input,.ofm_root select,.ofm_root textarea{
+  background:rgba(255,255,255,.04) !important;
+  border:1px solid rgba(255,255,255,.1);
+  color:#e9ecf1;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.25);
+  caret-color:#7c9eff;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+.ofm_root .ofm_input:focus,.ofm_root input:focus,.ofm_root select:focus,.ofm_root textarea:focus{
+  outline:none;
+  border-color:rgba(124,158,255,.6);
+  box-shadow:0 0 0 3px rgba(124,158,255,.12),inset 0 1px 2px rgba(0,0,0,.25);
+}
+
+/* ---------- M8) 热力图：哑光递进，去发光 ---------- */
+.ofm_root .ofm_cell{transition:background .15s ease}
+.ofm_root .ofm_cell.l1{background:rgba(124,158,255,.18);box-shadow:none}
+.ofm_root .ofm_cell.l2{background:rgba(124,158,255,.34);box-shadow:none}
+.ofm_root .ofm_cell.l3{background:rgba(124,158,255,.56);box-shadow:none}
+.ofm_root .ofm_cell.l4{background:#7c9eff;box-shadow:none}
+.ofm_root .ofm_cell:hover{
+  transform:none;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);
+  z-index:1;
+}
+
+/* ---------- M9) 表格：哑光行提亮，去 hover 光带 ---------- */
+.ofm_root .ofm_table thead th{
+  background:#0e1013;
+  color:#5f6875;
+  box-shadow:0 1px 0 rgba(255,255,255,.07);
+}
+.ofm_root .ofm_table tbody tr:hover td{
+  background:rgba(255,255,255,.03);
+}
+.ofm_root .ofm_logfailed td{
+  background:rgba(227,106,106,.06);
+  box-shadow:inset 2px 0 0 rgba(227,106,106,.45);
+}
+.ofm_root .ofm_logfailed:hover td{background:rgba(227,106,106,.1)}
+
+/* ---------- M10) 状态徽标 / 点：哑光实色，不发光 ---------- */
+.ofm_root .ofm_dot{transition:none}
+.ofm_root .ofm_dot.ok{background:#3ecfa0;box-shadow:none}
+.ofm_root .ofm_dot.warn{background:#f2a65a;box-shadow:none}
+.ofm_root .ofm_dot.err{background:#e36a6a;box-shadow:none}
+.ofm_root .ofm_badge.available{box-shadow:none}
+.ofm_root .ofm_badge.region-blocked{box-shadow:none}
+.ofm_root .ofm_badge.throttled,.ofm_root .ofm_badge.unavailable{box-shadow:none}
+.ofm_root .ofm_pill.strong{border-color:rgba(124,158,255,.35);box-shadow:none}
+.ofm_root .ofm_level.urgent{box-shadow:none}
+.ofm_root .ofm_newsdot{box-shadow:none}
+.ofm_root .ofm_step[data-on="true"]{box-shadow:none}
+.ofm_root .ofm_poolbadge.busy .ofm_pooldot,.ofm_root .ofm_poolbadge.over .ofm_pooldot{animation:none}
+
+/* ---------- M11) 进度条：去发光，哑光渐变 ---------- */
+.ofm_root .ofm_prog i{box-shadow:none}
+.ofm_root .ofm_skel::after{background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.05) 50%,transparent 80%)}
+
+/* ---------- M12) tab / seg：哑光填充指示器，去发光 ---------- */
+.ofm_root .ofm_tabglider{
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:none;
+  transition:transform .2s cubic-bezier(.2,.8,.2,1),width .2s cubic-bezier(.2,.8,.2,1),height .2s cubic-bezier(.2,.8,.2,1);
+}
+.ofm_root .ofm_tab{transition:color .15s ease}
+.ofm_root .ofm_tab[data-on="true"]{color:#e9ecf1;text-shadow:none}
+.ofm_root .ofm_tab[data-on="true"] .ofm_tabnum{color:#7c9eff}
+.ofm_root .ofm_seg{
+  background:rgba(255,255,255,.03);
+  box-shadow:none;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.ofm_root .ofm_seg button[aria-pressed="true"]{
+  background:rgba(255,255,255,.07);
+  color:#e9ecf1;
+  box-shadow:none;
+}
+
+/* ---------- M13) EAC 水位缸：哑光液面，去波光/发光/波光滤镜 ---------- */
+.ofm_root .ofm_tank{
+  background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(5,6,7,.4));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.07),
+    inset 0 -14px 24px -14px rgba(0,0,0,.5),
+    0 1px 2px rgba(0,0,0,.4);
+}
+.ofm_root .ofm_tank.xl{
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.08),
+    inset 0 -16px 28px -16px rgba(0,0,0,.55),
+    0 8px 24px -12px rgba(0,0,0,.5);
+}
+.ofm_root .ofm_tankglass{
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.09),
+    inset 0 12px 24px rgba(255,255,255,.03),
+    inset 0 -10px 22px rgba(0,0,0,.25);
+}
+.ofm_root .ofm_tank.ok .ofm_tankwater{
+  background:linear-gradient(180deg,rgba(124,158,255,.75) 0%,rgba(96,124,200,.85) 100%);
+  box-shadow:none;
+}
+.ofm_root .ofm_tank.busy .ofm_tankwater{
+  background:linear-gradient(180deg,rgba(242,166,90,.78),rgba(206,128,58,.88));
+  box-shadow:none;
+}
+.ofm_root .ofm_tank.over .ofm_tankwater{
+  background:linear-gradient(180deg,rgba(227,106,106,.8),rgba(186,70,70,.9));
+  box-shadow:none;
+}
+.ofm_root .ofm_tankdeep{background:linear-gradient(180deg,transparent,rgba(3,4,6,.4))}
+.ofm_root .ofm_tankshine{background:linear-gradient(196deg,rgba(255,255,255,.06) 0%,transparent 28%)}
+.ofm_root .ofm_bubble{box-shadow:none;background:rgba(255,255,255,.35)}
+.ofm_root .ofm_fish svg{fill:rgba(255,255,255,.7)}
+
+/* ---------- M14) toast / modal / 公告：哑光深色面，去彩色光晕 ---------- */
+.ofm_root .ofm_toast{
+  box-shadow:0 14px 40px -8px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.ofm_root .ofm_toast.warn{border-color:rgba(242,166,90,.4);box-shadow:0 14px 40px -8px rgba(0,0,0,.7)}
+.ofm_root .ofm_toast.err,.ofm_root .ofm_toast.error{border-color:rgba(227,106,106,.4);box-shadow:0 14px 40px -8px rgba(0,0,0,.7)}
+.ofm_root .ofm_toast.ok,.ofm_root .ofm_toast.success{border-color:rgba(62,207,160,.35);box-shadow:0 14px 40px -8px rgba(0,0,0,.7)}
+.ofm_root .ofm_newsitem.unread{
+  border-color:rgba(124,158,255,.3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.4);
+}
+.ofm_root .ofm_annhead{background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.05)}
+.ofm_root .ofm_starbtn{
+  border-color:rgba(124,158,255,.35);
+  background:rgba(124,158,255,.08);
+  color:#9db6ff;
+  box-shadow:none;
+}
+.ofm_root .ofm_starbtn:hover{
+  background:#7c9eff;
+  color:#0a0f1e;
+  box-shadow:none;
+}
+
+/* ---------- M15) 账号池 / 模型行 / 芯片 hover：哑光提亮 ---------- */
+.ofm_root .ofm_acct{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.06);transition:background .15s ease,border-color .15s ease}
+.ofm_root .ofm_acct:hover{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.045)}
+.ofm_root .ofm_modelrow:hover{background:rgba(255,255,255,.03)}
+.ofm_root .ofm_chip:hover{border-color:rgba(255,255,255,.14);color:#e9ecf1}
+
+/* ---------- M16) 弹入动画：收敛到 ≤200ms，仅 transform/opacity ---------- */
+.ofm_toast{animation:ofm-matte-pop .18s cubic-bezier(.2,.8,.2,1)}
+.ofm_root .ofm_ann,.ofm_root .ofm_modal{animation:ofm-matte-pop .18s cubic-bezier(.2,.8,.2,1)}
+.ofm_root .ofm_scrim{animation:ofm-matte-fade .15s ease}
+@keyframes ofm-matte-pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ofm-matte-fade{from{opacity:0}to{opacity:1}}
+
+/* ---------- M17) 选中色 / 滚动条 hover：哑光 ---------- */
+.ofm_root ::selection{background:rgba(124,158,255,.28);color:#f2f5ff}
+.ofm_root ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.18);background-clip:content-box;border:2px solid transparent}
+
+/* ---------- M18) reduced-motion：哑光层一致关停 ---------- */
+@media (prefers-reduced-motion:reduce){
+  .ofm_toast,.ofm_root .ofm_ann,.ofm_root .ofm_modal,.ofm_root .ofm_scrim{animation:none}
+}
