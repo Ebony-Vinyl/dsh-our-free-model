@@ -1250,6 +1250,19 @@ window.__ModuleLoader__.load({
 .ofm_poolmeta{display:flex;gap:8px 18px;align-items:baseline;flex-wrap:wrap;justify-content:space-between}
 @media (max-width:760px){.ofm_tank.xl{width:100%;max-width:340px}.ofm_tab{flex:1 1 auto;text-align:center}}
 /* ══ 动效降级：用户系统开启"减少动态效果"时全部收敛 ═══════════════════ */
+/* —— 交互锚点增强：激活态 / 状态色 / 加载态（additive，不改既有规则） —— */
+/* tab：激活项在滑块底衬之上再补一道品牌下划线，选中更明确 */
+.ofm_tab[aria-selected="true"]{color:var(--dsw-alias-label-primary)}
+.ofm_tab[aria-selected="true"]::after{content:"";position:absolute;left:12px;right:12px;bottom:3px;height:2px;border-radius:2px;background:var(--dsw-alias-state-business-primary);opacity:.85;transition:opacity .18s cubic-bezier(.32,.72,0,1)}
+/* 渠道卡：随接入状态着色顶部 hairline 与外发光（已接入=品牌色、关闭=灰、待接入=琥珀弱化） */
+.ofm_chan[data-state="on"]::before{background:linear-gradient(90deg,var(--chan-accent,var(--dsw-alias-state-business-primary)),color-mix(in srgb,var(--chan-accent,var(--dsw-alias-state-business-primary)) 30%,transparent));opacity:1}
+.ofm_chan[data-state="on"]{border-color:color-mix(in srgb,var(--chan-accent,var(--dsw-alias-state-business-primary)) 34%,var(--dsw-alias-border-l2))}
+.ofm_chan[data-state="idle"]::before{background:linear-gradient(90deg,var(--dsw-alias-state-warning-primary,#f0a441),transparent);opacity:.6}
+.ofm_chan[data-state="off"]::before{background:linear-gradient(90deg,var(--dsw-alias-label-tertiary),transparent);opacity:.5}
+/* 按钮：异步进行中显示内联 spinner（aria-busy 锚点，文字仍保留占位避免布局跳动） */
+.ofm_btn[aria-busy="true"]{position:relative;color:transparent !important;pointer-events:none}
+.ofm_btn[aria-busy="true"]::after{content:"";position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;border:2px solid color-mix(in srgb,currentColor 30%,var(--dsw-alias-label-secondary));border-top-color:var(--dsw-alias-label-primary);animation:ofm-btn-spin .7s linear infinite}
+@keyframes ofm-btn-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.ofm_root *,.ofm_root *::before,.ofm_root *::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
 `
 
@@ -2745,6 +2758,7 @@ window.__ModuleLoader__.load({
       const modelsTotal = status?.models?.total ?? 0
       const modelsOff = status?.models?.disabled ?? 0
       const connected = enabledCount > 0
+      const chanState = status?.closed === true ? 'off' : connected ? 'on' : 'idle'
       const stateText = status?.closed === true ? t('chan.state.closed') : connected ? t('chan.state.on') : t('chan.state.off')
 
       const loadAccounts = useCallback(async () => {
@@ -2887,6 +2901,7 @@ window.__ModuleLoader__.load({
 
       const card = h('article', {
         className: `ofm_chan ofm_glass${status?.closed === true ? ' off' : ''}`,
+        'data-state': chanState,
         style: { '--chan-accent': channel.accent },
       },
         h('div', { className: 'ofm_chanhead' },
@@ -2908,9 +2923,9 @@ window.__ModuleLoader__.load({
             `${t('chan.credits.left')} `,
             h('b', null, balancesKnown ? kilo(balancesTotal) : balances === undefined ? '…' : '—')) : null),
         h('div', { className: 'ofm_chanacts' },
-          h('button', { type: 'button', className: 'ofm_btn', disabled: busy !== '' || !rpc, onClick: startLogin }, busy === 'add' ? '…' : t('chan.act.add')),
+          h('button', { type: 'button', className: 'ofm_btn', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'add' ? 'true' : undefined, onClick: startLogin }, busy === 'add' ? '…' : t('chan.act.add')),
           accountsCount > 0 ? h('button', {
-            type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc,
+            type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'refreshAll' ? 'true' : undefined,
             onClick: () => accountAction('refreshAll', '', async () => {
               for (const row of accounts ?? await rpc('account.list', { provider: channel.id }).then(v => v?.accounts ?? [])) {
                 try { await rpc('account.refresh', { accountId: row.id }, 90_000) } catch (error) { onError(channel, error) }
@@ -2919,7 +2934,7 @@ window.__ModuleLoader__.load({
             }),
           }, busy === 'refreshAll' ? '…' : t('chan.act.refresh')) : null,
           CREDIT_PROVIDERS.has(channel.id) ? h('button', {
-            type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc,
+            type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'claim' ? 'true' : undefined,
             onClick: claim,
           }, busy === 'claim' ? '…' : t('chan.act.claim')) : null,
           h('button', { type: 'button', className: 'ofm_foldtoggle', 'data-open': open === 'accounts' ? 'true' : 'false', onClick: () => void toggle('accounts') },
@@ -3678,7 +3693,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'ofm_tabs', role: 'tablist' },
           h('span', { className: 'ofm_tabglider', style: { transform: `translate(${glider.left}px, ${glider.top}px)`, width: `${glider.width}px`, height: `${glider.height}px` } }),
           tabs.map(([id, label, num]) => h('button', {
-            key: id, type: 'button', role: 'tab', className: 'ofm_tab', 'data-on': tab === id ? 'true' : 'false',
+            key: id, type: 'button', role: 'tab', 'aria-selected': tab === id ? 'true' : 'false', className: 'ofm_tab', 'data-on': tab === id ? 'true' : 'false',
             'aria-selected': tab === id ? 'true' : 'false',
             ref: node => { tabRefs.current[id] = node },
             onClick: () => setTab(id),
