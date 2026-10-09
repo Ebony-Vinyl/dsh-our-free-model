@@ -335,3 +335,423 @@
 .ofm_root img{max-width:100%}
 .ofm_root input,.ofm_root select{max-width:100%;padding:7px 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:white;color:inherit}
 .ofm_root input[type=checkbox]{padding:0}
+
+/* ============================================================
+   OFM DARK THEME OVERRIDE — OLED 深色科技风
+   与 app.css 设计令牌对齐（#050607 底 / #7c9eff accent）
+   仅新增覆盖，不改既有规则；置于文件末尾，靠源码顺序胜出。
+   ============================================================ */
+
+/* ---------- 1) 15(+2) 个主题变量：深色值 ---------- */
+.ofm_root{
+  --dsw-alias-label-primary:#e8ebef;
+  --dsw-alias-label-secondary:#98a1ac;
+  --dsw-alias-label-tertiary:#5d6672;
+  --dsw-alias-label-on-accent:#0a0f1e;
+  --dsw-alias-bg-layer-1:#0b0d10;
+  --dsw-alias-bg-layer-2:#101318;
+  --dsw-alias-bg-layer-3:#161a20;
+  --dsw-alias-bg-mask-1:rgba(5,6,7,.72);
+  --dsw-alias-border-l1:rgba(255,255,255,.05);
+  --dsw-alias-border-l2:rgba(255,255,255,.09);
+  --dsw-alias-state-business-primary:#7c9eff;
+  --dsw-alias-state-success-primary:#3ecfa0;
+  --dsw-alias-state-error-primary:#e36a6a;
+  --dsw-alias-state-warning-primary:#f2a65a;
+  --dsw-alias-accent-primary:#7c9eff;
+  --dsw-alias-accent-secondary:rgba(124,158,255,.14);
+  color-scheme:dark;
+}
+
+/* ---------- 2) 全局氛围：极光调暗、阴影加深 ---------- */
+.ofm_aurora i{opacity:.30;filter:blur(90px)}
+.ofm_aurora i:nth-child(1){background:radial-gradient(circle,color-mix(in srgb,#7c9eff 46%,transparent),transparent 70%)}
+.ofm_aurora i:nth-child(2){background:radial-gradient(circle,rgba(62,207,160,.26),transparent 72%)}
+.ofm_aurora i:nth-child(3){background:radial-gradient(circle,rgba(124,92,255,.24),transparent 72%)}
+
+/* ---------- 3) Hero 英雄区：深色渐变 + 微光 + 玻璃 ---------- */
+.ofm_root .ofm_hero{
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(120% 160% at 8% -10%,rgba(124,158,255,.16),transparent 52%),
+    radial-gradient(90% 140% at 96% 0%,rgba(62,207,160,.08),transparent 56%),
+    linear-gradient(165deg,#181d26 0%,#10131a 46%,#0b0e13 100%);
+  border:1px solid rgba(124,158,255,.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    inset 0 0 60px rgba(124,158,255,.05),
+    0 18px 48px -12px rgba(0,0,0,.65);
+  backdrop-filter:blur(14px) saturate(150%);
+  -webkit-backdrop-filter:blur(14px) saturate(150%);
+}
+.ofm_root .ofm_hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.05) 46%,transparent 60%);
+  transform:translateX(-60%);
+  animation:ofm-dark-sheen 7s cubic-bezier(.2,.8,.2,1) infinite;
+}
+@keyframes ofm-dark-sheen{
+  0%,55%{transform:translateX(-70%)}
+  85%,100%{transform:translateX(140%)}
+}
+.ofm_root .ofm_hero::after{
+  content:"";position:absolute;left:10%;right:10%;top:0;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(124,158,255,.5),rgba(62,207,160,.4),transparent);
+}
+
+/* ---------- 4) 分段控件 / Tab：玻璃容器 + 发光滑动指示 ---------- */
+.ofm_root .ofm_tabs{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 4px 14px -6px rgba(0,0,0,.5);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+}
+.ofm_root .ofm_tabglider{
+  background:linear-gradient(150deg,rgba(124,158,255,.24),rgba(124,158,255,.10));
+  border:1px solid rgba(124,158,255,.34);
+  box-shadow:
+    0 0 0 1px rgba(124,158,255,.10),
+    0 4px 16px -2px rgba(124,158,255,.34),
+    inset 0 1px 0 rgba(255,255,255,.12);
+}
+.ofm_root .ofm_tab[data-on="true"]{color:#dfe6ff;text-shadow:0 0 14px rgba(124,158,255,.35)}
+.ofm_root .ofm_tab[data-on="true"] .ofm_tabnum{color:#9db6ff}
+
+.ofm_root .ofm_seg{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.06);
+}
+.ofm_root .ofm_seg button[aria-pressed="true"]{
+  background:linear-gradient(150deg,rgba(124,158,255,.26),rgba(124,158,255,.12));
+  color:#e8ebef;
+  box-shadow:0 2px 10px -2px rgba(124,158,255,.4),inset 0 1px 0 rgba(255,255,255,.1);
+}
+
+/* ---------- 5) 卡片 / 面板 / 玻璃：加深阴影、补发丝高光 ---------- */
+.ofm_root .ofm_glass{
+  background:rgba(22,26,32,.62);
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 6px 22px -6px rgba(0,0,0,.55);
+}
+.ofm_root .ofm_panel{
+  background:rgba(16,19,24,.72);
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 6px 22px -6px rgba(0,0,0,.55);
+  backdrop-filter:blur(14px) saturate(150%);
+  -webkit-backdrop-filter:blur(14px) saturate(150%);
+}
+.ofm_root .ofm_card,.ofm_root .ofm_newsitem,.ofm_root .ofm_stat{
+  background:rgba(22,26,32,.66);
+  border-color:rgba(255,255,255,.06);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 4px 14px -6px rgba(0,0,0,.5);
+}
+.ofm_root .ofm_card:hover{
+  border-color:rgba(124,158,255,.4);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 10px 28px -8px rgba(0,0,0,.6),0 0 0 1px rgba(124,158,255,.14);
+}
+
+/* ---------- 6) 13 渠道登录卡 ---------- */
+.ofm_root .ofm_chan{
+  background:linear-gradient(160deg,rgba(26,31,40,.85),rgba(16,19,24,.9));
+  border:1px solid rgba(255,255,255,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 4px 14px -6px rgba(0,0,0,.5);
+  transition:transform .18s cubic-bezier(.2,.8,.2,1),border-color .18s ease,box-shadow .18s ease;
+}
+.ofm_root .ofm_chan:hover{
+  transform:translateY(-3px);
+  border-color:color-mix(in srgb,var(--chan-accent,#7c9eff) 55%,transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 16px 36px -10px rgba(0,0,0,.7),
+    0 0 24px -6px color-mix(in srgb,var(--chan-accent,#7c9eff) 40%,transparent);
+}
+.ofm_root .ofm_chanlogo{
+  box-shadow:
+    0 4px 14px -2px color-mix(in srgb,var(--chan-accent,#7c9eff) 55%,transparent),
+    inset 0 1px 0 rgba(255,255,255,.22);
+}
+.ofm_root .ofm_chanstate{
+  background:rgba(255,255,255,.04);
+  border-color:rgba(255,255,255,.07);
+}
+.ofm_root .ofm_chanfold{border-top-color:rgba(255,255,255,.06)}
+
+/* ---------- 7) 按钮：主/次/禁用 ---------- */
+.ofm_root .ofm_btn{
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.1);
+  color:#e8ebef;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 8px -3px rgba(0,0,0,.5);
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease,transform .18s cubic-bezier(.2,.8,.2,1);
+}
+.ofm_root .ofm_btn:hover:not(:disabled){
+  border-color:rgba(124,158,255,.55);
+  background:rgba(124,158,255,.1);
+  box-shadow:0 0 0 1px rgba(124,158,255,.18),0 6px 18px -6px rgba(124,158,255,.3);
+  transform:translateY(-1px);
+}
+.ofm_root .ofm_btn:active:not(:disabled){transform:translateY(0)}
+.ofm_root .ofm_btn:disabled{opacity:.38;box-shadow:none}
+.ofm_root .ofm_btn.primary{
+  background:linear-gradient(150deg,#8fabff,#6c8ef5);
+  border-color:rgba(157,182,255,.6);
+  color:#0a0f1e;
+  font-weight:650;
+  box-shadow:0 6px 20px -4px rgba(124,158,255,.5),inset 0 1px 0 rgba(255,255,255,.35);
+}
+.ofm_root .ofm_btn.primary:hover:not(:disabled){
+  background:linear-gradient(150deg,#9db6ff,#7c9eff);
+  box-shadow:0 8px 26px -4px rgba(124,158,255,.65),inset 0 1px 0 rgba(255,255,255,.4);
+}
+.ofm_root .ofm_btn.ghost{background:transparent;box-shadow:none}
+
+.ofm_root .ofm_minibtn{
+  background:rgba(255,255,255,.04);
+  border-color:rgba(255,255,255,.09);
+  color:#98a1ac;
+  transition:all .16s cubic-bezier(.2,.8,.2,1);
+}
+.ofm_root .ofm_minibtn:hover:not(:disabled){
+  border-color:rgba(124,158,255,.5);
+  color:#e8ebef;
+  background:rgba(124,158,255,.1);
+  box-shadow:0 4px 12px -4px rgba(124,158,255,.35);
+  transform:translateY(-1px);
+}
+.ofm_root .ofm_minibtn.danger:hover:not(:disabled){
+  border-color:rgba(227,106,106,.6);
+  color:#e36a6a;
+  background:rgba(227,106,106,.1);
+  box-shadow:0 4px 12px -4px rgba(227,106,106,.3);
+}
+
+/* ---------- 8) 开关：深色轨道 + 选中发光 ---------- */
+.ofm_root .ofm_switch i{
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.45);
+}
+.ofm_root .ofm_switch i::after{
+  background:#aab3c0;
+  box-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+.ofm_root .ofm_switch[aria-checked="true"] i{
+  background:linear-gradient(150deg,#8fabff,#6c8ef5);
+  border-color:rgba(157,182,255,.7);
+  box-shadow:0 0 14px -1px rgba(124,158,255,.55),inset 0 1px 0 rgba(255,255,255,.3);
+}
+.ofm_root .ofm_switch[aria-checked="true"] i::after{
+  background:#fff;
+  box-shadow:0 0 8px rgba(255,255,255,.7),0 1px 3px rgba(0,0,0,.4);
+}
+
+/* ---------- 9) 输入框 ---------- */
+.ofm_root .ofm_input,
+.ofm_root input,.ofm_root select,.ofm_root textarea{
+  background:rgba(255,255,255,.045) !important;
+  border:1px solid rgba(255,255,255,.11);
+  color:#e8ebef;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.35);
+  caret-color:#7c9eff;
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+.ofm_root .ofm_input::placeholder,.ofm_root input::placeholder{color:#5d6672}
+.ofm_root .ofm_input:focus,.ofm_root input:focus,.ofm_root select:focus{
+  outline:none;
+  border-color:rgba(124,158,255,.65);
+  box-shadow:0 0 0 3px rgba(124,158,255,.18),inset 0 1px 3px rgba(0,0,0,.35);
+}
+.ofm_root select option{background:#101318;color:#e8ebef}
+
+/* ---------- 10) 热力图：深色底 + 蓝紫色阶 ---------- */
+.ofm_root .ofm_cell{
+  background:rgba(255,255,255,.045);
+  outline:1px solid rgba(255,255,255,.05);
+  outline-offset:-1px;
+}
+.ofm_root .ofm_cell.l1{background:rgba(124,158,255,.22);outline-color:transparent}
+.ofm_root .ofm_cell.l2{background:rgba(124,158,255,.42);outline-color:transparent}
+.ofm_root .ofm_cell.l3{background:rgba(124,158,255,.68);outline-color:transparent;box-shadow:0 0 6px rgba(124,158,255,.28)}
+.ofm_root .ofm_cell.l4{background:#7c9eff;outline-color:transparent;box-shadow:0 0 10px rgba(124,158,255,.55)}
+
+/* ---------- 11) EAC 水位缸：玻璃缸体 + 渐变液面 + 发光刻度 ---------- */
+.ofm_root .ofm_tank{
+  background:linear-gradient(180deg,rgba(124,158,255,.07),rgba(6,8,12,.55));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.08),
+    inset 0 14px 28px -14px rgba(124,158,255,.12),
+    inset 0 -18px 30px -18px rgba(0,0,0,.7),
+    0 14px 34px -12px rgba(0,0,0,.6);
+}
+.ofm_root .ofm_tank.xl{
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.1),
+    inset 0 16px 32px -16px rgba(124,158,255,.14),
+    inset 0 -20px 36px -20px rgba(0,0,0,.7),
+    0 20px 44px -14px rgba(0,0,0,.65);
+}
+.ofm_root .ofm_tankglass{
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.12),
+    inset 0 18px 34px rgba(255,255,255,.05),
+    inset 0 -12px 26px rgba(0,0,0,.32);
+}
+.ofm_root .ofm_tank.ok .ofm_tankwater{
+  background:linear-gradient(180deg,rgba(157,182,255,.95) 0%,rgba(124,158,255,.88) 34%,rgba(84,110,205,.92) 100%);
+  box-shadow:0 -1px 18px rgba(124,158,255,.5),inset 0 1px 0 rgba(255,255,255,.45);
+}
+.ofm_root .ofm_tank.busy .ofm_tankwater{
+  background:linear-gradient(180deg,rgba(242,166,90,.95),rgba(226,144,66,.92));
+  box-shadow:0 -1px 18px rgba(242,166,90,.45),inset 0 1px 0 rgba(255,255,255,.35);
+}
+.ofm_root .ofm_tank.over .ofm_tankwater{
+  background:linear-gradient(180deg,rgba(227,106,106,.95),rgba(196,74,74,.92));
+  box-shadow:0 -1px 18px rgba(227,106,106,.5),inset 0 1px 0 rgba(255,255,255,.35);
+}
+.ofm_root .ofm_tankrays{opacity:.34;mix-blend-mode:screen}
+.ofm_root .ofm_tankshine{background:linear-gradient(196deg,rgba(255,255,255,.14) 0%,transparent 32%)}
+.ofm_root .ofm_wave{opacity:.9}
+.ofm_root .ofm_fish svg{fill:rgba(255,255,255,.9)}
+.ofm_root .ofm_bubble{background:rgba(255,255,255,.55)}
+
+/* ---------- 12) 表格：深色斑马 + hover 光带 + 失败行 ---------- */
+.ofm_root .ofm_table th{
+  color:#5d6672;
+  border-bottom:1px solid rgba(255,255,255,.09);
+}
+.ofm_root .ofm_table td{border-bottom:1px solid rgba(255,255,255,.045)}
+.ofm_root .ofm_table tbody tr:nth-child(even) td{background:rgba(255,255,255,.018)}
+.ofm_root .ofm_table tbody tr:hover td{background:rgba(124,158,255,.07)}
+.ofm_root .ofm_logfailed td{background:rgba(227,106,106,.08)}
+.ofm_root .ofm_logfailed:hover td{background:rgba(227,106,106,.13)}
+
+/* ---------- 13) 公告 / 模态 / Toast：深色玻璃 ---------- */
+.ofm_root .ofm_scrim{
+  background:rgba(3,4,6,.68);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.ofm_root .ofm_ann,.ofm_root .ofm_modal{
+  background:linear-gradient(170deg,#161a22,#0e1117);
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 30px 80px -12px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.ofm_root .ofm_annhead{
+  background:linear-gradient(150deg,rgba(124,158,255,.1),transparent 60%);
+  border-bottom:1px solid rgba(255,255,255,.05);
+}
+.ofm_root .ofm_toast{
+  background:rgba(22,26,32,.92);
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 14px 40px -8px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.ofm_root .ofm_toast.warn{border-color:rgba(242,166,90,.45);box-shadow:0 14px 40px -8px rgba(0,0,0,.7),0 0 20px -6px rgba(242,166,90,.3)}
+.ofm_root .ofm_toast.err,.ofm_root .ofm_toast.error{border-color:rgba(227,106,106,.45);box-shadow:0 14px 40px -8px rgba(0,0,0,.7),0 0 20px -6px rgba(227,106,106,.3)}
+.ofm_root .ofm_toast.ok,.ofm_root .ofm_toast.success{border-color:rgba(62,207,160,.4);box-shadow:0 14px 40px -8px rgba(0,0,0,.7),0 0 20px -6px rgba(62,207,160,.28)}
+
+/* ---------- 14) 新闻 / 步骤 / 升级卡 / 提示卡 ---------- */
+.ofm_root .ofm_newsitem.unread{
+  border-color:rgba(124,158,255,.4);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 0 18px -6px rgba(124,158,255,.35);
+}
+.ofm_root .ofm_newsdot{background:#7c9eff;box-shadow:0 0 10px rgba(124,158,255,.8)}
+.ofm_root .ofm_newsbody mark{background:rgba(242,166,90,.24);color:#f2c894;border-radius:3px;padding:0 2px}
+.ofm_root .ofm_step{background:rgba(255,255,255,.09)}
+.ofm_root .ofm_step[data-on="true"]{background:#7c9eff;box-shadow:0 0 10px rgba(124,158,255,.6)}
+.ofm_root .ofm_callout{
+  border-color:rgba(242,166,90,.4);
+  background:rgba(242,166,90,.08);
+  color:#e8c9a3;
+}
+.ofm_root .ofm_upnotes{
+  background:rgba(255,255,255,.03);
+  border-color:rgba(255,255,255,.06);
+}
+
+/* ---------- 15) 账号池 / 徽标 / 键值 / 统计 ---------- */
+.ofm_root .ofm_acct{
+  background:rgba(255,255,255,.03);
+  border-color:rgba(255,255,255,.06);
+  transition:border-color .16s ease,background .16s ease;
+}
+.ofm_root .ofm_acct:hover{border-color:rgba(124,158,255,.3);background:rgba(124,158,255,.05)}
+.ofm_root .ofm_acct.pending{border-style:dashed;border-color:rgba(255,255,255,.14)}
+.ofm_root .ofm_kvc{
+  background:rgba(255,255,255,.03);
+  border-color:rgba(255,255,255,.06);
+}
+.ofm_root .ofm_stat b{color:#e8ebef}
+.ofm_root .ofm_kpivalue{
+  background:linear-gradient(120deg,#e8ebef,#9db6ff);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.ofm_root .ofm_poolbadge{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+.ofm_root .ofm_creditbadge{border-color:rgba(242,166,90,.5);background:rgba(242,166,90,.08)}
+.ofm_root .ofm_creditbadge.strong{border-color:rgba(62,207,160,.5);background:rgba(62,207,160,.08)}
+.ofm_root .ofm_modelrow{background:rgba(255,255,255,.028)}
+.ofm_root .ofm_modelrow:hover{background:rgba(124,158,255,.06)}
+
+/* ---------- 16) 标签 / 徽标 / 芯片 ---------- */
+.ofm_root .ofm_pill{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.07)}
+.ofm_root .ofm_tag{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.06)}
+.ofm_root .ofm_chantag{
+  border-color:rgba(124,158,255,.4);
+  color:#9db6ff;
+  background:rgba(124,158,255,.08);
+}
+.ofm_root .ofm_chip{background:rgba(255,255,255,.035);border-color:rgba(255,255,255,.07)}
+.ofm_root .ofm_chip:hover{border-color:rgba(124,158,255,.4);color:#e8ebef}
+.ofm_root .ofm_tagpill{border-color:rgba(255,255,255,.08)}
+.ofm_root .ofm_badge{border-color:rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+.ofm_root .ofm_badge.available{color:#3ecfa0;border-color:rgba(62,207,160,.45);background:rgba(62,207,160,.08)}
+.ofm_root .ofm_badge.region-blocked{color:#f2a65a;border-color:rgba(242,166,90,.45);background:rgba(242,166,90,.08)}
+.ofm_root .ofm_badge.throttled,.ofm_root .ofm_badge.unavailable{color:#e36a6a;border-color:rgba(227,106,106,.45);background:rgba(227,106,106,.08)}
+.ofm_root .ofm_level{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+.ofm_root .ofm_level.urgent{box-shadow:0 0 12px -2px rgba(227,106,106,.6)}
+
+/* ---------- 17) 进度条 / 骨架屏 / 代码块 / 导航 / 星按钮 ---------- */
+.ofm_root .ofm_prog{background:rgba(255,255,255,.06)}
+.ofm_root .ofm_prog i{background:linear-gradient(90deg,#6c8ef5,#9db6ff);box-shadow:0 0 12px rgba(124,158,255,.6)}
+.ofm_root .ofm_skel{background:rgba(255,255,255,.04)}
+.ofm_root .ofm_skel::after{background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.07) 50%,transparent 80%)}
+.ofm_root .ofm_mono{
+  background:#0a0c10;
+  border-color:rgba(255,255,255,.07);
+  color:#a9b6c6;
+  box-shadow:inset 0 1px 4px rgba(0,0,0,.4);
+}
+.ofm_root .ofm_nav{
+  background:rgba(13,16,21,.72);
+  border-color:rgba(255,255,255,.07);
+  box-shadow:0 8px 28px -10px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.045);
+}
+.ofm_root .ofm_starbtn{
+  border-color:rgba(124,158,255,.45);
+  background:linear-gradient(140deg,rgba(124,158,255,.14),transparent 70%);
+  color:#9db6ff;
+}
+.ofm_root .ofm_starbtn:hover{
+  background:linear-gradient(140deg,#7c9eff,#5f83e8);
+  color:#0a0f1e;
+  box-shadow:0 8px 24px -4px rgba(124,158,255,.55);
+}
+.ofm_root .ofm_foldtoggle:hover{color:#9db6ff}
+
+/* ---------- 18) 滚动条（深色细条） ---------- */
+.ofm_root ::-webkit-scrollbar{width:9px;height:9px}
+.ofm_root ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:99px;border:2px solid transparent;background-clip:content-box}
+.ofm_root ::-webkit-scrollbar-thumb:hover{background:rgba(124,158,255,.32);background-clip:content-box;border:2px solid transparent}
+.ofm_root ::-webkit-scrollbar-track{background:transparent}
+.ofm_root ::-webkit-scrollbar-corner{background:transparent}
+
+/* ---------- 19) 选中色 ---------- */
+.ofm_root ::selection{background:rgba(124,158,255,.32);color:#f2f5ff}
+
+/* ---------- 20) reduced-motion：关掉 hero 扫光 ---------- */
+@media (prefers-reduced-motion:reduce){
+  .ofm_root .ofm_hero::before{animation:none}
+}

@@ -22,3 +22,6 @@ scripts/eac-vault-mint.mjs
 worker/.env
 c3099.txt
 stats.json
+
+_audit/
+packages/standalone/web/*.bak
