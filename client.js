@@ -1160,6 +1160,10 @@ window.__ModuleLoader__.load({
 .ofm_tagpill{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 90%,transparent);color:var(--dsw-alias-label-tertiary);white-space:nowrap}
 .ofm_tagpill.free{color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 60%,transparent)}
 .ofm_tagpill.dead{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 60%,transparent)}
+.ofm_tagpill.promo{color:var(--dsw-alias-state-business-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 55%,transparent)}
+.ofm_tagpill.promo.idle{color:var(--dsw-alias-label-secondary);border-color:color-mix(in srgb,var(--dsw-alias-border-l1) 85%,transparent)}
+/* 会员档位标（「订阅优先」）：与折扣区分开——它不是价格，是调度优先级。 */
+.ofm_tagpill.promo.tier{color:var(--dsw-alias-label-secondary);border-style:dashed}
 .ofm_chanfold{border-top:1px dashed color-mix(in srgb,var(--dsw-alias-border-l1) 85%,transparent);padding-top:10px;display:flex;flex-direction:column;gap:8px}
 .ofm_foldtoggle{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dsw-alias-label-secondary);background:transparent;border:0;cursor:pointer;font-family:inherit;padding:0}
 .ofm_foldtoggle:hover{color:var(--dsw-alias-label-primary)}
@@ -2681,8 +2685,276 @@ window.__ModuleLoader__.load({
       return ago(entry.expiresAt, t.locale)
     }
 
+    /**
+     * One shared read of the Host's model catalog.
+     *
+     * `session.modelCatalog()` resolves **every** registered provider's models
+     * (and each model's info), so calling it once per card fold would rebuild the
+     * whole catalog thirteen times over on one page. A short TTL is enough: the
+     * catalogue's per-model `description` is a promo annotation that moves on the
+     * hour, not on a click.
+     */
+    let noteCatalogCache = { at: 0, promise: null }
+    function modelCatalogOnce(ctx) {
+      const now = Date.now()
+      if (noteCatalogCache.promise !== null && now - noteCatalogCache.at < 20_000) return noteCatalogCache.promise
+      let promise
+      try {
+        const session = ctx?.remote?.session
+        if (typeof session?.modelCatalog !== 'function') return Promise.resolve(undefined)
+        promise = Promise.resolve(session.modelCatalog()).catch(() => undefined)
+      } catch { return Promise.resolve(undefined) }
+      noteCatalogCache = { at: now, promise }
+      return promise
+    }
+
+    /**
+     * 一个 provider 的促销长标注（活动截止日 + 时段窗口 + 窗口外错峰价），按模型 id 取。
+     *
+     * 为什么不从卡片自己的 `model.list` 拿：那条 RPC 是插件内 channel-pack 的处理器，
+     * 它把适配器的行**重建**成 `{id, name, disabled, dead, isFree}`（见
+     * `vendor/channel-pack/src/channel-pack-rpc.ts` 的 `model.list` 分支）——
+     * 适配器写进 `description` 的长标注在拼行时就被丢掉了，宿主透不透传都无关。
+     * `listAllModels()` 同样只有 `{id, name}`。所以徽标数据必须换一个**确实带该字段**
+     * 的来源（connect-qoder 自起路由也是同一个道理）。
+     *
+     * DSH 的 `session.modelCatalog()` 正好是：它的 `buildModelCatalog` 逐模型取
+     * `ctx.llm.listModels()`，而 dsh-llm 的 `listModels` 会**逐字段复制**
+     * `description`（`dsh-llm/lib/index.js`），buddy/workbuddy 适配器则把
+     * `promotionView(model).note` 写进该字段。这是客户端唯一能直接读到长标注的门。
+     *
+     * @param {object} ctx - client plugin context, for the `remote` service.
+     * @param {string} providerId - provider route the card is showing.
+     * @returns {Promise<Map<string, string>>} model id → long annotation (empty when unavailable).
+     */
+    async function channelModelNotes(ctx, providerId) {
+      const notes = new Map()
+      try {
+        const answer = await modelCatalogOnce(ctx)
+        // The remote carrier answers `{ok:true,value}` / `{ok:false,error}`; a shell
+        // that hands the bare value back is accepted too, so the merge stays alive
+        // across carriers.
+        const value = answer?.ok === true ? answer.value : answer?.ok === false ? undefined : answer
+        for (const group of value?.groups ?? []) {
+          if (group?.id !== providerId) continue
+          for (const model of group.models ?? []) {
+            if (typeof model?.description === 'string' && model.description !== '') notes.set(model.id, model.description)
+          }
+        }
+      } catch { /* decoration only: a missing catalog must not blank the list */ }
+      return notes
+    }
+
+    /**
+     * 促销长标注的形状（与 `vendor/channel-pack/src/buddy.ts` 的
+     * `buildPromotionNote` 一一对应：「时段 → 价格 → 截止日」，`·` 分隔）。
+     *
+     * ⚠️ 为什么必须**认形状**而不能只看「有没有 description」：`description` 是通用
+     * 字段，不止 buddy 一族在写。Cline 的适配器把上游 `recommended-models` 的
+     * `{ id, name, description, tags }` 原样透传（见 `cline-product.ts` 的静态兜底表），
+     * lobsterai 同样 `{ description: model.description }` —— 那些是模型宣传语
+     * （「Mixture-of-Experts architecture with 309B total parameters」），不是促销标注。
+     * 只要字段非空就画胶囊，就会在 Cline / lobsterai 的每一行挂上一句英文废话
+     * （用户报障：「其他供应商出现奇怪的标签」）。
+     *
+     * 只有 buddy / workbuddy 的适配器会把 `promotionView(model).note` 写进该字段
+     * （`buddy-adapter.ts` 的 listModels），但按 provider 写死不如按形状判定：
+     * 形状是这条标注的**定义**，将来别的渠道发了促销也不用改这里。
+     * 两边互锁靠 `scripts/promo-badge-test.mjs`：它按真实形状逐个断言胶囊出现，
+     * 并用一段宣传语作反证 —— 改文案却没同步这里，探针当场失败。
+     */
+    const PROMO_NOTE_PIECES = [
+      // 错峰时段23:00-08:00 / 错峰时段09:00-12:00/14:00-18:00
+      /^错峰时段\d{2}:\d{2}-\d{2}:\d{2}(?:\/\d{2}:\d{2}-\d{2}:\d{2})*$/,
+      /^限免$/,
+      /^非高峰x[\d.]+$/,
+      /^至\d{1,2}月\d{1,2}日$/,
+    ]
+    /** 首段必须是「时段 / 限免 / 错峰价」之一，光有截止日不成标注。 */
+    const PROMO_NOTE_LEAD = [/^错峰时段/, /^限免$/, /^非高峰x[\d.]+$/]
+
+    /** 这段 `description` 是不是促销长标注（而不是模型宣传语）。 */
+    function isPromoNote(text) {
+      if (typeof text !== 'string' || text.length === 0) return false
+      const pieces = text.split('·')
+      if (pieces.length === 0) return false
+      if (!PROMO_NOTE_LEAD.some(re => re.test(pieces[0]))) return false
+      return pieces.every(piece => PROMO_NOTE_PIECES.some(re => re.test(piece)))
+    }
+
+    /**
+     * 兼容分支的唯一数据源：老 pack 没有 `promo` 字段时，促销标注只存在于
+     * `description`，按模型 id 取回。
+     *
+     * 两个来源按优先级取：DSH 的 `session.modelCatalog()`（`buildModelCatalog` →
+     * `ctx.llm.listModels`，逐字段复制适配器行的 `description`）；它整张表都取不到
+     * 时，再退插件自有的 `/api/our-free-model/models` 路由。
+     *
+     * ⚠️ 只在 pack **没有声明 promoTransport 能力位**（即老 pack）时才调用：
+     * 这条通路在新 pack 下完全用不到，不该为它付目录读取的代价。
+     *
+     * @param {object} ctx - client plugin context, for the `remote` service.
+     * @param {string} providerId - provider route the card is showing.
+     * @returns {Promise<Map<string, string>>} model id → description (possibly empty).
+     */
+    async function legacyPromoNotes(ctx, providerId) {
+      const notes = new Map()
+      try {
+        const fromCatalog = await channelModelNotes(ctx, providerId)
+        if (fromCatalog.size > 0) return fromCatalog
+        const payload = await api(`/models?provider=${encodeURIComponent(providerId)}`)
+        for (const row of payload?.models ?? []) {
+          if (row?.id !== undefined && row?.description !== undefined && row.description !== '') notes.set(row.id, String(row.description))
+        }
+      } catch { /* 兼容分支失败即无徽标，不影响列表 */ }
+      return notes
+    }
+
+    /**
+     * 把多段时段格式化成一行短文案，如 `22:00-08:00` 或 `09:00-12:00/14:00-18:00`。
+     *
+     * ⚠️ **`windows` 是数组就必须逐段显示**，不能只取第一段：上游会给出互补的
+     * 两段（workbuddy 的 `hy4-preview` 把跨零点的 `23:00-8:00` 拆成
+     * `23:00-23:59` + `0:00-8:00`），只显示一段会让用户以为另一段没有活动。
+     *
+     * 段数过多时**不再截断**而是原样拼接：这段文字只出现在胶囊与 tooltip 里，
+     * 截断会丢掉真实时段，而"看不全"比"看错"更糟。实测最多两段（Qoder 一段）。
+     *
+     * @param {Array<{start?: string, end?: string}>|undefined} windows - promo.windows
+     * @returns {string|undefined} `HH:MM-HH:MM` 形态，无可用时段时 undefined。
+     */
+    function formatPromoWindows(windows) {
+      if (!Array.isArray(windows)) return undefined
+      const slots = []
+      for (const slot of windows) {
+        if (slot === null || typeof slot !== 'object') continue
+        const start = typeof slot.start === 'string' ? slot.start.trim() : ''
+        const end = typeof slot.end === 'string' ? slot.end.trim() : ''
+        if (start === '' || end === '') continue
+        slots.push({ start, end })
+      }
+      if (slots.length === 0) return undefined
+      // ⚠️ `0:00-23:59`（整日窗口）不是"时段"，是上游用来表达"这条活动全天挂标"
+      // 的占位写法（实测 `ds-discount-daytime-badge-202608` 就是它）。把它当
+      // 时段显示会让用户以为"只有 0 点到 23:59 打折"，等于什么都没说还占宽度。
+      // 判据用分钟覆盖整个自然日，而不是比对字面 `0:00-23:59`（`00:00`/`23:59`
+      // 与 `0:00`/`24:00` 等写法都要认）。
+      const toMinutes = value => {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(value)
+        if (m === null) return undefined
+        const hour = Number(m[1]); const minute = Number(m[2])
+        return hour < 24 && minute < 60 ? hour * 60 + minute : undefined
+      }
+      const fullDay = slots.every(slot => {
+        const start = toMinutes(slot.start)
+        const end = toMinutes(slot.end)
+        // 全天：从 0:00 起、覆盖到当天末刻（23:59 或 24:00 计为收尾）。
+        return start === 0 && (end === 23 * 60 + 59 || end === 24 * 60 || end === 23 * 60)
+      })
+      if (fullDay) return undefined
+      return slots.map(slot => `${slot.start}-${slot.end}`).join('/')
+    }
+
+    /**
+     * 把一行模型的促销结构渲染成胶囊；无促销时返回 `null`。
+     *
+     * ## 为什么读结构而不是读字符串
+     *
+     * `promo` 是**独立字段**，带的是结构（多段时段 / 双段价格 / displayMode），
+     * 所以这里不需要解析任何展示串，也不会把模型宣传语误当成促销（那是
+     * `description` 的坑，见 `isPromoNote`）。胶囊文本用结构拼出来，`title`
+     * 则用 `note`（人读长标注）+ 原价，鼠标悬停能看到完整背景。
+     *
+     * ## 文本口径
+     *
+     * 展示串**优先用上游自己的**（见 `promo.badgeLabel` / `promo.hoverText`）：
+     * 上游为每条活动都准备了 label（「夜间折扣」「限时免费」「订阅优先」）与
+     * hover 文案，那是用户在官方 UI 里能对上号的口径。我们只在**上游没给**时
+     * 才退回自拼：双段价格 `x0.29→x0`（箭头与 Qoder / TRAE 的模型名同形，
+     * 一眼看出折扣幅度）或 `note` 长标注。
+     *
+     * 三处刻意的取舍：
+     * - **不改写上游文案**：实测 `ds-discount-daytime-badge-202608` 的 label 是
+     *   「夜间折扣」而 hoverText 讲的是工作日高峰——上游自己不一致。照抄一个
+     *   已知不一致的官方说法，好过编一套"更正确"的私货（用户对不上号更糟）。
+     * - **档位标（`kind === 'tier'`）不带价格**：它是资源调度优先级，不是折扣；
+     *   写价格就等于把「订阅优先」说成「打折」。
+     * - **`active === false` 照样显示**（加 `idle` 灰显）：活动还在、只是当前不在
+     *   时段窗口内，这正是用户最需要知道「到点会便宜」的信息。
+     *
+     * @param {object} model - one row from `model.list`.
+     * @returns {object|null} the pill element, or null.
+     */
+    function promoBadge(model) {
+      const promo = model?.promo
+      if (promo !== null && typeof promo === 'object') {
+        const label = typeof promo.badgeLabel === 'string' && promo.badgeLabel !== '' ? promo.badgeLabel : undefined
+        const shortLabel = typeof promo.badgeShortLabel === 'string' && promo.badgeShortLabel !== '' ? promo.badgeShortLabel : undefined
+        const price = promo.price
+        const original = typeof price?.original === 'string' ? price.original : undefined
+        const effective = typeof price?.effective === 'string' ? price.effective : undefined
+        // 双段价格：上游要求原价划掉（strikethrough）或原价与折后价本就是两个数。
+        const dual = original !== undefined && effective !== undefined && original !== effective
+        const isTier = promo.kind === 'tier'
+        // ⚠️ 上游 label（「错峰 4 折」/「限时折扣」）只说明**这是什么活动**，本身
+        // 既不总含价格、也不总含时段；两者都是用户判断"要不要现在用"的依据。
+        // 早期实现让 label 把整段文本顶掉，于是 Qoder 丢了时段（用户报障
+        // 「咋没有时段显示呢」）。这里按"缺什么补什么"拼，且**只在必要时补价**：
+        //
+        // - 有**时段**时，时段本身已界定"何时便宜"，而错峰型 label（「错峰 4 折」）
+        //   通常自带折扣力度，再缀价格只是把胶囊撑长 → 不补价；
+        // - **没有时段**时，价格是唯一能说明"便宜多少"的信息（Raccoon 的
+        //   「限时折扣」/TRAE 的 off_peak 都属此类）→ 必须补价，否则胶囊是个空壳。
+        const clock = formatPromoWindows(promo.windows)
+        const tierText = shortLabel ?? label ?? promo.note
+        const priceText = dual ? `${original}→${effective}` : undefined
+        const withPrice = clock === undefined ? (priceText ?? promo.note) : undefined
+        const text = isTier
+          ? tierText
+          : label === undefined
+            ? (priceText ?? promo.note ?? effective ?? original)
+            : [label, clock, withPrice].filter(part => typeof part === 'string' && part !== '').join(' · ')
+        if (typeof text !== 'string' || text === '') return null
+        // 悬停优先用上游 hover 文案；把拼进胶囊的那几段之外的信息附在其后。
+        const hover = typeof promo.hoverText === 'string' && promo.hoverText !== '' ? promo.hoverText : undefined
+        const extra = []
+        if (clock !== undefined && text !== undefined && !text.includes(clock)) extra.push(clock)
+        if (dual && !text.includes(`${original}→${effective}`)) extra.push(`原价 ${original}`)
+        if (typeof promo.note === 'string' && promo.note !== '' && promo.note !== text && promo.note !== hover) extra.push(promo.note)
+        // 只有上游没给 hover 文案时才自拼截止日。⚠️ `validUntil` 是 ISO 串
+        // （`2026-11-01`），直接缀上去会和 note 路的「至11月1日」两种格式混在
+        // 用户眼前——统一成中文短日期（无法解析则不写，宁缺毋错）。
+        if (typeof promo.validUntil === 'string' && promo.validUntil !== '' && hover === undefined) {
+          const until = /^(\d{4})-(\d{2})-(\d{2})/.exec(promo.validUntil)
+          if (until !== null) extra.push(`至${Number(until[2])}月${Number(until[3])}日`)
+        }
+        const title = [hover, ...extra].filter(part => typeof part === 'string' && part !== '').join(' · ') || text
+        return h('span', {
+          className: 'ofm_tagpill promo' + (promo.active === false ? ' idle' : '') + (isTier ? ' tier' : ''),
+          title,
+          // 上游色值**过白名单再用**：badgeColor 是从 RPC 一路搬来的外部数据
+          // （types.ts 的 ModelRowPromo 刻意宽松、RPC 层不校验），这里直接进
+          // inline style。虽然 CSSOM 会拒绝含 `;` 之类的畸形值，但认死
+          // `#rgb`/`#rrggbb` 是这条通路唯一的校验点，成本只有一个正则。
+          style: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(promo.badgeColor ?? '')
+            ? { color: promo.badgeColor, borderColor: promo.badgeColor }
+            : undefined,
+          // 结构留给 DOM 自检与将来的交互（悬停展开时段等），不参与视觉。
+          'data-promo': JSON.stringify({
+            id: promo.id, kind: promo.kind, displayMode: promo.displayMode, active: promo.active,
+            windows: promo.windows, until: promo.validUntil, tier: promo.tier,
+          }),
+        }, text)
+      }
+      // 兼容分支：老 pack 的标注由 loadModels 过完 isPromoNote（认形状）后写进
+      // 专用键 `promoNote`——走到这里的字符串不可能是模型宣传语。
+      return typeof model?.promoNote === 'string' && model.promoNote !== ''
+        ? h('span', { className: 'ofm_tagpill promo', title: model.promoNote }, model.promoNote)
+        : null
+    }
+
     function ChannelCard(props) {
-      const { channel, status, rpc, t, onError, onChanged } = props
+      const { channel, status, rpc, ctx, t, onError, onChanged } = props
       const [open, setOpen] = useState(null)
       const [accounts, setAccounts] = useState(undefined)
       const [models, setModels] = useState(undefined)
@@ -2710,9 +2982,37 @@ window.__ModuleLoader__.load({
       const loadModels = useCallback(async () => {
         try {
           const value = await rpc('model.list', { provider: channel.id })
-          setModels(value?.models ?? [])
+          let models = value?.models ?? []
+          // 促销徽标走**独立字段** `promo`：它由适配器写下、`model.list` 原样搬运
+          // （见 channel-pack-rpc.ts 的 model.list 分支），所以行里直接就有，
+          // 不需要再绕宿主目录。
+          //
+          // 兼容分支：老版本 pack 不搬 `promo`，促销标注只存在于 `description`。
+          // 触发条件看 pack 自己声明的**能力位** `promoTransport`，不数行样本：
+          // 「一行缺 promo」既可能是 pack 不搬、也可能是这个模型本来就没促销
+          // （后者是常态）——按样本判定等于每次展开 fold 都为兼容分支白付一次
+          // 目录读取。能力位缺失才说明对面是老 pack。
+          // **整张卡只查一次**目录（而不是逐行查）。
+          // TODO(下一个大版本)：pack 的 promo 通路稳定后可删除本分支。
+          if (value?.promoTransport !== true) {
+            const notes = await legacyPromoNotes(ctx, channel.id)
+            if (notes.size > 0) {
+              models = models.map(model => {
+                if (model.promo !== undefined && model.promo !== null) return model
+                // 拿到的字符串必须**认形状**：`description` 是通用字段，Cline /
+                // lobsterai 把上游模型介绍写在上面，不辨形状就会把宣传语画成胶囊。
+                const note = notes.get(model.id)
+                // 认出来的标注写进**专用键** `promoNote`，不回填 `description`：
+                // 后者是上游模型介绍的原样字段，往里面塞渲染态等于继续混淆两个
+                // 语义——这正是本 PR 要拆掉的耦合。
+                if (typeof note !== 'string' || !isPromoNote(note)) return model
+                return { ...model, promoNote: note }
+              })
+            }
+          }
+          setModels(models)
         } catch (error) { setModels([]); onError(channel, error) }
-      }, [rpc, channel.id, onError])
+      }, [rpc, ctx, channel.id, onError])
       const loadCredits = useCallback(async () => {
         if (!CREDIT_PROVIDERS.has(channel.id)) return
         try {
@@ -2939,6 +3239,13 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'ofm_id', title: model.id }, model.name ?? model.id),
                 model.isFree === true ? h('span', { className: 'ofm_tagpill free' }, t('chan.model.free')) : null,
                 model.dead === true ? h('span', { className: 'ofm_tagpill dead' }, t('chan.model.dead')) : null,
+                // 促销胶囊，与 connect-qoder 的 dsm-qoder-badge 同思路：CSS 与渲染都在
+                // 本插件内，不依赖宿主透传。两个来源：
+                //   ① model.promo —— **独立结构化字段**（当前路径，由适配器写下、
+                //      model.list 原样搬运）。多段时段、双段价格、displayMode 都在里面。
+                //   ② model.description —— 兼容分支（老 pack），且已经过 isPromoNote
+                //      认形状（见 loadModels），故这里直接渲染是安全的。
+                promoBadge(model),
                 h('button', {
                   type: 'button', className: 'ofm_minibtn', disabled: busy !== '' || !rpc,
                   onClick: () => accountAction('model:' + model.id, '', async () => {
@@ -3050,6 +3357,7 @@ window.__ModuleLoader__.load({
           channel,
           status: statuses?.[channel.id],
           rpc: available ? rpc : null,
+          ctx,
           t,
           onError,
           onChanged,
