@@ -1940,7 +1940,14 @@ input::placeholder, textarea::placeholder { color: #757064; opacity: 1; }
   color: var(--ink);
 }
 [data-theme="dark"] body::before {
-  background: radial-gradient(1200px 520px at 70% -10%, rgba(0, 208, 192, 0.035), transparent 64%);
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(1200px 560px at 82% -12%, rgba(233, 69, 66, 0.055), transparent 62%),
+    radial-gradient(1000px 520px at 8% 108%, rgba(0, 208, 192, 0.045), transparent 60%),
+    repeating-linear-gradient(0deg, var(--cp-scan) 0px, var(--cp-scan) 1px, transparent 1px, transparent 3px),
+    linear-gradient(90deg, var(--cp-grid) 1px, transparent 1px),
+    linear-gradient(0deg, var(--cp-grid) 1px, transparent 1px);
+  background-size: auto, auto, auto, 44px 44px, 44px 44px;
 }
 [data-theme="dark"] body::after {
   content: "";
