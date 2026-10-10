@@ -50,9 +50,16 @@ const upstream = http.createServer(async (req, res) => {
     }
   } else if (creditsFixture && pathname.endsWith(':retrieveUserQuotaSummary')) {
     json(res, { groups: [{ buckets: [
-      { bucketId: 'gemini-5h', window: '5h', remainingFraction: 0.8 },
-      { bucketId: 'gemini-weekly', window: 'weekly', remainingFraction: 0.4 },
+      { bucketId: 'gemini-5h', window: '5h', remainingFraction: 0.8, resetTime: new Date(Date.now() + 5 * 3600000).toISOString() },
+      { bucketId: 'gemini-weekly', window: 'weekly', remainingFraction: 0.4, resetTime: new Date(Date.now() + 7 * 86400000).toISOString() },
     ] }] })
+  } else if (creditsFixture && pathname.endsWith('/zcode-plan/billing/balance')) {
+    json(res, { code: 0, data: { balances: [{
+      show_name: '本机测试模型', unit_type: 'token', meter: 'model_usage',
+      total_units: 200000, remaining_units: 123000, available_units: 123000, used_units: 77000,
+    }] } })
+  } else if (creditsFixture && pathname.endsWith('/zcode-plan/billing/preview')) {
+    json(res, { code: 0, data: { plans: [] } })
   } else if (pathname.endsWith('/chat/completions')) {
     testRequests.started++
     recordRequests()
