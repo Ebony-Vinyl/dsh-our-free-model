@@ -29,7 +29,7 @@
 .settings-toggle:disabled, .settings-fieldset:disabled .settings-toggle { cursor: not-allowed; opacity: 0.55; }
 .settings-number { width: 180px; flex-shrink: 0; }
 .settings-number input { width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; transition: border-color 150ms var(--ease-out-expo), box-shadow 150ms var(--ease-out-expo); }
-.settings-number input[aria-invalid=true] { border-color: var(--danger); background: #fdf6f5; }
+.settings-number input[aria-invalid=true] { border-color: var(--danger); background: var(--danger-soft); }
 .settings-number input[aria-invalid=true]:focus-visible { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(178, 59, 75, 0.13); }
 .settings-field-error { font-size: 11px; color: var(--danger); margin-top: 6px; display: flex; align-items: flex-start; gap: 4px; animation: settingsErrorIn 220ms cubic-bezier(0.16, 1, 0.3, 1); }
 .settings-note { display: flex; align-items: flex-start; gap: 8px; background: #f2f4fa; color: #5d6478; padding: 12px; border-radius: 6px; font-size: 12px; margin-top: 16px; border: 1px solid #dfe4f3; animation: feedbackIn 260ms cubic-bezier(0.16, 1, 0.3, 1); }
@@ -53,7 +53,7 @@
 .settings-field:first-of-type, .settings-number-field:first-of-type { padding-top: 14px; }
 
 /* 数字输入：min/max 提示与 invalid 出现动画 */
-.settings-number .settings-hint { display: block; font-size: 10px; color: var(--dsw-alias-label-tertiary); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.settings-number .settings-hint { display: block; font-size: 10px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
 @keyframes settingsErrorIn { from { opacity: 0; transform: translateY(-3px) } to { opacity: 1; transform: none } }
 
 /* 操作区状态点：dirty 琥珀 / 保存中蓝色脉冲 / 已保存绿 */
@@ -85,7 +85,7 @@
 
 /* 卡片标题图标底块 */
 .cx-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; background: var(--accent-soft); color: var(--green); border-radius: 8px; }
-.cx-icon-danger { background: #fbeeee; color: var(--danger); }
+.cx-icon-danger { background: var(--danger-soft); color: var(--danger); }
 
 /* 凭证字段：密码箱质感（等宽字体 + 内敛底槽） */
 .cx-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 2px 4px 2px 12px; border: 1px solid #ddd6c9; border-radius: 7px; background: #faf7f1; transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1), background 150ms cubic-bezier(0.16, 1, 0.3, 1); }
@@ -93,7 +93,7 @@
 .cx-field > svg { color: var(--dsw-alias-label-tertiary); }
 .cx-field input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 9px 0; font-family: Consolas, "SFMono-Regular", monospace; font-size: 12.5px; box-shadow: none !important; }
 .cx-field input:focus-visible { outline: none; }
-.cx-field input::placeholder { color: #757064; font-family: inherit; }
+.cx-field input::placeholder { color: var(--muted); font-family: inherit; }
 .cx-revealed { border-color: #b9c7e8; background: var(--surface); animation: cxReveal 300ms cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes cxReveal { from { opacity: 0.55 } to { opacity: 1 } }
 .copy-field .cx-field input[readonly] { cursor: default; }
@@ -140,7 +140,7 @@
 .channel-summary-strip .checkin-control .status-dot { animation: none; }
 
 /* 工具栏：筛选 chip 计数 */
-.channel-filters button span { padding: 1px 6px; background: rgba(72, 58, 42, 0.08); border-radius: 8px; font-variant-numeric: tabular-nums; }
+.channel-filters button span { padding: 1px 6px; background: rgba(72, 58, 42, 0.08); border-radius: 8px; font-variant-numeric: tabular-nums; font-weight: 550; color: var(--ink-soft); }
 .channel-filters button[aria-pressed=true] span { background: #e4eaf9; color: var(--green); }
 
 /* 供应商卡片：logo 质感 / 计数 tabular-nums / 悬停按钮显现 */
@@ -276,7 +276,7 @@
 [data-theme="dark"] .settings-card-heading > svg { background: rgba(91, 141, 239, 0.12); color: var(--green); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05); }
 [data-theme="dark"] .settings-toggle { background: rgba(255, 255, 255, 0.08); }
 [data-theme="dark"] .settings-toggle:hover { background: rgba(255, 255, 255, 0.13); }
-[data-theme="dark"] .settings-toggle:checked { background: linear-gradient(180deg, #6e9df2, #5b8def); border-color: transparent; }
+[data-theme="dark"] .settings-toggle:checked { background: linear-gradient(180deg, #6e9df2, #5b8def); border-color: rgba(255, 255, 255, 0.17); }
 [data-theme="dark"] .settings-toggle:checked:hover { background: linear-gradient(180deg, #7aa7f4, #6e9df2); }
 [data-theme="dark"] .settings-toggle:after { background: linear-gradient(180deg, #aab4c4, #8b95a5); }
 [data-theme="dark"] .settings-toggle:checked:after { background: linear-gradient(180deg, #ffffff, #e8edf5); }
@@ -344,3 +344,229 @@
 [data-theme="dark"] .ofm_root .ofm_note { color: var(--dsw-alias-label-tertiary); }
 [data-theme="dark"] .ofm_root .ofm_modal { border-radius: 12px; }
 [data-theme="dark"] .ofm_root .ofm_toast { box-shadow: 0 16px 48px -12px rgba(0, 0, 0, 0.55); }
+
+/* ==========================================================================
+   逐元素精修层（precision pass）
+   覆盖：服务设置 settings-* / API 接入 connection-* · cx-* / 渠道管理 ch-*
+        provider-* · detail-* / EAC 内嵌 ofm_*
+   原则：只新增样式。class、DOM、aria 零改动；既有 6 个 @keyframes
+        （settingsIn / settingsErrorIn / settingsPulse / spin / feedbackIn /
+         cxReveal）全部保留，本层不新增、不改写任何关键帧。
+   动效：位移与形变只走 transform / opacity（≤180ms）；色彩与阴影过渡
+        ≤260ms 缓出，不触发几何重排。
+   ========================================================================== */
+
+/* ---------- 0. 精修令牌：昼夜成对（本文件私有，不改写 app.css 令牌） ---------- */
+:root:not([data-theme="dark"]) {
+  --ofm-hair: #eee9e0;            /* 卡片内发丝分隔线 */
+  --ofm-sheen: rgba(255, 255, 255, 0.85);
+  --ofm-hover-wash: rgba(72, 58, 42, 0.035);
+  --ofm-field-bg: #faf7f1;        /* 凭据输入底槽 */
+  --ofm-field-line: #ddd6c9;
+  --ofm-field-line-hover: #c3bbac;
+  --ofm-sunk: #f7f3ec;            /* 凹陷面：只读 / 禁用 */
+  --ofm-track-ring: rgba(72, 58, 42, 0.10);
+  --ofm-code-thumb: rgba(255, 255, 255, 0.14);
+  --ofm-danger-card-top: rgba(178, 59, 75, 0.30);
+}
+[data-theme="dark"] {
+  --ofm-hair: rgba(255, 255, 255, 0.055);
+  --ofm-sheen: rgba(255, 255, 255, 0.05);
+  --ofm-hover-wash: rgba(255, 255, 255, 0.028);
+  --ofm-field-bg: #0d1016;
+  --ofm-field-line: rgba(255, 255, 255, 0.075);
+  --ofm-field-line-hover: rgba(255, 255, 255, 0.13);
+  --ofm-sunk: rgba(255, 255, 255, 0.03);
+  --ofm-track-ring: rgba(255, 255, 255, 0.08);
+  --ofm-code-thumb: rgba(255, 255, 255, 0.16);
+  --ofm-danger-card-top: rgba(227, 106, 106, 0.26);
+}
+
+/* ==========================================================================
+   1. 服务设置（settings-*）
+   ========================================================================== */
+
+/* 1.1 表单栏宽：与「API 接入」同栏宽，避免 1440px 下每行两端被拉开 */
+.settings-browser { max-width: 900px; }
+
+/* 1.2 分组卡片标题：图标块几何稳定 + 说明文案排版 */
+.settings-card { min-width: 0; }
+.settings-card-heading > svg { display: grid; place-items: center; width: 16px; height: 16px; box-sizing: content-box; box-shadow: inset 0 1px 0 var(--ofm-sheen); }
+.settings-card-heading > div { min-width: 0; }
+.settings-card-heading h2 { line-height: 1.35; text-wrap: balance; }
+.settings-card-heading p { line-height: 1.6; text-wrap: pretty; }
+
+/* 1.3 字段行：行高、断行与鼠标悬停热区（触屏不触发粘滞高亮） */
+.settings-field strong { line-height: 1.45; }
+.settings-field small { text-wrap: pretty; }
+label.settings-field { cursor: pointer; }
+@media (hover: hover) {
+  label.settings-field { border-radius: 9px; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+  label.settings-field:hover { background: var(--ofm-hover-wash); }
+}
+
+/* 1.4 开关：昼夜同一套几何；按压纵向挤压（transform），禁用降饱和 */
+.settings-toggle { border: 1px solid transparent; transition: background 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 250ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 250ms cubic-bezier(0.16, 1, 0.3, 1), transform 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+/* 通用 input 规则（app.css 的 9px 圆角）会盖掉开关的胶囊形，这里用更高权重还原 999px */
+.settings-fieldset .settings-field .settings-toggle { border-radius: 999px; }
+.settings-toggle:active:not(:disabled) { transform: scaleY(0.94); }
+.settings-toggle:disabled, .settings-fieldset:disabled .settings-toggle { filter: saturate(0.55); }
+[data-theme="dark"] .settings-toggle { transition: background 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 250ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 250ms cubic-bezier(0.16, 1, 0.3, 1), transform 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-theme="dark"] .settings-toggle:focus-visible { outline: 2px solid rgba(122, 165, 245, 0.9); outline-offset: 3px; box-shadow: 0 0 0 5px rgba(91, 141, 239, 0.16); }
+
+/* 1.5 数字输入：读数质感 + 禁用态（保存中整表禁用） */
+.settings-number { min-width: 0; }
+.settings-number input { font-weight: 500; }
+.settings-number input:disabled { background: var(--ofm-sunk); border-color: var(--dsw-alias-border-l1); color: var(--dsw-alias-label-tertiary); cursor: not-allowed; }
+.settings-number .settings-hint { line-height: 1.5; }
+
+/* 1.6 行内错误：图标与首行对齐、任意断行 */
+.settings-field-error { line-height: 1.5; text-wrap: pretty; overflow-wrap: anywhere; }
+.settings-field-error > svg { flex-shrink: 0; margin-top: 2px; }
+
+/* 1.7 底部状态区：dirty / saving / saved 连文字一起生效；状态点收边 */
+.settings-footer { padding: 15px 2px 8px; }
+.settings-footer > span { gap: 8px; min-height: 18px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.settings-actions { align-items: center; }
+.settings-status-dot { box-shadow: inset 0 0 0 1px var(--ofm-track-ring); }
+.settings-footer > span.settings-status-dirty { color: var(--warning); }
+.settings-footer > span.settings-status-saving { color: var(--green); }
+.settings-footer > span.settings-status-saved { color: var(--success-ink); }
+[data-theme="dark"] .settings-footer > span.settings-status-dirty { color: #f2a65a; }
+[data-theme="dark"] .settings-footer > span.settings-status-saving { color: var(--green); }
+[data-theme="dark"] .settings-footer > span.settings-status-saved { color: var(--dsw-alias-state-success-primary); }
+
+/* 1.8 提示条与保存失败：长文案兜底 */
+.settings-note { line-height: 1.65; overflow-wrap: anywhere; }
+.settings-save-error { line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
+.settings-save-error > span { min-width: 0; }
+.settings-save-error > svg { margin-top: 1px; }
+
+/* ==========================================================================
+   2. API 接入（connection-* / cx-*）
+   ========================================================================== */
+
+/* 2.1 卡片标题：窄屏换行与长文案兜底 */
+.connection-card { min-width: 0; }
+.connection-card-heading { flex-wrap: wrap; row-gap: 10px; }
+.connection-card-heading > div { min-width: 0; }
+.connection-card-heading h2 { line-height: 1.35; }
+.connection-card-heading p { line-height: 1.6; text-wrap: pretty; }
+
+/* 2.2 凭据字段：收敛到 38px 控件节奏（与按钮同高），悬停/聚焦联动 */
+.cx-field { padding: 1px 4px 1px 12px; background: var(--ofm-field-bg); border-color: var(--ofm-field-line); }
+.cx-field:hover { border-color: var(--ofm-field-line-hover); }
+.cx-field > svg { transition: color 150ms cubic-bezier(0.16, 1, 0.3, 1); }
+.cx-field:focus-within > svg { color: var(--green); }
+.cx-field input { padding: 8px 0; line-height: 1.44; }
+.copy-field .cx-field input { background: transparent; border-radius: 0; }
+.cx-revealed { box-shadow: inset 0 0 0 1px rgba(38, 86, 201, 0.07); }
+[data-theme="dark"] .cx-field:focus-within > svg { color: var(--green); }
+[data-theme="dark"] .cx-revealed { box-shadow: inset 0 0 0 1px rgba(91, 141, 239, 0.1); }
+
+/* 2.3 代码块：终端表面的浏览器细节（滚动条 / 选区 / 制表符 / 方向） */
+.cx-code { tab-size: 2; -moz-tab-size: 2; direction: ltr; unicode-bidi: isolate; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--ofm-code-thumb) transparent; }
+.cx-code::selection { background: rgba(91, 141, 239, 0.32); color: #eef3ff; }
+
+/* 2.4 危险区：红色只做一层薄雾与 1px 顶光，不做整块红 */
+.connection-danger { background: linear-gradient(180deg, #fffdfa, #fdf7f7); }
+.connection-danger::before { background: linear-gradient(90deg, transparent, var(--ofm-danger-card-top), transparent); }
+.connection-danger > .ui-button { flex-shrink: 0; }
+.cx-danger-btn { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66); }
+[data-theme="dark"] .connection-danger { background: linear-gradient(180deg, #13161d, #17141a); }
+[data-theme="dark"] .connection-danger::before { background: linear-gradient(90deg, transparent, var(--ofm-danger-card-top), transparent); }
+
+/* 2.5 反馈条：图标对齐与长文案兜底 */
+.connection-feedback, .connection-error { line-height: 1.6; overflow-wrap: anywhere; }
+.connection-feedback > svg { flex-shrink: 0; margin-top: 1px; }
+
+/* 2.6 字段标签与复制行：两组凭据之间的关系更清楚 */
+.field-label { font-weight: 550; letter-spacing: 0.01em; margin: 20px 0 8px; overflow-wrap: anywhere; }
+.copy-field { align-items: stretch; }
+.copy-field > .ui-button { flex-shrink: 0; }
+.copy-field + .field-label { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.footnote { line-height: 1.65; text-wrap: pretty; overflow-wrap: anywhere; }
+
+/* ==========================================================================
+   3. 渠道管理（ch-* / provider-* / detail-*）
+   ========================================================================== */
+
+/* 3.1 汇总指标：读数排版 + 图标块顶光 */
+.ch-metric { min-width: 0; }
+.ch-metric-body { min-width: 0; }
+.ch-metric-icon { box-shadow: inset 0 1px 0 var(--ofm-sheen); }
+.ch-metric-label { font-weight: 500; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+.ch-metric-value { letter-spacing: -0.01em; }
+.ch-skeleton { vertical-align: middle; }
+
+/* 3.2 供应商卡片：logo 浮雕 + 触屏设备也能看到「管理渠道」箭头 */
+.provider-logo { letter-spacing: 0.02em; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35); }
+.provider-manage { font-weight: 550; }
+@media (hover: none) {
+  .provider-manage svg { opacity: 1; transform: none; }
+}
+[data-theme="dark"] .provider-logo { text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35); }
+
+/* 3.3 详情侧栏：选中竖条收到 1px，配合已有底色与字重表达选中 */
+.detail-provider-link { border-left-width: 1px; border-radius: 0 8px 8px 0; min-width: 0; }
+
+/* ==========================================================================
+   4. EAC 内嵌（ofm_*）—— 与独立控制台同一控件刻度
+   ========================================================================== */
+
+/* 4.1 按钮与折叠开关：圆角/高度对齐，触摸目标 ≥24px */
+.ofm_root .ofm_btn { min-height: 32px; border-radius: 9px; }
+.ofm_root .ofm_btn:disabled { cursor: not-allowed; }
+.ofm_root .ofm_minibtn { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; border-radius: 7px; }
+.ofm_root .ofm_foldtoggle { min-height: 24px; padding: 3px 8px; margin-left: -8px; border-radius: 7px; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.ofm_root .ofm_foldtoggle:hover { background: var(--dsw-alias-bg-layer-2); }
+[data-theme="dark"] .ofm_root .ofm_foldtoggle:hover { background: rgba(255, 255, 255, 0.05); }
+
+/* 4.2 行与分隔：上下对称的发丝线，控件圆角对齐 9px */
+.ofm_root .ofm_row { margin: 0; padding: 11px 0; border-top: 1px solid var(--ofm-hair); }
+.ofm_root .ofm_row.ofm_acts { padding-top: 13px; }
+.ofm_root .ofm_row select, .ofm_root .ofm_row input[type=text], .ofm_root .ofm_row input:not([type]) { border-radius: 9px; }
+.ofm_root .ofm_row input[type=checkbox] { margin: 0; cursor: pointer; }
+
+/* 4.3 卡片 / 弹窗 / 提示条圆角：夜主题与昼主题同刻度 */
+.ofm_root .ofm_card, .ofm_root .ofm_hero, .ofm_root .ofm_glass, .ofm_root .ofm_chan { border-radius: 12px; }
+.ofm_root .ofm_glass, .ofm_root .ofm_ann, .ofm_root .ofm_newsitem, .ofm_root .ofm_stat { border-radius: 12px; }
+.ofm_root .ofm_modal { border-radius: 16px; }
+.ofm_root .ofm_toast { border-radius: 11px; }
+[data-theme="dark"] .ofm_root .ofm_modal { border-radius: 16px; }
+
+/* 4.4 渠道折叠卡：logo 与状态标签跟主控制台同一语言（状态色交给内部圆点） */
+.ofm_root .ofm_chanlogo { border-radius: 9px; }
+.ofm_root .ofm_chanstate { border-radius: 6px; background: var(--dsw-alias-bg-layer-2); box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l1); }
+[data-theme="dark"] .ofm_root .ofm_chanstate { background: rgba(255, 255, 255, 0.045); color: var(--dsw-alias-label-secondary); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07); }
+
+/* ==========================================================================
+   5. 圆角刻度：夜主题与昼主题同刻度（把昼主题已定的值原样镜像，不加新数值）
+   ========================================================================== */
+.provider-logo { border-radius: 11px; }
+.settings-card-heading > svg, .cx-icon, .cx-icon-danger, .ch-metric-icon { border-radius: 10px; }
+.settings-number input, .settings-note, .settings-save-error,
+.connection-feedback, .connection-error, .cx-field, .detail-security-note { border-radius: 9px; }
+.cx-code { border-radius: 10px; }
+.detail-provider-link { border-radius: 0 8px 8px 0; }
+
+/* ==========================================================================
+   6. 对比度底线：昼主题实测低于 4.5:1 的次要文字（夜主题已有自己的规则）
+   ========================================================================== */
+:root:not([data-theme="dark"]) .settings-number .settings-hint { color: var(--muted); }
+:root:not([data-theme="dark"]) .ch-metric-label { color: var(--muted); }
+:root:not([data-theme="dark"]) .provider-counts { color: var(--dsw-alias-label-secondary); }
+:root:not([data-theme="dark"]) .provider-detail-top { color: var(--muted); }
+:root:not([data-theme="dark"]) .detail-security-note { color: var(--dsw-alias-label-secondary); }
+
+/* ==========================================================================
+   7. 响应式补丁与动效降级
+   ========================================================================== */
+@media (max-width: 700px) {
+  .connection-danger { flex-direction: column; align-items: stretch; }
+  .connection-danger > .ui-button { width: 100%; }
+  .settings-footer { padding: 15px 2px 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-toggle:active:not(:disabled) { transform: none !important; }
+}
