@@ -2126,7 +2126,11 @@ window.__ModuleLoader__.load({
           updatePending({ link: started.link, url: started.url, startedAt: Date.now() })
           if (started.opened !== true) setNotice(t('eac.openManually'))
         } catch (error) {
-          if (current === attempt.current) setNotice(t('eac.startFailed').replace('{reason}', 'unreachable'))
+          if (current === attempt.current) {
+            const raw = String(error?.message ?? '').trim()
+            const reason = /^gateway-http-\d{3}$/.test(raw) ? `HTTP ${raw.slice(-3)}` : (raw || 'unreachable')
+            setNotice(t('eac.startFailed').replace('{reason}', reason))
+          }
         } finally { starting.current = false; setBusy(false) }
       }
       const logout = async () => {

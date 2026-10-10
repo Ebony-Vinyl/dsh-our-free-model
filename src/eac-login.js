@@ -24,7 +24,7 @@ export function createEacLoginPoller({ credentialOf, fetch, readUser, writeUser,
     try {
       const root = credential.base.replace(/\/v1\/?$/, '')
       response = await fetch(`${root}/auth/poll?link=${encodeURIComponent(link)}&retain=1`, {
-        headers: { accept: 'application/json' }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+        headers: { accept: 'application/json', 'user-agent': 'dsh-our-free-model' }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
       })
       if (!response.ok) return { error: `gateway-http-${response.status}` }
       data = await response.json().catch(() => null)
@@ -45,7 +45,7 @@ export function createEacLoginPoller({ credentialOf, fetch, readUser, writeUser,
     if (data.ackRequired === true) {
       try {
         await fetch(`${credential.base.replace(/\/v1\/?$/, '')}/auth/ack?link=${encodeURIComponent(link)}`, {
-          method: 'POST', headers: { accept: 'application/json', 'x-ofm-user': saved.token },
+          method: 'POST', headers: { accept: 'application/json', 'x-ofm-user': saved.token, 'user-agent': 'dsh-our-free-model' },
           signal: AbortSignal.timeout(3000),
         })
       } catch { /* bounded pending TTL handles an unreachable confirmation */ }
@@ -66,11 +66,12 @@ export function createEacLoginPoller({ credentialOf, fetch, readUser, writeUser,
         // The existing start endpoint registers a waiting link. Node transport
         // does not follow its OAuth redirect; the system browser opens later.
         const response = await fetch(`${credential.base.replace(/\/v1\/?$/, '')}/auth/github/start?link=${encodeURIComponent(link)}`, {
+          headers: { accept: 'application/json, text/html, */*', 'user-agent': 'dsh-our-free-model' },
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
         })
         await response.text().catch(() => {})
         if (startedGeneration !== generation || sessionFor(link).cancelled) return { error: 'cancelled' }
-        return response.status === 302 ? { ok: true } : { error: `gateway-http-${response.status}` }
+        return (response.status >= 200 && response.status < 400) ? { ok: true } : { error: `gateway-http-${response.status}` }
       } catch { return { error: controller.signal.aborted ? 'cancelled' : 'unreachable' } }
       finally { if (controllers.get(link) === controller) controllers.delete(link) }
     },
