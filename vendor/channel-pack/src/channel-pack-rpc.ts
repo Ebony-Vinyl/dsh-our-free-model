@@ -3111,7 +3111,7 @@ function registerChannelPackEndpoints(
           const values = await collectCreditBalances<GeminiCredential, typeof GEMINI>(accounts, GEMINI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             fetchBalanceDetailed: async (credential) => {
-              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI)
+              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, { force: req.force === true })
               const extra: RpcCreditsBalanceExtra | undefined = tier === undefined
                 ? undefined
                 : { accountTier: { label: tier.label, title: `${tier.name}（${tier.id}）` } }

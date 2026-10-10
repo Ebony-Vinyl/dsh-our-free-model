@@ -102,6 +102,7 @@ export async function verifyChannelCreditsUi() {
   fail = true
   app.button('刷新余额').props.onClick()
   await settle()
+  assert.equal(app.calls.filter(row => row.method === 'credits.balances').at(-1).payload.force, true, '手动重试必须跳过配额缓存')
   assert.ok(app.text().includes('余额查询失败：网络暂时断开'))
   assert.equal(app.button('刷新余额').props.disabled, false)
   fail = false

@@ -61604,7 +61604,7 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
           const values2 = await collectCreditBalances(accounts, GEMINI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             fetchBalanceDetailed: async (credential) => {
-              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI);
+              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, { force: req.force === true });
               const extra = tier === void 0 ? void 0 : { accountTier: { label: tier.label, title: `${tier.name}\uFF08${tier.id}\uFF09` } };
               return {
                 balance,

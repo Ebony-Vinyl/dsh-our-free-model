@@ -2856,7 +2856,7 @@ window.__ModuleLoader__.load({
         setBalanceLoading(true); setBalanceError('')
         request.promise = (async () => {
           try {
-            const value = await rpc('credits.balances', { provider: channel.id }, 90_000)
+            const value = await rpc('credits.balances', { provider: channel.id, ...afterWrite ? { force: true } : {} }, 90_000)
             if (generation === balanceGeneration.current) setBalances(value?.accounts ?? [])
           } catch (error) {
             if (generation === balanceGeneration.current) {
@@ -3049,7 +3049,7 @@ window.__ModuleLoader__.load({
           }, busy === 'refreshAll' ? '…' : t('chan.act.refresh')) : null,
           creditCapability ? h('button', {
             type: 'button', className: 'ofm_btn ghost', disabled: balanceLoading || busy !== '' || !rpc,
-            'aria-busy': balanceLoading ? 'true' : undefined, onClick: () => void loadBalances(),
+            'aria-busy': balanceLoading ? 'true' : undefined, onClick: () => void loadBalances(true),
           }, balanceLoading ? t('chan.credits.loading') : t('chan.credits.refresh')) : null,
           creditCapability?.claim ? h('button', {
             type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'claim' ? 'true' : undefined,
