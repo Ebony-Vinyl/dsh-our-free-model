@@ -23,6 +23,12 @@ worker/.env
 c3099.txt
 stats.json
 
+# 本地代码索引及工具状态，不进入仓库。
+.aoci/
+/aoci.txt
+/aoci.code.txt
+/aoci.meta.txt
+
 # AOCI agent host integration (machine-bound; do not commit)
 .codex/config.toml
 .codex/config.toml.backup.*
