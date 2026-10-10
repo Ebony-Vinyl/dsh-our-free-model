@@ -445,6 +445,9 @@ window.__ModuleLoader__.load({
         'gw.relayNote': '中继只放行模型接口（/v1/*），并要求携带中继密钥；局域网绑定意味着同网段的设备都能访问到这个端口。',
         'gw.freeLaneNote': '免费车道（Our Free Model）自己的转发端口在「免费模型」页的「本地转发」分区。',
         'chan.credits.left': '剩余积分',
+        'chan.credits.usd': '剩余余额（美元）',
+        'chan.credits.tokens': '剩余额度（token）',
+        'chan.credits.quota': '配额剩余',
         'chan.auto.title': '每日自动签到',
         'chan.auto.running': '签到进行中…',
         'chan.auto.ran': '今日已自动签到',
@@ -865,6 +868,9 @@ window.__ModuleLoader__.load({
         'gw.relayNote': 'The relay forwards only the model routes (/v1/*) and demands the relay key; binding to the LAN means every device on the network can reach that port.',
         'gw.freeLaneNote': 'The free lane (Our Free Model) has its own forward port under "Local forward" on the Free models page.',
         'chan.credits.left': 'Credits left',
+        'chan.credits.usd': 'Balance (USD)',
+        'chan.credits.tokens': 'Quota (tokens)',
+        'chan.credits.quota': 'Quota left',
         'chan.auto.title': 'Daily auto check-in',
         'chan.auto.running': 'Check-in running…',
         'chan.auto.ran': 'Checked in today',
@@ -1267,6 +1273,28 @@ window.__ModuleLoader__.load({
       if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
       if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K`
       return String(n)
+    }
+
+    /**
+     * The unit a balance is measured in. Channels report different things under
+     * the same `CreditBalance` shape — Cline is USD, ZCode is tokens, Gemini is
+     * a quota percentage — and labelling all of them "积分" is a lie. The unit
+     * arrives on the packages the pack returns, so read it from there and fall
+     * back to credits when the response carries nothing.
+     */
+    function balanceUnit(balance) {
+      const unit = (balance?.packages ?? []).map(p => p?.unit).find(u => typeof u === 'string' && u !== '')
+      if (unit === undefined) return 'credit'
+      return unit
+    }
+
+    /** The dictionary key for a balance label: 积分 by default, USD / token / % where the channel bills differently. */
+    function unitLabel(unit) {
+      const u = String(unit ?? '').toLowerCase()
+      if (u === 'usd' || u === '$') return 'chan.credits.usd'
+      if (u === 'token' || u === 'tokens') return 'chan.credits.tokens'
+      if (u === '%') return 'chan.credits.quota'
+      return 'chan.credits.left'
     }
 
     function ago(ts, locale) {
@@ -2640,8 +2668,23 @@ window.__ModuleLoader__.load({
       { id: 'gemini', name: 'Gemini', org: 'Google Code Assist', accent: '#4285F4', note: '本地回调 OAuth 免费线', login: 'browser' },
     ]
 
-    /** Channels whose daily credits can be claimed from here. */
-    const CREDIT_PROVIDERS = new Set(['codearts', 'buddy', 'workbuddy', 'lobsterai', 'qoder', 'qodercn', 'loomy', 'minimax'])
+    /**
+     * Channels whose remaining balance the pack can report. `credits.balances`
+     * has a real branch for every channel (raccoon queries
+     * `GET /points/v1/balance`, TRAE / Cline / ZCode / Gemini each have theirs),
+     * so this is all of them. The old narrower whitelist is why the Raccoon card
+     * never showed its credits even though the backend had the number.
+     */
+    const BALANCE_PROVIDERS = new Set(CHANNEL_PROVIDERS.map(row => row.id))
+
+    /**
+     * Channels whose daily credits can be claimed from here. This must mirror
+     * the `credits.claimAll` branches in the pack: CodeArts / buddy / LobsterAI
+     * / Qoder / TRAE / Loomy / MiniMax / ZCode all claim; WorkBuddy 国际版、
+     * Cline、Raccoon、Gemini have no check-in endpoint and the pack answers
+     * `bad-request` — showing the button there only errors at the user.
+     */
+    const CREDIT_PROVIDERS = new Set(['codearts', 'buddy', 'lobsterai', 'qoder', 'qodercn', 'trae', 'loomy', 'minimax', 'zcode'])
 
     /**
      * The host RPC the pack registered at `/api/channel-pack`.
@@ -2721,7 +2764,7 @@ window.__ModuleLoader__.load({
         } catch { setCredits([]) }
       }, [rpc, channel.id])
       const loadBalances = useCallback(async () => {
-        if (!CREDIT_PROVIDERS.has(channel.id)) return
+        if (!BALANCE_PROVIDERS.has(channel.id)) return
         try {
           const value = await rpc('credits.balances', { provider: channel.id }, 90_000)
           setBalances(value?.accounts ?? [])
@@ -2732,7 +2775,7 @@ window.__ModuleLoader__.load({
       // balances move whenever a model is used elsewhere, and a stale credit
       // count reads as "I have more quota than I do".
       useEffect(() => {
-        if (!CREDIT_PROVIDERS.has(channel.id)) return undefined
+        if (!BALANCE_PROVIDERS.has(channel.id)) return undefined
         const timer = setInterval(() => { void loadBalances() }, 90_000)
         return () => clearInterval(timer)
       }, [channel.id, loadBalances])
@@ -2742,6 +2785,8 @@ window.__ModuleLoader__.load({
       }
       const balancesTotal = (balances ?? []).reduce((sum, row) => sum + (Number.isFinite(row.balance?.total) ? row.balance.total : 0), 0)
       const balancesKnown = (balances ?? []).some(row => Number.isFinite(row.balance?.total))
+      // 汇总徽标的单位：取第一个有包的账号的单位（同一渠道内单位一致）。
+      const balanceUnitOf = rows => balanceUnit((rows ?? []).find(row => (row.balance?.packages ?? []).length > 0)?.balance)
 
       // Refetch what is on screen whenever the pack reports a change for this
       // channel: an account added in another tab, a completed background login,
@@ -2862,8 +2907,8 @@ window.__ModuleLoader__.load({
         h('div', { className: 'ofm_chanmeta' },
           h('span', null, `${t('chan.meta.accounts')} `, h('b', null, `${enabledCount}/${accountsCount}`)),
           h('span', null, `${t('chan.meta.models')} `, h('b', null, modelsTotal === 0 ? '—' : `${modelsTotal - modelsOff}/${modelsTotal}`)),
-          CREDIT_PROVIDERS.has(channel.id) ? h('span', { className: 'ofm_credittotal' },
-            `${t('chan.credits.left')} `,
+          BALANCE_PROVIDERS.has(channel.id) ? h('span', { className: 'ofm_credittotal' },
+            `${t(unitLabel(balanceUnitOf(balances)))} `,
             h('b', null, balancesKnown ? kilo(balancesTotal) : balances === undefined ? '…' : '—')) : null),
         h('div', { className: 'ofm_chanacts' },
           h('button', { type: 'button', className: 'ofm_btn', disabled: busy !== '' || !rpc, onClick: startLogin }, busy === 'add' ? '…' : t('chan.act.add')),
@@ -2901,8 +2946,8 @@ window.__ModuleLoader__.load({
                   (() => {
                     const balance = balanceOf(row.id)
                     if (balance === null || !Number.isFinite(balance.total)) return null
-                    return h('span', { className: 'ofm_creditbadge strong', title: t('chan.credits.left') },
-                      `${t('chan.credits.left')} ${kilo(balance.total)}`)
+                    return h('span', { className: 'ofm_creditbadge strong', title: t(unitLabel(balanceUnit(balance))) },
+                      `${t(unitLabel(balanceUnit(balance)))} ${kilo(balance.total)}`)
                   })(),
                   h('span', { className: 'ofm_acctacts' },
                     h('button', {
