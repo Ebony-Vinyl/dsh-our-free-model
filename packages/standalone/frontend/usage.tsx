@@ -72,8 +72,8 @@ export function Usage({ stats, host, active }: { stats: Stats; host: Host; activ
     {message && <p className="usage-feedback" role="status">{message}</p>}
     {error && <div className="channel-error" role="alert"><CircleAlert size={16} /><span>{error}</span>
       <Button variant="ghost" aria-label="关闭统计错误提示" onClick={() => setError('')}><X size={15} /></Button></div>}
-    <div className="usage-metrics">{metrics.map(metric => <Card className="dashboard-metric" key={metric.name}>
-      <div><span>{metric.name}</span><metric.icon size={17} /></div>
+    <div className="usage-metrics">{metrics.map(metric => <Card className="dashboard-metric ov-metric" key={metric.name}>
+      <div><span>{metric.name}</span><div className="ov-metric-icon"><metric.icon size={17} /></div></div>
       <strong title={number(metric.value)} data-metric={metric.name}>{metric.name.includes('Token') ? compact(metric.value) : number(metric.value)}</strong><p>{metric.detail}</p>
     </Card>)}</div>
     <div className="usage-scope"><span>累计统计 · 不受下方趋势天数影响</span>

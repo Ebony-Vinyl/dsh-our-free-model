@@ -107,6 +107,11 @@ try {
     assert.equal(page.headers.get('referrer-policy'), 'no-referrer')
     const body = await page.text()
     assert.match(body, /本地控制台/)
+    assert.match(page.headers.get('content-security-policy'), /script-src 'self';/)
+    const scripts = [...body.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
+    assert.ok(scripts.length > 0)
+    assert.ok(scripts.every(([, attributes, content]) => /\bsrc=/.test(attributes) && !content.trim()),
+      '管理页脚本必须通过同源外部资源加载，不能依赖被 CSP 禁止的内联脚本')
     const platform = process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'unsupported'
     assert.ok(body.includes(`data-login-platform="${platform}"`))
     assert.ok(!body.includes(key))

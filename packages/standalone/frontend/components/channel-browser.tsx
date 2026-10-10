@@ -56,10 +56,23 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
     return `${provider.name} ${provider.org}`.toLowerCase().includes(search.toLowerCase().trim())
       && (filter === 'all' || (status !== undefined && (filter === 'connected' ? isConnected : !isConnected)))
   })
+  // 分类标签展示全量数量；搜索后的匹配数量由结果栏单独展示。
+  const counts: Record<string, number> = {
+    all: providers.length,
+    connected,
+    pending: providers.filter(provider => {
+      const status = statuses?.[provider.id]
+      return status !== undefined && (status.closed || (status.accounts?.enabled ?? 0) <= 0)
+    }).length,
+  }
   return <>
     <div className="channel-summary-strip">
-      <div><Network size={18} /><span>已接入渠道</span><strong>{statuses ? connected : '—'}<small> / 13</small></strong></div>
-      <div><ShieldCheck size={18} /><span>本机账号</span><strong>{statuses ? accounts : '—'}</strong></div>
+      <div className="ch-metric"><span className="ch-metric-icon"><Network size={16} /></span>
+        <div className="ch-metric-body"><span className="ch-metric-label">已接入渠道</span>
+          <strong className="ch-metric-value">{statuses ? connected : <span className="ch-skeleton" />}<small> / {providers.length}</small></strong></div></div>
+      <div className="ch-metric"><span className="ch-metric-icon"><ShieldCheck size={16} /></span>
+        <div className="ch-metric-body"><span className="ch-metric-label">本机账号</span>
+          <strong className="ch-metric-value">{statuses ? accounts : <span className="ch-skeleton" />}</strong></div></div>
       <div className="checkin-control"><span className="status-dot" /><span>{auto?.running ? '签到进行中' : auto?.ranToday ? '今日签到已执行' : '每日自动签到'}</span>
         <button type="button" role="switch" aria-label="每日自动签到" aria-checked={auto?.enabled === true}
           className={`ui-switch ${auto?.enabled ? 'on' : ''}`} disabled={!auto || busy} onClick={() => {
@@ -83,7 +96,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
     </div> : <>
       <div className="channel-toolbar"><div className="channel-search"><Search size={17} /><Input aria-label="搜索渠道" placeholder="搜索渠道或供应商…" value={search} onChange={event => setSearch(event.target.value)} /></div>
         <div className="channel-filters" aria-label="渠道状态筛选">{[['all', '全部渠道'], ['connected', '已接入'], ['pending', '待接入']].map(([id, label]) =>
-          <button key={id} aria-pressed={filter === id} disabled={id !== 'all' && !statuses} onClick={() => setFilter(id)}>{label}{id === 'all' && <span>{providers.length}</span>}</button>)}</div>
+          <button key={id} aria-pressed={filter === id} disabled={id !== 'all' && !statuses} onClick={() => setFilter(id)}>{label}<span>{id === 'all' || statuses ? counts[id] : '—'}</span></button>)}</div>
       </div>
       <div className="channel-results-meta"><span>{rows.length} 个渠道</span><span><SlidersHorizontal size={13} />按供应商管理独立账号与额度</span></div>
       <div className="provider-grid">{rows.map(provider => {

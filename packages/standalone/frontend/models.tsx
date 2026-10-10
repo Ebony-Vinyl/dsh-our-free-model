@@ -80,7 +80,13 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
         const result = await host.testModel(model.id, controller.signal)
         if (!isCurrent()) return
         setTest({ model, state: 'success', result })
-        await host.refresh()
+        try {
+          await host.refresh()
+        } catch (reason) {
+          if (!isCurrent()) return
+          const detail = reason instanceof Error ? reason.name === 'TimeoutError' ? '请求超时，请重试。' : reason.message : '请求失败，请重试。'
+          setError(`模型测试已成功，但刷新摘要失败：${detail}`)
+        }
       } else {
         await host.refreshModels(kind === 'probe', controller.signal)
         if (!isCurrent()) return
@@ -88,19 +94,30 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
       }
     } catch (reason) {
       if (!isCurrent()) return
-      const detail = reason instanceof Error ? reason.name === 'TimeoutError' ? '请求超时，请重试。' : reason.message : '请求失败，请重试。'
-      if (model) setTest(previous => previous?.state === 'success' ? previous : { model, state: 'error', error: detail })
-      setError(detail)
+      const detail = reason instanceof Error ? reason.name === 'TimeoutError' ? '请求超时，请重试。' : reason.message : '操作失败，请重试。'
+      if (kind === 'test' && model) setTest({ model, state: 'error', error: detail })
+      else setError(detail)
     } finally {
-      if (pending.current === controller) { pending.current = undefined; setOperation(undefined) }
+      if (isCurrent()) { pending.current = undefined; setOperation(undefined) }
     }
   }
+
   const cancel = () => {
     pending.current?.abort()
     pending.current = undefined
     setOperation(undefined)
     setTest(previous => previous ? { ...previous, state: 'cancelled' } : previous)
   }
+
+  const copyModelId = (model: Model) => {
+    void host.copy(model.id).then(() => {
+      if (activeRef.current) {
+        setCopied(model.id)
+        setTimeout(() => { if (activeRef.current) setCopied(undefined) }, 1800)
+      }
+    }).catch(host.error)
+  }
+
   if (!active) return null
   const filtered = Object.entries(filters).some(([key, value]) => value !== initialFilters[key as keyof typeof initialFilters])
   const routable = summary.catalog.filter(model => model.routable).length
@@ -187,11 +204,13 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
                 {availabilityNames[state] ?? '未知状态'}</Badge>{!model.routable && <small>未公开</small>}
                 {model.ttftMs != null && <small>首响应 {number(model.ttftMs)} ms</small>}</div>
               <div role="cell" className="model-row-actions">
-                <Button variant="ghost" title={`复制 ${model.id}`} aria-label={`复制模型 ID：${model.id}`} onClick={() => {
-                  void host.copy(model.id).then(() => { if (activeRef.current) setCopied(model.id) }).catch(host.error)
-                }}>{copied === model.id ? <Check size={16} /> : <Copy size={16} />}</Button>
+                <Button variant="ghost" title={`复制 ${model.id}`} aria-label={`复制模型 ID：${model.id}`} onClick={() => copyModelId(model)}
+                  className={copied === model.id ? 'md-copy-done' : ''}>
+                  {copied === model.id ? <Check size={16} /> : <Copy size={16} />}
+                </Button>
                 <Button variant="outline" disabled={!!disabledReason} title={disabledReason || `测试 ${model.name}，会产生推理请求`}
-                  aria-label={`测试模型：${model.id}`} onClick={() => { void run('test', model) }}>
+                  aria-label={`测试模型：${model.id}`} onClick={() => { void run('test', model) }}
+                  className={operation === 'test' && test?.model.id === model.id ? 'md-testing' : ''}>
                   {operation === 'test' && test?.model.id === model.id ? <LoaderCircle size={14} className="spinning" /> : <Play size={14} />}测试
                 </Button>
               </div>

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import vm from 'node:vm'
 import { buildStats } from '../src/core/stats.js'
 import { filterModels } from '../packages/standalone/frontend/models-data.mjs'
 import { usageDays, usageModels } from '../packages/standalone/frontend/usage-data.mjs'
 import { settingsDraft, settingsChanged, syncSettings, validateSettingsDraft } from '../packages/standalone/frontend/settings-data.mjs'
 import { verifySettingsHost } from './standalone-settings-host-test.mjs'
+import { verifyModelOperation } from './standalone-model-operation-test.mjs'
+import { verifyChannelFilters } from './standalone-channel-filter-test.mjs'
 import { spawnSync } from 'node:child_process'
 
 const web = new URL('../packages/standalone/web/', import.meta.url)
@@ -14,6 +17,24 @@ assert.ok(assets.includes('app.js') && assets.includes('app.css'))
 assert.ok(assets.every(name => /^[\w-]+\.(js|css)$/.test(name)))
 for (const name of assets) assert.ok(fs.statSync(new URL(name, web)).size > 0)
 const html = fs.readFileSync(new URL('index.html', web), 'utf8')
+const themeSource = fs.readFileSync(new URL('../packages/standalone/frontend/theme.mjs', import.meta.url), 'utf8')
+for (const [saved, prefersDark, expected, storageUnavailable] of [
+  ['dark', false, 'dark'],
+  ['light', true, 'light'],
+  [null, true, 'dark'],
+  [null, false, 'light'],
+  ['invalid', true, 'dark'],
+  [null, true, 'dark', true],
+]) {
+  const document = { documentElement: { dataset: {} } }
+  vm.runInNewContext(themeSource, {
+    document,
+    localStorage: { getItem() { if (storageUnavailable) throw new Error('存储不可用'); return saved } },
+    window: { matchMedia: () => ({ matches: prefersDark }) },
+  })
+  assert.equal(document.documentElement.dataset.theme, expected,
+    `主题初始化：保存值=${saved}，系统深色=${prefersDark}，存储不可用=${!!storageUnavailable}`)
+}
 assert.match(html, /type="module".+src="\/assets\/app.js"/)
 assert.ok(!html.includes('channels-'), '渠道不应在登录首屏预加载')
 assert.ok(!html.includes('models-'), '模型页面不应在登录首屏预加载')
@@ -156,4 +177,6 @@ assert.deepEqual(savedSettings, {
   defaultMaxTokens: 32768, probeIntervalMinutes: 15,
 }, '草稿操作不能改动输入配置')
 await verifySettingsHost()
+await verifyModelOperation()
+verifyChannelFilters()
 console.log('standalone-frontend: 资源登记、四页面分包、模型筛选、统计日期分页、设置校验与草稿同步、迟到摘要及退出保存检查通过')
