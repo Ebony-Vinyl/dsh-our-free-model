@@ -2684,3 +2684,163 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   .dashboard-heading, .page-heading { gap: 10px; }
   .source-row { gap: 8px; }
 }
+
+/* ==========================================================================
+   质感彩蛋层（sk- micro-delights）· 骨架 / 导航 / 登录 / 概览微反馈
+   --------------------------------------------------------------------------
+   本层只新增规则：不改写、不删除任何既有规则、class 名、DOM 契约。
+   既有 15 个 @keyframes 原样保留；新增关键帧全部启用 sk- 新名字：
+   sk-logo-nod / sk-brand-dot-pop / sk-copied-in / sk-check-pop。
+   动效只使用 transform / opacity（颜色与阴影只做平滑过渡），不动宽高与定位。
+   浅色统一加 :root:not([data-theme="dark"]) 前缀，深色统一加 [data-theme="dark"]；
+   不带主题前缀的规则在两主题下都成立。
+   ========================================================================== */
+
+/* ==========================================================================
+   A. 骨架与导航
+   ========================================================================== */
+
+/* A1 品牌 logo：扫过时轻轻“点一次头”，动画收尾与悬停位无缝衔接（560ms 春感） */
+@keyframes sk-logo-nod {
+  0%   { transform: translateY(0)    rotate(0deg)    scale(1); }
+  38%  { transform: translateY(-1px) rotate(-4.5deg) scale(1.02); }
+  70%  { transform: translateY(-1px) rotate(1.6deg)  scale(1.02); }
+  100% { transform: translateY(-1px) rotate(0deg)    scale(1.02); }
+}
+.console-brand:hover .console-mark { animation: sk-logo-nod 560ms var(--ease-spring); }
+.console-brand:active .console-mark { animation: none; }
+
+/* A2 主题开关：日升月沉的垂直交替（在既有旋转缩放之上叠加方向感） */
+.theme-toggle-track[data-theme="light"] .theme-toggle-sun { transform: translateY(5px) rotate(90deg) scale(0.35); opacity: 0; }
+.theme-toggle-track[data-theme="light"] .theme-toggle-moon { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+.theme-toggle-track[data-theme="dark"] .theme-toggle-moon { transform: translateY(-5px) rotate(-90deg) scale(0.35); opacity: 0; }
+.theme-toggle-track[data-theme="dark"] .theme-toggle-sun { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+
+/* A3 导航指示条：选中切换 300ms 春感更从容；hover 预览更醒目 */
+.console-nav-indicator { transition: transform 300ms var(--ease-spring), opacity 200ms var(--ease-glide); }
+.console-nav-item:hover .console-nav-indicator { transform: translateY(-50%) scaleY(0.65); }
+
+/* A4 导航图标：hover 位移更“跟手”（1px -> 2px，同一条春感曲线） */
+.console-nav-item svg { transition: transform 240ms var(--ease-spring), opacity 180ms var(--ease-glide); }
+.console-nav-item:hover svg { transform: translateX(2px); }
+
+/* A5 工作空间头像：hover 轻轻歪头（外层 -5°，盾牌 +3° 作惯性反作用） */
+.workspace-avatar { transition: transform 260ms var(--ease-spring), box-shadow 280ms var(--ease-out-expo); }
+.workspace-avatar svg { transition: transform 300ms var(--ease-spring); }
+.workspace-switch:hover .workspace-avatar { transform: rotate(-5deg) scale(1.07); }
+.workspace-switch:hover .workspace-avatar svg { transform: rotate(3deg); }
+:root:not([data-theme="dark"]) .workspace-switch:hover .workspace-avatar {
+  box-shadow: inset 0 0 0 1px rgba(38, 86, 201, 0.26), 0 5px 12px -5px rgba(38, 86, 201, 0.42);
+}
+[data-theme="dark"] .workspace-switch:hover .workspace-avatar {
+  box-shadow:
+    inset 0 0 0 1px rgba(122, 165, 245, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 18px -12px rgba(91, 141, 239, 1);
+}
+
+/* A6 状态点：扫到状态行时“啵”一下（点体 1.18 / 光环 1.6），不打断既有呼吸 */
+.status-dot { transition: transform 260ms var(--ease-spring); }
+.status-dot::after { transition: transform 260ms var(--ease-spring); }
+.console-sidebar-footer > div:hover .status-dot { transform: scale(1.18); }
+.console-sidebar-footer > div:hover .status-dot::after { transform: scale(1.6); }
+
+/* ==========================================================================
+   B. 登录页：品牌字标的“一个有设计的瞬间”
+   ========================================================================== */
+
+/* B1 开始输入（focus-within）那一刻，句点蹦一下并亮起；只播一次，不循环 */
+@keyframes sk-brand-dot-pop {
+  0%   { transform: translateY(0) scale(1); }
+  42%  { transform: translateY(-3px) scale(1.42); }
+  100% { transform: translateY(0) scale(1); }
+}
+.login-card .brand-mark span {
+  display: inline-block;
+  transform-origin: 50% 72%;
+  transition: color 260ms var(--ease-glide), filter 300ms var(--ease-glide);
+}
+.login-card:focus-within .brand-mark span { animation: sk-brand-dot-pop 520ms var(--ease-spring) both; }
+:root:not([data-theme="dark"]) .login-card:focus-within .brand-mark span {
+  color: #2f61d8;
+  filter: drop-shadow(0 0 7px rgba(38, 86, 201, 0.5));
+}
+[data-theme="dark"] .login-card:focus-within .brand-mark span {
+  color: #8fb4ff;
+  filter: drop-shadow(0 0 9px rgba(122, 165, 245, 0.65));
+}
+
+/* ==========================================================================
+   C. 概览：图表 / 来源 / 复制反馈
+   ========================================================================== */
+
+/* C1 图表柱：hover 时从底部轻轻“长”一点；zero 柱不参与，保持数据诚实 */
+.dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) { transform: scale(1.06, 1.08); }
+:root:not([data-theme="dark"]) .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 14px -8px rgba(38, 86, 201, 0.6);
+}
+[data-theme="dark"] .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) {
+  box-shadow: 0 0 14px -2px rgba(91, 141, 239, 0.6);
+}
+
+/* C2 图表日期标签：hover 跟随主题变量变得更清晰（浅更深 / 深更亮） */
+.dashboard-chart-column > span { transition: color 180ms var(--ease-glide); }
+.dashboard-chart-column:hover > span { color: var(--dsw-alias-label-secondary); }
+
+/* C3 来源图标：hover 时图标轻轻“歪一下”，像被拿起来看了一眼 */
+.source-icon svg { transition: transform 280ms var(--ease-spring); }
+.source-row:hover .source-icon svg { transform: rotate(-6deg) scale(1.05); }
+
+/* C4 复制反馈：文字上浮落定 + 一枚纯 CSS 小对勾延迟弹出（零新增 DOM） */
+@keyframes sk-copied-in {
+  0%   { opacity: 0; transform: translateY(4px) scale(0.97); }
+  62%  { opacity: 1; transform: translateY(0) scale(1.012); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes sk-check-pop {
+  0%   { opacity: 0; transform: rotate(-45deg) scale(0); }
+  72%  { opacity: 1; transform: rotate(-45deg) scale(1.14); }
+  100% { opacity: 1; transform: rotate(-45deg) scale(1); }
+}
+.copy-feedback {
+  display: inline-block;
+  animation: sk-copied-in 340ms var(--ease-spring) both;
+}
+.copy-feedback::before {
+  content: ""; display: inline-block;
+  width: 7px; height: 4px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  border-left: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  border-bottom-left-radius: 1px;
+  transform: rotate(-45deg);
+  animation: sk-check-pop 420ms var(--ease-spring) 60ms both;
+}
+
+/* ==========================================================================
+   D. 减弱动效：只关掉本层新增的动作，保留颜色 / 阴影等状态反馈
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .console-brand:hover .console-mark,
+  .login-card:focus-within .brand-mark span,
+  .copy-feedback,
+  .copy-feedback::before { animation: none !important; }
+  .console-nav-item svg, .console-nav-item:hover svg,
+  .console-nav-indicator, .console-nav-item:hover .console-nav-indicator,
+  .workspace-avatar, .workspace-switch:hover .workspace-avatar,
+  .workspace-avatar svg, .workspace-switch:hover .workspace-avatar svg,
+  .status-dot, .status-dot::after,
+  .console-sidebar-footer > div:hover .status-dot,
+  .console-sidebar-footer > div:hover .status-dot::after,
+  .dashboard-chart-bar, .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero),
+  .dashboard-chart-column > span,
+  .source-icon svg, .source-row:hover .source-icon svg { transition: none !important; }
+  .workspace-switch:hover .workspace-avatar,
+  .workspace-switch:hover .workspace-avatar svg,
+  .console-sidebar-footer > div:hover .status-dot,
+  .console-sidebar-footer > div:hover .status-dot::after,
+  .source-row:hover .source-icon svg,
+  .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) { transform: none !important; }
+  .console-nav-item:hover .console-nav-indicator { transform: translateY(-50%) scaleY(0.5); }
+}
