@@ -917,7 +917,7 @@ window.__ModuleLoader__.load({
    层级约定：layer-3 凹槽/页面底 · layer-2 面板 · layer-1 浮起元素。
    动效约定：transform/opacity 优先；常规 150–300ms、覆盖层 300–400ms。
    ═══════════════════════════════════════════════════════════════════════ */
-.ofm_root{--gap:14px;display:flex;flex-direction:column;gap:calc(var(--gap)*1.4);max-width:1080px;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary);-webkit-font-smoothing:antialiased}
+.ofm_root{--ease-instrument:cubic-bezier(.16,1,.3,1);--ease-settle:cubic-bezier(.34,1.4,.4,1);--gap:14px;display:flex;flex-direction:column;gap:calc(var(--gap)*1.4);max-width:1080px;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary);-webkit-font-smoothing:antialiased}
 .ofm_root::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.022;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E")}
 .ofm_root>*{position:relative;z-index:1}
 .ofm_root *{box-sizing:border-box}
@@ -1009,9 +1009,9 @@ window.__ModuleLoader__.load({
 .ofm_table tr:last-child td{border-bottom:0}
 .ofm_num{text-align:right}
 /* ══ 按钮（分层状态） ══════════════════════════════════════════════════ */
-.ofm_btn{font:inherit;font-size:12px;font-weight:580;padding:6px 14px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-3) 84%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 5%),0 1px 2px rgb(0 0 0 / 6%);color:var(--dsw-alias-label-primary);cursor:pointer;transition:transform .12s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease,opacity .16s ease}
+.ofm_btn{font:inherit;font-size:12px;font-weight:580;padding:6px 14px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-3) 84%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 5%),0 1px 2px rgb(0 0 0 / 6%);color:var(--dsw-alias-label-primary);cursor:pointer;transition:transform .18s var(--ease-instrument),border-color .2s var(--ease-instrument),background .2s var(--ease-instrument),box-shadow .22s var(--ease-instrument),opacity .16s ease}
 .ofm_btn:hover:not(:disabled){border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 62%,var(--dsw-alias-border-l2));background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 7%,var(--dsw-alias-bg-layer-3));transform:translateY(-1px);box-shadow:inset 0 1px 0 rgb(255 255 255 / 7%),0 3px 8px rgb(0 0 0 / 9%)}
-.ofm_btn:active:not(:disabled){transform:scale(.97);box-shadow:inset 0 1px 0 rgb(255 255 255 / 4%)}
+.ofm_btn:active:not(:disabled){transform:scale(.985);transition-duration:.1s;box-shadow:inset 0 1px 0 rgb(255 255 255 / 4%)}
 .ofm_btn:disabled{opacity:.45;cursor:default;box-shadow:none;transform:none}
 .ofm_btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-state-business-primary) 88%,#fff),var(--dsw-alias-state-business-primary));border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 82%,#000);color:var(--dsw-alias-label-on-accent,#fff);box-shadow:inset 0 1px 0 rgb(255 255 255 / 18%),0 2px 8px color-mix(in srgb,var(--dsw-alias-state-business-primary) 32%,transparent)}
 .ofm_btn.primary:hover:not(:disabled){background:linear-gradient(180deg,var(--dsw-alias-state-business-primary),color-mix(in srgb,var(--dsw-alias-state-business-primary) 88%,#000));border-color:var(--dsw-alias-state-business-primary);box-shadow:inset 0 1px 0 rgb(255 255 255 / 20%),0 4px 14px color-mix(in srgb,var(--dsw-alias-state-business-primary) 42%,transparent)}
@@ -1320,6 +1320,435 @@ window.__ModuleLoader__.load({
 .ofm_btn[aria-busy="true"]::after{content:"";position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;border:2px solid color-mix(in srgb,currentColor 30%,var(--dsw-alias-label-secondary));border-top-color:var(--dsw-alias-label-primary);animation:ofm-btn-spin .7s linear infinite}
 @keyframes ofm-btn-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.ofm_root *,.ofm_root *::before,.ofm_root *::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+/* ═══ 精密仪器精修层（世界观：原厂仪器手感）：颜色听宿主，质感在阻尼。曲线 --ease-instrument 冲得快落得稳，--ease-settle 极轻过冲。退场比进场快。 ═══ */
+.ofm_glass{transition:border-color .22s var(--ease-instrument),box-shadow .26s var(--ease-instrument),transform .22s var(--ease-instrument),background .22s var(--ease-instrument)}
+.ofm_glass:hover{border-color:color-mix(in srgb,var(--dsw-alias-border-l2) 92%,var(--dsw-alias-state-business-primary));box-shadow:0 1px 2px rgb(0 0 0 / 5%),0 10px 28px -14px color-mix(in srgb,var(--dsw-alias-state-business-primary) 18%,transparent)}
+.ofm_kpi{transition:border-color .22s var(--ease-instrument),transform .22s var(--ease-instrument),box-shadow .26s var(--ease-instrument)}
+.ofm_kpi:hover{transform:translateY(-1px)}
+.ofm_kpivalue{transition:transform .3s var(--ease-settle),color .2s var(--ease-instrument);display:inline-block}
+.ofm_kpi:hover .ofm_kpivalue{transform:translateY(-1px) scale(1.015);color:var(--dsw-alias-label-primary)}
+.ofm_table tbody tr{transition:background .14s var(--ease-instrument)}
+.ofm_seg button,.ofm_chip{transition:background .2s var(--ease-instrument),color .2s var(--ease-instrument),border-color .2s var(--ease-instrument),box-shadow .22s var(--ease-settle)}
+.ofm_prog i{transition:width .5s var(--ease-instrument)}
+.ofm_minibtn{transition:transform .14s var(--ease-instrument),border-color .18s var(--ease-instrument),color .18s var(--ease-instrument),background .18s var(--ease-instrument)}
+.ofm_minibtn:active:not(:disabled){transform:scale(.98);transition-duration:.09s}
+.ofm_root input,.ofm_root select,.ofm_root textarea{transition:border-color .18s var(--ease-instrument),box-shadow .2s var(--ease-instrument),background .18s var(--ease-instrument)}
+@media (prefers-reduced-motion:reduce){.ofm_glass,.ofm_kpi,.ofm_kpivalue,.ofm_minibtn,.ofm_prog i{transition:none!important}.ofm_kpi:hover,.ofm_kpi:hover .ofm_kpivalue{transform:none}}
+
+/* ==== V5 INSTRUMENT START ==== */
+/* 精密仪器·样板间覆盖层：1px细边+内高光，无外投影；颜色全部听宿主 var(--dsw-alias-*)。
+   夜(暗)高光更刃、纹理更显；昼(亮)高光收敛、纹理近乎哑。reduced-motion 去位移留状态。 */
+
+/* ── ① 面板卡片 .ofm_panel / .ofm_card ─────────────────────────── */
+/* 双基底：拉丝细纹(repeating-linear-gradient)垫底，实体色覆盖在上，从边缘隐约透出拉丝感 */
+.ofm_root .ofm_panel{
+  background:
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 4.5%) 0 1px, transparent 1px 2.5px) padding-box,
+    color-mix(in srgb, var(--dsw-alias-bg-layer-2) 86%, transparent) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), inset 0 -14px 28px -18px rgb(0 0 0 / 16%) !important;
+  transition: border-color .22s var(--ease-instrument), box-shadow .26s var(--ease-instrument), transform .22s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_card{
+  background:
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 4.5%) 0 1px, transparent 1px 2.5px) padding-box,
+    color-mix(in srgb, var(--dsw-alias-bg-layer-3) 84%, transparent) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), inset 0 -12px 24px -16px rgb(0 0 0 / 14%) !important;
+  transition: transform .22s var(--ease-instrument), box-shadow .26s var(--ease-instrument), border-color .2s var(--ease-instrument) !important;
+}
+/* hover：kinetic tension —— 位移压浅(-1px)，去掉外投影，靠边色提亮+高光增强传递"浮起" */
+.ofm_root .ofm_card:hover{
+  transform: translateY(-1px) !important;
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 58%, var(--dsw-alias-border-l2)) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 11%), inset 0 -12px 24px -16px rgb(0 0 0 / 10%) !important;
+}
+
+/* ── ② 按钮 .ofm_btn ─────────────────────────── */
+/* kinetic tension：外壳 active 陷落(scale .985)，内部 ::after 扫光条反向滑过形成"外陷内顶" */
+.ofm_root .ofm_btn{
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%) !important;
+  transition: transform .16s var(--ease-settle), border-color .2s var(--ease-instrument), background .2s var(--ease-instrument), box-shadow .2s var(--ease-instrument), opacity .16s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_btn::after{
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important; bottom: 0 !important;
+  left: -60% !important; width: 42% !important;
+  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 14%), transparent) !important;
+  transform: skewX(-18deg) !important;
+  transition: left .5s var(--ease-instrument) !important;
+  pointer-events: none !important;
+}
+/* hover：扫光滑过（exit slower than press）；去掉原外投影，仅留顶部高光 */
+.ofm_root .ofm_btn:hover:not(:disabled){
+  transform: translateY(-1px) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%) !important;
+}
+.ofm_root .ofm_btn:hover:not(:disabled)::after{
+  left: 118% !important;
+}
+/* active：快速陷落(.09s) + 内阴影加深=物理按压；松开靠 --ease-settle 回弹 */
+.ofm_root .ofm_btn:active:not(:disabled){
+  transform: scale(.985) !important;
+  transition-duration: .09s !important;
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / 14%), inset 0 1px 0 rgb(255 255 255 / 3%) !important;
+}
+/* primary 按钮保留主色渐变，仅把外投影换成更克制的内高光+轻凹槽 */
+.ofm_root .ofm_btn.primary{
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), inset 0 -10px 18px -12px rgb(0 0 0 / 24%) !important;
+}
+.ofm_root .ofm_btn.primary:hover:not(:disabled){
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 26%), inset 0 -10px 18px -12px rgb(0 0 0 / 18%) !important;
+}
+
+/* ── ③ 表格行 hover .ofm_table tbody tr ─────────────────────────── */
+/* 行首 2px 主色竖条用 transform:scaleY 展开(不触发布局)；exit(.12s) 比 entrance(.16s) 快 */
+.ofm_root .ofm_table tbody tr{
+  transition: background .16s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_table tbody tr td:first-child{
+  position: relative !important;
+}
+.ofm_root .ofm_table tbody tr td:first-child::before{
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important; top: 6px !important; bottom: 6px !important;
+  width: 2px !important; border-radius: 2px !important;
+  background: var(--dsw-alias-state-business-primary) !important;
+  transform: scaleY(0) !important;
+  transform-origin: center !important;
+  opacity: 0 !important;
+  transition: transform .16s var(--ease-instrument), opacity .12s var(--ease-instrument) !important;
+  pointer-events: none !important;
+}
+.ofm_root .ofm_table tbody tr:hover td:first-child::before{
+  transform: scaleY(1) !important;
+  opacity: 1 !important;
+}
+/* 数字列表针走格感：tabular-nums + pl5-tick 机械顿挫(steps) */
+.ofm_root .ofm_table td{
+  font-variant-numeric: tabular-nums !important;
+}
+/* 表针走格：离散百分比快照模拟 steps 顿挫——同值连帧=停格，瞬间跳格=机械感；@keyframes 里用不了 steps() 函数，用帧堆出来 */
+@keyframes pl5-tick{
+  0%,24%{ transform: translateY(0); }
+  25%,54%{ transform: translateY(-1.5px); }
+  55%,79%{ transform: translateY(-.75px); }
+  80%,100%{ transform: translateY(0); }
+}
+
+/* ── 昼(not-dark)收敛：高光更哑、拉丝更隐、回弹更小 ─────────────── */
+@media not (prefers-color-scheme: dark){
+  .ofm_root .ofm_panel,
+  .ofm_root .ofm_card{
+    background:
+      repeating-linear-gradient(115deg, rgb(255 255 255 / 4%) 0 1px, transparent 1px 2.5px) padding-box,
+      color-mix(in srgb, var(--dsw-alias-bg-layer-2) 90%, transparent) !important;
+  }
+  .ofm_root .ofm_card{
+    background:
+      repeating-linear-gradient(115deg, rgb(255 255 255 / 4%) 0 1px, transparent 1px 2.5px) padding-box,
+      color-mix(in srgb, var(--dsw-alias-bg-layer-3) 88%, transparent) !important;
+  }
+  .ofm_root .ofm_panel{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -14px 28px -18px rgb(0 0 0 / 7%) !important;
+  }
+  .ofm_root .ofm_card{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -12px 24px -16px rgb(0 0 0 / 6%) !important;
+  }
+  .ofm_root .ofm_card:hover{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 60%), inset 0 -12px 24px -16px rgb(0 0 0 / 5%) !important;
+  }
+  .ofm_root .ofm_btn{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 50%) !important;
+  }
+  .ofm_root .ofm_btn:hover:not(:disabled){
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 62%) !important;
+  }
+}
+
+/* ── reduced-motion 降级：去位移/回弹/扫光/顿挫，保留颜色与不透明度反馈 ── */
+@media (prefers-reduced-motion: reduce){
+  /* 统一过渡降级：所有交互件只留颜色/不透明度反馈，去位移 */
+  .ofm_root .ofm_card,
+  .ofm_root .ofm_panel,
+  .ofm_root .ofm_btn,
+  .ofm_root .ofm_table tbody tr,
+  .ofm_root .ofm_table tbody tr td:first-child::before,
+  .ofm_root .ofm_switch i,
+  .ofm_root .ofm_switch i::after,
+  .ofm_root .ofm_seg button,
+  .ofm_root .ofm_stat,
+  .ofm_root .ofm_kvc,
+  .ofm_root .ofm_input,
+  .ofm_root .ofm_starbtn,
+  .ofm_root .ofm_chanlogo{
+    transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, opacity .12s ease, color .12s ease !important;
+  }
+  /* 去位移/回弹/陷落 */
+  .ofm_root .ofm_card:hover,
+  .ofm_root .ofm_btn:hover:not(:disabled),
+  .ofm_root .ofm_btn:active:not(:disabled),
+  .ofm_root .ofm_stat:hover,
+  .ofm_root .ofm_kvc:hover,
+  .ofm_root .ofm_seg button:active:not([aria-pressed="true"]),
+  .ofm_root .ofm_starbtn:active,
+  .ofm_root .ofm_chan:hover .ofm_chanlogo{
+    transform: none !important;
+  }
+  /* 开关捏扁还原 */
+  .ofm_root .ofm_switch:active i::after{
+    width: 14px !important;
+  }
+  /* 扫光条砍掉 */
+  .ofm_root .ofm_btn::after,
+  .ofm_root .ofm_starbtn::after{
+    content: none !important;
+  }
+  /* 呼吸灯停跳，但保留颜色状态 */
+  .ofm_root .ofm_dot.ok{
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  /* 表针走格动画停走，但保留数字本身 */
+  .ofm_root .ofm_kpi:hover .ofm_kpivalue,
+  .ofm_root .ofm_stat:hover b{
+    animation: none !important;
+  }
+}
+
+/* ── ④ 输入框 .ofm_input：仪器凹槽手感 ─────────────────────────── */
+/* 常态凹槽(inset 顶高光+底内阴影)；focus 时凹槽不动，只换边色+外发光，像仪器被点亮 */
+.ofm_root .ofm_input{
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), inset 0 2px 6px -2px rgb(0 0 0 / 10%) !important;
+  transition: border-color .18s var(--ease-instrument), box-shadow .2s var(--ease-instrument), background .18s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_input:hover{
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 55%, var(--dsw-alias-state-business-primary)) !important;
+}
+.ofm_root .ofm_input:focus{
+  border-color: var(--dsw-alias-state-business-primary) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), inset 0 2px 6px -2px rgb(0 0 0 / 8%), 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary) 16%, transparent) !important;
+}
+
+/* ── ⑤ 开关 .ofm_switch：spring 滑块阻尼 ─────────────────────────── */
+/* 滑块用 --ease-settle 带回弹；按下时滑块变宽=被"捏扁"，松开回弹归位 */
+.ofm_root .ofm_switch i{
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 10%), inset 0 -1px 0 rgb(255 255 255 / 4%) !important;
+  transition: background .22s var(--ease-instrument), border-color .22s var(--ease-instrument), box-shadow .22s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_switch i::after{
+  background: var(--dsw-alias-label-primary) !important;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 28%), inset 0 1px 0 rgb(255 255 255 / 20%) !important;
+  transition: transform .28s var(--ease-settle), background .2s var(--ease-instrument), width .14s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_switch[aria-checked="true"] i{
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 14%), inset 0 -1px 0 rgb(255 255 255 / 8%) !important;
+}
+.ofm_root .ofm_switch[aria-checked="true"] i::after{
+  background: var(--dsw-alias-label-on-accent, #fff) !important;
+}
+.ofm_root .ofm_switch:active i::after{
+  width: 17px !important;
+}
+
+/* ── ⑥ 徽章/药丸/标签 .ofm_badge/.ofm_pill/.ofm_tag/.ofm_chantag/.ofm_chip ── */
+/* 统一加顶部发丝高光；状态色只用 color-mix 调透明度，不换色相 */
+.ofm_root .ofm_pill,
+.ofm_root .ofm_tag,
+.ofm_root .ofm_chip,
+.ofm_root .ofm_chantag{
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%) !important;
+  transition: border-color .2s var(--ease-instrument), color .2s var(--ease-instrument), background .2s var(--ease-instrument), transform .18s var(--ease-settle) !important;
+}
+.ofm_root .ofm_badge{
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%) !important;
+  transition: border-color .2s var(--ease-instrument), color .2s var(--ease-instrument), background .2s var(--ease-instrument) !important;
+}
+/* 状态点呼吸灯保留，但改成 pl5- 前缀、机械顿挫更明显的两拍节奏 */
+@keyframes pl5-dot-breathe{
+  0%,100%{ opacity:1; }
+  50%{ opacity:.45; }
+}
+.ofm_root .ofm_dot.ok{
+  animation: pl5-dot-breathe 2.4s cubic-bezier(.4,0,.6,1) infinite !important;
+}
+/* 分段控件选中块：加顶部高光，按下时微微陷落 */
+.ofm_root .ofm_seg button[aria-pressed="true"]{
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%), inset 0 1px 0 rgb(255 255 255 / 8%) !important;
+  transition: color .18s var(--ease-instrument), background .18s var(--ease-instrument), box-shadow .2s var(--ease-settle) !important;
+}
+.ofm_root .ofm_seg button:active:not([aria-pressed="true"]){
+  transform: scale(.97) !important;
+}
+
+/* ── ⑦ 原生件接管：滚动条 / selection / caret / 聚焦环 ─────────────── */
+/* 滚动条：仪器滑轨——thumb 加顶部高光与底部凹槽，hover 时轻微增亮 */
+.ofm_root ::-webkit-scrollbar-thumb{
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 30%, transparent) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), inset 0 -1px 0 rgb(0 0 0 / 10%) !important;
+  transition: background .2s var(--ease-instrument) !important;
+}
+.ofm_root ::-webkit-scrollbar-thumb:hover{
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 48%, transparent) !important;
+}
+/* 文本选择：主色薄涂，昼模式再淡一点避免刺眼 */
+.ofm_root ::selection{
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 20%, transparent) !important;
+}
+/* 光标：跟随主色 */
+.ofm_root input, .ofm_root textarea{
+  caret-color: var(--dsw-alias-state-business-primary) !important;
+}
+/* 聚焦环：仪器刻度环——细环+外晕，用 --ease-instrument 淡入 */
+.ofm_root :focus-visible{
+  outline: 2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 72%, transparent) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent) !important;
+  transition: box-shadow .18s var(--ease-instrument), outline-color .18s var(--ease-instrument) !important;
+}
+
+/* ── ⑧【师傅批改①】拉丝纹理增强：金属感要真的能摸到 ─────────────── */
+/* 夜模式 3% → 4.5%，昼模式 1.5% → 2.8%，纹理间隔收紧让拉丝更密 */
+.ofm_root .ofm_panel{
+  background:
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 4.5%) 0 1px, transparent 1px 2.5px) padding-box,
+    color-mix(in srgb, var(--dsw-alias-bg-layer-2) 86%, transparent) !important;
+}
+.ofm_root .ofm_card{
+  background:
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 4.5%) 0 1px, transparent 1px 2.5px) padding-box,
+    color-mix(in srgb, var(--dsw-alias-bg-layer-3) 84%, transparent) !important;
+}
+@media not (prefers-color-scheme: dark){
+  .ofm_root .ofm_panel,
+  .ofm_root .ofm_card{
+    background:
+      repeating-linear-gradient(115deg, rgb(255 255 255 / 4%) 0 1px, transparent 1px 2.5px) padding-box,
+      color-mix(in srgb, var(--dsw-alias-bg-layer-2) 90%, transparent) !important;
+  }
+  .ofm_root .ofm_card{
+    background:
+      repeating-linear-gradient(115deg, rgb(255 255 255 / 4%) 0 1px, transparent 1px 2.5px) padding-box,
+      color-mix(in srgb, var(--dsw-alias-bg-layer-3) 88%, transparent) !important;
+  }
+}
+
+/* ── ⑧【师傅批改②】昼模式高光压暗：45-62% → 30-38%，更克制 ─────────── */
+@media not (prefers-color-scheme: dark){
+  .ofm_root .ofm_panel{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%), inset 0 -14px 28px -18px rgb(0 0 0 / 6%) !important;
+  }
+  .ofm_root .ofm_card{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 38%), inset 0 -12px 24px -16px rgb(0 0 0 / 5%) !important;
+  }
+  .ofm_root .ofm_card:hover{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 42%), inset 0 -12px 24px -16px rgb(0 0 0 / 4%) !important;
+  }
+  .ofm_root .ofm_btn{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 36%) !important;
+  }
+  .ofm_root .ofm_btn:hover:not(:disabled){
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 44%) !important;
+  }
+  .ofm_root .ofm_pill,
+  .ofm_root .ofm_tag,
+  .ofm_root .ofm_chip,
+  .ofm_root .ofm_chantag,
+  .ofm_root .ofm_badge{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%) !important;
+  }
+  .ofm_root .ofm_input{
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%), inset 0 2px 6px -2px rgb(0 0 0 / 6%) !important;
+  }
+}
+
+/* ── ⑧【师傅批改③】表格竖条语言统一：所有表格行 hover 都带主色竖条 ── */
+/* .ofm_newsbody table 是内容型表格，保持朴素；仅给数据表 .ofm_table 统一竖条。
+   同时把 .ofm_kvc / .ofm_stat 等"类表格"卡片也纳入 hover 微提亮，保持语言一致 */
+.ofm_root .ofm_stat,
+.ofm_root .ofm_kvc{
+  transition: border-color .2s var(--ease-instrument), box-shadow .22s var(--ease-instrument), transform .2s var(--ease-settle) !important;
+}
+.ofm_root .ofm_stat:hover,
+.ofm_root .ofm_kvc:hover{
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 38%, var(--dsw-alias-border-l1)) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ── ⑩【返工·收编租界】星按钮/导航标/渠道标 全部听宿主变量 ─────────────── */
+/* L1130 .ofm_starbtn:hover 混 #3ECFA0、L1181 .ofm_navmark 混 #3ECFA0 —— 统一改混 label-primary，零品牌色 */
+.ofm_root .ofm_starbtn{
+  transition: transform .16s var(--ease-settle), box-shadow .2s var(--ease-instrument), color .2s var(--ease-instrument), background .2s var(--ease-instrument) !important;
+}
+.ofm_root .ofm_starbtn:hover{
+  background: linear-gradient(140deg, var(--dsw-alias-state-business-primary), color-mix(in srgb, var(--dsw-alias-state-business-primary) 76%, var(--dsw-alias-label-primary))) !important;
+  color: var(--dsw-alias-label-on-accent, #fff) !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent), 0 6px 16px color-mix(in srgb, var(--dsw-alias-state-business-primary) 22%, transparent) !important;
+}
+.ofm_root .ofm_starbtn:active{
+  transform: scale(.97) !important;
+}
+/* 扫光条改走 --ease-instrument，与 .ofm_btn 同语言 */
+.ofm_root .ofm_starbtn::after{
+  transition: left .5s var(--ease-instrument) !important;
+}
+/* 导航标：去掉 #3ECFA0 混色，改混 label-primary；外投影换成内高光+轻凹槽 */
+.ofm_root .ofm_navmark{
+  background: linear-gradient(145deg, var(--dsw-alias-state-business-primary), color-mix(in srgb, var(--dsw-alias-state-business-primary) 58%, var(--dsw-alias-label-primary))) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 26%), inset 0 -6px 12px -8px rgb(0 0 0 / 20%) !important;
+}
+.ofm_root .ofm_navmark svg{
+  fill: var(--dsw-alias-label-on-accent, #fff) !important;
+}
+/* 渠道标：--chan-accent 兜底本来就是宿主变量，收编写死的 #fff / #101828，外投影换内高光 */
+.ofm_root .ofm_chanlogo{
+  color: var(--dsw-alias-label-on-accent, #fff) !important;
+  background: linear-gradient(150deg, var(--chan-accent, var(--dsw-alias-state-business-primary)), color-mix(in srgb, var(--chan-accent, var(--dsw-alias-state-business-primary)) 52%, var(--dsw-alias-bg-layer-3))) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 24%), inset 0 -8px 14px -10px rgb(0 0 0 / 22%) !important;
+  transition: transform .3s var(--ease-settle) !important;
+}
+.ofm_root .ofm_chan:hover .ofm_chanlogo{
+  transform: scale(1.05) rotate(-2deg) !important;
+}
+
+/* ── ⑩【返工·收编 SEASON 落地件】色板/选中 chip/渠道卡顶条 ─────────────── */
+/* SEASON 数组在 JS(L1663) 里、靠内联 style 注入，CSS 改不了值；
+   收编它落地的元素，让质感听宿主：色板加高光、chip 选中不再花、渠道卡顶条收敛 */
+.ofm_root .ofm_swatch{
+  border-radius: 3px !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%), inset 0 -1px 0 rgb(0 0 0 / 16%) !important;
+}
+/* chip 选中态：JS 注入彩色背景，这里压回宿主语言——主色薄涂+主色边，去掉杂色 */
+.ofm_root .ofm_chip[aria-pressed="true"]{
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent) !important;
+  color: var(--dsw-alias-state-business-primary) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%) !important;
+}
+/* 渠道卡顶条(::before 用 --chan-accent)：收敛高度与发光，听宿主凹槽语言 */
+.ofm_root .ofm_chan::before{
+  height: 2px !important;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 6%) !important;
+}
+.ofm_root .ofm_chan[data-state="on"]{
+  border-color: color-mix(in srgb, var(--chan-accent, var(--dsw-alias-state-business-primary)) 30%, var(--dsw-alias-border-l2)) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%) !important;
+}
+
+/* ── ⑩【返工·接上 pl5-tick】KPI/统计数字获得表针走格感 ─────────────── */
+/* 挂到 KPI 大数字与统计卡数字：hover 时数字以机械顿挫走一格，模拟仪表指针跳动 */
+.ofm_root .ofm_kpivalue,
+.ofm_root .ofm_stat b{
+  display: inline-block !important;
+}
+.ofm_root .ofm_kpi:hover .ofm_kpivalue,
+.ofm_root .ofm_stat:hover b{
+  animation: pl5-tick .34s var(--ease-instrument) 1 !important;
+}
+/* ==== V5 INSTRUMENT END ==== */
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
