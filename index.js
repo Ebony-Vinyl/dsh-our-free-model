@@ -36,7 +36,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError } from './src/http.js'
-import { outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
+import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
 import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
@@ -1036,7 +1036,10 @@ export function apply(ctx, config) {
     // release manifest stays inside its file cap.
     void import('./vendor/channel-pack/pack.js').then(pack => {
       if (stopped) return
-      pack.apply(scoped, { disableOpencode: true })
+      pack.apply(scoped, {
+        disableOpencode: true,
+        outlet: { active: egressActive, fetch: egressFetch },
+      })
       channelPack = { state: 'ready', error: '' }
       logger.info?.('our-free-model: free-channel pack mounted (CodeArts, CodeBuddy, and 11 more)')
     }).catch(error => {

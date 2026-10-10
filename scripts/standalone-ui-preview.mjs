@@ -7,6 +7,8 @@ import { createCredentials } from '../packages/standalone/channels/credentials.m
 const modelCount = Number(process.env.OFM_PREVIEW_MODELS ?? 0)
 const usageFixture = process.env.OFM_PREVIEW_USAGE === '1'
 const settingsFixture = process.env.OFM_PREVIEW_SETTINGS === '1'
+const creditsFixture = process.env.OFM_PREVIEW_CREDITS === '1'
+const creditFailureFlag = path.resolve('.verify/ui-credits-data/fail-balance')
 const usageDaysAgo = Number(process.env.OFM_PREVIEW_USAGE_DAYS_AGO ?? 0)
 if (!Number.isInteger(usageDaysAgo) || usageDaysAgo < 0 || usageDaysAgo > 90) throw new Error('用量替身日期偏移必须为 0–90 天')
 if (!Number.isInteger(modelCount) || modelCount < 0 || modelCount > 1000) throw new Error('替身模型数量必须为 0–1000')
@@ -37,6 +39,27 @@ const upstream = http.createServer(async (req, res) => {
       models: [{ id: 'fixture-free', name: '本机替身模型', credits: 'x0', maxInputTokens: 128000, maxOutputTokens: 4096, supportsImages: true }],
       agents: [{ name: 'craft', models: ['fixture-free'] }],
     } })
+  } else if (creditsFixture && pathname.endsWith('/v2/billing/meter/get-user-resource')) {
+    if (fs.existsSync(creditFailureFlag) || req.headers.authorization === 'Bearer fixture-expired') {
+      res.writeHead(502, { 'content-type': 'text/plain' })
+      res.end('本机替身：余额查询暂时失败')
+    } else {
+      json(res, { code: 0, data: { Response: { Data: { Accounts: [{
+        PackageName: '本机测试积分', Status: 1, CycleCapacityRemain: 123, CycleCapacity: 200,
+      }] } } } })
+    }
+  } else if (creditsFixture && pathname.endsWith(':retrieveUserQuotaSummary')) {
+    json(res, { groups: [{ buckets: [
+      { bucketId: 'gemini-5h', window: '5h', remainingFraction: 0.8, resetTime: new Date(Date.now() + 5 * 3600000).toISOString() },
+      { bucketId: 'gemini-weekly', window: 'weekly', remainingFraction: 0.4, resetTime: new Date(Date.now() + 7 * 86400000).toISOString() },
+    ] }] })
+  } else if (creditsFixture && pathname.endsWith('/zcode-plan/billing/balance')) {
+    json(res, { code: 0, data: { balances: [{
+      show_name: '本机测试模型', unit_type: 'token', meter: 'model_usage',
+      total_units: 200000, remaining_units: 123000, available_units: 123000, used_units: 77000,
+    }] } })
+  } else if (creditsFixture && pathname.endsWith('/zcode-plan/billing/preview')) {
+    json(res, { code: 0, data: { plans: [] } })
   } else if (pathname.endsWith('/chat/completions')) {
     testRequests.started++
     recordRequests()
@@ -71,7 +94,7 @@ process.env.OUR_FREE_MODEL_KILO_BASE = base
 const fixture = new URL('./lib/standalone-channel-fixture.mjs', import.meta.url).href
 process.execArgv.push('--import', fixture)
 await import(fixture)
-const prefix = settingsFixture ? 'ui-settings' : usageFixture ? usageDaysAgo ? 'ui-usage-history' : 'ui-usage' : modelCount ? 'ui-phase1-load' : 'ui-phase1'
+const prefix = creditsFixture ? 'ui-credits' : settingsFixture ? 'ui-settings' : usageFixture ? usageDaysAgo ? 'ui-usage-history' : 'ui-usage' : modelCount ? 'ui-phase1-load' : 'ui-phase1'
 const dataDir = path.resolve(`.verify/${prefix}-data`)
 fs.mkdirSync(path.join(dataDir, 'channel-pack'), { recursive: true })
 const state = path.join(dataDir, 'channel-pack/state.json')
@@ -87,6 +110,28 @@ if (!fs.existsSync(state)) {
     user_id: 'fixture-user', nickname: '本机替身账号', account_type: 'personal',
   }))
   credentials.dispose()
+}
+if (creditsFixture) {
+  const fixtureAccounts = [
+    { id: 'buddy-preview', provider: 'buddy', nickname: '余额正常的替身账号', token: 'fixture-preview' },
+    { id: 'buddy-preview-error', provider: 'buddy', nickname: '查询失败的替身账号', token: 'fixture-expired' },
+    { id: 'zcode-preview', provider: 'zcode', nickname: 'ZCode 替身账号', token: 'fixture-zcode' },
+    { id: 'gemini-preview', provider: 'gemini', nickname: 'Gemini 替身账号', token: 'fixture-gemini' },
+  ]
+  const credentials = createCredentials(dataDir)
+  for (const account of fixtureAccounts) {
+    await credentials.set(`PREVIEW_${account.id.replaceAll('-', '_').toUpperCase()}`, JSON.stringify({
+      access_token: account.token, zcode_jwt: account.token, device_mid: 'fixture-device',
+      expires_at: Date.now() + 86400000, project_id: 'fixture-project', account_label: account.nickname,
+    }))
+  }
+  credentials.dispose()
+  fs.writeFileSync(state, JSON.stringify({ accounts: fixtureAccounts.map(account => ({
+    id: account.id, provider: account.provider, nickname: account.nickname,
+    credentialRef: `PREVIEW_${account.id.replaceAll('-', '_').toUpperCase()}`,
+    enabled: true, refreshable: false, createdAt: Date.now(), expiresAt: Date.now() + 86400000,
+  })), disabledModels: {} }))
+  fs.writeFileSync(path.join(dataDir, 'channel-pack/auto-checkin.json'), JSON.stringify({ enabled: false }))
 }
 // 仅独立用量验收目录初始化模拟统计；正式 CLI 不加载这个脚本。
 const usageFile = path.join(dataDir, 'stats.json')
@@ -119,7 +164,7 @@ if (usageFixture && !fs.existsSync(usageFile)) {
 }
 const { startStandalone } = await import('../packages/standalone/service.mjs')
 const service = await startStandalone({
-  dataDir, port: settingsFixture ? 18905 : usageFixture ? usageDaysAgo ? 18904 : 18903 : modelCount ? 18902 : 18901,
+  dataDir, port: creditsFixture ? 18906 : settingsFixture ? 18905 : usageFixture ? usageDaysAgo ? 18904 : 18903 : modelCount ? 18902 : 18901,
   refresh: process.env.OFM_PREVIEW_NO_REFRESH !== '1',
 })
 await service.ready

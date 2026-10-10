@@ -73,6 +73,8 @@ import { OPENCODE } from './opencode-product.js'
 import { deriveProjectId, opencodeUserAgent } from './opencode.js'
 import { primeOpencodeCapabilities, refreshOpencodeCapabilities } from './opencode-capability.js'
 import { closeAllProxyDispatchers } from './opencode-proxy.js'
+import { createChannelFetch, type ChannelOutlet } from './channel-fetch.js'
+export { createChannelFetch, parseWindowsProxy, channelProxyBypassed } from './channel-fetch.js'
 import { execFile } from 'node:child_process'
 
 /**
@@ -266,7 +268,9 @@ export function makeReadImageRequest(ctx: Context) {
 }
 
 /** 注册 codeartsAuth 服务与 codearts LLM 路由（不注册斜杠命令）。 */
-export function apply(ctx: Context, config: { disableOpencode?: boolean } = {}): void {
+export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?: ChannelOutlet } = {}): void {
+  const network = createChannelFetch({ outlet: config.outlet })
+  ctx.effect(() => () => { void network.close() })
   // 本插件自带 Channel Pack 设置页，关闭 0.1.7 起由 Config schema 反渲染的自动表单
   // （老契约没有 configure()，静默跳过）。
   suppressAutoSettingsPage(ctx)
@@ -873,7 +877,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean } = {}):
   // （前缀**不可剥**），推理是**标准 OpenAI 兼容**端点。
   // 服务名由 ClineAuth 依 product.id 派生，注册为 ctx.clineAuth。
   // 不注册斜杠命令：入口在 Channel Pack 的 Cline 面板。
-  const cline = new ClineAuth(ctx)
+  const cline = new ClineAuth(ctx, { fetcher: network.fetch })
   /**
    * 「本次实际使用的是哪个 Cline **池账号**」——「订阅额度 → 请求记录」的
    * 「账号」列按它归属，面板也是用这个 id 过滤的。
@@ -888,6 +892,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean } = {}):
    */
   let activeClineAccountId = ''
   const clineAdapter = registerClineLlm(ctx, {
+    fetchImpl: network.fetch,
     credentialRef: credentialRef(CLINE.defaultCredentialRef),
     resolveCredential: async (modelId?: string) => {
       // 只从 Cline 自己的账号池取账号，回退到自己的单凭据 ref，
@@ -1266,12 +1271,14 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean } = {}):
   //
   // 服务名由 GeminiAuth 依 product.id 派生，注册为 ctx.geminiAuth。
   // 不注册斜杠命令：入口在 Channel Pack 的 Gemini 面板。
-  const gemini = new GeminiAuth(ctx)
+  const gemini = new GeminiAuth(ctx, { fetchImpl: network.fetch })
   const geminiSigStore = createGeminiSigStore(ctx)
   // ⚠️ 项目号探测缓存必须**在这里建一次、长期复用** —— 每次 `stream()` 现造
   // 等于没有跨请求缓存，每轮推理都会多打一次 `loadCodeAssist`。
   const geminiProjectCache = new Map<string, string>()
   const geminiAdapter = registerGeminiLlm(ctx, {
+    fetchImpl: network.fetch,
+    projectFetcher: network.fetch,
     credentialRef: credentialRef(GEMINI.defaultCredentialRef),
     resolveCredential: async (modelId?: string) => {
       // ⚠️ provider 实参用 GEMINI.id 而非字面量（同 minimax 的既有约定：

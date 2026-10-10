@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="55" viewBox="0 0 250 55" role="img" aria-labelledby="title desc">
+  <title id="title">GITHUB TRENDING #2 Repository Of The Week</title>
+  <desc id="desc">OFM 在 Trendshift JavaScript 周榜排名第 2，静态记录。</desc>
+  <rect x="0.6" y="0.6" width="248.8" height="53.8" rx="10" fill="#fff" stroke="#68449d" stroke-width="1.2"/>
+  <defs>
+    <g id="laurel-half">
+      <path d="M33 42C21 40 13 32 13 21" fill="none" stroke="#68449d" stroke-width="0.8"/>
+      <path d="M14 26C10 24 10 21 11 19C14 21 15 23 14 26ZM14 29C10 28 8 26 8 24C12 24 14 26 14 29ZM16 33C12 33 10 31 9 29C13 28 16 30 16 33ZM19 36C15 37 12 35 11 33C15 32 18 33 19 36ZM23 39C20 41 16 40 14 38C18 36 21 36 23 39ZM28 41C25 44 21 44 19 42C22 40 26 39 28 41ZM14 28C14 24 16 22 18 21C19 24 17 27 14 28ZM16 32C16 28 18 26 20 25C21 29 19 31 16 32ZM19 36C18 32 20 30 22 28C24 31 22 34 19 36ZM23 39C21 36 23 33 25 32C27 35 26 37 23 39ZM28 41C25 38 27 35 29 34C31 37 30 39 28 41Z" fill="#68449d"/>
+    </g>
+  </defs>
+  <use href="#laurel-half"/>
+  <use href="#laurel-half" transform="translate(68 0) scale(-1 1)"/>
+  <text x="34" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" fill="#68449d">2</text>
+  <text x="63" y="20" font-family="Arial, sans-serif" font-size="9" fill="#68449d">GITHUB TRENDING</text>
+  <text x="63" y="38" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#55328c">#2 Repository Of The Week</text>
+</svg>

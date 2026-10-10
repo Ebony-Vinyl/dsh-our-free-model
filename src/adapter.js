@@ -27,6 +27,7 @@ import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor,
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
+import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
 
 export const ROUTE_MAIN = 'our-free-model'
 export const ROUTE_REGION = 'our-free-model-region'
@@ -84,22 +85,18 @@ export class FreeModelAdapter {
   /**
    * Resolve provider-side request-image pricing for one exact model route.
    *
-   * The harness base class supplies a default no-op returning `undefined`
-   * (meaning "this route declares no image pricing"); this adapter deliberately
-   * extends no version-pinned base class so it can mount on several kernel lines,
-   * so it has to provide that default itself. Without it,
-   * `ctx.llm.imageRequestPricing()` forwards to a missing method and token
-   * measurement — and therefore compaction — throws.
+   * 宿主 spill-policy 遇到 undefined 会放弃整条含图结果的落盘（issue #151）。
+   * 免费出口没有统一视觉计价协议，提供同步估算以支持预算与落盘。
    *
    * Must stay synchronous: the token meter resolves it per measurement, with no
    * I/O window (issue #42).
    *
    * @param {string} _provider - a route passed to `registerAdapter()` for this instance.
    * @param {string} _model - exact model id passed to GenerateOptions.model.
-   * @returns always `undefined`: the free egress quotes no per-image price.
+   * @returns {typeof FALLBACK_IMAGE_PRICING} 视觉 Token 估算，不是厂商真实消耗。
    */
   imageRequestPricing(_provider, _model) {
-    return undefined
+    return FALLBACK_IMAGE_PRICING
   }
 
   /** Models this route advertises right now. */
