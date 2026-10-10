@@ -80,7 +80,13 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
         const result = await host.testModel(model.id, controller.signal)
         if (!isCurrent()) return
         setTest({ model, state: 'success', result })
-        await host.refresh()
+        try {
+          await host.refresh()
+        } catch (reason) {
+          if (!isCurrent()) return
+          const detail = reason instanceof Error ? reason.name === 'TimeoutError' ? '请求超时，请重试。' : reason.message : '请求失败，请重试。'
+          setError(`模型测试已成功，但刷新摘要失败：${detail}`)
+        }
       } else {
         await host.refreshModels(kind === 'probe', controller.signal)
         if (!isCurrent()) return

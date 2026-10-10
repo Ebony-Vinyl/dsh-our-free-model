@@ -6,6 +6,7 @@ import { filterModels } from '../packages/standalone/frontend/models-data.mjs'
 import { usageDays, usageModels } from '../packages/standalone/frontend/usage-data.mjs'
 import { settingsDraft, settingsChanged, syncSettings, validateSettingsDraft } from '../packages/standalone/frontend/settings-data.mjs'
 import { verifySettingsHost } from './standalone-settings-host-test.mjs'
+import { verifyModelOperation } from './standalone-model-operation-test.mjs'
 import { spawnSync } from 'node:child_process'
 
 const web = new URL('../packages/standalone/web/', import.meta.url)
@@ -175,4 +176,5 @@ assert.deepEqual(savedSettings, {
   defaultMaxTokens: 32768, probeIntervalMinutes: 15,
 }, '草稿操作不能改动输入配置')
 await verifySettingsHost()
+await verifyModelOperation()
 console.log('standalone-frontend: 资源登记、四页面分包、模型筛选、统计日期分页、设置校验与草稿同步、迟到摘要及退出保存检查通过')
