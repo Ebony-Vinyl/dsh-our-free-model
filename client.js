@@ -449,6 +449,16 @@ window.__ModuleLoader__.load({
         'gw.relayNote': '中继只放行模型接口（/v1/*），并要求携带中继密钥；局域网绑定意味着同网段的设备都能访问到这个端口。',
         'gw.freeLaneNote': '免费车道（Our Free Model）自己的转发端口在「免费模型」页的「本地转发」分区。',
         'chan.credits.left': '剩余积分',
+        'chan.credits.tokens': '剩余 Token',
+        'chan.credits.dollars': '剩余余额（USD）',
+        'chan.credits.quota': '剩余配额',
+        'chan.credits.loaded': '已查询 {count} 个账号',
+        'chan.credits.refresh': '刷新余额',
+        'chan.credits.loading': '余额查询中…',
+        'chan.credits.failed': '余额查询失败：{reason}',
+        'chan.credits.partial': '{count} 个账号未能查询余额，请展开账号查看原因并重试。',
+        'chan.credits.unavailable': '未返回余额数据',
+        'chan.claim.failed': '领取失败：{reason}',
         'chan.auto.title': '每日自动签到',
         'chan.auto.running': '签到进行中…',
         'chan.auto.ran': '今日已自动签到',
@@ -873,6 +883,16 @@ window.__ModuleLoader__.load({
         'gw.relayNote': 'The relay forwards only the model routes (/v1/*) and demands the relay key; binding to the LAN means every device on the network can reach that port.',
         'gw.freeLaneNote': 'The free lane (Our Free Model) has its own forward port under "Local forward" on the Free models page.',
         'chan.credits.left': 'Credits left',
+        'chan.credits.tokens': 'Tokens left',
+        'chan.credits.dollars': 'Balance left (USD)',
+        'chan.credits.quota': 'Quota left',
+        'chan.credits.loaded': '{count} accounts queried',
+        'chan.credits.refresh': 'Refresh balance',
+        'chan.credits.loading': 'Querying balance…',
+        'chan.credits.failed': 'Balance query failed: {reason}',
+        'chan.credits.partial': 'Could not query {count} accounts. Expand accounts to see the reasons and retry.',
+        'chan.credits.unavailable': 'No balance data returned',
+        'chan.claim.failed': 'Claim failed: {reason}',
         'chan.auto.title': 'Daily auto check-in',
         'chan.auto.running': 'Check-in running…',
         'chan.auto.ran': 'Checked in today',
@@ -1218,11 +1238,12 @@ window.__ModuleLoader__.load({
 .ofm_chanmeta b{color:var(--dsw-alias-label-secondary);font-weight:650;font-variant-numeric:tabular-nums}
 .ofm_chanacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ofm_acctlist{display:flex;flex-direction:column;gap:6px}
-.ofm_acct{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:11px;border:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 82%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 62%,transparent);font-size:12px;transition:border-color .16s ease,background .16s ease}
+.ofm_acct{display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:7px 10px;border-radius:11px;border:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 82%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 62%,transparent);font-size:12px;transition:border-color .16s ease,background .16s ease}
 .ofm_acct:hover{border-color:var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 88%,transparent)}
 .ofm_acct.pending{border-style:dashed}
 .ofm_acctname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
 .ofm_acctmeta{font-size:10.5px;color:var(--dsw-alias-label-tertiary);white-space:nowrap}
+.ofm_balanceerror{flex-basis:100%;overflow-wrap:anywhere;color:var(--dsw-alias-state-error-primary);font-size:11px}
 .ofm_acctacts{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap}
 .ofm_modellist{display:flex;flex-direction:column;gap:4px;max-height:238px;overflow:auto;padding-right:2px}
 .ofm_modelrow{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:9px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 55%,transparent);font-size:11.5px;transition:background .15s ease}
@@ -1268,7 +1289,7 @@ window.__ModuleLoader__.load({
 .ofm_chanlogo{padding:0;overflow:hidden}
 .ofm_credittotal b{color:var(--dsw-alias-state-success-primary);font-variant-numeric:tabular-nums}
 .ofm_creditbadge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 9%,transparent);color:var(--dsw-alias-state-warning-primary,#f0a441);white-space:nowrap}
-.ofm_creditbadge.strong{color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 9%,transparent)}
+.ofm_creditbadge.strong{max-width:100%;white-space:normal;overflow-wrap:anywhere;color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 9%,transparent)}
 /* ══ 账号池状态 ════════════════════════════════════════════════════════ */
 .ofm_pooltop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .ofm_poolbadge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 72%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 4%);font-size:12.5px;font-weight:650;white-space:nowrap}
@@ -2734,8 +2755,22 @@ window.__ModuleLoader__.load({
       { id: 'gemini', name: 'Gemini', org: 'Google Code Assist', accent: '#4285F4', note: '本地回调 OAuth 免费线', login: 'browser' },
     ]
 
-    /** Channels whose daily credits can be claimed from here. */
-    const CREDIT_PROVIDERS = new Set(['codearts', 'buddy', 'workbuddy', 'lobsterai', 'qoder', 'qodercn', 'loomy', 'minimax'])
+    /** 与现有 RPC 的能力对应：余额、每日领取及独立签到状态分别判断。 */
+    const CHANNEL_CREDITS = {
+      codearts: { claim: true },
+      buddy: { claim: true, status: true },
+      workbuddy: {},
+      lobsterai: { claim: true },
+      qoder: { claim: true },
+      qodercn: { claim: true },
+      trae: { claim: true },
+      cline: { unit: 'dollars' },
+      loomy: { claim: true },
+      raccoon: {},
+      minimax: { claim: true, status: true },
+      zcode: { claim: true, unit: 'tokens' },
+      gemini: { unit: 'quota', quota: true },
+    }
 
     /**
      * The host RPC the pack registered at `/api/channel-pack`.
@@ -2788,6 +2823,15 @@ window.__ModuleLoader__.load({
       const [notice, setNotice] = useState('')
       const [login, setLogin] = useState(null)
       const modelBatchPending = useRef(false)
+      const [balanceError, setBalanceError] = useState('')
+      const [balanceLoading, setBalanceLoading] = useState(false)
+      const balancePending = useRef(null)
+      const balanceGeneration = useRef(0)
+      const claimPending = useRef(false)
+      const creditCapability = CHANNEL_CREDITS[channel.id]
+      const balanceLabel = creditCapability?.unit === 'tokens' ? t('chan.credits.tokens')
+        : creditCapability?.unit === 'dollars' ? t('chan.credits.dollars')
+          : creditCapability?.quota ? t('chan.credits.quota') : t('chan.credits.left')
 
       const accountsCount = status?.accounts?.total ?? 0
       const enabledCount = status?.accounts?.enabled ?? 0
@@ -2810,25 +2854,46 @@ window.__ModuleLoader__.load({
         } catch (error) { setModels([]); onError(channel, error) }
       }, [rpc, channel.id, onError])
       const loadCredits = useCallback(async () => {
-        if (!CREDIT_PROVIDERS.has(channel.id)) return
+        if (!CHANNEL_CREDITS[channel.id]?.status) return
         try {
           const value = await rpc('credits.status', { provider: channel.id })
           setCredits(value?.accounts ?? [])
         } catch { setCredits([]) }
       }, [rpc, channel.id])
-      const loadBalances = useCallback(async () => {
-        if (!CREDIT_PROVIDERS.has(channel.id)) return
-        try {
-          const value = await rpc('credits.balances', { provider: channel.id }, 90_000)
-          setBalances(value?.accounts ?? [])
-        } catch { setBalances([]) }
+      const loadBalances = useCallback((afterWrite = false) => {
+        if (!CHANNEL_CREDITS[channel.id] || !rpc) return Promise.resolve()
+        const pending = balancePending.current
+        if (!afterWrite && pending?.provider === channel.id && pending.rpc === rpc) return pending.promise
+        const generation = ++balanceGeneration.current
+        const request = { provider: channel.id, rpc }
+        balancePending.current = request
+        setBalanceLoading(true); setBalanceError('')
+        request.promise = (async () => {
+          try {
+            const value = await rpc('credits.balances', { provider: channel.id, ...afterWrite ? { force: true } : {} }, 90_000)
+            if (generation === balanceGeneration.current) setBalances(value?.accounts ?? [])
+          } catch (error) {
+            if (generation === balanceGeneration.current) {
+              setBalances([])
+              setBalanceError(String(error?.message ?? error))
+            }
+          } finally {
+            if (generation === balanceGeneration.current) setBalanceLoading(false)
+            if (balancePending.current === request) balancePending.current = null
+          }
+        })()
+        return request.promise
       }, [rpc, channel.id])
-      useEffect(() => { void loadBalances() }, [loadBalances])
+      useEffect(() => {
+        setBalances(undefined); setBalanceError('')
+        void loadBalances()
+        return () => { balanceGeneration.current++; balancePending.current = null }
+      }, [loadBalances])
       // A slow heartbeat keeps the numbers honest while the page sits open:
       // balances move whenever a model is used elsewhere, and a stale credit
       // count reads as "I have more quota than I do".
       useEffect(() => {
-        if (!CREDIT_PROVIDERS.has(channel.id)) return undefined
+        if (!CHANNEL_CREDITS[channel.id]) return undefined
         const timer = setInterval(() => { void loadBalances() }, 90_000)
         return () => clearInterval(timer)
       }, [channel.id, loadBalances])
@@ -2838,20 +2903,25 @@ window.__ModuleLoader__.load({
       }
       const balancesTotal = (balances ?? []).reduce((sum, row) => sum + (Number.isFinite(row.balance?.total) ? row.balance.total : 0), 0)
       const balancesKnown = (balances ?? []).some(row => Number.isFinite(row.balance?.total))
+      const balanceFailures = (balances ?? []).filter(row => row.error || !Number.isFinite(row.balance?.total)).length
 
       // Refetch what is on screen whenever the pack reports a change for this
       // channel: an account added in another tab, a completed background login,
       // a claim that moved the numbers.
       useEffect(() => {
-        const onEvent = () => { if (open === 'accounts') void loadAccounts(); if (open === 'models') void loadModels() }
+        const onEvent = () => {
+          if (open === 'accounts') { void loadAccounts(); void loadCredits() }
+          if (open === 'models') void loadModels()
+          void loadBalances()
+        }
         window.addEventListener('ofm:channels', onEvent)
         return () => window.removeEventListener('ofm:channels', onEvent)
-      }, [open, loadAccounts, loadModels])
+      }, [open, loadAccounts, loadModels, loadCredits, loadBalances])
 
       const toggle = async fold => {
         if (open === fold) { setOpen(null); return }
         setOpen(fold)
-        if (fold === 'accounts') { setAccounts(undefined); await loadAccounts(); void loadCredits() }
+        if (fold === 'accounts') { setAccounts(undefined); await loadAccounts(); void loadCredits(); void loadBalances() }
         if (fold === 'models') { setModels(undefined); await loadModels() }
       }
 
@@ -2897,7 +2967,7 @@ window.__ModuleLoader__.load({
                 onChanged()
                 void loadAccounts()
                 void loadCredits()
-                void loadBalances()
+                void loadBalances(true)
               }
             } else if (typeof value?.error === 'string' && value.error !== '') {
               setLogin(null)
@@ -2906,7 +2976,7 @@ window.__ModuleLoader__.load({
           } catch { /* the link may still complete; keep polling */ }
         }, 3000)
         return () => { alive = false; clearInterval(timer) }
-      }, [login, rpc, channel.id, t, onChanged, loadAccounts, loadCredits])
+      }, [login, rpc, channel.id, t, onChanged, loadAccounts, loadCredits, loadBalances])
 
       const accountAction = async (key, accountId, fn) => {
         setBusy(key); setNotice('')
@@ -2931,22 +3001,26 @@ window.__ModuleLoader__.load({
           && !window.confirm(t('chan.confirm.delete').replace('{name}', entry?.nickname ?? accountId))) return
         await accountAction('del:' + accountId, accountId, async () => {
           await rpc('account.delete', { accountId })
-          onChanged(); await loadAccounts()
+          onChanged(); await loadAccounts(); void loadBalances(true)
         })
       }
 
       const claim = async () => {
+        if (!creditCapability?.claim || busy !== '' || claimPending.current) return
+        claimPending.current = true
         setBusy('claim'); setNotice('')
         try {
           const value = await rpc('credits.claimAll', { provider: channel.id }, 180_000)
           const summary = value?.summary ?? value
           const claimed = Number(summary?.claimed ?? 0)
           const credit = Number(summary?.totalCredit ?? 0)
-          setNotice(claimed > 0
-            ? t('chan.claim.result').replace('{count}', String(claimed)).replace('{credit}', String(credit))
-            : t('chan.claim.none'))
-          void loadCredits()
-        } catch (error) { onError(channel, error) } finally { setBusy('') }
+          const failed = (value?.results ?? []).filter(row => row.outcome?.kind === 'failed')
+          const successText = t('chan.claim.result').replace('{count}', String(claimed)).replace('{credit}', String(credit))
+          const failureText = t('chan.claim.failed').replace('{reason}', failed.map(row => row.outcome.message).join('；'))
+          setNotice(failed.length > 0 ? claimed > 0 ? `${successText}；${failureText}` : failureText
+            : claimed > 0 ? successText : t('chan.claim.none'))
+          void loadCredits(); void loadBalances(true)
+        } catch (error) { onError(channel, error) } finally { claimPending.current = false; setBusy('') }
       }
 
       const creditFor = accountId => (credits ?? []).find(row => row.accountId === accountId)?.status ?? null
@@ -2971,9 +3045,11 @@ window.__ModuleLoader__.load({
         h('div', { className: 'ofm_chanmeta' },
           h('span', null, `${t('chan.meta.accounts')} `, h('b', null, `${enabledCount}/${accountsCount}`)),
           h('span', null, `${t('chan.meta.models')} `, h('b', null, modelsTotal === 0 ? '—' : `${modelsTotal - modelsOff}/${modelsTotal}`)),
-          CREDIT_PROVIDERS.has(channel.id) ? h('span', { className: 'ofm_credittotal' },
-            `${t('chan.credits.left')} `,
-            h('b', null, balancesKnown ? kilo(balancesTotal) : balances === undefined ? '…' : '—')) : null),
+          creditCapability ? h('span', { className: 'ofm_credittotal' },
+            `${balanceLabel} `,
+            h('b', null, balanceLoading ? '…' : balancesKnown
+              ? creditCapability.quota ? t('chan.credits.loaded').replace('{count}', String((balances ?? []).filter(row => Number.isFinite(row.balance?.total)).length)) : kilo(balancesTotal)
+              : balances === undefined ? '…' : '—')) : null),
         h('div', { className: 'ofm_chanacts' },
           h('button', { type: 'button', className: 'ofm_btn', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'add' ? 'true' : undefined, onClick: startLogin }, busy === 'add' ? '…' : t('chan.act.add')),
           accountsCount > 0 ? h('button', {
@@ -2982,10 +3058,14 @@ window.__ModuleLoader__.load({
               for (const row of accounts ?? await rpc('account.list', { provider: channel.id }).then(v => v?.accounts ?? [])) {
                 try { await rpc('account.refresh', { accountId: row.id }, 90_000) } catch (error) { onError(channel, error) }
               }
-              onChanged(); await loadAccounts(); void loadBalances()
+              onChanged(); await loadAccounts(); void loadBalances(true)
             }),
           }, busy === 'refreshAll' ? '…' : t('chan.act.refresh')) : null,
-          CREDIT_PROVIDERS.has(channel.id) ? h('button', {
+          creditCapability ? h('button', {
+            type: 'button', className: 'ofm_btn ghost', disabled: balanceLoading || busy !== '' || !rpc,
+            'aria-busy': balanceLoading ? 'true' : undefined, onClick: () => void loadBalances(true),
+          }, balanceLoading ? t('chan.credits.loading') : t('chan.credits.refresh')) : null,
+          creditCapability?.claim ? h('button', {
             type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'claim' ? 'true' : undefined,
             onClick: claim,
           }, busy === 'claim' ? '…' : t('chan.act.claim')) : null,
@@ -2996,6 +3076,10 @@ window.__ModuleLoader__.load({
             h('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true' }, h('path', { d: 'M3 1.5l6 4.5-6 4.5z' })),
             t('chan.fold.models'), models === undefined ? null : ` (${models.length})`)),
         notice !== '' ? h('p', { className: 'ofm_note' }, notice) : null,
+        balanceError !== '' ? h('p', { className: 'ofm_balanceerror', role: 'alert' },
+          t('chan.credits.failed').replace('{reason}', balanceError))
+          : balanceFailures > 0 ? h('p', { className: 'ofm_balanceerror', role: 'status' },
+            t('chan.credits.partial').replace('{count}', String(balanceFailures))) : null,
         open === 'accounts' ? h('div', { className: 'ofm_chanfold' },
           accounts === undefined ? h('div', { className: 'ofm_skel', style: { minHeight: 44 } })
             : accounts.length === 0 ? h('p', { className: 'ofm_note' }, t('chan.noAccount'))
@@ -3005,13 +3089,21 @@ window.__ModuleLoader__.load({
                 return h('div', { className: 'ofm_acct' + (pending ? ' pending' : ''), key: row.id },
                   h('span', { className: 'ofm_acctname', title: row.nickname ?? row.id }, row.nickname ?? row.id),
                   h('span', { className: 'ofm_acctmeta' }, row.enabled === false ? t('chan.disabled') : t('chan.enabled'), ' · ', expiryText(row, t)),
-                  credit?.status?.todayCredit ? h('span', { className: 'ofm_creditbadge' },
-                    t('chan.credit.today').replace('{credit}', String(credit.status.todayCredit))) : null,
+                  credit?.todayCheckedIn === true && Number.isFinite(credit.todayCredit) ? h('span', { className: 'ofm_creditbadge' },
+                    t('chan.credit.today').replace('{credit}', String(credit.todayCredit))) : null,
                   (() => {
                     const balance = balanceOf(row.id)
-                    if (balance === null || !Number.isFinite(balance.total)) return null
-                    return h('span', { className: 'ofm_creditbadge strong', title: t('chan.credits.left') },
-                      `${t('chan.credits.left')} ${kilo(balance.total)}`)
+                    if (!creditCapability) return null
+                    if (balanceLoading) return h('span', { className: 'ofm_note' }, t('chan.credits.loading'))
+                    const result = (balances ?? []).find(entry => entry.accountId === row.id)
+                    if (balance === null || !Number.isFinite(balance.total)) return h('span', { className: 'ofm_balanceerror' },
+                      balanceError ? t('chan.credits.failed').replace('{reason}', balanceError)
+                        : result?.error || t('chan.credits.unavailable'))
+                    const reading = creditCapability.quota
+                      ? (balance.packages ?? []).map(pkg => `${pkg.name} ${pkg.remaining}%`).join(' · ') || '—'
+                      : kilo(balance.total)
+                    return h('span', { className: 'ofm_creditbadge strong', title: balanceLabel },
+                      `${balanceLabel} ${reading}`)
                   })(),
                   h('span', { className: 'ofm_acctacts' },
                     h('button', {
@@ -3027,7 +3119,7 @@ window.__ModuleLoader__.load({
                       type: 'button', className: 'ofm_minibtn', disabled: busy !== '' || !rpc,
                       onClick: () => accountAction('refresh:' + row.id, row.id, async () => {
                         await rpc('account.refresh', { accountId: row.id }, 90_000)
-                        onChanged(); await loadAccounts()
+                        onChanged(); await loadAccounts(); void loadBalances(true)
                       }),
                     }, t('chan.act.refresh')),
                     h('button', {

@@ -450,6 +450,8 @@ export interface RpcCreditsClaimAllResponse {
 /** RPC: 查询某 provider 下全部账号的积分余额请求 */
 export interface RpcCreditsBalancesRequest {
   provider: string
+  /** 用户刷新或账号写入后查询时跳过支持该选项的渠道缓存。 */
+  force?: boolean
 }
 
 /**
