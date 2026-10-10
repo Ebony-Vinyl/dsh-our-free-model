@@ -10,6 +10,7 @@ import { registerHooks } from 'node:module'
 import { verifyChannelModelActions } from './channel-model-actions-test.mjs'
 import { verifyChannelCreditsUi } from './channel-credits-ui-test.mjs'
 import { verifyChannelCreditsRpc } from './channel-credits-rpc-test.mjs'
+import { verifyChannelImagePricing } from './channel-image-pricing-test.mjs'
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-channel-pack-'))
 const kernel = new URL('./lib/channel-pack-kernel.mjs', import.meta.url).href
@@ -73,6 +74,8 @@ try {
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
   assert.equal(adapters.size, 13, 'all other account providers remain registered')
+  verifyChannelImagePricing(adapters)
+  console.log('ok  十三渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
   assert.equal(writes.length, 0, 'mount neither creates nor deletes credentials')
   assert.equal(fetched.some(url => url.includes('opencode') || url.includes('models.dev')), false, 'no OpenCode capability/catalog warmup')
   assert.deepEqual(ctx.accountPool.listAccountsByProvider('opencode'), state.accounts, 'historical account data survives')
