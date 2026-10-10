@@ -69,6 +69,7 @@ export async function verifyChannelModelActions() {
   const settle = () => new Promise(resolve => setImmediate(resolve))
   assert.equal(button('全部开启').props.disabled, false)
   assert.equal(button('全部关闭').props.disabled, false)
+  assert.ok(button('开启') && button('关闭'), '单模型按钮应说明将执行的动作，不能将动作伪装成当前状态')
   hold = true
   button('全部关闭').props.onClick()
   button('全部开启').props.onClick()
