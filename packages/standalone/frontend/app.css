@@ -3428,6 +3428,121 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   background: rgba(255,250,235,0.55) !important;
 }
 
+/* ============================================================
+   V5 LIGHT 铺开 · 全套（徽章/分割线/状态点 → 输入与聚焦 →
+   原生件 → 纸纹与光束 → 颜色纪律 → 图表与空态）
+   ============================================================ */
+
+/* ---- 0. 令牌重声明：蓝色泄漏清零（昼内不引蓝） ---- */
+:root:not([data-theme="dark"]) {
+  --green: #b45309 !important;
+  --accent-soft: #f5ede0 !important;
+  --accent-line: #e3d5bd !important;
+  --accent-hover: #9a4708 !important;
+  --accent-glow: rgba(180,83,9,0.14) !important;
+  --focus-ring: #b45309 !important;
+  --focus-halo: rgba(180,83,9,0.16) !important;
+  --dsw-alias-state-business-primary: #b45309 !important;
+  --dsw-alias-accent-primary: #b45309 !important;
+  --dsw-alias-accent-secondary: #f5ede0 !important;
+}
+:root:not([data-theme="dark"]) ::selection { background: rgba(180,83,9,0.20) !important; color: #1c1917 !important; }
+:root:not([data-theme="dark"]) .console-mark { border-color: rgba(180,83,9,0.24) !important; box-shadow: 0 1px 2px rgba(86,52,10,0.10), 0 8px 18px -12px rgba(180,83,9,0.40) !important; }
+:root:not([data-theme="dark"]) .console-brand:hover .console-mark { border-color: rgba(180,83,9,0.38) !important; box-shadow: 0 2px 5px rgba(86,52,10,0.12), 0 12px 22px -14px rgba(180,83,9,0.48) !important; }
+:root:not([data-theme="dark"]) .console-nav-item:hover { background: linear-gradient(90deg, rgba(180,83,9,0.08), rgba(180,83,9,0.02)) !important; }
+:root:not([data-theme="dark"]) .console-nav-item.selected { background: linear-gradient(90deg, rgba(180,83,9,0.13), rgba(180,83,9,0.04)) !important; box-shadow: inset 0 0 0 1px rgba(180,83,9,0.16), 0 1px 2px rgba(86,52,10,0.06) !important; }
+:root:not([data-theme="dark"]) .console-nav-item.selected svg { color: #b45309 !important; }
+:root:not([data-theme="dark"]) .count-badge { background: #f0e6d4 !important; color: #9a4708 !important; box-shadow: inset 0 0 0 1px rgba(180,83,9,0.12) !important; }
+:root:not([data-theme="dark"]) .login-shell { background: radial-gradient(880px 420px at 50% 28%, rgba(180,83,9,0.06), transparent 64%), var(--paper) !important; }
+:root:not([data-theme="dark"]) .login-card { box-shadow: 0 1px 2px rgba(86,52,10,0.05), 0 14px 44px -14px rgba(86,52,10,0.18), 0 40px 80px -60px rgba(180,83,9,0.30), inset 0 1px 0 rgba(255,255,255,0.85) !important; }
+:root:not([data-theme="dark"]) .login-card:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 2px rgba(86,52,10,0.06), 0 22px 56px -16px rgba(86,52,10,0.22), 0 44px 88px -60px rgba(180,83,9,0.38) !important; }
+:root:not([data-theme="dark"]) .login-card-glow { background: linear-gradient(90deg, transparent, rgba(180,83,9,0.4), transparent) !important; }
+:root:not([data-theme="dark"]) .login-card input:focus-visible { box-shadow: 0 0 0 3px var(--accent-glow), 0 0 18px -6px rgba(180,83,9,0.35) !important; }
+:root:not([data-theme="dark"]) .login-card:focus-within .brand-mark span { color: #b45309 !important; filter: drop-shadow(0 0 6px rgba(180,83,9,0.45)) !important; }
+:root:not([data-theme="dark"]) .loading-screen { background: radial-gradient(920px 460px at 50% 22%, rgba(180,83,9,0.07), transparent 62%), radial-gradient(700px 420px at 88% 96%, rgba(30,138,99,0.04), transparent 66%), linear-gradient(180deg, #fdfbf7, var(--paper) 46%, #f7f4ee) !important; }
+:root:not([data-theme="dark"]) .loading-bar { background: rgba(180,83,9,0.12) !important; }
+:root:not([data-theme="dark"]) .loading-bar-fill { background: #b45309 !important; }
+:root:not([data-theme="dark"]) .ui-spinner { border-color: rgba(180,83,9,0.2) !important; }
+:root:not([data-theme="dark"]) .workspace-avatar { background: linear-gradient(180deg, #ffffff, #f5ede0) !important; box-shadow: inset 0 0 0 1px rgba(180,83,9,0.16), 0 1px 2px rgba(86,52,10,0.08) !important; }
+:root:not([data-theme="dark"]) .workspace-switch:hover .workspace-avatar { box-shadow: inset 0 0 0 1px rgba(180,83,9,0.26), 0 4px 10px -4px rgba(180,83,9,0.40) !important; }
+:root:not([data-theme="dark"]) .theme-toggle:hover { border-color: var(--accent-line) !important; color: #b45309 !important; box-shadow: inset 0 1px 0 #ffffff, 0 3px 8px -3px rgba(86,52,10,0.16), 0 0 0 3px rgba(180,83,9,0.06) !important; }
+:root:not([data-theme="dark"]) .quick-endpoint code { color: #8a5206 !important; }
+:root:not([data-theme="dark"]) .quick-icon { background: #f5ede0 !important; color: #b45309 !important; }
+:root:not([data-theme="dark"]) .detail-provider-link.active { background: #f5ede0 !important; color: #b45309 !important; }
+:root:not([data-theme="dark"]) .text-button { color: #b45309 !important; }
+:root:not([data-theme="dark"]) .card-foot button { color: #b45309 !important; }
+:root:not([data-theme="dark"]) .card-foot button:hover { color: #9a4708 !important; }
+:root:not([data-theme="dark"]) input:focus-visible, :root:not([data-theme="dark"]) select:focus-visible, :root:not([data-theme="dark"]) textarea:focus-visible { border-color: #b45309 !important; box-shadow: 0 0 0 3px rgba(180,83,9,0.14), 0 0 14px -6px rgba(180,83,9,0.35) !important; }
+:root:not([data-theme="dark"]) input, :root:not([data-theme="dark"]) textarea { caret-color: #7a4a12 !important; }
+:root:not([data-theme="dark"]) input::placeholder, :root:not([data-theme="dark"]) textarea::placeholder { color: #9c9285 !important; }
+:root:not([data-theme="dark"]) .ui-input:hover:not(:disabled) { border-color: #cbbba0 !important; }
+:root:not([data-theme="dark"]) .ui-input:focus-visible { border-color: #b45309 !important; box-shadow: 0 0 0 3px rgba(180,83,9,0.14), 0 0 14px -6px rgba(180,83,9,0.35) !important; }
+:root:not([data-theme="dark"]) .ui-badge-blue { background: #f5ede0 !important; color: #b45309 !important; border-color: #e3d5bd !important; }
+:root:not([data-theme="dark"]) .ui-badge-blue .ui-badge-dot { box-shadow: 0 0 0 2px rgba(180,83,9,0.16) !important; }
+:root:not([data-theme="dark"]) .ui-switch.on { background: radial-gradient(circle at 50% 50%, #c8842a, #b45309 55%, #a04a08) !important; border-color: #8a4a06 !important; }
+:root:not([data-theme="dark"]) .dashboard-chart-bar { background: linear-gradient(180deg, #c8842a, #b45309) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 0 0 0.5px rgba(120,60,0,0.20), 0 1px 2px rgba(86,52,10,0.10) !important; }
+:root:not([data-theme="dark"]) .dashboard-chart-bar.zero { background: #ece5d8 !important; box-shadow: none !important; }
+:root:not([data-theme="dark"]) .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) { background: linear-gradient(180deg, #d1912e, #b85a09) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), inset 0 0 0 0.5px rgba(120,60,0,0.22), 0 6px 14px -8px rgba(180,83,9,0.45) !important; }
+:root:not([data-theme="dark"]) .chart-empty { background: rgba(250,247,242,0.9) !important; }
+:root:not([data-theme="dark"]) .chart-empty span, :root:not([data-theme="dark"]) .chart-empty small { color: #8a8274 !important; }
+:root:not([data-theme="dark"]) .empty-state h3 { color: #1c1917 !important; }
+:root:not([data-theme="dark"]) .empty-state svg { color: #b45309 !important; opacity: 0.35 !important; }
+:root:not([data-theme="dark"]) .channel-empty svg { color: #b45309 !important; opacity: 0.30 !important; }
+:root:not([data-theme="dark"]) .channel-empty p { color: #6b655c !important; }
+
+/* ---- 1. 徽章 · 分割线 · 状态点（黄铜胶囊 + 虚线分隔） ---- */
+:root:not([data-theme="dark"]) .ui-badge { border-radius: 999px !important; padding: 3px 9px !important; font-size: 10px !important; letter-spacing: 0.04em !important; background: #f5ede0 !important; color: #9a4708 !important; border: 1px solid #e3d5bd !important; }
+:root:not([data-theme="dark"]) .ui-badge-success { background: #eff5f0 !important; color: #177552 !important; border-color: #d5e2d9 !important; }
+:root:not([data-theme="dark"]) .ui-badge-warning { background: #fbf6ea !important; color: #8a6215 !important; border-color: #eadfc6 !important; }
+:root:not([data-theme="dark"]) .ui-badge-dot { width: 5px !important; height: 5px !important; border-radius: 50% !important; }
+:root:not([data-theme="dark"]) .card-foot { border-top: 1px dashed #d8cdb9 !important; }
+:root:not([data-theme="dark"]) .dashboard-heading, :root:not([data-theme="dark"]) .page-heading { border-bottom: 1px dashed #d8cdb9 !important; padding-bottom: 10px !important; }
+
+/* ---- 2. 输入框与聚焦（墨环） ---- */
+:root:not([data-theme="dark"]) input, :root:not([data-theme="dark"]) textarea, :root:not([data-theme="dark"]) select, :root:not([data-theme="dark"]) .ui-input { background: #fdfcf9 !important; border: 1px solid #ddd3c2 !important; border-radius: 6px !important; box-shadow: inset 0 1px 2px rgba(86,52,10,0.04) !important; transition: border-color 280ms cubic-bezier(0.32,0.72,0,1), box-shadow 280ms cubic-bezier(0.32,0.72,0,1) !important; }
+:root:not([data-theme="dark"]) .channel-search input:focus { border-color: #b45309 !important; box-shadow: 0 0 0 3px rgba(180,83,9,0.14), 0 0 14px -6px rgba(180,83,9,0.35) !important; }
+:root:not([data-theme="dark"]) .channel-search input:hover:not(:focus) { border-color: #cbbba0 !important; }
+
+/* ---- 3. 原生件（滚动条 / selection / caret / focus ring） ---- */
+:root:not([data-theme="dark"]) * { scrollbar-color: rgba(140,110,70,0.28) transparent !important; }
+:root:not([data-theme="dark"]) *:hover { scrollbar-color: rgba(140,110,70,0.42) transparent !important; }
+:root:not([data-theme="dark"]) button:focus-visible, :root:not([data-theme="dark"]) a:focus-visible, :root:not([data-theme="dark"]) input:focus-visible, :root:not([data-theme="dark"]) select:focus-visible, :root:not([data-theme="dark"]) textarea:focus-visible, :root:not([data-theme="dark"]) [tabindex]:focus-visible { outline: 2px solid #b45309 !important; outline-offset: 2px !important; }
+
+/* ---- 4. 纸纹与光束 ---- */
+:root:not([data-theme="dark"]) .ui-card::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p2)' opacity='0.07'/%3E%3C/svg%3E") !important;
+}
+:root:not([data-theme="dark"]) body::after {
+  background:
+    radial-gradient(900px 480px at 12% -8%, rgba(255,209,140,0.06), transparent 62%),
+    radial-gradient(820px 460px at 88% -4%, rgba(255,177,92,0.05), transparent 66%),
+    linear-gradient(115deg, transparent 36%, rgba(255,224,176,0.04) 48%, transparent 62%),
+    linear-gradient(-165deg, transparent 20%, rgba(255,200,130,0.03) 50%, transparent 78%) !important;
+  animation: lt5-beam-drift 48s ease-in-out infinite alternate !important;
+}
+@keyframes lt5-beam-drift {
+  0%   { transform: translate3d(-2%, -0.5%, 0) scale(1.01); }
+  50%  { transform: translate3d(1%, 1%, 0) scale(1.04); }
+  100% { transform: translate3d(2.5%, 0.5%, 0) scale(1.02); }
+}
+
+/* ---- 5. 按钮高光移动：left/right → transform 位移（性能修正） ---- */
+:root:not([data-theme="dark"]) body .ui-button-default::before,
+:root:not([data-theme="dark"]) body .primary::before {
+  left: 10% !important;
+  right: 10% !important;
+  transform: translateX(0) !important;
+  transition: transform 400ms cubic-bezier(0.32,0.72,0,1), background 400ms cubic-bezier(0.32,0.72,0,1) !important;
+}
+:root:not([data-theme="dark"]) body .ui-button-default:hover::before,
+:root:not([data-theme="dark"]) body .primary:hover::before {
+  transform: translateX(-18px) !important;
+  background: linear-gradient(160deg, rgba(255,250,235,0.5), rgba(255,250,235,0.08)) !important;
+}
+:root:not([data-theme="dark"]) body .ui-button-default:active::before,
+:root:not([data-theme="dark"]) body .primary:active::before {
+  transform: translateX(0) !important;
+}
 /* ==== V5 LIGHT END ==== */
 
 /* ==== V5 NIGHT START ==== */
@@ -3696,8 +3811,8 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 /* ---------- 6. 新增关键帧（cp5- 前缀） ---------- */
 /* 方块光标闪烁：不是渐隐，是二值跳变（终端没有中间态） */
 @keyframes cp5-blink {
-  0%, 49%   { opacity: 1; }
-  50%, 100% { opacity: 0; }
+  0%, 69%   { opacity: 1; }
+  70%, 100% { opacity: 0; }
 }
 /* 状态点方块呼吸：step 式，两态跳变，不做平滑呼吸 */
 @keyframes cp5-pulse-square {
@@ -3714,7 +3829,7 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 }
 
 /* ---------- 7. 页面标题：方块光标 + 信号接入 + 蓝标记线归位 ---------- */
-[data-theme="dark"] .dashboard-heading h1,
+[data-theme="dark"] h1,
 [data-theme="dark"] .page-heading h1 {
   text-transform: uppercase !important;
   letter-spacing: -0.02em !important;
@@ -3722,14 +3837,14 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   font-variant-numeric: tabular-nums !important;
   animation: cp5-boot-in 460ms var(--ease-out-expo) both !important;
 }
-[data-theme="dark"] .dashboard-heading h1::before,
+[data-theme="dark"] h1::before,
 [data-theme="dark"] .page-heading h1::before {
   content: "" !important;
   display: inline-block !important;
-  width: 0.42em !important;
+  width: 0.46em !important;
   height: 0.8em !important;
   margin-right: 0.34em !important;
-  vertical-align: -0.03em !important;
+  vertical-align: -0.03em !important; position: static !important; float: none !important;
   background: #00d0c0 !important;
   box-shadow: 0 0 10px rgba(0, 208, 192, 0.55) !important;
   animation: cp5-blink 1.1s step-end infinite !important;
@@ -3955,11 +4070,12 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 
 /* ---------- 14. 降级：prefers-reduced-motion（新增选择器） ---------- */
 @media (prefers-reduced-motion: reduce) {
-  [data-theme="dark"] .dashboard-heading h1,
+  [data-theme="dark"] h1,
   [data-theme="dark"] .page-heading h1 { animation: none !important; }
-  [data-theme="dark"] .dashboard-heading h1::before,
+  [data-theme="dark"] h1::before,
   [data-theme="dark"] .page-heading h1::before,
   [data-theme="dark"] .empty-state p::after { animation: none !important; }
   [data-theme="dark"] .status-dot,
   [data-theme="dark"] .console-sidebar-footer .status-dot { animation: none !important; }
-}/* ==== V5 NIGHT END ==== */
+}
+/* ==== V5 NIGHT END ==== */
