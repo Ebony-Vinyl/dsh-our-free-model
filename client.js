@@ -351,8 +351,12 @@ window.__ModuleLoader__.load({
         'chan.credit.today': '今日已领 {credit}',
         'chan.model.free': '免费额度',
         'chan.model.dead': '已下架',
-        'chan.model.off': '已关闭',
-        'chan.model.on': '已开启',
+        'chan.model.off': '关闭',
+        'chan.model.on': '开启',
+        'chan.model.enableAll': '全部开启',
+        'chan.model.disableAll': '全部关闭',
+        'chan.model.enabledCount': '已开启 {enabled}/{total}',
+        'chan.model.allScope': '仅操作当前渠道的全部模型',
         'chan.error': '操作失败：{reason}',
         'chan.confirm.delete': '移除账号 {name}？该账号的凭据会一并删除。',
         'chan.rpc.unavailable': '宿主未提供 connection 服务，渠道操作暂不可用。',
@@ -771,8 +775,12 @@ window.__ModuleLoader__.load({
         'chan.credit.today': '{credit} claimed today',
         'chan.model.free': 'Free quota',
         'chan.model.dead': 'Retired',
-        'chan.model.off': 'Hidden',
-        'chan.model.on': 'Shown',
+        'chan.model.off': 'Hide',
+        'chan.model.on': 'Show',
+        'chan.model.enableAll': 'Show all',
+        'chan.model.disableAll': 'Hide all',
+        'chan.model.enabledCount': 'Shown {enabled}/{total}',
+        'chan.model.allScope': 'Apply to all models in this channel only',
         'chan.error': 'Action failed: {reason}',
         'chan.confirm.delete': 'Remove account {name}? Its credential is deleted with it.',
         'chan.rpc.unavailable': 'This host exposes no connection service, so channel actions are unavailable.',
@@ -2765,6 +2773,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [notice, setNotice] = useState('')
       const [login, setLogin] = useState(null)
+      const modelBatchPending = useRef(false)
 
       const accountsCount = status?.accounts?.total ?? 0
       const enabledCount = status?.accounts?.enabled ?? 0
@@ -2890,6 +2899,18 @@ window.__ModuleLoader__.load({
         try { await fn() } catch (error) { onError(channel, error) } finally { setBusy('') }
       }
 
+      const setAllModels = async disabled => {
+        if (busy !== '' || modelBatchPending.current || !rpc || !models?.length) return
+        modelBatchPending.current = true
+        try {
+          await accountAction(disabled ? 'models:hide' : 'models:show', '', async () => {
+            await rpc('model.setAllDisabled', { provider: channel.id, disabled })
+            await loadModels()
+            onChanged()
+          })
+        } finally { modelBatchPending.current = false }
+      }
+
       const removeAccount = async accountId => {
         const entry = (accounts ?? []).find(row => row.id === accountId)
         if (typeof window !== 'undefined' && typeof window.confirm === 'function'
@@ -3010,7 +3031,22 @@ window.__ModuleLoader__.load({
         open === 'models' ? h('div', { className: 'ofm_chanfold' },
           models === undefined ? h('div', { className: 'ofm_skel', style: { minHeight: 44 } })
             : models.length === 0 ? h('p', { className: 'ofm_note' }, '—')
-              : h('div', { className: 'ofm_modellist' }, models.map(model => h('div', {
+              : h(Fragment, null,
+                h('div', { className: 'ofm_row' },
+                  h('span', { className: 'ofm_note' }, t('chan.model.enabledCount')
+                    .replace('{enabled}', String(models.filter(model => model.disabled !== true).length))
+                    .replace('{total}', String(models.length))),
+                  h('button', {
+                    type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc,
+                    title: t('chan.model.allScope'), 'aria-busy': busy === 'models:show' ? 'true' : undefined,
+                    onClick: () => void setAllModels(false),
+                  }, t('chan.model.enableAll')),
+                  h('button', {
+                    type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc,
+                    title: t('chan.model.allScope'), 'aria-busy': busy === 'models:hide' ? 'true' : undefined,
+                    onClick: () => void setAllModels(true),
+                  }, t('chan.model.disableAll'))),
+                h('div', { className: 'ofm_modellist' }, models.map(model => h('div', {
                 className: 'ofm_modelrow' + (model.disabled === true ? ' off' : ''),
                 key: model.id,
               },
@@ -3023,7 +3059,7 @@ window.__ModuleLoader__.load({
                     await rpc('model.setDisabled', { provider: channel.id, modelId: model.id, disabled: model.disabled !== true })
                     await loadModels(); onChanged()
                   }),
-                }, model.disabled === true ? t('chan.model.on') : t('chan.model.off')))))) : null)
+                }, model.disabled === true ? t('chan.model.on') : t('chan.model.off'))))))) : null)
 
       const modal = login === null ? null : h('div', { className: 'ofm_scrim' },
         h('div', { className: 'ofm_modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('chan.login.title').replace('{name}', channel.name) },
