@@ -4271,4 +4271,81 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 @media (prefers-reduced-motion: reduce) {
   [data-theme="dark"] .chart-empty::after { animation: none !important; }
 }
+
+/* ==== V5 NIGHT · 圆角清零 + 切角多样化 ==== */
+/* 用户要求：赛博终端不该有钝圆边框，全部清零。但不是千篇一律的直角，而是不同角度的斜切，独具一格。 */
+
+/* 一级：大容器（卡片/面板/表格/登录卡）—— 18px 对角切 */
+[data-theme="dark"] .ui-card,
+[data-theme="dark"] .login-card,
+[data-theme="dark"] .model-table,
+[data-theme="dark"] .usage-panel,
+[data-theme="dark"] .confirm-panel,
+[data-theme="dark"] .settings-card-heading,
+[data-theme="dark"] .panel {
+  border-radius: 0 !important;
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px) !important;
+}
+
+/* 二级：按钮/输入框/下拉 —— 8px 单侧切（左上或右上，不对称才像切割） */
+[data-theme="dark"] .ui-button,
+[data-theme="dark"] .ui-button-default,
+[data-theme="dark"] .ui-button-outline,
+[data-theme="dark"] .ui-button-ghost,
+[data-theme="dark"] .ui-button-sm,
+[data-theme="dark"] .ui-button-lg,
+[data-theme="dark"] .ui-button-icon,
+[data-theme="dark"] .primary,
+[data-theme="dark"] .secondary,
+[data-theme="dark"] .danger-button,
+[data-theme="dark"] .ui-input,
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  border-radius: 0 !important;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px) !important;
+}
+
+/* 三级：徽章/标签/状态点 —— 4px 微切（小到几乎看不见，但凑近能发现是切角不是圆角） */
+[data-theme="dark"] .ui-badge,
+[data-theme="dark"] .count-badge,
+[data-theme="dark"] .status-dot,
+[data-theme="dark"] .ui-status-dot,
+[data-theme="dark"] .ui-badge-dot {
+  border-radius: 0 !important;
+  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px) !important;
+}
+
+/* 四级：滚动条/开关/进度条 —— 纯直角（机械件的零修饰） */
+[data-theme="dark"] ::-webkit-scrollbar-thumb,
+[data-theme="dark"] .ui-switch,
+[data-theme="dark"] .ui-switch span,
+[data-theme="dark"] .settings-toggle,
+[data-theme="dark"] .progress-bar,
+[data-theme="dark"] .loading-bar,
+[data-theme="dark"] .loading-bar-fill {
+  border-radius: 0 !important;
+  clip-path: none !important;
+}
+
+/* 五级：骨架屏/空状态/图表柱 —— 12px 对角切（比卡片小一号，区分层级） */
+[data-theme="dark"] .ofm_skel,
+[data-theme="dark"] .empty-state,
+[data-theme="dark"] .chart-empty,
+[data-theme="dark"] .channel-empty,
+[data-theme="dark"] .dashboard-chart-bar,
+[data-theme="dark"] .usage-day-bar {
+  border-radius: 0 !important;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px) !important;
+}
+
+/* 六级：头像/图标容器 —— 允许保留极小圆角（2px），因为完全直角会割手 */
+[data-theme="dark"] .workspace-avatar,
+[data-theme="dark"] .source-icon,
+[data-theme="dark"] .quick-icon,
+[data-theme="dark"] .provider-logo {
+  border-radius: 2px !important;
+  clip-path: none !important;
+}
+/* ==== V5 NIGHT · 圆角清零 END ==== */
 /* ==== V5 NIGHT END ==== */
