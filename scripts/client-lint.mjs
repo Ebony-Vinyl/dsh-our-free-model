@@ -33,6 +33,11 @@ const stubReact = {
   useCallback: fn => fn,
 }
 
+/** A react-dom stand-in: the platform seed ships it, so the bundle may require it. */
+const stubReactDom = {
+  createPortal: (node, target) => ({ portal: true, node, target }),
+}
+
 // The wrapper is a single expression, so a Function body reproduces the browser's
 // script semantics without needing a DOM or a module graph.
 new Function('window', 'document', 'navigator', source)(globalThis.window, globalThis.document, { language: 'zh-CN' })
@@ -48,7 +53,8 @@ if (record === undefined) {
   else {
     const exports = record.factory(name => {
       if (name === 'react') return stubReact
-      throw new Error(`the browser half may only require react; it asked for "${name}"`)
+      if (name === 'react-dom') return stubReactDom
+      throw new Error(`the browser half may only require react or react-dom; it asked for "${name}"`)
     })
     if (typeof exports.apply !== 'function') problems.push('exports.apply is missing')
     if (!Array.isArray(exports.inject)) problems.push('exports.inject is missing')
