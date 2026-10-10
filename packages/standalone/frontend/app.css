@@ -3615,6 +3615,10 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   animation: lt5-ink-spread 520ms cubic-bezier(0.22,0.61,0.36,1) both !important;
   pointer-events: none !important;
 }
+/* ============================================================
+   V5 LIGHT 返工补丁 · R2（批评家重测范围补漏：模型清单页）
+   ============================================================ */
+:root:not([data-theme="dark"]) .model-table { border-radius: 8px !important; }
 /* ==== V5 LIGHT END ==== */
 
 /* ==== V5 NIGHT START ==== */
