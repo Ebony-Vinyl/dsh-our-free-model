@@ -200,6 +200,26 @@ try {
     assert.equal((await rpc('account.list', { provider: 'buddy' })).accounts[0].enabled, true)
     assert.equal((await rpc('credits.permanentLock', { provider: 'buddy' })).locked, true)
   })
+  await check('批量模型开关仅作用于当前渠道，目录更新且关闭状态落盘', async () => {
+    await rpc('model.setAllDisabled', { provider: 'buddy', disabled: false })
+    const listed = (await rpc('model.list', { provider: 'buddy' })).models
+    assert.ok(listed.length > 0 && listed.every(model => model.disabled === false))
+    const otherBefore = (await rpc('model.list', { provider: 'workbuddy' })).models
+    await rpc('model.setAllDisabled', { provider: 'buddy', disabled: true })
+    assert.ok((await rpc('model.list', { provider: 'buddy' })).models.every(model => model.disabled === true))
+    const stored = JSON.parse(fs.readFileSync(path.join(dataDir, 'channel-pack/state.json'), 'utf8'))
+    assert.ok(Object.keys(stored.disabledModels.buddy).length > 0, '批量关闭必须持久化')
+    assert.deepEqual((await rpc('model.list', { provider: 'workbuddy' })).models, otherBefore)
+    await service.channels.refresh()
+    assert.ok(!(await api('/v1/models')).value.data.some(model => model.id.startsWith('buddy/')))
+    assert.ok((await api('/v1/models')).value.data.some(model => model.id === 'workbuddy/fixture-free'))
+    await rpc('model.setAllDisabled', { provider: 'buddy', disabled: false })
+    await service.channels.refresh()
+    assert.ok((await api('/v1/models')).value.data.some(model => model.id === 'buddy/fixture-free'))
+    const restored = JSON.parse(fs.readFileSync(path.join(dataDir, 'channel-pack/state.json'), 'utf8'))
+    assert.equal(Object.keys(restored.disabledModels.buddy ?? {}).length, 0)
+    assert.equal((await rpc('credits.permanentLock', { provider: 'buddy' })).locked, true)
+  })
   await check('EAC 原 GitHub 登录、签名、用户 token、清单及退出链路可用', async () => {
     const start = await api('/api/management/eac/login/start', {})
     assert.equal(start.response.status, 200)

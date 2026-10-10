@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { registerHooks } from 'node:module'
+import { verifyChannelModelActions } from './channel-model-actions-test.mjs'
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-channel-pack-'))
 const kernel = new URL('./lib/channel-pack-kernel.mjs', import.meta.url).href
@@ -154,6 +155,8 @@ try {
   assert.equal(cards.includes('opencode'), false)
   assert.deepEqual([...cards].sort(), [...adapters.keys()].sort(), 'UI and mounted account providers agree')
   console.log('ok  actual channel page: 13 account cards, OpenCode removed')
+  await verifyChannelModelActions()
+  console.log('ok  共享渠道卡片：批量开关、单次请求、重复点击保护和失败恢复')
 
   // The retained OFM anonymous lane still enumerates and streams without any
   // account, independently of the disabled vendored OpenCode provider.
