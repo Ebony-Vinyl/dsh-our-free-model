@@ -1,7 +1,7 @@
 {
   "version": "2.0.0",
   "base": "../",
-  "publishedAt": "2026-10-10T03:33:23.625Z",
+  "publishedAt": "2026-10-10T06:45:04.688Z",
   "notes": "",
   "files": [
     {
@@ -56,8 +56,8 @@
     },
     {
       "path": "src/adapter.js",
-      "size": 29100,
-      "sha256": "a1d05ec49641f09d7f0ff66102cb9b8e6f0356e3fdab63b72ba3b318183cb0d5"
+      "size": 28954,
+      "sha256": "b190b8d5f301c0c6d6c94f47ba5a8d4af8dbe42d41e02068502bcf77bbcddbac"
     },
     {
       "path": "src/catalog.js",
@@ -128,6 +128,16 @@
       "path": "src/http.js",
       "size": 24912,
       "sha256": "2afb523e410495c1af90105a1c2e9732a34fd306cf7b3829621836f48b866b83"
+    },
+    {
+      "path": "src/image-pricing.d.ts",
+      "size": 252,
+      "sha256": "b59f4f5e0bf36e012114f57e34cc8407b9037c1a6204c3bbcd54eed390255494"
+    },
+    {
+      "path": "src/image-pricing.js",
+      "size": 539,
+      "sha256": "ee92a354506df0f0ce182efaf6bbc4780fb7c3fb503a5cbb2836974b34d47066"
     },
     {
       "path": "src/kilo.js",
@@ -211,8 +221,8 @@
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2873411,
-      "sha256": "a8da31e5ca3214102c39f99589811e937ca63f3128688d0255e76ac6da0741c3"
+      "size": 2874047,
+      "sha256": "690d7ebfaea9e1f1915da3c7203179f163b0962ad6b742b123b86e05f9e3b3b0"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
@@ -220,5 +230,5 @@
       "sha256": "6419471effa631519def7797d76d7ede38b9fcfa9a83c2148c8ef5d43355b43d"
     }
   ],
-  "signature": "6ICbIiYE1spIuFnnSdVdZlvZFFANJsGax5k4p1J/hGJR0EhBG88YDaR/K3XtL0513y2zN6coesMNWUAobf81DA=="
+  "signature": "BneRXbsWSB5nHrr0n2OH41N8By2I8l/SfvlscjS4qbWwDOnX8a2h9w7i9PYvnFA9vzYWXQl3Vf2ua+3lpDVdAw=="
 }
