@@ -3429,3 +3429,247 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 }
 
 /* ==== V5 LIGHT END ==== */
+
+/* ==== V5 NIGHT START ==== */
+/* ==========================================================================
+   夜 · 赛博终端 · V5 样板间
+   范围：只做两件原子件，本块为文件末尾追加，绝不修改任何已有行。
+     1) 卡片：.ui-card（含 .card-heading / .card-foot）
+     2) 按钮：.ui-button-default / .ui-button（默认变体）/ .primary
+   纪律：选择器一律带引号 [data-theme="dark"] 且声明全部 !important；
+   动效只碰 transform / opacity / clip-path / filter；新关键帧 cp5- 前缀。
+   层叠要点：!important 声明在 CSS 层叠里高于 @keyframes 动画，所以"被动画
+   驱动的属性"（::after 的 opacity / clip-path / filter、按钮 :active 的
+   transform / filter）在本块里刻意不写静态 !important 值，改由 visibility
+   与状态选择器控制开关，否则动画会被静默压掉。
+   提权要点：文件里已有一组 [data-theme="dark"] body .ui-button-default /
+   .primary 的 !important 规则（压共享包旧蓝按钮用），特异性 (0,2,1)/(0,2,2)
+   高于普通的 [data-theme="dark"] .ui-button。所以按钮底色 / 文字 / 边框 /
+   阴影这几条必须同样带 body 前缀，并用 :not() 链把特异性提到 (0,4,1)。
+   ========================================================================== */
+
+/* ---------- 0. 令牌重声明：蓝色泄漏清零 + 无障碍硬线 ---------- */
+[data-theme="dark"] {
+  /* 原值 #6f9df3 属旧品牌蓝家族（浅蓝），暗色聚焦环换成扫描青 */
+  --focus-ring: #00d0c0 !important;
+  /* 三级文字：原 #55606e 在 #0a0b10 上约 3.1:1，提到约 5.4:1 */
+  --dsw-alias-label-tertiary: #7c8794 !important;
+}
+
+/* ---------- 1. 新关键帧（cp5- 前缀） ---------- */
+/* 边框被青光从左边起笔重新描一遍，走满一圈后余辉收掉 */
+@keyframes cp5-edge-sweep {
+  0%   { clip-path: inset(0 100% 0 0); opacity: 0; filter: drop-shadow(0 0 0 rgba(0, 208, 192, 0)); }
+  12%  { opacity: 1; }
+  55%  { clip-path: inset(0 0 0 0); opacity: 1; filter: drop-shadow(0 0 7px rgba(0, 208, 192, 0.55)); }
+  100% { clip-path: inset(0 0 0 0); opacity: 0; filter: drop-shadow(0 0 0 rgba(0, 208, 192, 0)); }
+}
+
+/* 按下瞬间的 100ms 色差故障：红青错位一闪，是信号抖动，不是按钮弹跳 */
+@keyframes cp5-glitch-hit {
+  0%   { transform: translate3d(0, 0, 0); filter: none; }
+  25%  { transform: translate3d(-1px, 0, 0); filter: drop-shadow(2px 0 0 rgba(233, 69, 66, 0.55)) drop-shadow(-2px 0 0 rgba(0, 208, 192, 0.55)); }
+  55%  { transform: translate3d(1px, 0, 0); filter: drop-shadow(-2px 0 0 rgba(233, 69, 66, 0.5)) drop-shadow(2px 0 0 rgba(0, 208, 192, 0.5)); }
+  100% { transform: translate3d(0, 0, 0); filter: none; }
+}
+
+/* ---------- 2. 卡片：切角芯片板 ---------- */
+[data-theme="dark"] .ui-card {
+  border-radius: 0 !important;
+  /* 只切两个对角：左上 + 右下（斜切替代圆角，其余角保持 90 度） */
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px) !important;
+  background:
+    linear-gradient(180deg, rgba(0, 208, 192, 0.06) 0%, rgba(0, 208, 192, 0.015) 40%, rgba(0, 208, 192, 0.03) 100%),
+    #0b0f15 !important;
+  border: 1px solid rgba(0, 208, 192, 0.18) !important;
+  border-top-color: rgba(0, 208, 192, 0.34) !important;
+  /* 夜的世界不起浮：层级靠亮度，不靠投影，只留一道内侧顶光 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045) !important;
+  overflow: hidden !important;
+  position: relative !important;
+  transform: none !important;
+  transition: opacity 200ms var(--ease-out-expo) !important;
+}
+[data-theme="dark"] .ui-card:hover { transform: none !important; }
+[data-theme="dark"] .ui-card:hover,
+[data-theme="dark"] .ui-card:focus-within {
+  border-color: rgba(0, 208, 192, 0.42) !important;
+  border-top-color: rgba(0, 208, 192, 0.62) !important;
+  background:
+    linear-gradient(180deg, rgba(0, 208, 192, 0.10) 0%, rgba(0, 208, 192, 0.028) 40%, rgba(0, 208, 192, 0.045) 100%),
+    #0d131a !important;
+}
+
+/* 四角刻度：右上 / 左下 = L 型刻度；左上 / 右下 = 与斜切边平行的斜刻度 */
+[data-theme="dark"] .ui-card::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  pointer-events: none !important;
+  background-color: transparent !important;
+  background-image:
+    linear-gradient(135deg, transparent 0 calc(50% - 0.5px), rgba(0, 208, 192, 0.5) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px) 100%),
+    linear-gradient(135deg, transparent 0 calc(50% - 0.5px), rgba(0, 208, 192, 0.5) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px) 100%),
+    linear-gradient(rgba(0, 208, 192, 0.5) 0 0),
+    linear-gradient(rgba(0, 208, 192, 0.5) 0 0),
+    linear-gradient(rgba(0, 208, 192, 0.5) 0 0),
+    linear-gradient(rgba(0, 208, 192, 0.5) 0 0) !important;
+  background-size: 14px 14px, 14px 14px, 12px 1px, 1px 12px, 12px 1px, 1px 12px !important;
+  background-position:
+    1px 1px,
+    calc(100% - 1px) calc(100% - 1px),
+    calc(100% - 6px) 6px,
+    calc(100% - 6px) 6px,
+    6px calc(100% - 6px),
+    6px calc(100% - 6px) !important;
+  background-repeat: no-repeat !important;
+  opacity: 0.55 !important;
+  transition: opacity 240ms var(--ease-out-expo) !important;
+}
+[data-theme="dark"] .ui-card:hover::before,
+[data-theme="dark"] .ui-card:focus-within::before { opacity: 0.95 !important; }
+
+/* 悬停：边框被青光从左边起笔描一遍；静止态完全不可见 */
+[data-theme="dark"] .ui-card::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  border: 1px solid rgba(0, 208, 192, 0.75) !important;
+  background: transparent !important;
+  /* 静止态用 visibility 收起来：opacity / clip-path 留给关键帧，不能被 !important 压住 */
+  visibility: hidden !important;
+  transition: none !important;
+}
+[data-theme="dark"] .ui-card:hover::after,
+[data-theme="dark"] .ui-card:focus-within::after {
+  visibility: visible !important;
+  animation: cp5-edge-sweep 520ms var(--ease-out-expo) 1 forwards !important;
+}
+
+/* 卡内排版：数据 / 正文等宽 + 表格数字；元数据全大写宽字距 */
+[data-theme="dark"] .ui-card .card-heading h2,
+[data-theme="dark"] .ui-card .card-heading h3 {
+  font-family: var(--mono-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  font-variant-numeric: tabular-nums !important;
+}
+[data-theme="dark"] .ui-card .card-heading p {
+  font-family: var(--mono-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  font-variant-numeric: tabular-nums !important;
+}
+[data-theme="dark"] .ui-card .card-foot {
+  font-family: var(--mono-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  font-variant-numeric: tabular-nums !important;
+  color: var(--dsw-alias-label-secondary) !important;
+  /* 原分隔线取 --line-soft（#f1ece3，浅色纸白），夜主题下是一条暖白亮线，这里归位 */
+  border-top-color: rgba(0, 208, 192, 0.16) !important;
+}
+[data-theme="dark"] .ui-card .card-foot button {
+  font-family: var(--mono-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  color: #00d0c0 !important;
+  text-underline-offset: 3px !important;
+}
+[data-theme="dark"] .ui-card .card-foot button:hover { color: #7ff5ea !important; }
+
+/* ---------- 3. 按钮：斜切终端键（只做默认变体 + .primary） ---------- */
+[data-theme="dark"] body .ui-button-default,
+[data-theme="dark"] body button.ui-button-default,
+[data-theme="dark"] body .ui-button:not(.ui-button-outline):not(.ui-button-ghost),
+[data-theme="dark"] body .primary {
+  border-radius: 0 !important;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px) !important;
+  font-family: var(--mono-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  font-variant-numeric: tabular-nums !important;
+  font-weight: 600 !important;
+  position: relative !important;
+  overflow: hidden !important;
+  background: rgba(0, 208, 192, 0.10) !important;
+  color: #00d0c0 !important;
+  border: 1px solid #00d0c0 !important;
+  /* 静止态不留零偏移彩色光晕，只留一道内侧顶光；亮是稀缺信号 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  transition: opacity 160ms var(--ease-out-expo) !important;
+}
+
+/* 方括号替代：左右各一条 1px 竖刻度，不改文案也不加字符 */
+[data-theme="dark"] .ui-button-default::before,
+[data-theme="dark"] .ui-button:not(.ui-button-outline):not(.ui-button-ghost):not(.ui-button-icon)::before,
+[data-theme="dark"] .primary::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 5px 4px !important;
+  border-left: 1px solid rgba(0, 208, 192, 0.42) !important;
+  border-right: 1px solid rgba(0, 208, 192, 0.42) !important;
+  pointer-events: none !important;
+  opacity: 0.7 !important;
+}
+[data-theme="dark"] .ui-button-default:disabled::before,
+[data-theme="dark"] .primary:disabled::before { opacity: 0.25 !important; }
+
+/* 悬停：底色升一档 + 轮廓余辉（:not(:active) 给按下故障让路，避免压掉关键帧） */
+[data-theme="dark"] body .ui-button-default:hover:not(:active):not(:disabled),
+[data-theme="dark"] body .primary:hover:not(:active):not(:disabled) {
+  background: rgba(0, 208, 192, 0.20) !important;
+  color: #eafffd !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  filter: drop-shadow(0 0 7px rgba(0, 208, 192, 0.38)) !important;
+}
+/* 悬停：沿用既有扫描光带，只把光束加亮（不碰 transform / opacity，避免压掉动画） */
+[data-theme="dark"] .ui-button:hover::after,
+[data-theme="dark"] .primary:hover::after {
+  background: linear-gradient(105deg, transparent, rgba(0, 208, 192, 0.34), transparent) !important;
+}
+
+/* 按下：100ms 短促色差故障（此处刻意不写 transform / filter 的静态 !important） */
+[data-theme="dark"] .ui-button-default:active,
+[data-theme="dark"] .primary:active,
+[data-theme="dark"] .ui-button:not(.ui-button-outline):not(.ui-button-ghost):active {
+  animation: cp5-glitch-hit 100ms linear 1 !important;
+  background: rgba(0, 208, 192, 0.28) !important;
+}
+
+/* 聚焦：方角 2px 青环（原生件接管；暗色聚焦环令牌已在上方转青） */
+[data-theme="dark"] .ui-button:focus-visible,
+[data-theme="dark"] .ui-button-default:focus-visible,
+[data-theme="dark"] .primary:focus-visible {
+  border-radius: 0 !important;
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+/* 禁用：断电态（不靠整体降透明度表达，改由配色断电） */
+[data-theme="dark"] .ui-button-default:disabled:not(.is-busy),
+[data-theme="dark"] .primary:disabled:not(.is-busy) {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(0, 208, 192, 0.14) !important;
+  color: rgba(223, 230, 233, 0.38) !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* 加载中：既有扫描光带持续走格（走格 = 传输中，和断电态区分开） */
+[data-theme="dark"] .ui-button-default.is-busy::after,
+[data-theme="dark"] .ui-button-default[data-busy]::after {
+  animation: cp-scan-sweep 1100ms linear infinite !important;
+}
+
+/* ---------- 4. 降级：prefers-reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="dark"] .ui-card::after,
+  [data-theme="dark"] .ui-button::after,
+  [data-theme="dark"] .ui-button-default::after,
+  [data-theme="dark"] .primary::after { animation: none !important; }
+}
+/* ==== V5 NIGHT END ==== */
