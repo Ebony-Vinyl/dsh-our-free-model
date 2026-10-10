@@ -190,6 +190,8 @@ function isGeminiContextOverflow(text: string): boolean {
 
 /** {@link GeminiAdapter} 的构造选项。 */
 export interface GeminiAdapterOptions {
+  /** 与登录、续期共用的渠道出网能力。 */
+  fetchImpl?: typeof fetch
   /** 单凭据回退 ref（无账号池时）。 */
   credentialRef: CredentialRef
   /** 解析当前可用凭据。 */
@@ -623,7 +625,7 @@ export class GeminiAdapter extends LlmAdapter {
         }
         let response: Response
         try {
-          response = await fetch(url, {
+          response = await (this.options.fetchImpl ?? fetch)(url, {
             method: 'POST',
             // ⚠️ 流式**刻意不带 `Accept`**（抓包一致，见 `geminiHeaders`）。
             headers: geminiHeaders(credential),

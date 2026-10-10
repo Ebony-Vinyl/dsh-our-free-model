@@ -42,7 +42,7 @@ const cache = new Map<string, Dispatcher>()
 export function buildProxyDispatcher(proxy: NormalizedProxy): Dispatcher {
   const existing = cache.get(proxy.url)
   if (existing !== undefined) return existing
-  const created = proxy.kind === 'http' ? buildHttpDispatcher(proxy.url) : buildSocksDispatcher(proxy)
+  const created = createProxyDispatcher(proxy)
   // 触碰即移到末尾，实现 LRU 的淘汰顺序
   cache.delete(proxy.url)
   cache.set(proxy.url, created)
@@ -58,6 +58,11 @@ export function buildProxyDispatcher(proxy: NormalizedProxy): Dispatcher {
     }
   }
   return created
+}
+
+/** 创建独立生命周期的代理，供渠道共享出网层管理，不占每账号代理缓存。 */
+export function createProxyDispatcher(proxy: NormalizedProxy): Dispatcher {
+  return proxy.kind === 'http' ? buildHttpDispatcher(proxy.url) : buildSocksDispatcher(proxy)
 }
 
 /** 当前缓存的代理实例数（诊断用）。 */

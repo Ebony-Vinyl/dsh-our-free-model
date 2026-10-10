@@ -26,6 +26,7 @@ import {
   type ExpiryAccessors,
 } from './expiry-sync.js'
 import { SerialQueue } from './serial-queue.js'
+import { ChannelNetworkError } from './channel-fetch.js'
 import {
   GEMINI,
   geminiAccountLabel,
@@ -449,6 +450,8 @@ export class GeminiAuth extends Service {
       // 并在 Google 轮换 refresh_token 时回写新值。
       return credentialFromGeminiGrant(grant, credential)
     } catch (error) {
+      // TLS 的 CERT_HAS_EXPIRED 属于网络故障，不能因文案含 expired 就废弃 refresh_token。
+      if (error instanceof ChannelNetworkError) throw error
       const message = error instanceof Error ? error.message : String(error)
       if (/invalid_grant|invalid_client|expired|revoked|unauthorized/i.test(message)) {
         throw new GeminiRefreshTokenExpiredError('refresh_token 已失效，请重新登录')

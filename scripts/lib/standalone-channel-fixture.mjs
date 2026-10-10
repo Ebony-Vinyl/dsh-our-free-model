@@ -10,6 +10,8 @@ globalThis.fetch = async (input, options = {}) => {
   if (url.protocol !== 'https:') throw new Error('测试禁止外部网络')
   const headers = new Headers(options.headers)
   headers.set('x-ofm-fixture-host', url.hostname)
-  return original(`${fixture}/remote${url.pathname}${url.search}`, { ...options, headers, redirect: 'manual' })
+  // 外部目标已替换为本机；不把测试机的环境或系统代理带到隔离服务器。
+  const { dispatcher, ...localOptions } = options
+  return original(`${fixture}/remote${url.pathname}${url.search}`, { ...localOptions, headers, redirect: 'manual' })
 }
 lane.fetch = globalThis.fetch
