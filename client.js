@@ -883,7 +883,7 @@ window.__ModuleLoader__.load({
     // colour, callouts lost their border. Every use of those two names carries a
     // fallback for exactly that reason.
     const CSS = `
-.ofm_root{--gap:14px;display:flex;flex-direction:column;gap:calc(var(--gap)*1.4);max-width:1080px;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary)}
+.ofm_root{--gap:14px;display:flex;flex-direction:column;gap:calc(var(--gap)*1.4);max-width:1080px;width:100%;height:100%;min-height:0;margin-inline:auto;box-sizing:border-box;padding:20px 24px 40px;overflow-y:auto;overscroll-behavior:contain;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary)}
 .ofm_root *{box-sizing:border-box}
 .ofm_hero{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-radius:16px;border:1px solid var(--dsw-alias-border-l2);background:linear-gradient(160deg,var(--dsw-alias-bg-layer-3),var(--dsw-alias-bg-layer-1))}
 .ofm_pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
@@ -1200,8 +1200,9 @@ window.__ModuleLoader__.load({
 .ofm_poolbadge.over{color:var(--dsw-alias-state-error-primary,#ec1313)}
 .ofm_poolbadge.over .ofm_pooldot{background:var(--dsw-alias-state-error-primary,#ec1313);animation:ofmpulse .8s ease-in-out infinite}
 @keyframes ofmpulse{50%{opacity:.3}}
-.ofm_poolstats{display:flex;gap:22px;flex-wrap:wrap}
-.ofm_poolstats .ofm_stat b{font-size:19px}
+.ofm_poolstats{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ofm_poolstats .ofm_stat{display:flex;align-items:baseline;gap:6px;padding:6px 12px}
+.ofm_poolstats .ofm_stat b{font-size:15px}
 .ofm_poolstats .ofm_stat.hot b{color:var(--dsw-alias-state-error-primary,#ec1313)}
 .ofm_poolmeta{display:flex;gap:8px 18px;align-items:baseline;flex-wrap:wrap;justify-content:space-between}
 @media (max-width:760px){.ofm_tank.xl{width:100%;max-width:340px}.ofm_tab{flex:1 1 auto;text-align:center}}
@@ -3810,7 +3811,7 @@ window.__ModuleLoader__.load({
             h('span', { className: 'spacer' }),
             page === 0 ? h(Button, { kind: 'ghost', onClick: finish }, t('ann.later')) : h(Button, { kind: 'ghost', onClick: () => setPage(p => Math.max(0, p - 1)) }, '‹'),
             last
-              ? h(Button, { kind: 'primary', onClick: async () => { await finish(); openSection?.('our-free-model') } }, t('ann.openSettings'))
+              ? h(Button, { kind: 'primary', onClick: async () => { await finish(); ctx.get('layout')?.selectPanel('our-free-model') } }, t('ann.openSettings'))
               : h(Button, { kind: 'primary', onClick: () => setPage(p => Math.min(PAGES.length - 1, p + 1)) }, '›'))))
     }
 
@@ -3979,13 +3980,48 @@ window.__ModuleLoader__.load({
         return () => {}
       }, 'our-free-model: reload notice')
 
-      ctx.slots.inject('settings.section', () => ctx.slots.register({
-        name: 'settings.section',
-        id: 'our-free-model',
-        order: 35,
+      // ── surface as a global sidebar panel, not a settings section ──
+      // The plugin now lives in the web shell's left rail: a `sidebar.panellist`
+      // row (the SHELL owns the row chrome + label; we supply the glyph and
+      // `open()`) that opens the whole SettingsPage as a center-column `main`
+      // panel through `layout.selectPanel`. The `main` registration and the
+      // panellist row SHARE PANEL_ID, and BOTH consume `panelFace` (the row uses
+      // `open`; the panel uses `ctx` + `open`/`close`), so a click and a close
+      // both resolve against the same registry key.
+      const PANEL_ID = 'our-free-model'
+
+      const panelFace = () => ({
+        ctx,
+        open: () => { ctx.get('layout')?.selectPanel(PANEL_ID) },
+        close: () => { ctx.get('layout')?.selectPanel(null) },
+      })
+
+      // Glyph rendered into the shell's `sidebar.panellist` slot (the icon area of
+      // the row). Plain SVG so it inherits the rail's currentColor.
+      function PanelGlyph() {
+        return h('svg', {
+          width: '16', height: '16', viewBox: '0 0 16 16', fill: 'none',
+          xmlns: 'http://www.w3.org/2000/svg', 'aria-hidden': 'true',
+          stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linejoin': 'round',
+        },
+          h('path', { d: 'M1.5 9c2-3 6-4.2 9.2-2.4L14.5 4.2v9L10.7 10.8C7.5 12.6 3.5 11.6 1.5 9z' }),
+          h('path', { d: 'M14.5 6.5l2.5-1.7v3.4L14.5 9.5z' }),
+        )
+      }
+
+      ctx.slots.inject('main', () => ctx.slots.register(
+        { name: 'main', key: PANEL_ID, locale: NS, inject: panelFace },
+        SettingsPage,
+      ))
+
+      ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+        name: 'sidebar.panellist',
+        id: PANEL_ID,
+        order: 40,
         label: () => t('nav'),
         locale: NS,
-      }, props => h(SettingsPage, { ...props, locale: localeTag(ctx), ctx })))
+        inject: panelFace,
+      }, PanelGlyph))
 
       ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
         name: 'settings.onboarding',
