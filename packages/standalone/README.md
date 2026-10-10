@@ -131,12 +131,19 @@ Kilo 免费池的提示词可能被上游记录，请勿发送敏感内容。
 失败时保留输入，保存成功以服务端返回值为准。自动探测开关仍控制原有周期任务；
 以 `--no-refresh` 启动时，保存设置不会恢复自动任务。
 
+## Gemini 与 Cline 网络连接
+
+这两条渠道的登录、续期和模型请求会读取 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`；没有环境代理时，Windows 自动读取当前用户的手动系统代理。环境代理遵守 `NO_PROXY`，系统代理遵守 `ProxyOverride`，回环请求不自动使用代理。无需设置 `NODE_USE_ENV_PROXY`。
+
+Windows 手动代理配置最多缓存 30 秒；PAC 自动配置脚本不在支持范围内。独立服务尚未提供插件的订阅出口功能，使用环境代理或手动系统代理即可。Gemini 需要能访问 Google 的授权、令牌、身份和 Code Assist 端点；浏览器授权成功不代表后台连接成功，网络错误会显示连接路径和底层错误码。
+
 ## 验证
 
 ```powershell
 npm run test:standalone
 npm run test:management
 npm run test:standalone-channels
+node scripts/channel-network-test.mjs
 npm run test:contributor
 ```
 

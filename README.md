@@ -230,6 +230,14 @@ reasoning、reasoning_content、reasoning_text 三个字段识别——同一段
 在应用内完成（下载 → 校验 → 备份 → 替换 → 热重载），无需重新安装，也无需
 重启应用。升级失败会自动回滚至上一版本并给出失败原因。
 
+### Gemini 与 Cline 的代理连接
+
+Gemini 登录需要访问 `accounts.google.com`、`oauth2.googleapis.com`、`www.googleapis.com`，模型请求还需访问 Google Code Assist 服务。浏览器能打开授权页，只说明浏览器的网络可用，插件仍需能访问这些端点。
+
+Gemini 的登录、续期、项目探测和推理，以及 Cline 的登录、续期和推理，共用逐请求代理：优先使用已运行的插件出口代理，其次读取 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`，最后在 Windows 读取当前用户的手动系统代理；没有代理时直连。环境代理遵守 `NO_PROXY`，系统代理遵守 `ProxyOverride`；回环请求不自动使用代理。无需为这两条渠道设置 `NODE_USE_ENV_PROXY`，也不会改动宿主的全局代理。
+
+Windows 自动检测只支持手动代理，不执行 PAC 自动配置脚本；系统设置最多缓存 30 秒。仅配置 PAC 时，请改用插件出口或环境代理。网络失败会显示所选路径及 `UND_ERR_CONNECT_TIMEOUT`、`ENOTFOUND` 等底层错误码；代理连接失败不会自动重试直连。浏览器回调未到达的授权超时仍需检查本机回调地址和端口是否可达。
+
 ## 实现结构
 
 ```
