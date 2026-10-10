@@ -596,3 +596,155 @@
 [data-theme="dark"] .model-scroll::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, rgba(180, 193, 212, 0.42), rgba(126, 139, 161, 0.28));
 }
+
+/* ==========================================================================
+   质感彩蛋层 · 昼 + 夜成对（redesign-eggs）
+   --------------------------------------------------------------------------
+   本章约定（自检口径）：
+   1) 只新增规则与关键帧：所有既有 class / id / data-testid / ARIA / DOM 契约不动；
+      既有 md-copy-pop、md-fade-in-up 两个关键帧原样保留、不改名。
+   2) 新增关键帧全部 md- 前缀、全新名字，且只动 transform / opacity。
+   3) 表格行内部绝不出现 transform：顺滑只交给 background-color / box-shadow
+      过渡（虚拟滚动每帧给行写 transform，行上再加 transform 过渡必抖）。
+   ========================================================================== */
+
+/* ---- 新增令牌（两主题通用，不改任何旧令牌） ---- */
+:root {
+  --md-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --md-ease-breathe: cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+/* ---- ① 复制成功 ·「对勾落章 + 柔光描边」（记忆点 1） ----
+   落章：图标先被按下去一点、微微过冲、再落定，像盖了一枚章。
+   描边：一圈细线从按钮内侧扩散退场，把成功态往外推一点点。 */
+.model-row-actions .md-copy-done > svg {
+  animation: md-check-stamp 320ms var(--md-ease-out) both;
+}
+@keyframes md-check-stamp {
+  0% { transform: scale(0.42) rotate(-18deg); opacity: 0.2; }
+  58% { transform: scale(1.14) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.model-row-actions .md-copy-done::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit;
+  box-shadow: inset 0 0 0 1.5px rgba(23, 117, 82, 0.34);
+  pointer-events: none; opacity: 0;
+  animation: md-copy-ring 540ms var(--md-ease-out) both;
+}
+@keyframes md-copy-ring {
+  0% { transform: scale(0.84); opacity: 0.85; }
+  62% { opacity: 0.3; }
+  100% { transform: scale(1.14); opacity: 0; }
+}
+/* 原 md-copy-done 只给颜色声明了过渡，这里补上按压与阴影两条，hover / 按下更连贯。 */
+.model-row-actions .md-copy-done {
+  transition: color var(--md-duration-fast) var(--md-ease-out),
+    background-color var(--md-duration-fast) var(--md-ease-out),
+    border-color var(--md-duration-fast) var(--md-ease-out),
+    box-shadow var(--md-duration-fast) var(--md-ease-out),
+    transform var(--md-duration-fast) var(--md-ease-out);
+}
+
+/* ---- ② 测试中 ·「正在探测」的呼吸（记忆点 2） ----
+   旋转弧沿用 app.css 的匀速 spin（匀速旋转最丝滑，不做加减速曲线），
+   按钮整体做一次很浅的明暗呼吸，表示探测仍在进行。 */
+.model-row-actions .md-testing {
+  animation: md-test-breathe 1.6s var(--md-ease-breathe) infinite;
+}
+@keyframes md-test-breathe {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.96; }
+}
+
+/* ---- ③ 渠道筛选 chip · 悬停浮起、选中落座 ---- */
+.model-list-toolbar .channel-filters button {
+  transition: background-color var(--md-duration-fast) var(--md-ease-out),
+    color var(--md-duration-fast) var(--md-ease-out),
+    transform var(--md-duration-fast) var(--md-ease-out);
+}
+.model-browser .channel-filters button:hover { transform: translateY(-1px); }
+.model-browser .channel-filters button:active { transform: translateY(0) scale(0.97); }
+.model-browser .channel-filters button[aria-pressed="true"] {
+  animation: md-chip-settle 240ms var(--md-ease-spring);
+}
+@keyframes md-chip-settle {
+  from { transform: scale(0.94); }
+  to { transform: scale(1); }
+}
+
+/* ---- ④ 搜索框 · 放大镜「靠近」 ----
+   聚焦时镜头轻微放大并转成强调色，和输入框描边同一拍节奏。 */
+.model-search > svg {
+  transition: color var(--md-duration-fast) var(--md-ease-out),
+    transform var(--md-duration-normal) var(--md-ease-out);
+}
+.model-search:focus-within > svg { transform: translateY(-50%) scale(1.12); }
+
+/* ---- ⑤ 下拉框 / 搜索框 · 悬停时控件轻轻「抬」起一层 ----
+   用 :hover:not(:focus) 把焦点态让出来，聚焦环永不被悬停覆盖。 */
+.model-filters select {
+  transition: border-color var(--md-duration-fast) var(--md-ease-out),
+    box-shadow var(--md-duration-fast) var(--md-ease-out),
+    background-color var(--md-duration-fast) var(--md-ease-out);
+}
+.model-search input {
+  transition: border-color var(--md-duration-fast) var(--md-ease-out),
+    box-shadow var(--md-duration-fast) var(--md-ease-out);
+}
+.model-filters select:hover:not(:focus),
+.model-search input:hover:not(:focus) {
+  box-shadow: var(--md-shadow-inset), 0 1px 2px rgba(72, 58, 42, 0.06), 0 8px 18px -12px rgba(72, 58, 42, 0.45);
+}
+[data-theme="dark"] .model-filters select:hover:not(:focus),
+[data-theme="dark"] .model-search input:hover:not(:focus) {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.012),
+    0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 22px -14px rgba(0, 0, 0, 0.9);
+}
+
+/* ---- ⑥ 表格行 · 左侧定位边「生长」进来（行内绝不加 transform） ----
+   背景色原本就有过渡，这里把 box-shadow 也纳入同一时长：定位边从零宽淡入，
+   离开时同速退场，不再瞬切。 */
+.model-browser .model-table-row {
+  transition: background-color var(--md-duration-normal) var(--md-ease-out),
+    box-shadow var(--md-duration-normal) var(--md-ease-out);
+}
+
+/* ---- ⑦ 空态 · 图标安静地浮动（6.2s 一个来回，近似呼吸） ---- */
+.model-empty > svg { animation: md-empty-drift 6.2s var(--md-ease-breathe) infinite; }
+@keyframes md-empty-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ---- ⑧ 反馈条 / 错误条 / 测试结果面板 · 落位 ---- */
+.model-feedback,
+.model-browser .channel-error,
+.model-test-result {
+  animation: md-notice-rise 240ms var(--md-ease-out) both;
+}
+@keyframes md-notice-rise {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- ⑨ 夜主题配对：成功描边在暗底上提亮一档 ---- */
+[data-theme="dark"] .model-row-actions .md-copy-done::after {
+  box-shadow: inset 0 0 0 1.5px rgba(62, 207, 160, 0.45);
+}
+
+/* ---- ⑩ 减弱动画：保留状态含义，去掉位移与循环 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .model-row-actions .md-copy-done > svg,
+  .model-row-actions .md-copy-done::after,
+  .model-row-actions .md-testing,
+  .model-browser .channel-filters button[aria-pressed="true"],
+  .model-empty > svg,
+  .model-feedback,
+  .model-browser .channel-error,
+  .model-test-result {
+    animation: none !important;
+  }
+  .model-browser .channel-filters button:hover,
+  .model-browser .channel-filters button:active { transform: none !important; }
+  .model-search:focus-within > svg { transform: translateY(-50%) !important; }
+}

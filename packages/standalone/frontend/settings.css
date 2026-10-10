@@ -570,3 +570,144 @@ label.settings-field { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .settings-toggle:active:not(:disabled) { transform: none !important; }
 }
+
+/* ==========================================================================
+   质感彩蛋层（egg pass / 昼 + 夜成对）
+   - 只新增样式：class / id / data-* / ARIA / JS 零改动。
+   - 既有 6 个 @keyframes（settingsIn / settingsErrorIn / settingsPulse /
+     spin / feedbackIn / cxReveal）原样保留；本层新增关键帧一律 set- 前缀，
+     且只使用 transform / opacity。
+   - 动效预算：微反馈 180–340ms，折叠 260ms；全部一次性，不做常驻装饰。
+   ========================================================================== */
+
+/* ---------- 0. 彩蛋令牌（本层私有，昼夜成对） ---------- */
+:root:not([data-theme="dark"]) {
+  --set-ring-blue: rgba(38, 86, 201, 0.14);
+  --set-ring-green: rgba(30, 138, 99, 0.20);
+  --set-code-glow: rgba(91, 141, 239, 0.14);
+  --set-code-line: rgba(91, 141, 239, 0.38);
+  --set-danger-glow: rgba(178, 59, 75, 0.22);
+}
+[data-theme="dark"] {
+  --set-ring-blue: rgba(91, 141, 239, 0.22);
+  --set-ring-green: rgba(62, 207, 160, 0.22);
+  --set-code-glow: rgba(91, 141, 239, 0.20);
+  --set-code-line: rgba(91, 141, 239, 0.46);
+  --set-danger-glow: rgba(227, 106, 106, 0.26);
+}
+
+/* ==========================================================================
+   1. 设置开关：切换瞬间 Q 弹（旋钮滑动 + 微压缩回弹），hover 轨道微亮
+   ========================================================================== */
+@keyframes set-knob-pop {
+  0% { transform: translateX(0) scaleX(1) scaleY(1); }
+  58% { transform: translateX(17px) scaleX(0.84) scaleY(1.10); }
+  80% { transform: translateX(17px) scaleX(1.05) scaleY(0.97); }
+  100% { transform: translateX(17px) scaleX(1) scaleY(1); }
+}
+.settings-toggle:checked::after { animation: set-knob-pop 320ms cubic-bezier(0.22, 0.9, 0.3, 1); }
+@media (hover: hover) {
+  .settings-toggle:hover:not(:disabled):not(:checked) { background: #dcd6c9; box-shadow: inset 0 1px 3px rgba(72, 58, 42, 0.16), 0 0 0 3px var(--set-ring-blue); }
+  .settings-toggle:checked:hover:not(:disabled) { box-shadow: inset 0 1px 2px rgba(12, 30, 78, 0.30), 0 0 0 3px var(--set-ring-blue); }
+  [data-theme="dark"] .settings-toggle:hover:not(:disabled):not(:checked) { background: rgba(255, 255, 255, 0.15); box-shadow: inset 0 1px 3px rgba(72, 58, 42, 0.16), 0 0 0 3px var(--set-ring-blue); }
+  [data-theme="dark"] .settings-toggle:checked:hover:not(:disabled) { box-shadow: inset 0 1px 2px rgba(12, 30, 78, 0.30), 0 0 0 3px var(--set-ring-blue); }
+}
+
+/* ==========================================================================
+   2. 保存状态点：saved 时“点一下 + 一圈涟漪散开”，把“已保存”变成讨喜的落定感
+   ========================================================================== */
+.settings-footer > span { transition: color 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.settings-status-dot { position: relative; }
+.settings-status-dot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 1.5px var(--set-ring-green); opacity: 0; pointer-events: none; }
+@keyframes set-status-pop {
+  0% { transform: scale(0.70); }
+  62% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+@keyframes set-status-ring {
+  0% { opacity: 0.9; transform: scale(0.70); }
+  100% { opacity: 0; transform: scale(2.60); }
+}
+.settings-status-saved .settings-status-dot { animation: set-status-pop 360ms cubic-bezier(0.22, 0.9, 0.3, 1); }
+.settings-status-saved .settings-status-dot::after { animation: set-status-ring 620ms cubic-bezier(0.16, 1, 0.3, 1) 40ms; }
+
+/* ==========================================================================
+   3. 凭据框：聚焦时前导图标微放大并转为强调色；显隐切换有“揭开”感
+   ========================================================================== */
+.cx-field > svg { transform-origin: 50% 50%; transition: color 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 200ms cubic-bezier(0.22, 0.9, 0.3, 1); }
+.cx-field:focus-within > svg { transform: scale(1.18); }
+.cx-revealed > svg { color: var(--green); transform: scale(1.10); }
+@keyframes set-field-in {
+  from { opacity: 0.45; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+.cx-revealed input { animation: set-field-in 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+@media (hover: hover) {
+  .cx-field:hover > svg { transform: scale(1.06); }
+}
+
+/* ==========================================================================
+   4. 复制成功：绿色“落章”弹跳 + 对勾轻轻弹入
+   ========================================================================== */
+@keyframes set-copy-pop {
+  0% { transform: scale(0.93); }
+  55% { transform: scale(1.045); }
+  100% { transform: scale(1); }
+}
+.cx-copied, .copy-field .copied { animation: set-copy-pop 300ms cubic-bezier(0.22, 0.9, 0.3, 1); box-shadow: 0 0 0 3px var(--set-ring-green); }
+.cx-copied > svg, .copy-field .copied > svg { animation: set-copy-pop 340ms cubic-bezier(0.22, 0.9, 0.3, 1); }
+
+/* ==========================================================================
+   5. 渠道折叠：箭头带一点回弹地旋转，面板像抽屉一样落开
+   ========================================================================== */
+.ofm_root .ofm_foldtoggle svg { transition: transform 300ms cubic-bezier(0.34, 1.5, 0.64, 1); }
+.ofm_root .ofm_foldtoggle[data-open="true"] svg { transform: rotate(90deg); }
+@keyframes set-fold-unfold {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.ofm_root .ofm_chanfold { transform-origin: top center; animation: set-fold-unfold 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+@media (hover: hover) {
+  .ofm_root .ofm_foldtoggle:hover svg { transform: translateY(1px) scale(1.08); }
+  .ofm_root .ofm_foldtoggle[data-open="true"]:hover svg { transform: rotate(90deg) scale(1.08); }
+}
+
+/* ==========================================================================
+   6. 危险按钮：hover 轻轻抬起 + 红色薄雾，回旋图标小幅摆动
+   ========================================================================== */
+.cx-danger-btn { transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), background-color 180ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms cubic-bezier(0.16, 1, 0.3, 1), color 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+.cx-danger-btn svg { transition: transform 220ms cubic-bezier(0.34, 1.5, 0.64, 1); }
+.cx-danger-btn:active:not(:disabled) { transform: scale(0.97); }
+@media (hover: hover) {
+  .cx-danger-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 10px -4px var(--set-danger-glow), inset 0 1px 0 rgba(255, 255, 255, 0.66); }
+  .cx-danger-btn:hover:not(:disabled) svg { transform: rotate(-24deg); }
+  [data-theme="dark"] .cx-danger-btn:hover:not(:disabled) { box-shadow: 0 3px 12px -4px var(--set-danger-glow), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+}
+
+/* ==========================================================================
+   7. 命令框：hover 时边框亮起 + 一层很轻的终端呼吸光，暗示“可复制”
+   ========================================================================== */
+.cx-code { transition: border-color 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.cx-code::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: radial-gradient(120% 150% at 14% 0%, var(--set-code-glow), transparent 58%); opacity: 0; transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@media (hover: hover) {
+  .cx-code:hover { border-color: var(--set-code-line); }
+  .cx-code:hover::after { opacity: 1; }
+}
+
+/* ==========================================================================
+   8. 动效降级：保留颜色与状态反馈，去掉位移 / 弹跳 / 涟漪
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .settings-toggle:checked::after,
+  .settings-status-saved .settings-status-dot,
+  .settings-status-saved .settings-status-dot::after,
+  .cx-copied, .copy-field .copied,
+  .cx-copied > svg, .copy-field .copied > svg,
+  .cx-revealed input,
+  .ofm_root .ofm_chanfold { animation: none !important; }
+  .cx-field > svg, .cx-danger-btn, .cx-danger-btn svg,
+  .ofm_root .ofm_foldtoggle svg, .cx-code, .cx-code::after { transition-duration: 1ms !important; }
+  .cx-field:focus-within > svg, .cx-revealed > svg, .cx-field:hover > svg,
+  .cx-danger-btn:hover:not(:disabled), .cx-danger-btn:hover:not(:disabled) svg,
+  .ofm_root .ofm_foldtoggle:hover svg, .ofm_root .ofm_foldtoggle[data-open="true"]:hover svg { transform: none; }
+}

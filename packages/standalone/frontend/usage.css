@@ -908,3 +908,167 @@
 @media (prefers-reduced-motion: reduce) {
   .usage-feedback, .usage-browser .channel-error { animation: none !important; }
 }
+/* ==========================================================================
+   质感彩蛋层 · 微交互与精致细节（只新增，不改动上方任何内容）
+   约束：仅新增选择器 / 新增关键帧；动画只使用 transform 与 opacity；
+        全部彩蛋在昼主题与夜主题下同时成立。
+   ========================================================================== */
+
+/* 新关键帧：空态插画的“安静浮动” */
+@keyframes us-drift-soft {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.62; }
+  50% { transform: translateY(-3px) scale(1.02); opacity: 0.82; }
+}
+
+/* 新关键帧：复制成功的“按一下”回弹确认 */
+@keyframes us-copy-pop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+/* 新关键帧：表格行进入的极轻淡入（只作用于行内文本，不动 sticky 单元格） */
+@keyframes us-row-fade {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+/* 新关键帧：空态状态点的低幅呼吸 */
+@keyframes us-dot-breathe {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.42; }
+  50% { transform: translateY(-1px) scale(1.08); opacity: 0.66; }
+}
+
+/* ---- 1. 指标卡 / 图表：图标与数字的弹性联动 ---- */
+.ov-metric-icon,
+.ov-metric:hover .ov-metric-icon {
+  transition: transform var(--us-duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow var(--us-duration-normal) var(--us-ease-out),
+    color var(--us-duration-normal) var(--us-ease-out),
+    background-color var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-metric:hover strong {
+  color: var(--ov-accent, var(--us-accent));
+  transition: color var(--us-duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---- 2. 趋势图柱子：顶部高光的“抬眸” ---- */
+.usage-day-bar {
+  position: relative;
+}
+.usage-day-bar::before,
+.ov-chart .dashboard-chart-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0) 58%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--us-duration-normal) var(--us-ease-out);
+}
+.usage-day:hover .usage-day-bar::before,
+.usage-day:focus .usage-day-bar::before,
+.usage-day:focus-visible .usage-day-bar::before,
+.ov-chart .dashboard-chart-column:hover .dashboard-chart-bar::before {
+  opacity: 1;
+}
+[data-theme="dark"] .usage-day-bar::before,
+[data-theme="dark"] .ov-chart .dashboard-chart-bar::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 62%);
+}
+.usage-day span {
+  transition: color var(--us-duration-normal) cubic-bezier(0.16, 1, 0.3, 1),
+    transform var(--us-duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.usage-day:hover span,
+.usage-day:focus span,
+.usage-day:focus-visible span {
+  transform: translateY(-1px);
+}
+
+/* ---- 3. 空态：图标轻轻漂浮 + 呼吸 ---- */
+.usage-empty > svg,
+.ov-chart-empty svg {
+  animation: us-drift-soft 3.4s ease-in-out infinite;
+}
+.usage-empty > svg { animation-delay: 120ms; }
+.ov-chart-empty svg { animation-delay: 0ms; }
+.usage-window-empty::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 9px;
+  border-radius: 999px;
+  background: var(--us-accent);
+  opacity: 0.5;
+  animation: us-dot-breathe 3s ease-in-out infinite;
+}
+
+/* ---- 4. 复制反馈：成功时按钮“按一下” ---- */
+.ov-copied {
+  animation: us-copy-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ---- 5. 表格行：细微淡入，翻页与搜索切换更顺滑 ---- */
+.usage-model-table tbody tr {
+  animation: us-row-fade 200ms var(--us-ease-out) backwards;
+}
+.usage-model-table tbody tr:nth-child(n+1) { animation-delay: 0ms; }
+.usage-model-table tbody tr:nth-child(n+6) { animation-delay: 20ms; }
+.usage-model-table tbody tr:nth-child(n+11) { animation-delay: 40ms; }
+.usage-model-table tbody tr:nth-child(n+16) { animation-delay: 60ms; }
+.usage-model-table tbody tr strong,
+.usage-model-table tbody tr code {
+  display: inline-block;
+  transition: transform var(--us-duration-normal) cubic-bezier(0.16, 1, 0.3, 1);
+}
+.usage-model-table tbody tr:hover td:first-child strong,
+.usage-model-table tbody tr:hover td:first-child code {
+  transform: translateX(2px);
+}
+
+/* ---- 6. 更新按钮：等待时图标轻微“醒来” ---- */
+.usage-browser .dashboard-heading .ui-button svg,
+.usage-browser header .ui-button svg {
+  transition: opacity var(--us-duration-normal) var(--us-ease-out);
+}
+.usage-browser .dashboard-heading .ui-button:disabled svg,
+.usage-browser header .ui-button:disabled svg {
+  opacity: 0.82;
+}
+.usage-browser .dashboard-heading .ui-button:hover svg,
+.usage-browser header .ui-button:hover svg {
+  opacity: 1;
+}
+
+/* ---- 7. 减少动画：新层同样完整降级 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .usage-empty > svg,
+  .ov-chart-empty svg,
+  .usage-window-empty::before,
+  .ov-copied,
+  .usage-model-table tbody tr {
+    animation: none !important;
+  }
+  .ov-metric-icon,
+  .ov-metric:hover .ov-metric-icon,
+  .ov-metric:hover strong,
+  .usage-day span,
+  .usage-day-bar::before,
+  .ov-chart .dashboard-chart-bar::before,
+  .usage-model-table tbody tr strong,
+  .usage-model-table tbody tr code,
+  .usage-browser .dashboard-heading .ui-button svg,
+  .usage-browser header .ui-button svg {
+    transition: none !important;
+  }
+  .usage-day:hover span,
+  .usage-day:focus span,
+  .usage-day:focus-visible span,
+  .usage-model-table tbody tr:hover td:first-child strong,
+  .usage-model-table tbody tr:hover td:first-child code {
+    transform: none !important;
+  }
+}
