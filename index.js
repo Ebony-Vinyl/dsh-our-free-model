@@ -46,6 +46,7 @@ import { windowTokens } from './src/stream.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { PluginUpdater } from './src/updater.js'
 import { selfReload, watchPackage, isReloading } from './src/reload.js'
+import { installChannelCatalogVisibility } from './src/channel-visibility.js'
 import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
@@ -1026,6 +1027,14 @@ export function apply(ctx, config) {
    * instead of showing nothing.
    */
   let channelPack = { state: 'pending', error: '' }
+  /**
+   * The channel pack's own catalog gate is keyed on "has a logged-in account",
+   * which is inert once a provider has any credential — and the remote catalog
+   * keeps adding models a per-model blacklist cannot chase. This wrapper turns
+   * that gate into one master switch over all 13 channel groups. It is display
+   * only: routing resolves models through `resolveModel`, never this gate.
+   */
+  let channelVisibility = { installed: false, sync() {} }
   ctx.inject(['credentials', 'commands', 'llm'], scoped => {
     let stopped = false
     scoped.effect(() => () => { stopped = true }, 'our-free-model: channel pack')
@@ -1040,8 +1049,17 @@ export function apply(ctx, config) {
         disableOpencode: true,
         outlet: { active: egressActive, fetch: egressFetch },
       })
+      // `apply` is synchronous and ends with `ctx.provide('accountPool', pool)`,
+      // so the pool is reachable here. Read it non-strictly: the providing fiber
+      // has not reached the active state yet at this point, and a strict `get`
+      // returns `undefined` — which would leave the switch silently unarmed.
+      // Adapters hold that same object and call the wrapped method on every
+      // `listModels()`, so the switch is read live.
+      channelVisibility = installChannelCatalogVisibility(scoped.get('accountPool', false), {
+        shouldHide: () => settings.get().hideChannelModels === true,
+      })
       channelPack = { state: 'ready', error: '' }
-      logger.info?.('our-free-model: free-channel pack mounted (CodeArts, CodeBuddy, and 11 more)')
+      logger.info?.(`our-free-model: free-channel pack mounted (CodeArts, CodeBuddy, and 11 more)${channelVisibility.installed ? ', catalog visibility switch armed' : ''}`)
     }).catch(error => {
       if (stopped) return
       channelPack = { state: 'failed', error: String(error?.message ?? error).slice(0, 300) }
@@ -1062,6 +1080,12 @@ export function apply(ctx, config) {
     // The absorbed channel pack's liveness, for the 白嫖接入 page: the page
     // renders its channel grid from this bit plus the pack's own RPC.
     channels: () => channelPack,
+    // The catalog visibility switch lives in `apply`'s scope (it wraps the pool
+    // the pack provides on mount), so the route reaches it through here.
+    channelVisibility: () => channelVisibility,
+    // Rebuilding the catalog is what makes the picker drop the hidden groups:
+    // the client caches one catalog per Host generation, so it needs the event.
+    onTopology: () => emitTopology(),
     chanRelay: {
       status: chanRelayStatus,
       apply: async patch => {
@@ -1659,7 +1683,7 @@ function createApiRoutes(deps) {
       if (method === 'POST' && routePath === '/settings') {
         const patch = await readJson(req)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']) }, current)
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'hideChannelModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']) }, current)
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
           // The listener spends this machine's lane, and a routable bind address
@@ -1708,6 +1732,11 @@ function createApiRoutes(deps) {
         }
         deps.settings.update(next)
         deps.settings.flush()
+        // Apply the catalog switch before answering: the pack reads it live, so
+        // the next catalog build already reflects the new value. `onTopology`
+        // is what tells the picker to re-fetch instead of keeping its cache.
+        deps.channelVisibility().sync()
+        if (next.hideChannelModels !== current.hideChannelModels) deps.onTopology()
         await deps.syncForward()
         await deps.syncRelay()
         await deps.syncEgress()
@@ -1815,6 +1844,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
   return {
     enabled: settings.enabled !== false,
     exposeRegionModels: settings.exposeRegionModels !== false,
+    hideChannelModels: settings.hideChannelModels === true,
     probeIntervalMinutes: settings.probeIntervalMinutes ?? 15,
     defaultMaxTokens: settings.defaultMaxTokens ?? 32768,
     announcementAck: settings.announcementAck ?? '',
