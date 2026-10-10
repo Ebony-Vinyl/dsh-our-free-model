@@ -89,10 +89,34 @@ const dataDir = home => path.join(home, 'our-free-model')
   for (const method of ['providerInfo', 'providerRetryPolicy', 'imageRequestPricing', 'listModels', 'resolveModel', 'prepareCall', 'stream']) {
     check(`the adapter answers the contract method ${method}()`, typeof adapter?.[method], 'function')
   }
+  // `undefined` 是 token meter 的合法答案，却是 0.2.x spill policy 的致命答案：
+  // `dsh-spill-policy` 会抛「the current model has no image token calculator」，
+  // 于是每条含图工具结果都留在上下文里，窗口被撑满且 `/compact` 也救不回来
+  // （issue #151）。保留该契约方法，但给出真正的计价器：免费通道的请求里带着
+  // 附件真实宽高，按面积估算比统一兜底更贴近实际。
   const pricing = adapter?.imageRequestPricing(ROUTE_MAIN, 'any-model-free')
-  check('imageRequestPricing synchronously estimates request images for spill-policy',
-    pricing?.priceImages([{ type: 'image', attachment: {} }, { type: 'image', attachment: {}, offloaded: true }]),
-    [{ visualTokens: 1024, text: '[image]' }, { visualTokens: 0, text: '[image omitted]' }])
+  check('imageRequestPricing answers an image calculator', typeof pricing?.priceImages, 'function')
+  const images = [
+    { type: 'image', attachment: { attachmentId: 'a', mediaType: 'image/png', width: 1024, height: 768 } },
+    { type: 'image', attachment: { attachmentId: 'b', mediaType: 'image/jpeg', width: 0, height: 0 } },
+    { type: 'image', attachment: { attachmentId: 'c', mediaType: 'image/webp', width: 2048, height: 1536 }, offloaded: true },
+  ]
+  const prices = pricing?.priceImages(images) ?? []
+  check('one price per occurrence — an inconsistent count is itself a fatal error', prices.length, images.length)
+  check('a retained image is priced in visual tokens', prices[0]?.visualTokens > 0, true)
+  check('and carries descriptor text the meter can count', typeof prices[0]?.text === 'string' && prices[0].text.length > 0, true)
+  check('an image with no measured size is still priced', prices[1]?.visualTokens > 0, true)
+  check('an offloaded image costs no visual tokens', prices[2]?.visualTokens, 0)
+  // 按面积估算，不是统一兜底值：一张 2048x1536 的图必须比 1024x768 的贵。
+  // 这条断言把「回到固定 1024」钉死——那是 issue #151 修好计价器之前的形状。
+  const small = pricing?.priceImages([{ type: 'image', attachment: { mediaType: 'image/png', width: 1024, height: 768 } }])[0]
+  const large = pricing?.priceImages([{ type: 'image', attachment: { mediaType: 'image/png', width: 2048, height: 1536 } }])[0]
+  check('a larger image is priced higher — the estimator measures, it does not flat-rate',
+    large?.visualTokens > small?.visualTokens, true)
+  check('and the estimate tracks the pixel area', small?.visualTokens, Math.ceil(1024 * 768 / 750))
+  // 计价器必须可重复调用且互不污染：宿主会为同一次请求的每个出现位置各取一次。
+  const once = JSON.stringify(pricing?.priceImages(images))
+  check('pricing the same request twice is stable', JSON.stringify(pricing?.priceImages(images)), once)
 
   const models = await adapter.listModels(ROUTE_MAIN)
   check('the fallback roster is advertised with no network and no key', models.length > 0, true)

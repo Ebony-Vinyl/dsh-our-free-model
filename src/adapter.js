@@ -27,7 +27,7 @@ import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor,
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
-import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
+import { PIXEL_IMAGE_PRICING } from './image-pricing.js'
 
 export const ROUTE_MAIN = 'our-free-model'
 export const ROUTE_REGION = 'our-free-model-region'
@@ -93,10 +93,10 @@ export class FreeModelAdapter {
    *
    * @param {string} _provider - a route passed to `registerAdapter()` for this instance.
    * @param {string} _model - exact model id passed to GenerateOptions.model.
-   * @returns {typeof FALLBACK_IMAGE_PRICING} 视觉 Token 估算，不是厂商真实消耗。
+   * @returns {typeof PIXEL_IMAGE_PRICING} 视觉 Token 估算，不是厂商真实消耗。
    */
   imageRequestPricing(_provider, _model) {
-    return FALLBACK_IMAGE_PRICING
+    return PIXEL_IMAGE_PRICING
   }
 
   /** Models this route advertises right now. */
