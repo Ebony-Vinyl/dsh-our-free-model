@@ -3543,6 +3543,78 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 :root:not([data-theme="dark"]) body .primary:active::before {
   transform: translateX(0) !important;
 }
+/* ============================================================
+   V5 LIGHT 返工补丁 · R1（验收批评家 P0×3 + P1×3）
+   P0-1 蓝清残余：hover 蓝辉光 → 暖棕（开关 on / quick-endpoint / source-row / quick-icon）
+   P0-2 形状统一：按钮全变体 6px / .login-card 8px / 徽章 999px 复申
+   P0-3 黄铜按钮：active 全变体 translateY(1px)，拍死 scale(0.97)
+   P1-4 纸纹卡片级：复申 0.07 纸纹（构建后可见）
+   P1-5 开关墨水洇开：lt5-ink-spread 挂到 .ui-switch.on span
+   P1-6 selection 兜底：黄铜 20%（拍 2810 行蓝）
+   ============================================================ */
+
+/* P1-6 ::selection 兜底（黄铜，拍基础层 2810 蓝） */
+:root:not([data-theme="dark"]) ::selection { background: rgba(180,83,9,0.20) !important; color: #1c1917 !important; }
+
+/* P0-1 hover 蓝辉光清零 */
+:root:not([data-theme="dark"]) .ui-switch.on:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), inset 0 0 0 1px rgba(140,75,6,0.55), 0 4px 12px -6px rgba(180,83,9,0.50) !important; }
+:root:not([data-theme="dark"]) .ui-switch.on { box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 0 0 1px rgba(140,75,6,0.50) !important; }
+:root:not([data-theme="dark"]) .quick-endpoint:hover { border-color: var(--accent-line) !important; box-shadow: inset 0 1px 2px rgba(86,52,10,0.05), 0 0 0 3px rgba(180,83,9,0.06) !important; }
+:root:not([data-theme="dark"]) .source-row:hover { background: linear-gradient(90deg, rgba(180,83,9,0.055), rgba(180,83,9,0)) !important; }
+:root:not([data-theme="dark"]) .quick-icon { box-shadow: inset 0 0 0 1px rgba(180,83,9,0.12), 0 1px 2px rgba(86,52,10,0.06) !important; }
+
+/* P0-2 形状统一 */
+:root:not([data-theme="dark"]) .ui-button,
+:root:not([data-theme="dark"]) .ui-button-sm,
+:root:not([data-theme="dark"]) .ui-button-lg,
+:root:not([data-theme="dark"]) .ui-button-icon,
+:root:not([data-theme="dark"]) .primary,
+:root:not([data-theme="dark"]) .secondary,
+:root:not([data-theme="dark"]) .danger-button { border-radius: 6px !important; }
+:root:not([data-theme="dark"]) .login-card { border-radius: 8px !important; }
+:root:not([data-theme="dark"]) .ui-card { border-radius: 8px !important; }
+:root:not([data-theme="dark"]) .ui-badge,
+:root:not([data-theme="dark"]) .count-badge { border-radius: 999px !important; }
+:root:not([data-theme="dark"]) .ui-badge-blue .ui-badge-dot { background: #b45309 !important; box-shadow: 0 0 0 2px rgba(180,83,9,0.16) !important; }
+
+/* P0-3 active 全变体：按进纸里 */
+:root:not([data-theme="dark"]) .ui-button:active,
+:root:not([data-theme="dark"]) .ui-button-sm:active,
+:root:not([data-theme="dark"]) .ui-button-lg:active,
+:root:not([data-theme="dark"]) .ui-button-icon:active,
+:root:not([data-theme="dark"]) .primary:active,
+:root:not([data-theme="dark"]) .secondary:active,
+:root:not([data-theme="dark"]) .danger-button:active,
+:root:not([data-theme="dark"]) body .ui-button-default:active,
+:root:not([data-theme="dark"]) body .primary:active { transform: translateY(1px) !important; scale: 1 !important; }
+
+/* P1-4 卡片纸纹复申（构建产物验证点） */
+:root:not([data-theme="dark"]) .ui-card::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p2)' opacity='0.07'/%3E%3C/svg%3E") !important;
+  background-size: 120px 120px !important;
+}
+
+/* P1-5 开关墨水洇开：黄铜墨从滑块中心洇开 */
+@keyframes lt5-ink-spread {
+  0%   { opacity: 0.45; transform: scale(0.30); }
+  68%  { opacity: 0.28; }
+  100% { opacity: 0; transform: scale(1.80); }
+}
+:root:not([data-theme="dark"]) .ui-switch.on span::after,
+:root:not([data-theme="dark"]) .ui-switch.on span::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin: -15px 0 0 -15px !important;
+  border-radius: 50% !important;
+  background: radial-gradient(circle, rgba(180,83,9,0.40) 0%, transparent 68%) !important;
+  transform: scale(0.30) !important;
+  animation: lt5-ink-spread 520ms cubic-bezier(0.22,0.61,0.36,1) both !important;
+  pointer-events: none !important;
+}
 /* ==== V5 LIGHT END ==== */
 
 /* ==== V5 NIGHT START ==== */
@@ -3578,7 +3650,7 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   0%   { clip-path: inset(0 100% 0 0); opacity: 0; filter: drop-shadow(0 0 0 rgba(0, 208, 192, 0)); }
   12%  { opacity: 1; }
   55%  { clip-path: inset(0 0 0 0); opacity: 1; filter: drop-shadow(0 0 7px rgba(0, 208, 192, 0.55)); }
-  100% { clip-path: inset(0 0 0 0); opacity: 0; filter: drop-shadow(0 0 0 rgba(0, 208, 192, 0)); }
+  100% { clip-path: inset(0 0 0 0); opacity: 0.45; filter: drop-shadow(0 0 5px rgba(0, 208, 192, 0.35)); }
 }
 
 /* 按下瞬间的 100ms 色差故障：红青错位一闪，是信号抖动，不是按钮弹跳 */
@@ -3662,7 +3734,7 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 [data-theme="dark"] .ui-card:hover::after,
 [data-theme="dark"] .ui-card:focus-within::after {
   visibility: visible !important;
-  animation: cp5-edge-sweep 520ms var(--ease-out-expo) 1 forwards !important;
+  animation: cp5-edge-sweep 680ms var(--ease-out-expo) 1 forwards !important;
 }
 
 /* 卡内排版：数据 / 正文等宽 + 表格数字；元数据全大写宽字距 */
@@ -4077,5 +4149,122 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   [data-theme="dark"] .empty-state p::after { animation: none !important; }
   [data-theme="dark"] .status-dot,
   [data-theme="dark"] .console-sidebar-footer .status-dot { animation: none !important; }
+}
+/* ---------- 15. 返工加固：徽章 0 圆角 / 标题光标 / 状态点 steps / 卡片扫光余辉 ---------- */
+/* 15.1 徽章：浅色侧有两条 0 圆角竞争者：:root:not([data-theme="dark"]) .ui-badge 的 7px
+   （app.css L1872，无 !important）与浅色块 L3494 的 999px !important，两者特异性都是 (0,3,0)。
+   主题属性挂在 html 上（shell.tsx 用 dataset.theme），所以它们本来就不该匹配；但为彻底保险，
+   这里把特异性提到 (0,3,1)：重复类名是刻意为之，只服务于"运行时恒为 0 圆角"。 */
+[data-theme="dark"] body .ui-badge.ui-badge {
+  border-radius: 0 !important;
+}
+
+/* 15.2 标题方块光标：特异性由 (0,1,2) 提到 (0,2,2)，方块加大到 0.5em，截图更容易读到 */
+[data-theme="dark"] body h1::before {
+  content: "" !important;
+  display: inline-block !important;
+  position: static !important;
+  float: none !important;
+  width: 0.5em !important;
+  height: 0.86em !important;
+  margin-right: 0.32em !important;
+  vertical-align: -0.04em !important;
+  background: #00d0c0 !important;
+  box-shadow: 0 0 12px rgba(0, 208, 192, 0.6) !important;
+  animation: cp5-blink 1.1s steps(1, end) infinite !important;
+}
+
+/* 15.3 状态点：侧栏变体的竞争规则特异性是 (0,3,0)，这里提到 (0,3,1)，保持 steps 硬切 */
+[data-theme="dark"] body .console-sidebar-footer .status-dot,
+[data-theme="dark"] body .status-dot.status-dot {
+  border-radius: 0 !important;
+  width: 5px !important;
+  height: 5px !important;
+  animation: cp5-pulse-square 1.6s steps(1, end) infinite !important;
+}
+
+/* ---------- 16. 全局滚动条：补一条直接命中根节点的规则 ---------- */
+/* 根元素 html 不匹配 [data-theme="dark"] *（后代选择器），所以根滚动条一直是 --thumb 灰蓝 */
+[data-theme="dark"],
+[data-theme="dark"] * { scrollbar-color: rgba(0, 208, 192, 0.34) #070a0e !important; }
+[data-theme="dark"]::-webkit-scrollbar,
+[data-theme="dark"] *::-webkit-scrollbar { width: 10px !important; height: 10px !important; }
+[data-theme="dark"]::-webkit-scrollbar-track,
+[data-theme="dark"] *::-webkit-scrollbar-track { background: #070a0e !important; }
+[data-theme="dark"]::-webkit-scrollbar-thumb,
+[data-theme="dark"] *::-webkit-scrollbar-thumb {
+  background: rgba(0, 208, 192, 0.26) !important;
+  border: 2px solid #070a0e !important;
+  border-radius: 0 !important;
+  background-clip: padding-box !important;
+}
+[data-theme="dark"]::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background: rgba(0, 208, 192, 0.48) !important; }
+[data-theme="dark"]::-webkit-scrollbar-corner,
+[data-theme="dark"] *::-webkit-scrollbar-corner { background: #070a0e !important; }
+
+/* ---------- 17. Skeleton 与禁用态 ---------- */
+[data-theme="dark"] .ofm_skel,
+[data-theme="dark"] .ofm_root .ofm_skel {
+  border-radius: 0 !important;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 4px),
+    rgba(0, 208, 192, 0.07) !important;
+  border: 1px solid rgba(0, 208, 192, 0.16) !important;
+  box-shadow: inset 0 0 20px -12px rgba(0, 208, 192, 0.5) !important;
+}
+[data-theme="dark"] .ofm_skel::after,
+[data-theme="dark"] .ofm_root .ofm_skel::after {
+  background: linear-gradient(100deg, transparent 20%, rgba(0, 208, 192, 0.16) 48%, transparent 76%) !important;
+}
+/* 禁用态：条纹叠加表达"断电后仍在通电的骨架"，不用文字标记，避免与方括号刻度伪元素打架 */
+[data-theme="dark"] body button:disabled:not(.is-busy):not([data-busy]):not(.danger-button),
+[data-theme="dark"] body [aria-disabled="true"]:not(.is-busy) {
+  opacity: 1 !important;
+  background-image: repeating-linear-gradient(135deg, rgba(0, 208, 192, 0.10) 0 6px, transparent 6px 12px) !important;
+  border-color: rgba(0, 208, 192, 0.16) !important;
+  color: rgba(223, 230, 233, 0.42) !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* ---------- 18. 空态统一：把模型页 [ NO SIGNAL ] 模板搬到首页图表空态与通用空态 ---------- */
+[data-theme="dark"] .chart-empty,
+[data-theme="dark"] .empty-state {
+  position: relative !important;
+  border: 1px solid var(--cp-cyan-line) !important;
+  border-radius: 0 !important;
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px) !important;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 4px),
+    radial-gradient(420px 170px at 50% 30%, rgba(0, 208, 192, 0.07), transparent 72%) !important;
+  box-shadow: inset 0 0 46px -24px var(--cp-glow) !important;
+  font-family: var(--mono-font) !important;
+}
+[data-theme="dark"] .chart-empty::before,
+[data-theme="dark"] .empty-state::before {
+  content: "[ NO SIGNAL ]" !important;
+  display: block !important;
+  margin: 0 auto 14px !important;
+  font-family: var(--mono-font) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.34em !important;
+  text-indent: 0.34em !important;
+  color: #00d0c0 !important;
+  opacity: 0.7 !important;
+}
+[data-theme="dark"] .chart-empty::after {
+  content: "" !important;
+  display: block !important;
+  width: 8px !important;
+  height: 14px !important;
+  margin: 12px auto 0 !important;
+  background: #00d0c0 !important;
+  box-shadow: 0 0 10px -1px rgba(0, 208, 192, 0.55) !important;
+  animation: cp5-blink 1.05s steps(1, end) infinite !important;
+}
+/* 降级补充：首页空态新加的等待光标也要在 reduced-motion 下停 */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="dark"] .chart-empty::after { animation: none !important; }
 }
 /* ==== V5 NIGHT END ==== */
