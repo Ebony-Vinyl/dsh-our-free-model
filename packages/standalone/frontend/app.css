@@ -3240,3 +3240,192 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
   .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) { transform: none !important; }
   .console-nav-item:hover .console-nav-indicator { transform: translateY(-50%) scaleY(0.5); }
 }
+/* ==== V5 LIGHT START ==== */
+/* 拾光者样板间 · 三原子件：卡片 / 黄铜按钮 / 开关
+   世界观：纸 + 黄铜 + 左上光源暖影
+   读书笔记映射：
+   - 卡片 → 双嵌套（外纸壳 + 内亮纸面）+ 可见纸纹 + 方向影
+   - 按钮 → 黄铜镜面高光条 + 拉丝 + 暗倒角 + hover 高光移动 + active 下沉
+   - 开关 → 黄铜胶囊框 + 墨水洇开反馈
+*/
+
+/* ---- 1. 卡片：纸上浮起 ---- */
+:root:not([data-theme="dark"]) .ui-card,
+:root:not([data-theme="dark"]) .login-card {
+  background: #fdfcf9 !important;
+  border: 1px solid #e8e0d3 !important;
+  border-radius: 8px !important;
+  box-shadow: 3px 4px 0 rgba(86,52,10,0.04), 6px 8px 22px -6px rgba(86,52,10,0.13), 0 1px 3px rgba(86,52,10,0.05) !important;
+  transition: transform 400ms cubic-bezier(0.32,0.72,0,1) !important, box-shadow 400ms cubic-bezier(0.32,0.72,0,1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+/* 纸纹：fixed 定位伪元素叠加极细噪点 */
+:root:not([data-theme="dark"]) .ui-card::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23p)' opacity='0.04'/%3E%3C/svg%3E") !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+}
+/* 顶部薄光边：模拟纸被左上阳光照亮的边缘 */
+:root:not([data-theme="dark"]) .ui-card::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, rgba(180,83,9,0.12), rgba(255,255,255,0.5) 30%, transparent) !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+/* 卡片内容不被纹理遮住 */
+:root:not([data-theme="dark"]) .ui-card > * {
+  position: relative !important;
+  z-index: 2 !important;
+}
+/* hover：迎光上浮 2px，影子拉开（纸被拿起透光） */
+:root:not([data-theme="dark"]) .ui-card:hover,
+:root:not([data-theme="dark"]) .login-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 4px 6px 0 rgba(86,52,10,0.03), 10px 14px 32px -6px rgba(86,52,10,0.17), 0 2px 5px rgba(86,52,10,0.06) !important;
+}
+
+/* ---- 2. 黄铜按钮：不是橙色渐变，是"真黄铜" ---- */
+:root:not([data-theme="dark"]) body .ui-button-default,
+:root:not([data-theme="dark"]) body .primary {
+  background: linear-gradient(180deg, #c8842a 0%, #b45309 50%, #9a4708 100%) !important;
+  color: #fffdf6 !important;
+  border: 1px solid #8a4a06 !important;
+  border-radius: 6px !important;
+  box-shadow:
+    0 1px 0 rgba(255,240,200,0.45) inset,
+    0 -1px 2px rgba(60,30,0,0.35) inset,
+    2px 3px 0 rgba(86,52,10,0.10),
+    3px 6px 14px -4px rgba(86,52,10,0.30) !important;
+  transition: all 350ms cubic-bezier(0.32,0.72,0,1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+/* 镜面高光条：顶部一条白色反光，不是整体渐变 */
+:root:not([data-theme="dark"]) body .ui-button-default::before,
+:root:not([data-theme="dark"]) body .primary::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 10% !important;
+  right: 10% !important;
+  height: 40% !important;
+  background: linear-gradient(180deg, rgba(255,250,235,0.35), rgba(255,250,235,0.05)) !important;
+  border-radius: 6px 6px 50% 50% / 6px 6px 20% 20% !important;
+  pointer-events: none !important;
+  transition: left 350ms cubic-bezier(0.32,0.72,0,1), right 350ms cubic-bezier(0.32,0.72,0,1) !important;
+}
+/* 拉丝纹理：极细水平噪点 */
+:root:not([data-theme="dark"]) body .ui-button-default::after,
+:root:not([data-theme="dark"]) body .primary::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='4'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.02 0.9' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='80' height='4' filter='url(%23b)' opacity='0.05'/%3E%3C/svg%3E") !important;
+  pointer-events: none !important;
+  opacity: 0.6 !important;
+}
+/* hover：高光位置移动（模拟黄铜微转反光面变） */
+:root:not([data-theme="dark"]) body .ui-button-default:hover::before,
+:root:not([data-theme="dark"]) body .primary:hover::before {
+  left: 3% !important;
+  right: 25% !important;
+  background: linear-gradient(160deg, rgba(255,250,235,0.45), rgba(255,250,235,0.08)) !important;
+}
+:root:not([data-theme="dark"]) body .ui-button-default:hover,
+:root:not([data-theme="dark"]) body .primary:hover {
+  background: linear-gradient(180deg, #d1912e 0%, #b85a09 50%, #9e4c08 100%) !important;
+  border-color: #7e4406 !important;
+  box-shadow:
+    0 1px 0 rgba(255,240,200,0.5) inset,
+    0 -1px 2px rgba(60,30,0,0.38) inset,
+    3px 4px 0 rgba(86,52,10,0.10),
+    4px 8px 18px -4px rgba(86,52,10,0.35) !important;
+  transform: translateY(-1px) !important;
+}
+/* active：按进纸里，下沉 1px，高光收缩 */
+:root:not([data-theme="dark"]) body .ui-button-default:active,
+:root:not([data-theme="dark"]) body .primary:active {
+  background: linear-gradient(180deg, #a86407 0%, #9a4708 50%, #8a3e06 100%) !important;
+  border-color: #6e3a05 !important;
+  box-shadow:
+    0 1px 0 rgba(255,240,200,0.25) inset,
+    0 2px 5px rgba(60,30,0,0.35) inset,
+    1px 1px 0 rgba(86,52,10,0.06),
+    0 2px 6px -2px rgba(86,52,10,0.20) !important;
+  transform: translateY(1px) !important;
+}
+:root:not([data-theme="dark"]) body .ui-button-default:active::before,
+:root:not([data-theme="dark"]) body .primary:active::before {
+  left: 20% !important;
+  right: 20% !important;
+  height: 25% !important;
+  opacity: 0.6 !important;
+}
+
+/* ---- 3. 开关：黄铜胶囊 + 墨水洇开 ---- */
+:root:not([data-theme="dark"]) .ui-switch {
+  width: 33px !important;
+  height: 20px !important;
+  padding: 3px !important;
+  border: 1px solid #d4c9b5 !important;
+  border-radius: 999px !important;
+  background: #ece6da !important;
+  box-shadow: 1px 2px 2px rgba(86,52,10,0.08) inset, 0 1px 1px rgba(255,255,255,0.6) !important;
+  transition: background 600ms cubic-bezier(0.32,0.72,0,1), box-shadow 600ms cubic-bezier(0.32,0.72,0,1), border-color 600ms cubic-bezier(0.32,0.72,0,1) !important;
+  position: relative !important;
+  overflow: visible !important;
+}
+/* 墨水洇开：on 时 track 底色从中心慢慢扩散成暖棕墨 */
+:root:not([data-theme="dark"]) .ui-switch.on {
+  background: radial-gradient(circle at 50% 50%, #c8842a 0%, #b45309 55%, #a04a08 100%) !important;
+  border-color: #8a4a06 !important;
+  box-shadow: 0 1px 2px rgba(86,52,10,0.18) inset, 0 -1px 1px rgba(255,240,200,0.25) inset !important;
+}
+/* 滑块：黄铜圆片带镜面高光点 */
+:root:not([data-theme="dark"]) .ui-switch span {
+  display: block !important;
+  width: 14px !important;
+  height: 14px !important;
+  background: linear-gradient(180deg, #f5ede0 0%, #ddd4c2 100%) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 3px rgba(86,52,10,0.18), 0 0 0 0.5px rgba(180,83,9,0.12) !important;
+  transition: transform 450ms cubic-bezier(0.34,1.4,0.64,1) !important;
+  position: relative !important;
+}
+/* 滑块高光点：左上小亮点 */
+:root:not([data-theme="dark"]) .ui-switch span::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 2px !important;
+  left: 3px !important;
+  width: 5px !important;
+  height: 5px !important;
+  background: rgba(255,255,255,0.7) !important;
+  border-radius: 50% !important;
+}
+/* on 状态滑块：变成黄铜色（仪器拨杆被推到黄铜端） */
+:root:not([data-theme="dark"]) .ui-switch.on span {
+  background: linear-gradient(180deg, #e8c47a 0%, #c8842a 100%) !important;
+  box-shadow: 0 1px 2px rgba(86,52,10,0.20), 0 0 0 0.5px rgba(140,75,6,0.18) !important;
+  transform: translateX(13px) !important;
+}
+:root:not([data-theme="dark"]) .ui-switch.on span::after {
+  background: rgba(255,250,235,0.55) !important;
+}
+
+/* ==== V5 LIGHT END ==== */
