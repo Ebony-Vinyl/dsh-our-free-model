@@ -2891,15 +2891,15 @@ code, pre { font-variant-ligatures: none; }
 /* E1 圆角体系统一：深色对齐浅色（卡片 12 / 控件 9 / 小徽章 7 / 浮层 10） ---------- */
 [data-theme="dark"] .ui-button, [data-theme="dark"] .ui-button-default, [data-theme="dark"] .ui-button-outline,
 [data-theme="dark"] .ui-button-ghost, [data-theme="dark"] .primary, [data-theme="dark"] .secondary,
-[data-theme="dark"] .danger-button { border-radius: 9px; }
-[data-theme="dark"] .ui-button-sm { border-radius: 8px; }
-[data-theme="dark"] .ui-button-lg { border-radius: 10px; }
-[data-theme="dark"] .ui-button-icon { border-radius: 9px; }
-[data-theme="dark"] .ui-card { border-radius: 12px; }
-[data-theme="dark"] .ui-badge { border-radius: 7px; }
+[data-theme=dark] .danger-button { border-radius: 0; }
+[data-theme=dark] .ui-button-sm { border-radius: 0; }
+[data-theme=dark] .ui-button-lg { border-radius: 0; }
+[data-theme=dark] .ui-button-icon { border-radius: 0; }
+[data-theme=dark] .ui-card { border-radius: 0; }
+[data-theme=dark] .ui-badge { border-radius: 0; }
 [data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea,
-[data-theme="dark"] .ui-input { border-radius: 9px; }
-[data-theme="dark"] .notice, [data-theme="dark"] pre, [data-theme="dark"] .confirm-panel { border-radius: 10px; }
+[data-theme=dark] .ui-input { border-radius: 0; }
+[data-theme=dark] .notice, [data-theme=dark] pre, [data-theme=dark] .confirm-panel { border-radius: 0; }
 
 /* E2 按钮：三变体 × 默认 / hover / 按下 / 聚焦 / 禁用 / 加载 ---------- */
 :root:not([data-theme="dark"]) .ui-button-default,
