@@ -10,12 +10,9 @@
   <img alt="build step" src="https://img.shields.io/badge/build%20step-none-7da1de?style=flat-square">
   <img alt="dsh kernels" src="https://img.shields.io/badge/dsh-0.1.5--0.1.7--rc.2-2f6f4f?style=flat-square">
   <img alt="status" src="https://img.shields.io/badge/status-beta-f0a441?style=flat-square">
-  <p><strong>Trending · recorded 2026-10-06</strong></p>
-  <!-- GitTrend pins the rank verified that day so history cannot drift; Trendshift uses its official live badge; click either badge to open its board. -->
-  <a href="https://trendshift.io/repositories/261203"><img alt="Trendshift JavaScript Repository Of The Day" src="https://trendshift.io/api/badge/trendshift/repositories/261203/daily?language=JavaScript"></a>
-  <a href="https://trendshift.io/repositories/261203"><img alt="Trendshift JavaScript Repository Of The Week" src="https://trendshift.io/api/badge/trendshift/repositories/261203/weekly?language=JavaScript"></a>
-  <a href="https://gittrend.io/trending/ai-infrastructure"><img alt="GitTrend AI Infrastructure daily #4, recorded 2026-10-06, list updated 2026-10-05" src="https://img.shields.io/badge/GitTrend-AI%20Infra%20%234-2563eb?style=for-the-badge" height="28"></a>
-  <p><sub>#4 on both the Trendshift JavaScript daily board and GitTrend's AI Infrastructure daily board. GitTrend's list data is as of 2026-10-05.</sub></p>
+  <br>
+  <a href="https://trendshift.io/repositories/261203"><img alt="GITHUB TRENDING #1, Repository Of The Day" src="docs/images/trendshift-daily-laurel-gold.svg" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/261203"><img alt="GITHUB TRENDING #2, Repository Of The Week" src="docs/images/trendshift-weekly-laurel-purple.svg" width="250" height="55"></a>
 
 </div>
 
