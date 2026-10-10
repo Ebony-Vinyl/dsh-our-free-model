@@ -24,6 +24,8 @@
 import crypto from 'node:crypto'
 import https from 'node:https'
 import http from 'node:http'
+import tls from 'node:tls'
+import { execFileSync } from 'node:child_process'
 import { Readable } from 'node:stream'
 // Web-stream adapter: http.js's readHead/readSse speak getReader(), so the
 // node:http response is converted into a proper WHATWG ReadableStream.
@@ -81,41 +83,191 @@ export { laneFetch as directFetch }
  * is what http.js's readHead/readSse consume; nothing is buffered before the
  * sniff window, so first tokens still flow out unheld.
  */
-function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal } = {}) {
-  if (typeof lane.fetch === 'function') return lane.fetch(url, { method, headers, body, signal })
+const cachedSystemProxy = { at: 0, val: null }
+
+function shouldBypassProxy(hostname) {
+  if (!hostname) return true
+  const lower = String(hostname).toLowerCase()
+  if (lower === 'localhost' || lower === '127.0.0.1' || lower === '::1') return true
+  const noProxy = process.env.NO_PROXY || process.env.no_proxy
+  if (noProxy) {
+    const list = noProxy.split(',').map(s => s.trim().toLowerCase())
+    if (list.includes('*') || list.some(item => item && (lower === item || lower.endsWith(`.${item}`)))) {
+      return true
+    }
+  }
+  return false
+}
+
+function getSystemProxy() {
+  const envProxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.ALL_PROXY || process.env.all_proxy
+  if (envProxy) {
+    if (/^socks/i.test(envProxy)) return null
+    return /^https?:\/\//i.test(envProxy) ? envProxy : `http://${envProxy}`
+  }
+  if (process.platform === 'win32') {
+    const now = Date.now()
+    if (now - cachedSystemProxy.at < 30_000) return cachedSystemProxy.val
+    cachedSystemProxy.at = now
+    try {
+      const enableOut = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings', '/v', 'ProxyEnable'], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500, windowsHide: true,
+      })
+      if (!/ProxyEnable\s+REG_DWORD\s+0x1/i.test(enableOut)) { cachedSystemProxy.val = null; return null }
+      const serverOut = execFileSync('reg', ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings', '/v', 'ProxyServer'], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500, windowsHide: true,
+      })
+      const match = /ProxyServer\s+REG_SZ\s+(\S+)/i.exec(serverOut)
+      if (!match) { cachedSystemProxy.val = null; return null }
+      let server = match[1]
+      if (server.includes('=')) {
+        const parts = server.split(';')
+        const httpsPart = parts.find(p => p.startsWith('https=')) || parts.find(p => p.startsWith('http='))
+        if (!httpsPart) { cachedSystemProxy.val = null; return null }
+        server = httpsPart.split('=')[1]
+      }
+      if (!server || /^socks/i.test(server)) { cachedSystemProxy.val = null; return null }
+      const proxyUrl = /^https?:\/\//i.test(server) ? server : `http://${server}`
+      cachedSystemProxy.val = proxyUrl
+      return proxyUrl
+    } catch {
+      cachedSystemProxy.val = null
+      return null
+    }
+  }
+  return null
+}
+
+function openProxyTunnel(proxyUrl, targetHost, targetPort, signal) {
   return new Promise((resolve, reject) => {
-    const target = new URL(url)
-    const transport = target.protocol === 'http:' ? http : https
-    const request = transport.request({
-      protocol: target.protocol,
-      hostname: target.hostname,
-      port: target.port || (target.protocol === 'http:' ? 80 : 443),
-      path: target.pathname + target.search,
-      method,
-      headers: body !== undefined ? { ...headers, 'content-length': Buffer.byteLength(body, 'utf8') } : headers,
-    }, response => {
-      resolve({
-        ok: response.statusCode >= 200 && response.statusCode < 300,
-        status: response.statusCode,
-        headers: { get: name => response.headers[String(name).toLowerCase()] ?? null },
-        body: Readable.toWeb(response),
-        async text() {
-          const chunks = []
-          for await (const chunk of response) chunks.push(Buffer.from(chunk))
-          return Buffer.concat(chunks).toString('utf8')
-        },
-        // Response-shaped means Response-complete: the pool proxy is the first
-        // caller that reads JSON off this shim, and a missing method here
-        // surfaces as an opaque 'unreachable' three layers up.
-        async json() { return JSON.parse(await this.text()) },
+    if (signal?.aborted) return reject(new Error('The operation was aborted'))
+    let proxy
+    try { proxy = new URL(proxyUrl) } catch (e) { return reject(e) }
+    const req = http.request({
+      host: proxy.hostname,
+      port: Number(proxy.port) || 80,
+      method: 'CONNECT',
+      path: `${targetHost}:${targetPort}`,
+      headers: {
+        host: `${targetHost}:${targetPort}`,
+        ...(proxy.username ? {
+          'Proxy-Authorization': `Basic ${Buffer.from(`${decodeURIComponent(proxy.username)}:${decodeURIComponent(proxy.password)}`).toString('base64')}`
+        } : {})
+      }
+    })
+    req.setTimeout(10_000, () => {
+      req.destroy(new Error('Proxy CONNECT timed out'))
+    })
+    let settled = false
+    let currentSocket = null
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      req.destroy(new Error('The operation was aborted'))
+      currentSocket?.destroy?.()
+      reject(new Error('The operation was aborted'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    req.on('connect', (res, socket) => {
+      currentSocket = socket
+      if (settled) { socket.destroy(); return }
+      if (res.statusCode !== 200) {
+        settled = true
+        signal?.removeEventListener('abort', onAbort)
+        socket.destroy()
+        return reject(new Error(`Proxy CONNECT refused with HTTP ${res.statusCode}`))
+      }
+      const tlsSocket = tls.connect({ socket, servername: targetHost }, () => {
+        if (!settled) {
+          settled = true
+          signal?.removeEventListener('abort', onAbort)
+          resolve(tlsSocket)
+        }
+      })
+      currentSocket = tlsSocket
+      tlsSocket.on('error', err => {
+        if (!settled) {
+          settled = true
+          signal?.removeEventListener('abort', onAbort)
+          reject(err)
+        }
       })
     })
-    request.on('error', reject)
-    const abort = () => request.destroy(new Error('The operation was aborted'))
-    signal?.addEventListener('abort', abort, { once: true })
-    request.on('close', () => signal?.removeEventListener?.('abort', abort))
-    if (body !== undefined) request.write(body, 'utf8')
-    request.end()
+    req.on('error', err => {
+      if (!settled) {
+        settled = true
+        signal?.removeEventListener('abort', onAbort)
+        reject(err)
+      }
+    })
+    req.end()
+  })
+}
+
+function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal } = {}) {
+  if (typeof lane.fetch === 'function') return lane.fetch(url, { method, headers, body, signal })
+  const hasUserAgent = Object.keys(headers).some(k => k.toLowerCase() === 'user-agent')
+  const reqHeaders = hasUserAgent ? headers : { 'user-agent': 'dsh-our-free-model', ...headers }
+  const finalHeaders = body !== undefined
+    ? { ...reqHeaders, 'content-length': Buffer.byteLength(body, 'utf8') }
+    : reqHeaders
+
+  const target = new URL(url)
+  const proxyUrl = (target.protocol === 'https:' && !shouldBypassProxy(target.hostname)) ? getSystemProxy() : null
+
+  async function connect() {
+    if (proxyUrl) {
+      try {
+        const tlsSocket = await openProxyTunnel(proxyUrl, target.hostname, target.port || 443, signal)
+        return { transport: https, options: { createConnection: () => tlsSocket } }
+      } catch (proxyErr) {
+        cachedSystemProxy.at = 0
+        cachedSystemProxy.val = null
+        if (signal?.aborted) throw proxyErr
+      }
+    }
+    const transport = target.protocol === 'http:' ? http : https
+    return { transport, options: {} }
+  }
+
+  return new Promise((resolve, reject) => {
+    connect().then(({ transport, options }) => {
+      if (signal?.aborted) {
+        options?.createConnection?.()?.destroy?.()
+        return reject(new Error('The operation was aborted'))
+      }
+      const request = transport.request({
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (target.protocol === 'http:' ? 80 : 443),
+        path: target.pathname + target.search,
+        method,
+        headers: finalHeaders,
+        ...options,
+      }, response => {
+        resolve({
+          ok: response.statusCode >= 200 && response.statusCode < 300,
+          status: response.statusCode,
+          headers: { get: name => response.headers[String(name).toLowerCase()] ?? null },
+          body: Readable.toWeb(response),
+          async text() {
+            const chunks = []
+            for await (const chunk of response) chunks.push(Buffer.from(chunk))
+            return Buffer.concat(chunks).toString('utf8')
+          },
+          // Response-shaped means Response-complete: the pool proxy is the first
+          // caller that reads JSON off this shim, and a missing method here
+          // surfaces as an opaque 'unreachable' three layers up.
+          async json() { return JSON.parse(await this.text()) },
+        })
+      })
+      request.on('error', reject)
+      const abort = () => request.destroy(new Error('The operation was aborted'))
+      signal?.addEventListener('abort', abort, { once: true })
+      request.on('close', () => signal?.removeEventListener?.('abort', abort))
+      if (body !== undefined) request.write(body, 'utf8')
+      request.end()
+    }).catch(reject)
   })
 }
 

@@ -84,7 +84,7 @@ export const version = readPackageVersion()
 function openExternal(url) {
   if (!/^https?:\/\//i.test(url)) return false
   try {
-    const [command, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+    const [command, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url.replace(/&/g, '^&')]]
       : process.platform === 'darwin' ? ['open', [url]]
         : ['xdg-open', [url]]
     const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true })
@@ -229,7 +229,7 @@ export function apply(ctx, config) {
     const timer = setTimeout(() => controller.abort(), 20_000)
     timer.unref?.()
     try {
-      const response = await directFetch(`${gatewayRoot}/pool`, { headers: { accept: 'application/json' }, signal: controller.signal })
+      const response = await directFetch(`${gatewayRoot}/pool`, { headers: { accept: 'application/json', 'user-agent': 'dsh-our-free-model' }, signal: controller.signal })
       if (!response.ok) throw poolError('gateway-status')
       const data = await response.json()
       // The gateway may answer a degraded snapshot: stars unreachable means
@@ -271,7 +271,7 @@ export function apply(ctx, config) {
     }
     try {
       const response = await directFetch(`${eacAuthRootOf(credential)}/auth/status`, {
-        headers: { accept: 'application/json', ...(local === null ? {} : { 'x-ofm-user': local.token }) },
+        headers: { accept: 'application/json', 'user-agent': 'dsh-our-free-model', ...(local === null ? {} : { 'x-ofm-user': local.token }) },
         signal: AbortSignal.timeout(15_000),
       })
       const data = await response.json().catch(() => null)
@@ -320,8 +320,8 @@ export function apply(ctx, config) {
       const link = crypto.randomBytes(24).toString('base64url')
       const url = `${eacAuthRootOf(credential)}/auth/github/start?link=${link}`
       const prepared = await eacLoginPoller.prepare(link)
-      if (prepared.error !== undefined) return prepared
-      return { url, link, opened: openExternal(url) }
+      if (prepared?.error === 'no-lane' || prepared?.error === 'cancelled' || prepared?.error === 'bad-link') return prepared
+      return { url, link, opened: openExternal(url), ...prepared?.error ? { warn: prepared.error } : {} }
     },
     /** Collect the token the browser flow just produced. */
     poll: link => eacLoginPoller.poll(link),
@@ -337,7 +337,7 @@ export function apply(ctx, config) {
         try {
           await directFetch(`${eacAuthRootOf(credential)}/auth/logout`, {
             method: 'POST',
-            headers: { accept: 'application/json', 'x-ofm-user': local.token },
+            headers: { accept: 'application/json', 'user-agent': 'dsh-our-free-model', 'x-ofm-user': local.token },
             signal: AbortSignal.timeout(8000),
           })
         } catch { /* local removal below is what the user asked for */ }
