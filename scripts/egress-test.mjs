@@ -26,6 +26,12 @@ function check(ok, message) {
   }
 }
 
+/** A stand-in binary: the locator only ever stats and permission-checks it. */
+function writeFakeMihomo(file) {
+  fs.writeFileSync(file, '#!/bin/sh\nexit 0\n')
+  if (process.platform !== 'win32') fs.chmodSync(file, 0o755)
+}
+
 /** Echo target: replies with what it saw; /limited answers 429; /stream trickles. */
 function startTarget() {
   const server = http.createServer((req, res) => {
@@ -238,6 +244,59 @@ async function main() {
     check(false, 'explicit missing binary throws')
   } catch (error) {
     check(String(error.message).includes('does not exist'), 'explicit missing binary throws')
+  }
+  // 3b — the locator has to find a binary in the shell this plugin actually
+  // runs in, not only where a desktop installs one, and it has to answer
+  // `chmod +x` rather than "not found" for the binary a download dropped on
+  // Android without the execute bit. The host's own layout is out of the
+  // test's hands, so PATH is emptied and the home and the prefix are faked:
+  // what survives being checked is the search order and the roots.
+  stage = 'locator roots'
+  const searchHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-home-'))
+  const searchPrefix = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-prefix-'))
+  const savedEnv = { PATH: process.env.PATH, PREFIX: process.env.PREFIX }
+  const savedHomedir = os.homedir
+  try {
+    fs.mkdirSync(path.join(searchHome, '.local/bin'), { recursive: true })
+    fs.mkdirSync(path.join(searchPrefix, 'bin'), { recursive: true })
+    writeFakeMihomo(path.join(searchHome, '.local/bin', 'mihomo'))
+    writeFakeMihomo(path.join(searchPrefix, 'bin', 'mihomo'))
+    os.homedir = () => searchHome
+    process.env.PATH = ''
+    process.env.PREFIX = searchPrefix
+    check(findMihomoBinary('') === path.join(searchHome, '.local/bin', 'mihomo'), 'a ~/.local/bin drop is found without PATH')
+    fs.rmSync(path.join(searchHome, '.local/bin', 'mihomo'))
+    check(findMihomoBinary('') === path.join(searchPrefix, 'bin', 'mihomo'), 'a $PREFIX/bin install is found without PATH')
+    // A pasted install directory — a Clash Verge folder, a `$PREFIX` — is a
+    // plausible answer the user meant; only its own children are searched.
+    const installDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-verge-'))
+    fs.mkdirSync(path.join(installDir, 'bin'), { recursive: true })
+    writeFakeMihomo(path.join(installDir, 'bin', 'mihomo'))
+    check(findMihomoBinary(installDir) === path.join(installDir, 'bin', 'mihomo'), 'a pasted install directory resolves its binary')
+    fs.mkdirSync(path.join(installDir, 'resources'), { recursive: true })
+    try {
+      findMihomoBinary(path.join(installDir, 'resources'))
+      check(false, 'an install directory without a binary explains itself')
+    } catch (error) {
+      check(String(error.message).includes('holds no mihomo'), 'an install directory without a binary explains itself')
+    }
+    if (process.platform !== 'win32') {
+      const blocked = path.join(installDir, 'mihomo')
+      fs.writeFileSync(blocked, '#!/bin/sh\nexit 0\n', { mode: 0o600 })
+      try {
+        findMihomoBinary(blocked)
+        check(false, 'a binary without the execute bit is reported with the fix')
+      } catch (error) {
+        check(String(error.message).includes('chmod +x'), 'a binary without the execute bit is reported with the fix')
+      }
+    }
+    fs.rmSync(installDir, { recursive: true, force: true })
+  } finally {
+    os.homedir = savedHomedir
+    if (savedEnv.PATH === undefined) { delete process.env.PATH } else { process.env.PATH = savedEnv.PATH }
+    if (savedEnv.PREFIX === undefined) { delete process.env.PREFIX } else { process.env.PREFIX = savedEnv.PREFIX }
+    fs.rmSync(searchHome, { recursive: true, force: true })
+    fs.rmSync(searchPrefix, { recursive: true, force: true })
   }
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-egress-'))
   try {

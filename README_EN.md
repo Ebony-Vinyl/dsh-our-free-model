@@ -220,9 +220,13 @@ network you trust, and narrow the sources with a firewall if you can.
 proxy`. Optional and off by default — with it off, requests go direct. Two modes:
 
 - **Subscription mode**: paste a Clash/V2Ray subscription URL; the plugin spawns
-  mihomo locally (auto-detected — e.g. Clash Verge's `verge-mihomo.exe` — or set
-  the path yourself) with a built-in url-test group that re-measures every five
-  minutes and sends traffic to the fastest node, health-checking dead nodes out.
+  mihomo locally (auto-detected — Clash Verge's `verge-mihomo.exe` on a desktop,
+  `$PREFIX/bin` or `~/.local/bin` where the shell is a phone's — or set the path
+  yourself, to the binary or to an install directory) with a built-in url-test
+  group that re-measures every five minutes and sends traffic to the fastest
+  node, health-checking dead nodes out. A binary that is there but has no
+  execute bit — the normal state of one an unzip or a browser just dropped on
+  Android — is reported with the `chmod +x` that repairs it, not as "not found".
   **The subscription URL is treated as a credential** — the path of a
   subscription link *is* its token — so it lives at the same standard as the two
   forward keys: kept in the local settings file, never sent with a request, and

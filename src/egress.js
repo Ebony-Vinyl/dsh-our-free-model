@@ -52,6 +52,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import tls from 'node:tls'
 import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
@@ -685,38 +686,115 @@ export function renderMihomoConfig({ subscription, mixedPort, apiPort, secret, a
 
 /**
  * Locate a mihomo-family binary: the explicit setting first, then PATH, then
- * the install directories of the clients that are actually common (Clash
- * Verge ships `verge-mihomo.exe` beside its GUI). No downloads here — a missing
- * binary is an error the settings page can explain, not a silent fetch.
+ * the directories where an install actually lands. No downloads here — a
+ * missing binary is an error the settings page can explain, not a silent fetch.
+ *
+ * The search is the part that has to keep up with where this plugin runs. A
+ * desktop contributes Clash Verge's install dir (its core ships as
+ * `verge-mihomo.exe` beside the GUI); a phone running only the harness's own
+ * shell contributes nothing of the sort — its mihomo came from `apt` in a
+ * Termux-style `$PREFIX`, or from a manual drop into `~/.local/bin`, and its
+ * `$HOME` is an app-private directory that no desktop convention would name.
+ * So the roots are derived from the environment actually in front of us
+ * (`os.homedir()`, `$PREFIX`) rather than from a hard-coded home, which — set
+ * to an empty string by a stripped sandbox env — used to resolve to a relative
+ * `.local/bin` and search the working directory by accident.
+ *
+ * The other half is the execute bit. A file that `curl -o`, a browser or an
+ * unzip just placed on Android has none, and `spawn` then fails with a bare
+ * `EACCES` that says nothing about the fix. A binary that is present but not
+ * executable is therefore never *returned* — it is remembered, and reported
+ * with the command that repairs it if nothing better turns up, so the settings
+ * page answers with `chmod +x` instead of "not found".
  */
 export function findMihomoBinary(explicit) {
   const given = String(explicit ?? '').trim()
   if (given !== '') {
-    if (!fs.existsSync(given)) throw new Error(`the mihomo path "${given}" does not exist`)
-    return given
+    const stat = statOrNull(given)
+    if (stat === null) throw new Error(`the mihomo path "${given}" does not exist`)
+    // A pasted install directory is a plausible thing to mean — a Clash Verge
+    // or mihomo folder, a `$PREFIX`. Its children are searched (the binaries
+    // sit in `bin/` or Clash Verge's `resources/`), never a whole tree below.
+    const found = stat.isDirectory()
+      ? scanMihomo([given, path.join(given, 'bin'), path.join(given, 'resources')], mihomoNames())
+      : scanMihomo([path.dirname(given)], [path.basename(given)])
+    if (found === null) throw new Error(`the mihomo path "${given}" holds no mihomo binary`)
+    if (!found.executable) throw notExecutable(found.path)
+    return found.path
   }
-  const windows = process.platform === 'win32'
-  const names = windows
+  const found = scanMihomo(mihomoSearchRoots(), mihomoNames())
+  if (found === null) {
+    throw new Error('no mihomo binary found — set its path in the egress settings (Clash Verge installs one, or get it from MetaCubeX/mihomo)')
+  }
+  if (!found.executable) throw notExecutable(found.path)
+  return found.path
+}
+
+/** The names a mihomo-family binary ships under, per platform. */
+function mihomoNames() {
+  return process.platform === 'win32'
     ? ['mihomo.exe', 'verge-mihomo.exe', 'verge-mihomo-alpha.exe', 'clash-meta.exe', 'clash.exe']
     : ['mihomo', 'clash-meta', 'clash']
-  const dirs = []
+}
+
+/**
+ * The directories worth searching, in the order a hit should win: what the
+ * caller put on PATH first, then what a user installed, then system dirs.
+ */
+function mihomoSearchRoots() {
+  const roots = []
   for (const entry of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (entry.trim() !== '') dirs.push(entry)
+    if (entry.trim() !== '') roots.push(entry)
   }
-  const roots = windows
-    ? [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], path.join(process.env.LOCALAPPDATA ?? '', 'Programs')]
-        .filter(Boolean)
-        .flatMap(root => [path.join(root, 'Clash Verge'), path.join(root, 'clash-verge'), path.join(root, 'mihomo')])
-    : ['/usr/local/bin', '/usr/bin', '/opt/homebrew/bin', path.join(process.env.HOME ?? '', '.local/bin')]
-  for (const dir of [...dirs, ...roots]) {
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local')
+    for (const root of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], path.join(local, 'Programs')].filter(Boolean)) {
+      roots.push(path.join(root, 'Clash Verge'), path.join(root, 'clash-verge'), path.join(root, 'mihomo'))
+    }
+    return roots
+  }
+  // The home is read through `os.homedir()`, not `$HOME`: the harness's own
+  // shells set both, but a stripped environment sets neither, and only one of
+  // the two is guaranteed to resolve to the real directory.
+  const home = os.homedir()
+  roots.push(path.join(home, '.local/bin'), path.join(home, 'bin'))
+  // Termux and the harness's shell both run under a prefix of their own; a
+  // `apt install mihomo` there lands in `$PREFIX/bin`, which is not on PATH
+  // inside the plugin's process.
+  const prefix = String(process.env.PREFIX ?? '').trim()
+  if (prefix !== '') roots.push(path.join(prefix, 'bin'))
+  roots.push('/usr/local/bin', '/usr/bin', '/opt/homebrew/bin')
+  return roots
+}
+
+/** First hit in `dirs`, executable preferred — see the note in `findMihomoBinary`. */
+function scanMihomo(dirs, names) {
+  let blocked = null
+  for (const dir of dirs) {
     for (const name of names) {
       const candidate = path.join(dir, name)
-      try {
-        if (fs.statSync(candidate).isFile()) return candidate
-      } catch { /* not there; next */ }
+      if (statOrNull(candidate)?.isFile() !== true) continue
+      if (isExecutable(candidate)) return { path: candidate, executable: true }
+      if (blocked === null) blocked = candidate
     }
   }
-  throw new Error('no mihomo binary found — set its path in the egress settings (Clash Verge installs one, or get it from MetaCubeX/mihomo)')
+  return blocked === null ? null : { path: blocked, executable: false }
+}
+
+/** One stat, `null` for anything that is not there. */
+function statOrNull(target) {
+  try { return fs.statSync(target) } catch { return null }
+}
+
+/** Windows has no execute bit; everywhere else the kernel enforces one. */
+function isExecutable(target) {
+  if (process.platform === 'win32') return true
+  try { fs.accessSync(target, fs.constants.X_OK); return true } catch { return false }
+}
+
+/** The answer for a binary that is present but unusable: the fix, not the search advice. */
+function notExecutable(target) {
+  return new Error(`the mihomo at "${target}" is not executable — run: chmod +x "${target}"`)
 }
 
 /** Hostname of a URL, for display: the path of a subscription link is its credential. */
