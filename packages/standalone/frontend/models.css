@@ -293,3 +293,224 @@
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   夜主题精修 · 模型清单（redesign-night）
+   范围：仅新增 [data-theme="dark"] 覆盖；不改动浅色与既有选择器。
+   ========================================================================== */
+
+/* ---------- 夜主题变量：深海层次 + 清晰数据层级 ---------- */
+[data-theme="dark"] {
+  --md-surface: #11161f;
+  --md-surface-raised: #151b26;
+  --md-surface-sunken: #0b0f16;
+  --md-line: rgba(255, 255, 255, 0.07);
+  --md-line-soft: rgba(255, 255, 255, 0.045);
+  --md-line-strong: rgba(255, 255, 255, 0.115);
+  --md-ink: #edf2f8;
+  --md-ink-secondary: #a8b3c4;
+  --md-ink-tertiary: #8c99ac;
+  --md-ink-muted: #768398;
+  --md-accent-soft: rgba(91, 141, 239, 0.14);
+  --md-accent-border: rgba(91, 141, 239, 0.3);
+  --md-success-soft: rgba(62, 207, 160, 0.12);
+  --md-success-border: rgba(62, 207, 160, 0.26);
+  --md-warning-soft: rgba(212, 168, 67, 0.12);
+  --md-warning-border: rgba(212, 168, 67, 0.26);
+  --md-error-soft: rgba(227, 106, 106, 0.12);
+  --md-error-border: rgba(227, 106, 106, 0.26);
+  --md-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.42), 0 18px 44px -30px rgba(0, 0, 0, 0.9);
+  --md-shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 6px rgba(0, 0, 0, 0.38), 0 24px 56px -32px rgba(0, 0, 0, 0.95), 0 0 28px -16px rgba(91, 141, 239, 0.55);
+  --md-shadow-inset: inset 0 1px 3px rgba(0, 0, 0, 0.34);
+}
+
+/* ---------- 摘要条：数字与说明拉开层级 ---------- */
+[data-theme="dark"] .model-summary {
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+  color: var(--md-ink-tertiary);
+}
+[data-theme="dark"] .model-summary > span:first-child {
+  color: var(--md-ink-secondary);
+}
+[data-theme="dark"] .model-summary > span:last-child {
+  color: var(--md-ink-muted);
+}
+
+/* ---------- 筛选器：深色输入槽 + 箭头不被背景覆盖 ---------- */
+[data-theme="dark"] .model-filters select {
+  background-color: #0c1119;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238c99ac' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #0b1018 0%, #0c1119 100%);
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 12px center, 0 0;
+  background-size: 10px 6px, auto;
+  border-color: rgba(255, 255, 255, 0.085);
+  color: var(--md-ink);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.012);
+  padding-right: 32px;
+}
+[data-theme="dark"] .model-search input {
+  background: linear-gradient(180deg, #0b1018 0%, #0c1119 100%);
+  border-color: rgba(255, 255, 255, 0.085);
+  color: var(--md-ink);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.012);
+}
+[data-theme="dark"] .model-filters select:hover,
+[data-theme="dark"] .model-search input:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+[data-theme="dark"] .model-filters select:focus {
+  border-color: rgba(91, 141, 239, 0.8);
+  background-color: #0d141f;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238c99ac' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #0d141f 0%, #0c121b 100%);
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 12px center, 0 0;
+  background-size: 10px 6px, auto;
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.14), 0 0 18px -8px rgba(91, 141, 239, 0.6), inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+[data-theme="dark"] .model-search input:focus {
+  border-color: rgba(91, 141, 239, 0.8);
+  background: linear-gradient(180deg, #0d141f 0%, #0c121b 100%);
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.14), 0 0 18px -8px rgba(91, 141, 239, 0.6), inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+[data-theme="dark"] .model-search > svg {
+  color: var(--md-ink-tertiary);
+}
+[data-theme="dark"] .model-search input::placeholder {
+  color: var(--md-ink-muted);
+}
+
+/* ---------- 工具栏：筛选 chip 与结果计数 ---------- */
+[data-theme="dark"] .model-list-toolbar > span {
+  color: var(--md-ink-tertiary);
+}
+[data-theme="dark"] .model-list-toolbar .channel-filters {
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.055), inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+[data-theme="dark"] .model-list-toolbar .channel-filters button[aria-pressed="true"] {
+  background: linear-gradient(180deg, #1a2231 0%, #151b26 100%);
+  color: var(--md-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 8px -6px rgba(0, 0, 0, 0.9);
+}
+
+/* ---------- 表格外壳：仪器面板槽与边缘折射 ---------- */
+[data-theme="dark"] .model-table {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 24%),
+    #11161f;
+  border-color: rgba(255, 255, 255, 0.075);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.012),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 22px 52px -34px rgba(0, 0, 0, 0.95);
+}
+[data-theme="dark"] .model-table-header {
+  background: rgba(21, 27, 38, 0.94);
+  color: var(--md-ink-tertiary);
+  border-bottom-color: rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.025), 0 8px 20px -18px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(16px) saturate(1.18);
+  -webkit-backdrop-filter: blur(16px) saturate(1.18);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+}
+[data-theme="dark"] .model-table-row {
+  background-color: #11161f;
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+  font-variant-numeric: tabular-nums;
+}
+[data-theme="dark"] .model-table-row:hover,
+[data-theme="dark"] .model-table-row:focus-within {
+  background-color: #161e2b;
+  box-shadow: inset 2px 0 0 rgba(91, 141, 239, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.03), inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+}
+
+/* ---------- 行内数据与操作按钮 ---------- */
+[data-theme="dark"] .model-identity strong {
+  color: var(--md-ink);
+}
+[data-theme="dark"] .model-identity code {
+  color: var(--md-ink-tertiary);
+}
+[data-theme="dark"] .model-source > span, [data-theme="dark"] .model-limits {
+  color: var(--md-ink-secondary);
+}
+[data-theme="dark"] .model-limits small, [data-theme="dark"] .model-state > small {
+  color: var(--md-ink-muted);
+}
+[data-theme="dark"] .model-row-actions .ui-button-ghost {
+  color: var(--md-ink-secondary);
+}
+[data-theme="dark"] .model-row-actions .ui-button-ghost:hover {
+  background: rgba(255, 255, 255, 0.075);
+  color: var(--md-ink);
+}
+[data-theme="dark"] .model-row-actions .ui-button-outline {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.03));
+  border-color: rgba(255, 255, 255, 0.11);
+}
+[data-theme="dark"] .model-row-actions .ui-button-outline:hover {
+  background: linear-gradient(180deg, rgba(91, 141, 239, 0.16), rgba(91, 141, 239, 0.08));
+  border-color: rgba(91, 141, 239, 0.34);
+}
+[data-theme="dark"] .model-row-actions .md-copy-done {
+  color: #4fe0b1 !important;
+  background: rgba(62, 207, 160, 0.14) !important;
+  box-shadow: inset 0 0 0 1px rgba(62, 207, 160, 0.12);
+}
+
+/* ---------- 反馈与测试结果 ---------- */
+[data-theme="dark"] .model-feedback {
+  color: #58ddb0;
+  text-shadow: 0 0 16px rgba(62, 207, 160, 0.12);
+}
+[data-theme="dark"] .model-test-result {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+[data-theme="dark"] .model-test-heading strong {
+  color: var(--md-ink);
+}
+[data-theme="dark"] .model-test-heading span {
+  color: var(--md-ink-tertiary);
+}
+[data-theme="dark"] .model-test-result pre {
+  background: #090d13;
+  border-color: rgba(255, 255, 255, 0.07);
+  color: #b9c6d8;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.012);
+}
+
+/* ---------- 空态：弱光环境里的可读引导 ---------- */
+[data-theme="dark"] .model-empty {
+  color: var(--md-ink-tertiary);
+  background: radial-gradient(420px 160px at 50% 30%, rgba(91, 141, 239, 0.045), transparent 70%);
+}
+[data-theme="dark"] .model-empty h2 {
+  color: var(--md-ink-secondary);
+}
+[data-theme="dark"] .model-empty p {
+  color: var(--md-ink-tertiary);
+}
+[data-theme="dark"] .model-empty > svg {
+  color: var(--md-ink-muted);
+  opacity: 0.65;
+  filter: drop-shadow(0 0 12px rgba(91, 141, 239, 0.12));
+}
+
+/* ---------- 滚动区：让长列表的滚动位置在暗底上可见 ---------- */
+[data-theme="dark"] .model-scroll {
+  scrollbar-color: rgba(140, 153, 172, 0.34) transparent;
+}
+[data-theme="dark"] .model-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(180, 193, 212, 0.28), rgba(126, 139, 161, 0.18));
+  border: 1px solid rgba(3, 6, 10, 0.5);
+}
+[data-theme="dark"] .model-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(180, 193, 212, 0.42), rgba(126, 139, 161, 0.28));
+}

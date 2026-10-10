@@ -385,12 +385,346 @@
   .usage-pagination > span:first-child { flex-basis: 100%; }
 }
 
+/* ============================================
+   打磨层 — 精密仪表盘 · 编辑级排版
+   本节只做增强：全部为新增选择器与新增关键帧，
+   不改动上方任何既有 class 名、DOM 契约或关键帧名称。
+   动效只使用 transform / opacity 两个属性。
+   ============================================ */
+
+@keyframes us-grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes us-chart-breathe {
+  0%, 100% { opacity: 0.45; transform: translateY(0); }
+  50% { opacity: 0.8; transform: translateY(-2px); }
+}
+
+/* ---- 指标卡：按位次建立四色家族（蓝 / 绿 / 黄 / 紫） ---- */
+.ov-metric {
+  --ov-accent: var(--us-accent);
+  --ov-accent-soft: var(--us-accent-soft);
+  --ov-icon-ring: rgba(255, 255, 255, 0.6) 0 0 0 1px inset;
+  --ov-icon-glow: transparent 0 0 0 0;
+  --ov-card-hover-shadow:
+    0 10px 26px -6px color-mix(in srgb, var(--ov-accent) 20%, transparent),
+    0 3px 10px -3px rgba(32, 35, 41, 0.08),
+    0 0 0 1px inset color-mix(in srgb, var(--ov-accent) 12%, transparent);
+}
+.ov-metric:nth-child(1) { --ov-accent: #2563eb; --ov-accent-soft: #eef4ff; }
+.ov-metric:nth-child(2) { --ov-accent: #16805a; --ov-accent-soft: #edf8f2; }
+.ov-metric:nth-child(3) { --ov-accent: #946609; --ov-accent-soft: #fff7e6; }
+.ov-metric:nth-child(4) { --ov-accent: #6b5b95; --ov-accent-soft: #f0eef9; }
+.ov-metric:nth-child(5) { --ov-accent: #b63647; --ov-accent-soft: #fdf2f2; }
+.ov-metric:nth-child(6) { --ov-accent: #0e7490; --ov-accent-soft: #e8f6fa; }
+
+/* 数据主角：数字用等宽数字 + 紧凑字距，hover 时轻微提亮 */
+.ov-metric strong {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.015em;
+  transition: color var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-metric:hover strong { color: var(--ov-accent); }
+
+/* 指标名：小号大写感的精密标签 */
+.ov-metric > div > span {
+  font-weight: 500;
+  color: var(--us-ink-secondary);
+}
+
+/* 图标容器升级：色彩印章 + 内描边，hover 有呼应 */
+.ov-metric-icon {
+  border-radius: 9px;
+  box-shadow: var(--ov-icon-ring), var(--ov-icon-glow), 0 1px 2px rgba(32, 35, 41, 0.05);
+}
+.ov-metric:hover .ov-metric-icon {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    var(--ov-icon-ring),
+    color-mix(in srgb, var(--ov-accent) 32%, transparent) 0 3px 11px -2px;
+}
+
+/* 卡片 hover：色相染过的柔和光晕，而不是纯黑阴影 */
+.ov-metric:hover { box-shadow: var(--ov-card-hover-shadow); }
+
+/* 递减的卡片级联入场 */
+.usage-metrics .ov-metric {
+  animation: us-fade-in-up var(--us-duration-slow) var(--us-ease-out) both;
+}
+.usage-metrics .ov-metric:nth-child(1) { animation-delay: 0ms; }
+.usage-metrics .ov-metric:nth-child(2) { animation-delay: 45ms; }
+.usage-metrics .ov-metric:nth-child(3) { animation-delay: 90ms; }
+.usage-metrics .ov-metric:nth-child(4) { animation-delay: 135ms; }
+.usage-metrics .ov-metric:nth-child(5) { animation-delay: 180ms; }
+.usage-metrics .ov-metric:nth-child(6) { animation-delay: 225ms; }
+
+/* ---- 趋势图：柱子生长 + 呼吸式 hover ---- */
+.usage-day-bar,
+.ov-chart .dashboard-chart-bar {
+  transform-origin: bottom center;
+}
+.usage-day-bar {
+  background: linear-gradient(180deg, #4c82f0, var(--us-accent));
+  min-height: 3px;
+}
+.usage-day-bar:not(.zero),
+.ov-chart .dashboard-chart-bar:not(.zero) {
+  animation: us-grow-y 680ms var(--us-ease-out) backwards;
+}
+.usage-day:nth-child(1) .usage-day-bar { animation-delay: 60ms; }
+.usage-day:nth-child(2) .usage-day-bar { animation-delay: 70ms; }
+.usage-day:nth-child(3) .usage-day-bar { animation-delay: 80ms; }
+.usage-day:nth-child(4) .usage-day-bar { animation-delay: 90ms; }
+.usage-day:nth-child(5) .usage-day-bar { animation-delay: 100ms; }
+.usage-day:nth-child(6) .usage-day-bar { animation-delay: 110ms; }
+.usage-day:nth-child(7) .usage-day-bar { animation-delay: 120ms; }
+.usage-day:nth-child(8) .usage-day-bar { animation-delay: 130ms; }
+.usage-day:nth-child(9) .usage-day-bar { animation-delay: 140ms; }
+.usage-day:nth-child(10) .usage-day-bar { animation-delay: 150ms; }
+.usage-day:nth-child(n+11) .usage-day-bar { animation-delay: 160ms; }
+.usage-day:nth-child(n+21) .usage-day-bar { animation-delay: 190ms; }
+.ov-chart-col:nth-child(2) .dashboard-chart-bar { animation-delay: 60ms; }
+.ov-chart-col:nth-child(3) .dashboard-chart-bar { animation-delay: 100ms; }
+.ov-chart-col:nth-child(4) .dashboard-chart-bar { animation-delay: 140ms; }
+.ov-chart-col:nth-child(5) .dashboard-chart-bar { animation-delay: 180ms; }
+.ov-chart-col:nth-child(6) .dashboard-chart-bar { animation-delay: 220ms; }
+.ov-chart-col:nth-child(7) .dashboard-chart-bar { animation-delay: 260ms; }
+.ov-chart-col:nth-child(8) .dashboard-chart-bar { animation-delay: 300ms; }
+
+/* hover / 键盘聚焦：提亮 + 轻微放大 + 柔和光晕 */
+.usage-day:hover .usage-day-bar,
+.usage-day:focus .usage-day-bar,
+.usage-day:focus-visible .usage-day-bar {
+  transform: scaleY(1.025);
+  box-shadow: 0 6px 16px -6px rgba(37, 99, 235, 0.4);
+}
+.usage-day:hover .usage-day-bar:not(.zero) {
+  background: linear-gradient(180deg, #3f76ee, var(--us-accent-strong));
+}
+.usage-day span {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  transition: color var(--us-duration-fast) var(--us-ease-out);
+}
+.usage-day:hover span,
+.usage-day:focus span,
+.usage-day:focus-visible span { color: var(--us-ink-secondary); }
+
+/* ---- 图表提示气泡：加边框与阴影，读起来更像仪表读数 ---- */
+.ov-chart-col::after {
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 12px -3px rgba(32, 35, 41, 0.28);
+}
+
+/* ---- 空态：不只是灰字，给引导容器 ---- */
+.ov-chart-empty svg {
+  animation: us-chart-breathe 2.6s ease-in-out infinite;
+}
+.ov-chart-empty span {
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+.ov-chart-empty small {
+  color: var(--us-ink-muted);
+}
+.usage-empty > svg {
+  border-radius: 999px;
+  padding: 10px;
+  background: var(--us-surface-sunken);
+  border: 1px solid var(--us-line-soft);
+}
+.usage-empty h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.usage-window-empty {
+  padding: 13px 15px;
+  border: 1px dashed var(--us-line);
+  border-radius: 8px;
+  background: var(--us-surface-sunken);
+  line-height: 1.7;
+}
+.usage-empty p,
+.usage-window-empty {
+  text-wrap: pretty;
+}
+
+/* ---- 表格：数字列对齐、表头更有秩序 ---- */
+.usage-model-table th:not(:first-child) { text-align: right; }
+.usage-model-table th { color: var(--us-ink-secondary); }
+.usage-model-table td { font-variant-numeric: tabular-nums; }
+.usage-model-table td:first-child strong { letter-spacing: -0.005em; }
+.usage-model-table td small {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* ---- 筛选与搜索：统一圆角与图标对齐，聚焦反馈更明确 ---- */
+.usage-model-search { display: flex; align-items: center; }
+.usage-model-search > svg { top: auto; }
+.usage-model-search input {
+  height: 40px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-model-search input:hover { background: var(--us-surface-raised); }
+.usage-model-search input:focus {
+  background: var(--us-surface);
+  box-shadow: 0 0 0 3px var(--us-accent-soft), inset 0 0 0 1px var(--us-accent-border);
+}
+.usage-model-filters select {
+  height: 40px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-model-filters select:hover { background: var(--us-surface-raised); }
+.usage-model-filters select:focus {
+  background: var(--us-surface);
+  box-shadow: 0 0 0 3px var(--us-accent-soft), inset 0 0 0 1px var(--us-accent-border);
+}
+.channel-filters button { font-variant-numeric: tabular-nums; }
+.channel-filters button[aria-pressed="true"] {
+  transition: background var(--us-duration-fast) var(--us-ease-out), color var(--us-duration-fast) var(--us-ease-out), transform var(--us-duration-fast) var(--us-ease-out);
+}
+.channel-filters button[aria-pressed="true"]:hover { transform: translateY(-1px); }
+
+/* ---- 其他细节 ---- */
+.usage-scroll-hint { color: var(--us-ink-tertiary); text-wrap: pretty; }
+.usage-feedback {
+  display: inline-block;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--us-success-soft);
+  border: 1px solid var(--us-success-border);
+  font-weight: 500;
+}
+.usage-pagination { font-variant-numeric: tabular-nums; }
+.ov-failure-row:hover { transform: translateX(2px); }
+.ov-failure-row {
+  transition: background var(--us-duration-fast) var(--us-ease-out), transform var(--us-duration-fast) var(--us-ease-out);
+}
+.ov-endpoint code { font-variant-numeric: tabular-nums; }
+.ov-quick .ov-endpoint { border-radius: 8px; }
+
+/* ============================================
+   深色主题：同样的家族色彩，换成仪表指示灯
+   ============================================ */
+[data-theme="dark"] .ov-metric {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 3px rgba(4, 6, 10, 0.35);
+  --ov-icon-ring: rgba(255, 255, 255, 0.05) 0 0 0 1px inset;
+  --ov-icon-glow: color-mix(in srgb, var(--ov-accent) 20%, transparent) 0 0 10px 0;
+  --ov-card-hover-shadow:
+    0 12px 34px -10px rgba(0, 0, 0, 0.62),
+    0 0 24px -14px color-mix(in srgb, var(--ov-accent) 55%, transparent),
+    0 0 0 1px inset color-mix(in srgb, var(--ov-accent) 18%, transparent);
+}
+[data-theme="dark"] .ov-metric:nth-child(1) { --ov-accent: #5b8def; --ov-accent-soft: rgba(91, 141, 239, 0.12); }
+[data-theme="dark"] .ov-metric:nth-child(2) { --ov-accent: #3ecfa0; --ov-accent-soft: rgba(62, 207, 160, 0.1); }
+[data-theme="dark"] .ov-metric:nth-child(3) { --ov-accent: #d4a843; --ov-accent-soft: rgba(212, 168, 67, 0.1); }
+[data-theme="dark"] .ov-metric:nth-child(4) { --ov-accent: #c88bbd; --ov-accent-soft: rgba(155, 91, 137, 0.12); }
+[data-theme="dark"] .ov-metric:nth-child(5) { --ov-accent: #e36a6a; --ov-accent-soft: rgba(227, 106, 106, 0.1); }
+[data-theme="dark"] .ov-metric:nth-child(6) { --ov-accent: #4cc4e0; --ov-accent-soft: rgba(76, 196, 224, 0.1); }
+
+/* 图表 hover 光晕跟随卡片色相（蓝色家族）而不是纯黑 */
+[data-theme="dark"] .ov-metric:hover .ov-metric-icon {
+  box-shadow:
+    rgba(255, 255, 255, 0.06) 0 0 0 1px inset,
+    color-mix(in srgb, var(--ov-accent) 40%, transparent) 0 0 14px 0;
+}
+[data-theme="dark"] .usage-day:hover .usage-day-bar,
+[data-theme="dark"] .usage-day:focus .usage-day-bar,
+[data-theme="dark"] .usage-day:focus-visible .usage-day-bar {
+  box-shadow: 0 0 16px -2px rgba(91, 141, 239, 0.45);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar {
+  box-shadow: 0 0 14px -2px rgba(91, 141, 239, 0.45);
+}
+[data-theme="dark"] .usage-day-bar {
+  background: linear-gradient(180deg, #6e9df2, #3f76ee);
+}
+[data-theme="dark"] .usage-day-bar.zero {
+  background: rgba(255, 255, 255, 0.07);
+}
+[data-theme="dark"] .usage-day:hover .usage-day-bar:not(.zero) {
+  background: linear-gradient(180deg, #7aa5f5, #4c82f0);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-bar {
+  background: linear-gradient(180deg, #6e9df2, #4c82f0);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-bar.zero {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* 图表格线：更轻，让柱子成为主角 */
+.chart-grid-lines span,
+.usage-trend-chart {
+  border-color: var(--us-line-soft);
+}
+[data-theme="dark"] .chart-grid-lines span { border-color: rgba(255, 255, 255, 0.03); }
+[data-theme="dark"] .usage-trend-chart { border-bottom-color: rgba(255, 255, 255, 0.03); }
+
+/* 深色下的空态与标签 */
+[data-theme="dark"] .usage-empty > svg {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .usage-window-empty {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+[data-theme="dark"] .usage-model-table th { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .usage-model-search input:hover,
+[data-theme="dark"] .usage-model-filters select:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+[data-theme="dark"] .usage-model-search input:focus,
+[data-theme="dark"] .usage-model-filters select:focus {
+  background: #13161d;
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.16), inset 0 0 0 1px rgba(91, 141, 239, 0.35);
+}
+[data-theme="dark"] .ov-chart-col::after {
+  background: #e8ecf1;
+  color: #13161d;
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .ov-endpoint code { color: #7aa5f5; }
+[data-theme="dark"] .ov-failure-row:hover { background: rgba(227, 106, 106, 0.08); }
+
+/* ---- 窄屏微调 ---- */
+@media (max-width: 700px) {
+  .usage-metrics .ov-metric strong { letter-spacing: -0.01em; }
+  .ov-metric-icon { border-radius: 8px; }
+  .usage-day-bar { max-width: 26px; }
+}
+@media (max-width: 420px) {
+  .usage-trend-chart { gap: 6px; }
+}
+
 /* ---- 减少动画 ---- */
 @media (prefers-reduced-motion: reduce) {
   .usage-metrics, .usage-scope, .usage-trend, .usage-model-panel,
-  .ov-source-row, .ov-metric, .usage-day-bar, .ov-chart .dashboard-chart-bar {
+  .ov-source-row, .ov-metric, .usage-day-bar, .ov-chart .dashboard-chart-bar,
+  .ov-chart-empty svg {
     animation: none !important;
     transition: none !important;
   }
   .ov-chart-col::after { display: none; }
+  .usage-metrics .ov-metric:hover,
+  .ov-metric:hover,
+  .ov-metric:hover .ov-metric-icon,
+  .ov-failure-row:hover,
+  .usage-day:hover .usage-day-bar,
+  .usage-day:focus .usage-day-bar,
+  .usage-day:focus-visible .usage-day-bar,
+  .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar {
+    transform: none !important;
+  }
 }
