@@ -29,6 +29,9 @@ stats.json
 /aoci.code.txt
 /aoci.meta.txt
 
+# PR 审查截图保留在本地，按需作为 PR 附件上传。
+.pr-screenshots/
+
 # AOCI agent host integration (machine-bound; do not commit)
 .codex/config.toml
 .codex/config.toml.backup.*
