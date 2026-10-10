@@ -31879,6 +31879,14 @@ function withDeadModelPruning(providers, adapter) {
   });
 }
 
+// src/image-pricing.js
+var FALLBACK_IMAGE_PRICING = Object.freeze({
+  /** @param {readonly { offloaded?: boolean }[]} images */
+  priceImages(images) {
+    return images.map((image) => image.offloaded === true ? { visualTokens: 0, text: "[image omitted]" } : { visualTokens: 1024, text: "[image]" });
+  }
+});
+
 // vendor/channel-pack/src/token-ledger.ts
 var TOKEN_LEDGER_LIMIT = 500;
 var ledger = [];
@@ -32244,6 +32252,13 @@ function wrapAdapterWithTokenLedger(providers, adapter) {
   };
   return new Proxy(adapter, {
     get(target, prop) {
+      if (prop === "imageRequestPricing") {
+        return (provider2, model) => {
+          const original = Reflect.get(target, prop, target);
+          const pricing = typeof original === "function" ? original.call(target, provider2, model) : void 0;
+          return pricing ?? FALLBACK_IMAGE_PRICING;
+        };
+      }
       if (prop === "stream") {
         return (options) => accountingStream(
           options,

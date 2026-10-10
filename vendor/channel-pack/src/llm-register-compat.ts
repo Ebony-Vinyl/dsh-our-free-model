@@ -72,6 +72,7 @@
  */
 
 import { withDeadModelPruning } from './dead-model-store.js'
+import { FALLBACK_IMAGE_PRICING } from '../../../src/image-pricing.js'
 
 /** dsh-llm 对「configurable provider 已存在」抛的 code。**当前仅作防御**保留。 */
 const DUPLICATE_DIRECTORY = 'DUPLICATE_DIRECTORY'
@@ -117,7 +118,7 @@ import { recordTokenUsage, peekLedgerAccount } from './token-ledger.js'
 import { channelOfOptions } from './openai-gateway/channel.js'
 
 /**
- * dsh-llm 对 adapter 的最小形状契约（本文件只包 `stream`，其余方法原样透传）。
+ * dsh-llm 对 adapter 的最小形状契约；流式记账和缺失视觉计价在注册边界补齐。
  */
 export interface StreamCapableAdapter {
   stream(options: never): AsyncIterable<unknown>
@@ -174,6 +175,14 @@ export function wrapAdapterWithTokenLedger<T extends object>(providers: readonly
 
   return new Proxy(adapter, {
     get(target, prop) {
+      if (prop === 'imageRequestPricing') {
+        return (provider: string, model: string) => {
+          const original = Reflect.get(target, prop, target) as unknown
+          // 保留厂商已提供的同步计价；原对象作为 this，兼容适配器私有字段。
+          const pricing = typeof original === 'function' ? original.call(target, provider, model) : undefined
+          return pricing ?? FALLBACK_IMAGE_PRICING
+        }
+      }
       if (prop === 'stream') {
         // ⚠️ `this` 必须绑回**原适配器**（target 而不是 proxy）：真实适配器的
         // 私有字段（`#field`）对 proxy 的 this 不可见，绑 proxy 会抛 TypeError。
