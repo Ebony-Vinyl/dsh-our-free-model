@@ -344,6 +344,11 @@ window.__ModuleLoader__.load({
         'chan.login.expired': '等待超时，请重新发起登录。',
         'chan.login.done': '已接入：{login}',
         'chan.login.failed': '登录未完成：{reason}',
+        // ZCode 授权页二选一：智谱开放平台（bigmodel.cn）vs z.ai 国际版
+        // （chat.z.ai）。两者是**不同的账号体系**，凭据不通用。
+        'chan.zcode.provider': '登录渠道',
+        'chan.zcode.bigmodel': 'bigmodel.cn',
+        'chan.zcode.zai': 'z.ai 国际版',
         'chan.test.ok': '连接正常（{ms} ms）',
         'chan.test.failed': '测试失败：{reason}',
         'chan.claim.result': '已领取 {count} 个账号，共 {credit} 积分。',
@@ -956,6 +961,11 @@ window.__ModuleLoader__.load({
         'chan.login.expired': 'Timed out — please start the sign-in again.',
         'chan.login.done': 'Connected: {login}',
         'chan.login.failed': 'Sign-in did not complete: {reason}',
+        // ZCode ships two unrelated account systems; the credential earned on one
+        // is not accepted by the other, so the route has to be picked up front.
+        'chan.zcode.provider': 'Sign-in route',
+        'chan.zcode.bigmodel': 'bigmodel.cn',
+        'chan.zcode.zai': 'z.ai international',
         'chan.test.ok': 'Connection healthy ({ms} ms)',
         'chan.test.failed': 'Test failed: {reason}',
         'chan.claim.result': 'Claimed for {count} account(s), {credit} credits in total.',
@@ -3587,6 +3597,14 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * ZCode 登录渠道的本地记忆键。
+     *
+     * 只记「上次选了哪个」，不记任何凭据 —— 这是个纯偏好，放 localStorage
+     * 就够了，不值得为此往插件设置里加字段（那会让所有渠道的设置页都多个空项）。
+     */
+    const ZCODE_PROVIDER_KEY = 'ofm:zcode:login-provider'
+
+    /**
      * The host RPC the pack registered at `/api/channel-pack`.
      *
      * The pack's own browser half used the shell's connection service; this page
@@ -3643,6 +3661,29 @@ window.__ModuleLoader__.load({
       const balanceGeneration = useRef(0)
       const claimPending = useRef(false)
       const creditCapability = CHANNEL_CREDITS[channel.id]
+      /**
+       * ZCode 授权走哪条腿（`bigmodel` 智谱开放平台 / `zai` z.ai 国际版）。
+       *
+       * ## 为什么必须在发起前定死
+       *
+       * 服务端按 `provider` 分发**不同的授权页与不同的 token 块**
+       * （`bigmodel.cn/login?appId=zcode&…` vs `chat.z.ai/api/oauth/authorize?…`，
+       * 凭据分别落在 `data.bigmodel` / `data.zai`）—— 两条腿是**互不相通的
+       * 账号体系**，授权完了没法补选。
+       *
+       * ⚠ 缺省仍是 `'bigmodel'`：与 RPC 的 `normalizeZcodeLoginProvider()`
+       * 兜底一致，老客户端不传这个字段时的行为不变。
+       * 选过的记在 localStorage，免得每加一个账号都要重选一次。
+       */
+      const [zcodeProvider, setZcodeProvider] = useState(() => {
+        try {
+          return window.localStorage.getItem(ZCODE_PROVIDER_KEY) === 'zai' ? 'zai' : 'bigmodel'
+        } catch { return 'bigmodel' }
+      })
+      const chooseZcodeProvider = value => {
+        setZcodeProvider(value)
+        try { window.localStorage.setItem(ZCODE_PROVIDER_KEY, value) } catch { /* 隐私模式 / 存储被禁用 */ }
+      }
       const balanceLabel = creditCapability?.unit === 'tokens' ? t('chan.credits.tokens')
         : creditCapability?.unit === 'dollars' ? t('chan.credits.dollars')
           : creditCapability?.quota ? t('chan.credits.quota') : t('chan.credits.left')
@@ -3747,7 +3788,16 @@ window.__ModuleLoader__.load({
       const startLogin = async () => {
         setBusy('add'); setNotice('')
         try {
-          const value = await rpc('account.create', { provider: channel.id }, 90_000)
+          /**
+           * ⚠ 只有 zcode 需要带 `zcodeProvider`：RPC 的 `account.create` 对
+           * 其它 provider 完全不看这个字段，带了也只是噪音。
+           * 服务端侧还有一道白名单（`normalizeZcodeLoginProvider`），未登记的
+           * 值会**回落**成 bigmodel 而不是报错 —— 所以这里必须发准确的值。
+           */
+          const value = await rpc('account.create', {
+            provider: channel.id,
+            ...(channel.id === 'zcode' ? { zcodeProvider } : {}),
+          }, 90_000)
           const accountId = value?.accountId
           const url = value?.loginUrl
           if (typeof accountId !== 'string' || accountId === '') throw new Error('bad-answer')
@@ -3865,6 +3915,24 @@ window.__ModuleLoader__.load({
               ? creditCapability.quota ? t('chan.credits.loaded').replace('{count}', String((balances ?? []).filter(row => Number.isFinite(row.balance?.total)).length)) : kilo(balancesTotal)
               : balances === undefined ? '…' : '—')) : null),
         h('div', { className: 'ofm_chanacts' },
+          /**
+           * ZCode 的授权腿二选一。复用既有 `.ofm_seg` 分段控件（页面里另有四处
+           * 在用），不新造样式 —— 它带齐了按下/悬停/动效与主题覆写。
+           *
+           * ⚠ 两个按钮**逐字**写而不是 map 一张表：`scripts/client-lint.mjs`
+           *   静态扫 `t('字面量')`，拼出来的键会被判成「词典里没人用」。
+           */
+          channel.id === 'zcode' ? h('div', { className: 'ofm_seg', role: 'group', 'aria-label': t('chan.zcode.provider') },
+            h('button', {
+              type: 'button', disabled: busy !== '' || !rpc,
+              'aria-pressed': zcodeProvider === 'bigmodel' ? 'true' : 'false',
+              onClick: () => chooseZcodeProvider('bigmodel'),
+            }, t('chan.zcode.bigmodel')),
+            h('button', {
+              type: 'button', disabled: busy !== '' || !rpc,
+              'aria-pressed': zcodeProvider === 'zai' ? 'true' : 'false',
+              onClick: () => chooseZcodeProvider('zai'),
+            }, t('chan.zcode.zai'))) : null,
           h('button', { type: 'button', className: 'ofm_btn', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'add' ? 'true' : undefined, onClick: startLogin }, busy === 'add' ? '…' : t('chan.act.add')),
           accountsCount > 0 ? h('button', {
             type: 'button', className: 'ofm_btn ghost', disabled: busy !== '' || !rpc, 'aria-busy': busy === 'refreshAll' ? 'true' : undefined,
