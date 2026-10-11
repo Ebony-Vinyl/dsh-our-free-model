@@ -108,7 +108,39 @@ npm run start:standalone
 Chat Completions、Responses API，以及独立网页管理（模型、统计、渠道、EAC、设置、API Key）。
 启动后打开终端打印的一次性管理链接即可使用；账号在独立页面登录，也可手动导入插件账号备份。
 启动、参数与验证见 [独立服务说明](packages/standalone/README.md)。
-独立服务的安装制品与 Release 尚未发布。
+
+### 桌面安装版（Windows）
+
+独立服务可以打成免依赖的桌面应用：托盘常驻、管理面板自动登录、
+Node 运行时随应用分发，不要求用户机器安装 Node。
+
+```powershell
+npm run desktop:runtime      # 首次：下载内嵌的官方 node.exe（带 SHA-256 校验）
+npm run desktop:build        # 产出 NSIS 安装包 + 便携版 zip
+```
+
+- **安装包** `desktop/target/*/release/bundle/nsis/*-setup.exe`——双击安装到用户目录，含开始菜单/桌面快捷方式与卸载器
+- **便携版** `desktop/target/*/release/portable/*-portable-win64.zip`——解压即用，不写注册表
+
+桌面壳只负责生命周期与展示：以子进程拉起独立服务、等 `/health` 就绪后
+打开管理面板（URL 自带一次性登录令牌，页面自动兑换）、托盘菜单、
+关窗隐藏、退出回收子进程。数据与命令行形态共用 `~/.our-free-model`。
+构建要求 Node 22+ 与 rustup 的 `stable-x86_64-pc-windows-gnu` 工具链
+（`desktop/rust-toolchain.toml` 已固定），Tauri 打包所需的 NSIS 由 CLI 自动下载。
+
+### 服务器部署
+
+`OFM_SERVER_MODE=1` 将同一套服务变成网络服务：允许非回环绑定
+（`--host 0.0.0.0`）、除 `/health` 外全路由强制 Bearer 密钥、
+管理页支持远程访问并禁用本机取令牌终端。仓库提供 Dockerfile 与
+docker-compose.yml：
+
+```bash
+docker compose up -d         # 数据持久化在 ofm-data 卷，端口 18900
+```
+
+部署细节、systemd 配置与安全须知见 [部署指南](docs/deploy.md)。
+未开启 `OFM_SERVER_MODE` 时，非回环绑定会被拒绝，桌面与命令行形态的安全语义不变。
 
 ## 安装
 

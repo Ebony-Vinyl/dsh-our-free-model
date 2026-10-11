@@ -1,5 +1,6 @@
 node_modules/
 dist/
+!desktop/dist/
 *.log
 *.tgz
 .DS_Store
@@ -35,3 +36,10 @@ stats.json
 # AOCI agent host integration (machine-bound; do not commit)
 .codex/config.toml
 .codex/config.toml.backup.*
+
+# 桌面版构建：内嵌运行时与 Tauri 产物不进仓库。
+build-cache/
+desktop/target/
+desktop/node_modules/
+desktop/gen/
+

@@ -16,12 +16,18 @@ export function resolveStandaloneDataDir(env = process.env, home = os.homedir())
   return configured === '' ? path.join(home, '.our-free-model') : path.resolve(configured)
 }
 
+/** 服务器模式（OFM_SERVER_MODE）：为容器/云主机部署放开回环限制。 */
+export function isServerMode() {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.OFM_SERVER_MODE ?? '').trim().toLowerCase())
+}
+
 /** 直接创建核心和 HTTP 服务，不加载插件入口、Cordis 或 DSH 凭据。 */
 export async function startStandalone({
   dataDir = resolveStandaloneDataDir(), host = '127.0.0.1', port,
   logger = console, refresh = true, probe,
 } = {}) {
-  if (!isLoopbackHost(host)) throw new TypeError('the standalone service binds a loopback address only')
+  const serverMode = isServerMode()
+  if (!serverMode && !isLoopbackHost(host)) throw new TypeError('the standalone service binds a loopback address only')
   if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) throw new TypeError('dataDir must be an absolute path')
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) {
     throw new TypeError('port must be an integer between 0 and 65535')
@@ -84,9 +90,11 @@ export async function startStandalone({
         baseUrl: `http://${host === '::1' ? '[::1]' : host}:${listener?.port ?? requestedPort}`,
         automaticRefresh: refresh,
         networkMode: process.env.OFM_TEST_UPSTREAM ? 'fixture' : 'live',
-        capabilities: { anonymous: true, kilo: true, eac: true, accountChannels: true, webUi: true },
+        // 服务器模式把网络边界交给部署层（反向代理/防火墙/容器网络），页面提示随之变化。
+        capabilities: { anonymous: true, kilo: true, eac: true, accountChannels: true, webUi: true, serverMode },
       }),
       onSettingsChanged: () => { if (!refreshInFlight) scheduleRefresh() },
+      ...(serverMode ? { remoteAccess: { localTerminal: false } } : {}),
     })
     listener = await startForwardServer({
       config: () => ({ host, port: requestedPort, enabled: settings.get().enabled !== false, key: settings.get().forwardKey }),

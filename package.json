@@ -21,6 +21,8 @@
     "build:standalone-ui": "node scripts/build-standalone-ui.mjs",
     "typecheck:standalone": "npm --prefix packages/standalone run typecheck",
     "test:standalone-channels": "node scripts/standalone-channels-test.mjs",
+    "desktop:runtime": "node scripts/fetch-desktop-runtime.mjs",
+    "desktop:build": "node scripts/build-desktop.mjs",
     "test": "node scripts/test-all.mjs",
     "test:contributor": "node scripts/test-all.mjs --mode contributor",
     "test:release": "node scripts/test-all.mjs --mode release",

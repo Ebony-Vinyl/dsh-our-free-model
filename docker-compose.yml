@@ -1,0 +1,25 @@
+services:
+  our-free-model:
+    build: .
+    image: our-free-model:latest
+    container_name: our-free-model
+    restart: unless-stopped
+    ports:
+      - "18900:18900"
+    environment:
+      # 服务器模式：非回环绑定 + 全路由强制密钥 + 远程管理页
+      OFM_SERVER_MODE: "1"
+      PORT: "18900"
+      # 自动探测会向上游发起真实推理请求，按需开启（true 开启）
+      OFM_PROBE: "false"
+    volumes:
+      - ofm-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18900/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  ofm-data:

@@ -1,0 +1,13 @@
+{
+  "name": "our-free-model-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Our Free Model 桌面版打包工程",
+  "scripts": {
+    "desktop:build": "node scripts/build-desktop.mjs",
+    "desktop:assemble": "node scripts/build-desktop.mjs --assemble-only"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.6"
+  }
+}
