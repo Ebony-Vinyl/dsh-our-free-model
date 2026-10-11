@@ -37,6 +37,7 @@ const REPO = 'Ebony-Vinyl/dsh-our-free-model'
 export const DEFAULT_MANIFEST_SOURCES = [
   `https://raw.githubusercontent.com/${REPO}/main/feed/manifest.json`,
   `https://cdn.jsdelivr.net/gh/${REPO}@main/feed/manifest.json`,
+  `https://gcore.jsdelivr.net/gh/${REPO}@main/feed/manifest.json`,
   `https://raw.githubusercontent.com/${REPO}/master/feed/manifest.json`,
 ]
 
@@ -245,7 +246,7 @@ async function snapshotManifestSource(source, fetchImpl, signal, revisions) {
   const rawPrefix = `/${REPO}/`
   const cdnPrefix = `/gh/${REPO}@`
   const prefix = url.hostname === 'raw.githubusercontent.com' ? rawPrefix
-    : url.hostname === 'cdn.jsdelivr.net' ? cdnPrefix : null
+    : url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'gcore.jsdelivr.net' ? cdnPrefix : null
   if (prefix === null || !url.pathname.startsWith(prefix)) return source
   const match = /^([^/]+)\/feed\/manifest\.json$/.exec(url.pathname.slice(prefix.length))
   if (match === null) return source

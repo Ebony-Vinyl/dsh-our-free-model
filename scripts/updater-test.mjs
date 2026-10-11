@@ -121,9 +121,11 @@ const NEXT_SNAPSHOT = 'b'.repeat(40)
 const REPOSITORY = 'Ebony-Vinyl/dsh-our-free-model'
 const rawSource = `https://raw.githubusercontent.com/${REPOSITORY}/main/feed/manifest.json`
 const cdnSource = `https://cdn.jsdelivr.net/gh/${REPOSITORY}@main/feed/manifest.json`
+const gcoreSource = `https://gcore.jsdelivr.net/gh/${REPOSITORY}@main/feed/manifest.json`
 const resolverUrl = `https://api.github.com/repos/${REPOSITORY}/commits/main`
 const rawSnapshot = rawSource.replace('/main/', `/${SNAPSHOT}/`)
 const cdnSnapshot = cdnSource.replace('@main/', `@${SNAPSHOT}/`)
+const gcoreSnapshot = gcoreSource.replace('@main/', `@${SNAPSHOT}/`)
 
 function snapshotFetch({ source = rawSnapshot, resolver = { sha: SNAPSHOT }, resolverStatus = 200, manifest = newManifest } = {}) {
   const calls = []
@@ -144,7 +146,7 @@ function snapshotFetch({ source = rawSnapshot, resolver = { sha: SNAPSHOT }, res
   return { fetchImpl, calls }
 }
 
-for (const [name, source, snapshot] of [['raw', rawSource, rawSnapshot], ['CDN', cdnSource, cdnSnapshot]]) {
+for (const [name, source, snapshot] of [['raw', rawSource, rawSnapshot], ['CDN', cdnSource, cdnSnapshot], ['gcore', gcoreSource, gcoreSnapshot]]) {
   await checkAsync(`${name} stages every file from the manifest's fixed commit, even when main moves`, async () => {
     const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-snapshot-'))
     const fixture = snapshotFetch({ source: snapshot })
