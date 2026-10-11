@@ -454,19 +454,50 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
     }
   }
   try {
+    let delivered = false
+    let done = false
     while (true) {
-      const { value, done } = await next()
-      if (done) break
-      if (Date.now() > deadline) throw new UpstreamError('our-free-model: upstream stream idle past its deadline', CODE.timeout)
+      // The deadline races the read instead of being checked between reads: a
+      // totally silent stream (no heartbeat at all) leaves `next()` pending
+      // forever, and a check that only runs after a read settles would never
+      // run. The race is what makes the deadline real for silence, too.
+      // Once the [DONE] sentinel has closed the answer, though, the race is
+      // over: what follows is teardown, and teardown is waited on without a
+      // deadline — a server that holds the connection after the answer ends
+      // must not turn a finished turn into a retryable timeout (which would
+      // have the harness re-send and pay twice). The pre-race code got this
+      // right by checking `done` before the deadline; keep that ordering by
+      // simply not racing anymore once the answer is closed.
+      const read = done ? next() : raceDeadline(next(), deadline, () => new UpstreamError(
+        delivered
+          ? 'our-free-model: upstream stream went silent mid-answer'
+          : 'our-free-model: upstream sent no SSE payload before its deadline',
+        CODE.timeout,
+      ))
+      const { value, done: readDone } = await read
+      if (readDone) break
       if (value !== undefined) buffer += decoder.decode(value, { stream: true })
       let newline = buffer.indexOf('\n')
       while (newline !== -1) {
         const line = buffer.slice(0, newline)
         buffer = buffer.slice(newline + 1)
-        emit(line, onData)
+        const verdict = emit(line, onData)
+        if (verdict === 'done') done = true
+        else if (verdict === true) delivered = true
         newline = buffer.indexOf('\n')
       }
-      deadline = Date.now() + timeoutMs
+      // Only a delivered payload moves the deadline. The EAC gateway flushes
+      // `: channel open` then `: keepalive` comment frames while the relay
+      // holds the first token (SSE prelude, worker/gateway-node.mjs); a
+      // comment frame used to reset this deadline here, so a relay that never
+      // delivered read as a healthy turn at the byte level and the client
+      // watched a spinner until something outside this lane gave up. A
+      // heartbeat keeps the connection; it does not keep the turn alive.
+      // The [DONE] sentinel is the same story from the other side: it closes
+      // the answer logically, so the connection-closed read that follows is
+      // teardown, and teardown is never a timeout — re-sending a completed
+      // turn is the failure this lane must never produce.
+      if (delivered || done) deadline = Date.now() + timeoutMs
     }
     // Flush the decoder so a multi-byte character split over the last two chunks
     // is not silently dropped from the final payload.
@@ -484,12 +515,40 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
 
 function emit(line, onData) {
   const text = line.trim()
-  if (text === '' || text.startsWith(':')) return
+  if (text === '' || text.startsWith(':')) return false
   if (text.startsWith('data:')) {
     const payload = text.slice(5).trim()
-    if (payload === '' || payload === '[DONE]') return
+    if (payload === '') return false
+    // The chat wire's own end-of-stream sentinel. Reported as terminal rather
+    // than delivered: everything after it is connection teardown, which no
+    // deadline should punish (a complete turn must never read as a timeout,
+    // or the harness re-sends and pays twice).
+    if (payload === '[DONE]') return 'done'
     onData(payload)
+    return true
   }
+  return false
+}
+
+/**
+ * Race one read against the stream's idle deadline. A read that settles in
+ * time resolves normally; the deadline passing first settles with the error
+ * `onDeadline` returns. The losing read never becomes an unhandled
+ * rejection: it settles once the reader is cancelled in the caller's finally.
+ */
+function raceDeadline(pending, deadline, onDeadline) {
+  return new Promise((resolve, reject) => {
+    let timer = null
+    const settleRead = row => { if (timer !== null) clearTimeout(timer); resolve(row) }
+    const failRead = error => { if (timer !== null) clearTimeout(timer); reject(error) }
+    pending.then(settleRead, failRead)
+    if (Date.now() >= deadline) {
+      failRead(onDeadline())
+      return
+    }
+    timer = setTimeout(() => { timer = null; failRead(onDeadline()) }, Math.max(0, deadline - Date.now()))
+    timer.unref?.()
+  })
 }
 
 /** Fetch a small JSON document from the gateway with the fingerprint headers. */
