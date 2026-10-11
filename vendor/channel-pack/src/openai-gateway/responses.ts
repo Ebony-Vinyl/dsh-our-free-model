@@ -73,6 +73,7 @@ import {
   OpenAiGatewayError,
   convertTools,
   createGatewayMessage,
+  gatewaySource,
   parseModelRoute,
   partsFromContent,
   textFromContent,
@@ -461,9 +462,7 @@ async function toMessages(
         messages.push(createGatewayMessage('system', [{
           type: 'text',
           text: rewriteTencentContentFingerprints(textFromContent(content), provider),
-        }], {
-          kind: 'plugin', plugin: 'dsh-openai-gateway',
-        }))
+        }], gatewaySource()))
         continue
       }
       throw new OpenAiGatewayError(`unsupported message role: ${String(raw.role)}`)
@@ -606,9 +605,7 @@ export async function toResponsesGenerateOptions(
     messages.push(createGatewayMessage('system', [{
       type: 'text',
       text: rewriteTencentContentFingerprints(body.instructions, provider),
-    }], {
-      kind: 'plugin', plugin: 'dsh-openai-gateway',
-    }))
+    }], gatewaySource()))
   }
   messages.push(...await toMessages(body.input, provider, model, images.bridge, limits))
 

@@ -260,6 +260,19 @@ export function textFromContent(content: unknown): string {
  * ⚠️ **导出**给 `responses.ts` 用：两个端点造出来的消息必须同形（同样的 id/source
  * 构造），否则同一份历史在两个端点上的来源标记不同，排查时会误导。
  */
+/**
+ * Gateway 消息的统一 source。必须用 producer-owned 的 kind 形式（`plugin:<name>`），
+ * 不能写已废弃的 V3 包装 `{ kind: 'plugin', plugin: 'dsh-openai-gateway' }`——
+ * dsh 0.2.x 的 V4 会话 native admission 会直接拒绝后者
+ * （SessionFormatError: format v4 message requires a producer-owned source kind），
+ * 且该包装只在历史会话迁移路径被宿主自动改写，白名单不含本插件。
+ * 返回工厂而非共享常量：createGatewayMessage 按引用存储 source，
+ * 避免多条消息共享同一个可变对象。
+ */
+export function gatewaySource(): Message['source'] {
+  return { kind: 'plugin:dsh-openai-gateway' } as Message['source']
+}
+
 export function createGatewayMessage(
   role: Message['role'],
   content: Message['content'],
@@ -306,9 +319,7 @@ async function convertMessage(
     return createGatewayMessage('system', [{
       type: 'text',
       text: rewriteTencentContentFingerprints(textFromContent(value.content), provider),
-    }], {
-      kind: 'plugin', plugin: 'dsh-openai-gateway',
-    })
+    }], gatewaySource())
   }
   if (role === 'user') {
     // ⚠️ user 消息走 parts：图片在这里被真正接收（其它角色不接受图片）。
