@@ -1,0 +1,17 @@
+.git
+.github
+desktop
+docs
+feed
+locale
+catalog
+scripts
+packages/standalone/frontend
+packages/standalone/node_modules
+build-cache
+_ref-antigravity-manager
+*.md
+!packages/standalone/README.md
+.cargo
+target
+dist

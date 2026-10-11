@@ -180,6 +180,33 @@ export async function resolveLoopbackBind(host) {
   return addresses[0].address
 }
 
+/** 服务器模式由环境变量 OFM_SERVER_MODE 显式开启；桌面与命令行默认保持回环语义。 */
+export function isServerMode() {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.OFM_SERVER_MODE ?? '').trim().toLowerCase())
+}
+
+/**
+ * 服务器模式的绑定地址解析：显式放开回环限制，允许 `0.0.0.0`/`::`/任意本机地址。
+ * 仅在 OFM_SERVER_MODE 开启时由 startForwardServer 使用。
+ */
+export async function resolveRemoteBind(host) {
+  const value = String(host ?? '').trim() || '0.0.0.0'
+  if (value === '*' || value === '0.0.0.0') return '0.0.0.0'
+  const literal = value.replace(/^\[|\]$/g, '')
+  if (literal === '::') return '::'
+  if (net.isIP(literal)) return literal
+  let addresses
+  try {
+    addresses = await dns.promises.lookup(literal, { all: true, verbatim: true })
+  } catch (error) {
+    throw new Error(`could not resolve the bind host "${value}" (${error?.message ?? error})`)
+  }
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    throw new Error(`the bind host "${value}" resolved to no address`)
+  }
+  return addresses[0].address
+}
+
 function isLoopbackIp(ip) {
   return ip === '::1' || ip.startsWith('127.')
 }
@@ -333,11 +360,19 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
       res.end()
       return
     }
+    // 服务器模式：除最小健康探针外，所有路径都要求密钥——远端监听没有回环围墙可依。
+    if (isServerMode() && path !== '/' && path !== '/health') {
+      if (!authorized(req, settings.key)) {
+        openAiError(res, 401, 'invalid_request_error', 'missing or invalid API key')
+        return
+      }
+    }
     // Liveness only, and deliberately before the key check: a caller probing
     // whether the port is up must not need the key to get an answer. It gets a
     // count of nothing — the model roster is what the authenticated routes serve.
     if (path === '/' || path === '/health') {
-      json(res, 200, health())
+      // 服务器模式只回一个布尔，不披露版本与能力清单。
+      json(res, 200, isServerMode() ? { ok: true } : health())
       return
     }
     if (!authorized(req, settings.key)) {
@@ -371,7 +406,8 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
   // Resolve before listen so a hostile hosts file cannot slip a routable bind
   // past the loopback-only rule. The reported `host` below stays the configured
   // spelling: the settings reconciliation compares it, not the resolved IP.
-  const bindAddress = await resolveLoopbackBind(config().host)
+  // 服务器模式（OFM_SERVER_MODE）改走 resolveRemoteBind，允许绑定任意本机地址。
+  const bindAddress = await (isServerMode() ? resolveRemoteBind(config().host) : resolveLoopbackBind(config().host))
   const requestedPort = Number.isFinite(Number(config().port)) ? Math.trunc(Number(config().port)) : 0
   const bound = await bindForwardPort(server, { address: bindAddress, port: requestedPort, log: message => log(`bind: ${message}`) })
   server.on('error', error => log(`listener error: ${error?.message ?? error}`))

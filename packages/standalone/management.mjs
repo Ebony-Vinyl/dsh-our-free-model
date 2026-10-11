@@ -75,7 +75,10 @@ export function managementSettings(value) {
 }
 
 /** 管理读写要求鉴权；登录恢复仅允许同源页面触发固定本机动作。 */
-export function createManagement({ stores, runtime, channels, eac, info, onSettingsChanged, loginTerminal = openLoginTerminal }) {
+export function createManagement({ stores, runtime, channels, eac, info, onSettingsChanged, loginTerminal = openLoginTerminal, remoteAccess }) {
+  // 服务器模式：登录终端与「本机取令牌」入口没有意义，显式关闭；
+  // 同源围栏改由部署层（反向代理/容器网络）承担，Origin 校验放宽为任意 http(s) 来源。
+  const isRemote = remoteAccess?.localTerminal === false
   let bootstrap = { token: crypto.randomBytes(32).toString('base64url'), until: Date.now() + BOOTSTRAP_MS }
   const sessions = new Map()
   let cookieName
@@ -151,6 +154,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
   async function route(req, res, pathname) {
     const method = req.method ?? 'GET'
     if (method === 'POST' && pathname === `${PREFIX}/login/terminal`) {
+      if (isRemote) throw fail(403, '服务器部署模式下不支持本机取令牌，请使用启动时打印的登录链接或 API Key 登录')
       // 此入口发生在登录前，必须有浏览器的同源 Origin，拒绝跨站和无来源调用。
       if (req.headers.origin !== new URL(`http://${req.headers.host}`).origin ||
           req.headers['sec-fetch-site'] !== 'same-origin') {
@@ -286,14 +290,14 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       const asset = assets.get(pathname)
       const isApi = pathname === PREFIX || pathname.startsWith(`${PREFIX}/`)
       if (!asset && !isApi) return false
-      // 不接受插件专用 dsh-app Referer；独立管理只允许本页面的 HTTP 来源。
+      // 不接受插件专用 dsh-app Referer；独立管理只允许本页面或部署域的 HTTP(S) 来源。
       const referer = req.headers.referer
       const origin = req.headers.origin
       const malformedSource = [referer, origin].some(value => value !== undefined && (
-        typeof value !== 'string' || !value.startsWith('http://')
+        typeof value !== 'string' || (!value.startsWith('http://') && !value.startsWith('https://'))
       ))
       if (closed || !cookieName) json(res, 503, { error: '服务正在停止或启动' })
-      else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: '管理接口仅允许本机同源访问' })
+      else if (malformedSource || (structuralRejection(req) !== undefined && !isRemote)) json(res, 403, { error: '管理接口仅允许本机同源访问' })
       else if (asset) {
         if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: '资源仅支持 GET 或 HEAD' })
         else {
