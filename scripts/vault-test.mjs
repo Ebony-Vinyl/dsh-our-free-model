@@ -450,6 +450,22 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   }), tinyEnv, fakeCtx)
   check('an oversized body is refused before any relay work', tinyResponse.status, 413)
 
+  // The cap is a BYTE cap, and the self-hosted host enforces it on the bytes it
+  // received. `chatBody` above is pure ASCII, so its UTF-16 length and its byte
+  // length agree and it cannot tell the two units apart; this fixture is chosen
+  // so they disagree — 96 bytes over the cap, well under it in code units.
+  const multibyteBody = JSON.stringify({ model: 'deepseek-ai/deepseek-v4.1-flash', messages: [{ role: 'user', content: '中'.repeat(40) }] })
+  const cap = 128
+  check('the multibyte fixture exceeds the cap in bytes but not in code units', [
+    multibyteBody.length > cap, Buffer.byteLength(multibyteBody, 'utf8') > cap,
+  ], [false, true])
+  const multibyteResponse = await gateway.default.fetch(new Request('https://gateway.test/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'x-ofm-timestamp': String(Date.now()), 'x-ofm-signature': 'x'.repeat(64) },
+    body: multibyteBody,
+  }), { ...env, MAX_BODY_BYTES: String(cap) }, fakeCtx)
+  check('a multibyte body over the byte cap is refused like an ASCII one', multibyteResponse.status, 413)
+
   // The drill's own lesson: a relay base without its /v1 would forward turns
   // into the relay's front page and answer HTML for the lane. Refuse it at
   // configure time, even on an otherwise valid signed request.
@@ -497,6 +513,21 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   check('the node host rate-limits per ip past its window', refusals, [200, 429, 429])
   const unsignedNode = await fetch(`${nodeBase}/models`)
   check('the node host refuses unsigned requests like the Worker', unsignedNode.status, 401)
+
+  // The two hosts must agree on MAX_BODY_BYTES for the same body: the Node host
+  // has always counted received bytes, so this is the reference behaviour the
+  // Worker has to match. Driven over a real socket, on a server with rate
+  // limiting off so only the cap can answer 413.
+  const capServer = createGatewayServer({ ...nodeEnv, MAX_BODY_BYTES: String(cap), RATE_LIMIT_PER_MINUTE: '0', RATE_LIMIT_PER_DAY: '0' })
+  await new Promise(resolve => capServer.listen(0, '127.0.0.1', resolve))
+  capServer.unref()
+  const capResponse = await fetch(`http://127.0.0.1:${capServer.address().port}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...signSealedRequest(GATEWAY_SECRET, { method: 'POST', path: '/v1/chat/completions', body: multibyteBody }) },
+    body: multibyteBody,
+  })
+  check('the node host refuses the same multibyte body (the behaviour the Worker must match)', capResponse.status, 413)
+  await new Promise(resolve => capServer.close(resolve))
   await new Promise(resolve => nodeServer.close(resolve))
   await new Promise(resolve => nodeRelay.close(resolve))
 

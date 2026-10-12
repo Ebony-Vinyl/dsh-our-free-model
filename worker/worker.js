@@ -115,8 +115,15 @@ export default {
 
       const skew = Number.parseInt(env.CLOCK_SKEW_SECONDS ?? '600', 10) || 600
       const maxBody = Number.parseInt(env.MAX_BODY_BYTES ?? '8388608', 10) || 8388608
-      const body = route.body === true ? await request.text() : ''
-      if (body.length > maxBody) return JSON_ERROR(413, 'request body too large')
+      // MAX_BODY_BYTES is a byte cap, and the self-hosted host enforces it on the
+      // bytes it received (gateway-node.mjs sums `chunk.length`). Measuring the
+      // decoded string's `.length` here measured UTF-16 code units instead, so a
+      // multibyte body slipped past at up to three times the configured cap and
+      // the two hosts disagreed about the same variable. Measure the bytes that
+      // actually arrived — before any decoding, and before the signature work.
+      const received = route.body === true ? await request.arrayBuffer() : null
+      if (received !== null && received.byteLength > maxBody) return JSON_ERROR(413, 'request body too large')
+      const body = received === null ? '' : new TextDecoder().decode(received)
 
       const secrets = String(env.SIGNING_SECRETS ?? '').split(',').map(s => s.trim()).filter(s => s.length >= 32)
       if (secrets.length === 0) return JSON_ERROR(500, 'gateway is not configured')
