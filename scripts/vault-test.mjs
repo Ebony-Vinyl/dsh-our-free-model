@@ -76,6 +76,22 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   check('the gate refuses one Tauri signal alone (home path only)', partialAio, null)
   const bareHarness = detectSealedHost({ env: {}, profileName: 'desktop' })
   check('the gate admits the desktop profile name alone (kernel-authoritative, Electron scrubs the env marker)', bareHarness, 'harness')
+  // Issue #267: DSH Tauri boots the same managed kernel with `--profile tauri`,
+  // and the name arrives through the same kernel profile context the desktop
+  // branch already trusts. Replayed with the reporter's own live signals.
+  const dshTauri = detectSealedHost({
+    env: { DSH_HOME: 'D:/dsh' },
+    execPath: 'D:/node.exe',
+    argv: ['node.exe', '--max-old-space-size=8057', 'lib/bin.js', '--profile', 'tauri', '--port', '3080', '--no-open'],
+    profileName: 'tauri',
+  })
+  check('the gate admits the DSH Tauri desktop shell by its kernel-minted profile name (issue #267)', dshTauri, 'harness')
+  check('and it is the name that admits it, not the AIO trio', detectSealedHost({ env: {}, profileName: 'tauri' }), 'harness')
+  check('a Tauri-shaped process without the kernel profile context is still refused', detectSealedHost({
+    env: { DSH_HOME: 'D:/dsh' },
+    execPath: 'D:/node.exe',
+    argv: ['node.exe', '--profile', 'tauri'],
+  }), null)
   const aio = detectSealedHost({
     env: { DSH_HOME: 'C:/Users/u/AppData/Roaming/com.deepseek.dsh.desktop.aio/releases/6.9.3/dsh-home' },
     execPath: 'D:/DSHEAC AIO/resources/node/node.exe',
@@ -834,6 +850,28 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
       ], [true, true])
       const poolRow = await callRoute(api(), 'GET', '/api/our-free-model/pool')
       check('the pool route answers on a web-desktop host too', poolRow.json?.ok, true)
+    } finally {
+      restore()
+    }
+  }
+
+  {
+    // Issue #267, end to end: a `tauri` boot must reach the sealed roster and
+    // open the lane exactly as a `desktop` boot does — before the fix the gate
+    // returned null here and the whole EAC lane stayed dark and silent.
+    const { ctx, api, restore } = await bootWith({ profileName: 'tauri' })
+    try {
+      const adapter = ctx.__captured.adapters[0]?.adapter
+      await until(async () => (await adapter.listModels(ROUTE_MAIN)).some(model => model.id === 'deepseek-ai/deepseek-v4.1-flash'), {
+        what: 'the sealed roster on a DSH Tauri host', timeoutMs: 10000,
+      })
+      const summary = await callRoute(api(), 'GET', '/api/our-free-model/summary')
+      check('a DSH Tauri boot lists the sealed models and reports the lane open (issue #267)', [
+        (summary.json.catalog ?? []).some(entry => entry.id === 'moonshotai/kimi-k3'),
+        summary.json.laneAvailable,
+      ], [true, true])
+      const poolRow = await callRoute(api(), 'GET', '/api/our-free-model/pool')
+      check('the pool route answers on a DSH Tauri host too', poolRow.json?.ok, true)
     } finally {
       restore()
     }

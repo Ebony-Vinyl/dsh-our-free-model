@@ -608,11 +608,13 @@ npm run typecheck # tsc --noEmit，严格检查 adapter/ 接缝（可选：需�
 
 ## EAC 渠道（桌面端专属）
 
-除免费车道外，插件内置一条协付渠道（EAC）。该渠道仅存在于两个桌面宿主中：
+除免费车道外，插件内置一条协付渠道（EAC）。该渠道仅存在于三个桌面宿主中：
 
 DSHEAC AIO（Tauri 壳）：内核路径、内嵌 node、web-desktop profile 三重信号同时命中才解锁；
 
-DeepSeek Harness 桌面端（Electron 壳）：内核自身提供的 desktop profile 上下文（CLI 按设计拒绝该 profile）加上桌面壳为内核进程设置的运行标记。
+DeepSeek Harness 桌面端（Electron 壳）：判据是内核自身提供的 desktop profile 上下文（CLI 按设计拒绝该 profile）。桌面壳虽在启动命令行上写过 `ELECTRON_RUN_AS_NODE=1`，但 Electron 在自身启动时会清除该变量（实测确认），它只存在于启动命令上，因此不作为闸门条件——内核铸出的 profile 名才是；
+
+DSH Tauri 桌面端（Tauri 壳）：同一套内核以 `--profile tauri` 启动，该 profile 名同样由内核的 `profileContext` 铸出，与 desktop 一并认可（issue #267）。
 
 在命令行、纯 dsh web 以及任何其它运行方式中，该通道整体不存在：没有模型、没有请求、没有报错，也不会发生解密尝试。
 
