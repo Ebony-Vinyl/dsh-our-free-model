@@ -77,6 +77,12 @@ const suites = [
   // module with its own offline suite; `aggregate-wiring` is the one that
   // proves the host actually reaches them.
   ['rtk', 'rtk-test.mjs', []],
+  // The shape predicate that decides what a search hit is: issue #280 (too
+  // wide — a page body collapsed to a fake grep summary) and the Windows
+  // direction (too narrow — every drive-absolute hit discarded, then answered
+  // as a file count). Separate suite because the failure mode is "the model is
+  // told something false", which deserves its own named gate.
+  ['rtk-shape', 'rtk-shape-test.mjs', []],
   ['local-optimize', 'local-optimize-test.mjs', []],
   ['registry', 'registry-test.mjs', []],
   ['route', 'route-test.mjs', []],

@@ -40,6 +40,7 @@ import { tree } from './filters/tree.js'
 import { smartTruncate } from './filters/smartTruncate.js'
 import { readNumbered, READ_NUMBERED_LINE_RE } from './filters/readNumbered.js'
 import { searchList, SEARCH_LIST_HEADER_RE } from './filters/searchList.js'
+import { isGrepHit } from './hitLine.js'
 
 const RE_GIT_DIFF = /^diff --git /m
 const RE_GIT_DIFF_HUNK = /^@@ /m
@@ -67,9 +68,12 @@ export function autoDetectFilter(text) {
   const lines = head.split('\n')
   const nonEmpty = lines.filter(l => l.trim().length > 0)
 
-  // Rust grep rule: first 5 non-empty lines, ANY matches "file:number:content"
+  // Rust grep rule: first 5 non-empty lines, ANY matches "file:number:content".
+  // The predicate is shared with the grep compactor (`hitLine.js`) so the two
+  // cannot disagree about what a hit is — see that module for why a hit needs
+  // a path-shaped file field and not merely a numeric one.
   const first5 = nonEmpty.slice(0, 5)
-  if (first5.some(isGrepLine)) return grep
+  if (first5.some(isGrepHit)) return grep
 
   // Rust find rule: ALL non-empty lines path-like (no ':'), >=3 lines
   if (nonEmpty.length >= 3 && nonEmpty.every(isPathLike)) return find
@@ -95,21 +99,6 @@ export function autoDetectFilter(text) {
   if (text.split('\n').length >= SMART_TRUNCATE_MIN_LINES) return smartTruncate
 
   return null
-}
-
-/**
- * Is this line `file:N:content` with a numeric middle field?
- *
- * Mirrors Rust's `splitn(3, ':')` + `parts[1].parse::<usize>()`: only the first
- * two colons matter, so content containing colons does not disqualify the line.
- */
-function isGrepLine(line) {
-  const first = line.indexOf(':')
-  if (first === -1) return false
-  const second = line.indexOf(':', first + 1)
-  if (second === -1) return false
-  const lineno = line.slice(first + 1, second)
-  return /^\d+$/.test(lineno)
 }
 
 /**

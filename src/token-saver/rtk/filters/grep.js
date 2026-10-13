@@ -14,24 +14,17 @@
  */
 
 import { GREP_PER_FILE_MAX } from '../constants.js'
+import { splitGrepHit, isGrepHit } from '../hitLine.js'
 
 export function grep(input) {
   const byFile = new Map()
   let total = 0
 
   for (const line of input.split('\n')) {
-    // splitn(3, ':') — only split on the first 2 colons, so a match whose
-    // content contains ':' (JSON, a ternary, a URL) keeps its content intact.
-    const first = line.indexOf(':')
-    if (first === -1) continue
-    const second = line.indexOf(':', first + 1)
-    if (second === -1) continue
-    const file = line.slice(0, first)
-    const lineNumStr = line.slice(first + 1, second)
-    const content = line.slice(second + 1)
-    // Rust: parts[1].parse::<usize>().is_ok() — a non-numeric middle field
-    // means this is not a grep line at all (e.g. "src/a.js: export ...").
-    if (!/^\d+$/.test(lineNumStr)) continue
+    // One shared predicate decides what a hit is, so this filter and the
+    // autodetector can never disagree about which lines they are looking at.
+    if (!isGrepHit(line)) continue
+    const { file, line: lineNumStr, content } = splitGrepHit(line)
     total++
     if (!byFile.has(file)) byFile.set(file, [])
     byFile.get(file).push([lineNumStr, content])
