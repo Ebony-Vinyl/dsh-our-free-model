@@ -39867,6 +39867,7 @@ function serializeTraeMessages(messages, imageUrls) {
         }
       }));
       const text2 = contentToText6(content2);
+      flushToolImages();
       wire.push({
         role: "assistant",
         content: text2.length === 0 && toolCalls.length > 0 ? null : text2,
@@ -39875,6 +39876,7 @@ function serializeTraeMessages(messages, imageUrls) {
       continue;
     }
     if (message2.role === "system") {
+      flushToolImages();
       wire.push({ role: "system", content: contentToText6(message2.content) });
       continue;
     }
@@ -39893,6 +39895,7 @@ function serializeTraeMessages(messages, imageUrls) {
         flushToolImages();
         wire.push({ role: "user", content: parts });
       } else {
+        flushToolImages();
         wire.push({ role: "user", content: text });
       }
     }
@@ -39912,8 +39915,8 @@ function serializeTraeMessages(messages, imageUrls) {
       flushToolImages();
       wire.push({ role: "user", content: parts ?? text });
     }
-    flushToolImages();
   }
+  flushToolImages();
   return wire;
 }
 function errorDetail5(body) {

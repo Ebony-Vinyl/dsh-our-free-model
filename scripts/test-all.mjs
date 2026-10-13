@@ -47,6 +47,8 @@ const suites = [
   ['forward', 'forward-test.mjs', []],
   ['chan-relay', 'chan-relay-test.mjs', []],
   ['channel-pack', 'channel-pack-test.mjs', []],
+  // TRAE 序列化里「工具结果内嵌图片」与并行工具调用的配对（上游 4027）。
+  ['trae-image-pairing', 'trae-tool-image-pairing-test.mjs', []],
   ['channel-network', 'channel-network-test.mjs', []],
   ['forward-boot', 'forward-boot-test.mjs', []],
   ['standalone', 'standalone-test.mjs', []],

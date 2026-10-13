@@ -400,6 +400,16 @@ function serializeTraeMessages(
   // 工具结果内嵌图片（`read_image` 等）不能并入 `role:'tool'` 消息：该角色的
   // content 只能是字符串，且必须紧跟其 assistant tool_call，中间插消息会 400。
   // 故挂起到其后的独立 user 消息统一发出（与 buddy / lobsterai 同款处理）。
+  //
+  // ⚠️ **flush 的时机是这段代码的正确性核心**：只能在「一条 assistant / system
+  // 即将发出」或「全部消息处理完毕」时 flush。若改成每条消息末尾都 flush，
+  // **并行工具调用**（一轮里两个以上 tool_call）就会被劈开成
+  // `assistant[A,B] → tool A → user(图片) → tool B` —— 上游按「tool_calls 之后
+  // 紧邻的连续 tool 消息」校验配对，看到 B 的应答被一条 user 消息隔断，即回
+  // `code=4027 An assistant message with 'tool_calls' must be followed by tool
+  // messages responding to each 'tool_call_id'. (insufficient tool messages
+  // following tool_calls message)`。buddy / lobsterai 两个适配器都是「assistant
+  // 前 + 收尾」两处 flush，TRAE 这里此前漏了这一约定。
   let pendingToolImages: Array<Record<string, unknown>> = []
   const flushToolImages = (): void => {
     if (pendingToolImages.length === 0) return
@@ -432,6 +442,9 @@ function serializeTraeMessages(
           },
         }))
       const text = contentToText(content)
+      // ⚠️ 挂起的工具结果图片必须在这条 assistant **之前**发出，不能留在循环末尾。
+      // 见下方 `pendingToolImages` 注释与 `flushToolImages` 的位置约定。
+      flushToolImages()
       // 正文为空且有工具调用时 content 必须为 null（对齐 Go 端：纯 tool_calls
       // 的 assistant 不回写空 content）。
       wire.push({
@@ -442,6 +455,7 @@ function serializeTraeMessages(
       continue
     }
     if (message.role === 'system') {
+      flushToolImages()
       wire.push({ role: 'system', content: contentToText(message.content) })
       continue
     }
@@ -478,6 +492,7 @@ function serializeTraeMessages(
         flushToolImages()
         wire.push({ role: 'user', content: parts })
       } else {
+        flushToolImages()
         wire.push({ role: 'user', content: text })
       }
     }
@@ -503,8 +518,9 @@ function serializeTraeMessages(
       flushToolImages()
       wire.push({ role: 'user', content: parts ?? text })
     }
-    flushToolImages()
   }
+  // 收尾：历史末端若仍挂着图片，落在最后一条消息之后。
+  flushToolImages()
   return wire
 }
 
