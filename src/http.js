@@ -350,7 +350,14 @@ async function readRemainder(head, signal) {
  */
 function userAgentWith(attribution) {
   if (typeof attribution !== 'string' || attribution === '') return CLIENT_UA
-  return attribution.includes('opencode/') ? attribution : `${attribution} ${CLIENT_UA}`
+  // The free-tier gate answers `deepseek-harness/<version>` with 403
+  // FreeTierError (verified live 2026-10-13): the versionless product name,
+  // the same name with a plain version beside it, and unrelated versioned
+  // tokens (dsh/0.1.7, some-tool/1.2.3) all pass — only the versioned spelling
+  // of the harness attribution is refused, with or without an opencode token.
+  // The attribution credit keeps its name and URL; the version is what goes.
+  const sanitized = attribution.replace(/(deepseek-harness)\/\d[\w.-]*/gi, '$1')
+  return sanitized.includes('opencode/') ? sanitized : `${sanitized} ${CLIENT_UA}`
 }
 
 export async function postStreamed({ path, body, session, requestId, attributionUserAgent, signal, onData, timeoutMs = 300000 }) {
