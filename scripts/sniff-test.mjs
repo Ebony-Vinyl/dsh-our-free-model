@@ -174,6 +174,32 @@ const held = await ask('mimo-v2.5-free', { timeoutMs: 200 })
 check('a complete answer behind a held connection arrives', framesOf(held.payloads), 'short and finished')
 check('instead of timing out with the turn in hand', held.error?.code ?? 'none', 'none')
 
+// A second read after `[DONE]` is a deterministic failure: no clock or peer EOF
+// decides whether the completed response was accepted.
+for (const pieces of [
+  ['data: {"answer":"OK"}\n\ndata: [DONE]\n\ndata: {"late":true}\n\n'],
+  ['data: {"answer":"OK"}\r\n\r\ndata: [DO', 'NE]\r\n\r\n'],
+]) {
+  let reads = 0
+  let cancelled = 0
+  let returned = 0
+  const delivered = []
+  const source = {
+    [Symbol.asyncIterator]() { return this },
+    async next() {
+      if (reads >= pieces.length) throw new Error('read after terminal marker')
+      return { value: bytes(pieces[reads++]), done: false }
+    },
+    cancel() { cancelled++ },
+    async return() { returned++; return { done: true } },
+  }
+  let error
+  try { await readSse(source, data => delivered.push(data)) } catch (cause) { error = cause }
+  check('a terminal marker ends without another read', error?.code ?? 'none', 'none')
+  check('only payloads before the marker are delivered', delivered, ['{"answer":"OK"}'])
+  check('the completed source is cancelled and returned', [cancelled, returned], [1, 1])
+}
+
 // ── aborting a stream that was already sniffed ───────────────────────────────
 // The replayed head means the reader is owned by a generator rather than by the
 // response directly, so cancellation has to reach through both layers.

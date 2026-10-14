@@ -411,7 +411,8 @@ export async function postStreamed({ path, body, session, requestId, attribution
  *
  * The source is anything that yields byte chunks: a `ReadableStream` (Node's own
  * response body) or an async iterable, which is what lets a head that was already
- * sniffed be replayed in front of the live reader.
+ * sniffed be replayed in front of the live reader. `[DONE]` ends delivery and
+ * cancels the owned reader without waiting for HTTP EOF.
  */
 export async function readSse(source, onData, signal, timeoutMs = 300000) {
   const reader = typeof source?.getReader === 'function' ? source.getReader() : null
@@ -463,7 +464,7 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
       while (newline !== -1) {
         const line = buffer.slice(0, newline)
         buffer = buffer.slice(newline + 1)
-        emit(line, onData)
+        if (emit(line, onData)) return
         newline = buffer.indexOf('\n')
       }
       deadline = Date.now() + timeoutMs
@@ -484,12 +485,14 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
 
 function emit(line, onData) {
   const text = line.trim()
-  if (text === '' || text.startsWith(':')) return
+  if (text === '' || text.startsWith(':')) return false
   if (text.startsWith('data:')) {
     const payload = text.slice(5).trim()
-    if (payload === '' || payload === '[DONE]') return
+    if (payload === '') return false
+    if (payload === '[DONE]') return true
     onData(payload)
   }
+  return false
 }
 
 /** Fetch a small JSON document from the gateway with the fingerprint headers. */
