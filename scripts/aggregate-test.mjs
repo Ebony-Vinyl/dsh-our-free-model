@@ -252,6 +252,67 @@ await checkAsync('a streamed answer is pushed through verbatim, in order', async
   assert.equal(finishReason(outcome.finish).kind, 'tool-calls')
 })
 
+// The composite picker id is the one thing every other test here cannot see: they
+// hand `postAggregateStreamed` a body that already carries the bare id, which is
+// exactly what the adapter does *not* do — it builds the body from `entry.id`,
+// `providerId/modelId`. So these three drive the pair the real call site drives.
+const OPEN_ROUTER_BARE = 'google/gemma-4-31b-it:free'
+const OPEN_ROUTER_COMPOSITE = `open_router/${OPEN_ROUTER_BARE}`
+const openRouterConfig = {
+  enabled: true,
+  providers: { open_router: { enabled: true, apiKey: 'sk-openrouter-secret', baseUrl: `${base}/openrouter` } },
+}
+
+await checkAsync('the composite picker id comes back off the body before the provider sees it', async () => {
+  script = (req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    for (const frame of CHAT_FRAMES) res.write(`data: ${frame}\n\n`)
+    res.end('data: [DONE]\n\n')
+  }
+  const pushed = []
+  await postAggregateStreamed({
+    config: openRouterConfig, providerId: 'open_router', modelId: OPEN_ROUTER_BARE,
+    body: { model: OPEN_ROUTER_COMPOSITE, messages: [{ role: 'user', content: 'hi' }] },
+    onData: value => pushed.push(value),
+  })
+  const request = last()
+  assert.equal(request.url, '/openrouter/chat/completions')
+  assert.equal(JSON.parse(request.body).model, OPEN_ROUTER_BARE)
+  // The stronger form: the namespace must not survive anywhere on the wire, so a
+  // partial rewrite (right `model`, composite id left in a nested field) still
+  // fails here. The id's own slash is why the bare value cannot be cut out of the
+  // string — it is the caller's split, not a substring.
+  assert.equal(request.body.includes('open_router/'), false, `the composite id reached the provider: ${request.body}`)
+  assert.equal(JSON.parse(request.body).stream, true)
+  assert.ok(pushed.length > 0)
+})
+
+await checkAsync('a body that already carries the bare id is posted unchanged', async () => {
+  script = (req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.end('data: [DONE]\n\n')
+  }
+  await postAggregateStreamed({
+    config: openRouterConfig, providerId: 'open_router', modelId: OPEN_ROUTER_BARE,
+    body: { model: OPEN_ROUTER_BARE, messages: [{ role: 'user', content: 'hi' }] },
+    onData: () => {},
+  })
+  assert.equal(JSON.parse(last().body).model, OPEN_ROUTER_BARE)
+})
+
+await checkAsync('a caller that names no model leaves the body\'s own model alone', async () => {
+  script = (req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.end('data: [DONE]\n\n')
+  }
+  await postAggregateStreamed({
+    config: liveConfig, providerId: 'cerebras',
+    body: { model: 'gpt-oss-120b', messages: [{ role: 'user', content: 'hi' }] },
+    onData: () => {},
+  })
+  assert.equal(JSON.parse(last().body).model, 'gpt-oss-120b')
+})
+
 const COMPLETION = {
   id: 'cmpl-1',
   object: 'chat.completion',

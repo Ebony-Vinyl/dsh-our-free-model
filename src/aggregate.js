@@ -511,8 +511,10 @@ function modelIdsFrom(payload) {
  * @param {object} options
  * @param {object} options.config - the plugin settings' `aggregate` section
  * @param {string} options.providerId - registry provider id
- * @param {string} [options.modelId] - the bare model id, used to label synthesised frames
- * @param {object|string} options.body - the request body the caller built for this wire
+ * @param {string} [options.modelId] - the bare model id: it labels the synthesised
+ *   frames and it is the `model` the wire body has to carry (see below)
+ * @param {object|string} options.body - the request body the caller built for this
+ *   wire; an object body has its `model` replaced by `modelId`
  * @param {AbortSignal} [options.signal]
  * @param {(payload: string) => void} options.onData - one `data:` payload, in order
  * @param {number} [options.timeoutMs] - idle budget handed to the shared readers
@@ -521,7 +523,19 @@ function modelIdsFrom(payload) {
 export async function postAggregateStreamed({ config, providerId, modelId, body, signal, onData, timeoutMs = TURN_TIMEOUT_MS }) {
   const resolved = resolveProvider(config, providerId)
   const model = text(modelId)
-  const bodyText = typeof body === 'string' ? body : JSON.stringify({ ...body, stream: true })
+  // One provider's row is addressed by the picker as `providerId/modelId`, and the
+  // adapter builds this body from that composite id — this lane is the only one
+  // that namespaces, because the EAC and Kilo rows already carry their upstream
+  // ids. The provider only knows the bare id, so the split has to be put back
+  // before the request leaves or the row cannot be used at all: OpenRouter answers
+  // `400 … is not a valid model ID` for `open_router/google/gemma-4-31b-it:free`.
+  // `model` is the caller's own split of the pair, so a model id that contains
+  // slashes of its own (`google/gemma-4-31b-it:free`) survives intact — nothing
+  // here cuts the string. A body handed in already serialised is the caller's own
+  // bytes and is forwarded exactly as they are.
+  const bodyText = typeof body === 'string'
+    ? body
+    : JSON.stringify({ ...body, ...model === '' ? {} : { model }, stream: true })
   let response
   try {
     response = await egressFetch(resolved.chatUrl, {
