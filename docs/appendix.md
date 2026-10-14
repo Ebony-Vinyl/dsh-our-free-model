@@ -1,6 +1,6 @@
 # Appendix
 
-Disclaimer and star history.
+Disclaimer.
 
 > 本文件内容取自原 README，正文与原句一致；仅调整标题层级与相对路径。
 
@@ -31,20 +31,6 @@ Disclaimer and star history.
 - **The plugin is not affiliated with, nor endorsed by, any of the upstreams.**
   Vendor names and trademarks belong to their owners and are cited only to name
   the source.
-
-
----
-
-### Star history
-
-The chart is updated automatically by Star History, so no image has to be committed by hand. Display can lag because of the service cache (currently 24 hours) and GitHub's image cache — it is not live to the second. Click the chart to open the live trend.
-
-<a href="https://www.star-history.com/?type=date&amp;repos=Ebony-Vinyl%2Fdsh-our-free-model">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date&amp;theme=dark" />
-    <img alt="dsh-our-free-model GitHub star growth" src="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date" />
-  </picture>
-</a>
 
 ---
 

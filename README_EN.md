@@ -124,7 +124,7 @@ Restart the app once afterwards, then open a new conversation — the model pick
 | How it is built, trade-offs, aggregate lane / token savers / routing / gateway | [docs/design-notes.md](docs/design-notes.md) |
 | Offline test suites, release signing, upstream sources, security and privacy | [docs/development-and-upstream.md](docs/development-and-upstream.md) |
 | Round-by-round verification record | [docs/verification-record.md](docs/verification-record.md) |
-| Disclaimer, star history | [docs/appendix.md](docs/appendix.md) |
+| Disclaimer | [docs/appendix.md](docs/appendix.md) |
 ## License
 
 MIT — see [LICENSE](LICENSE).
@@ -132,3 +132,16 @@ MIT — see [LICENSE](LICENSE).
 This project is an independent plugin and is not affiliated with, endorsed by, or
 sponsored by any model provider. Using it to reach free tiers is subject to those
 providers' own terms; check them before deploying anywhere beyond your own machine.
+
+---
+
+## Star history
+
+The chart is updated automatically by Star History — no image is committed by hand. Display can lag because of the service cache (24 hours) and GitHub's image cache; it is not live to the second. Click the chart to open the live trend.
+
+<a href="https://www.star-history.com/?type=date&amp;repos=Ebony-Vinyl%2Fdsh-our-free-model">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date&amp;theme=dark" />
+    <img alt="dsh-our-free-model GitHub star growth" src="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date" />
+  </picture>
+</a>
