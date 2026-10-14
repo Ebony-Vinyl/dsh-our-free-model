@@ -139,7 +139,7 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 
 1. 将发布文件复制至 node_modules/dsh-our-free-model/
 （index.js、client.js、adapter/、src/、locale/、icon.svg、cordis.patch.yml、package.json——adapter/ 不可遗漏：index.js 首行即 import 该目录）
-2. 在 dependencies 中加入 "dsh-our-free-model": "2.1.0"——该版本号跟随仓库 package.json 的 version（版本变更时同步，当前为 2.1.0），不要沿用旧值，也不要写为 link:
+2. 在 dependencies 中加入 "dsh-our-free-model": "2.2.0"——该版本号跟随仓库 package.json 的 version（版本变更时同步，当前为 2.2.0），不要沿用旧值，也不要写为 link:
 3. 在 dsh.profile.bundles 末尾追加 "dsh-our-free-model"
 
 不要再向 cordis.patch.yml 添加条目。被 dsh.profile.bundles 引用的包，其自带的

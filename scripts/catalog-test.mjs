@@ -70,6 +70,16 @@ const idRe = new RegExp(schema.$defs.namespacedId.pattern)
 check('id is namespaced per the schema', idRe.test(manifest.id), true)
 check('name is the npm package name', manifest.name, pkg.name)
 check('version tracks package.json', manifest.version, pkg.version)
+
+// The manual-install step in both READMEs tells the user what to put in
+// `dependencies`, and says that number tracks `package.json`'s `version` — so it
+// is a version claim like every other one here, and the only one no check
+// reached. v2.1.0's release commit bumped it; v2.2.0's did not, and it sat at
+// 2.1.0 for a whole release while every gate stayed green. Read the pin out of
+// both READMEs so the next release cannot miss it quietly either.
+const readmePin = rel => new RegExp('"dsh-our-free-model": "(\\d+\\.\\d+\\.\\d+)"').exec(read(rel))?.[1]
+check('the README install pin names the shipping version',
+  [readmePin('README.md'), readmePin('README_EN.md')], [pkg.version, pkg.version])
 check('license tracks package.json', manifest.license, pkg.license)
 
 const required = schema.required
