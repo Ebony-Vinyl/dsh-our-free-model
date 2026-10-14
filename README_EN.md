@@ -125,6 +125,53 @@ Restart the app once afterwards, then open a new conversation — the model pick
 | Offline test suites, release signing, upstream sources, security and privacy | [docs/development-and-upstream.md](docs/development-and-upstream.md) |
 | Round-by-round verification record | [docs/verification-record.md](docs/verification-record.md) |
 | Disclaimer | [docs/appendix.md](docs/appendix.md) |
+## Disclaimer
+
+- **This plugin is a client, not a model provider.** Every model response is
+  generated and delivered by the third-party upstreams named above (OpenCode's
+  Zen gateway, Kilo AI's public gateway, and the EAC gateway you or the
+  maintainer deploy); the plugin hosts, modifies and filters none of it. Models
+  can produce wrong, outdated or biased content — verify before you rely on it.
+- **Free does not mean unlimited, and it does not mean private.** The free
+  allowances are the upstreams' unilateral offer and can be throttled, priced or
+  withdrawn at any time; Kilo's free pool states that prompts may be logged and
+  used to improve their services. **Never send passwords, keys, personal data,
+  trade secrets, or anything you would not hand to a third party through this
+  plugin's free lanes**; for production and sensitive work, use your own paid
+  API.
+- **You agree to the upstreams' terms by using them.** Using a channel means you
+  accept that upstream's terms of service and usage policy; throttling, bans or
+  other consequences of violating them are yours to own. The plugin makes no
+  promise about any upstream's availability, accuracy or continuity.
+- **The EAC lane is a shared, co-paid offer.** Its gateway is deployed by the
+  repository maintainer and unlocked by a GitHub login plus a star; it is for
+  authorized users only. Do not try to bypass the gate, resell, or share access —
+  abuse tightens the lane for everyone.
+- **The plugin is not affiliated with, nor endorsed by, any of the upstreams.**
+  Vendor names and trademarks belong to their owners and are cited only to name
+  the source.
+
+---
+
+## Security and privacy
+
+- All state lives in `DSH_HOME/our-free-model/`; usage and settings stay local, nothing is uploaded.
+- **The aggregate lane's keys never leave the machine.** They are written only into the plugin's own `0600` `settings.json`, requests go only to the provider you configured, and the plugin's API echoes `hasKey` plus a `…abcd` fingerprint rather than the key itself; the Test and Discover probes redact the credential out of anything a provider answers back.
+- The forward listener binds a **loopback address only**, `127.0.0.1` by default, and rejects keyless requests. Widening it to a routable interface is refused: `POST /settings` answers 400 with the reason, and on a composition with no web server a hand-written `settings.json` simply does not start the listener. That traffic is spent from this machine's free lane; one string in a settings file should not put a whole subnet on it.
+- **Network access is a second door, not a relaxation of the rule above.** The local listener still binds loopback only and still refuses a routable address; reaching another machine takes an explicit switch, and then **every** request must carry the network key — `/` and `/health` included, unlike the local listener, because an unauthenticated liveness answer tells the whole subnet that this machine is here and proxying. The relay carries five whitelisted paths (`/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/messages/count_tokens`, each also accepted without its `/v1` prefix) and is not a general proxy for whatever else answers on loopback; it swaps the network key for the local one at the door, so the two are never interchangeable; a request that already carries the relay's hop marker is refused with `508`, so a relay port equal to the local one cannot spin. The network key is minted by `crypto`, compared with `timingSafeEqual`, stored in the same `0600` file, and rotated on its own from the panel.
+
+- **Network access is a second door, not a relaxation of the rule above.** The local listener still binds loopback only and still refuses a routable address; reaching another machine takes an explicit switch, and then **every** request must carry the network key — `/` and `/health` included, unlike the local listener, because an unauthenticated liveness answer tells the whole subnet that this machine is here and proxying. The relay carries three whitelisted paths (`/v1/models`, `/v1/chat/completions`, `/v1/responses`) and is not a general proxy for whatever else answers on loopback; it swaps the network key for the local one at the door, so the two are never interchangeable; a request that already carries the relay's hop marker is refused with `508`, so a relay port equal to the local one cannot spin. The network key is minted by `crypto`, compared with `timingSafeEqual`, stored in the same `0600` file, and rotated on its own from the panel. **The address to dial is re-read from this machine's interfaces** — the panel polls it every 15 s while the relay is on, so a laptop that changed networks, woke from sleep or brought a VPN up is not told where it used to be. A machine commonly holds several private addresses at once (the router's `192.168.x.y`, plus whatever a virtual switch, tunnel or VPN adapter has), so the physical interface leads and is the address the panel offers to copy, with the others listed below it; the relay binds every interface, but whether a given address answers from another machine depends on the network that adapter is on.
+- **The EAC lane's per-user gate lives server-side.** The plugin carries only a shared signing secret, and any install can extract it — so the one place a per-person gate can actually hold is the gateway in front of the relay credential. A chat turn needs a token minted after a GitHub sign-in verified to have starred the repository; the star is re-checked on a configurable window (12 h by default), a removed star revokes at the next sweep, tokens are revocable at any time, and per-account rate and concurrency ceilings bound a shared token. The relay key never reaches the plugin, and the token never reaches the browser — the settings page sees a login name and a verdict.
+- The forward key is minted at runtime by `crypto`, compared with `timingSafeEqual`, and stored in a `0600` file. No hardcoded credential ships in this repository. `/` and `/health` answer ahead of the key check because they are liveness probes — they answer only "is it there"; the model roster requires the key.
+- The plugin's HTTP routes carry a **request trust fence** (fixed in v1.1): the plugin's `/api/our-free-model` prefix outranks the kernel's `/api` in webServer's longest-prefix dispatch and used to bypass kernel auth. Every request now goes through the composition's `connection` admission first (exactly the kernel's `/api` check: cookie/token); compositions without a connection service fall back to a structural fence — loopback Host, cross-site `sec-fetch-site` refused, `Origin`/`Referer` must match the Host authority and port, and a **missing or empty Host is refused too** (fail closed; there is no fallback to the socket's local address). Measured: foreign Host/Origin 403, cookieless loopback 401. `connection` is resolved per request, because the browser half provides it only after plugins load — reading it once at apply time silently degrades the fence to its structural layer for the life of the process.
+- **Announcement HTML renders through a strict client-side allowlist**: `scripts/sanitize-test.mjs` runs an XSS corpus (script injection, event handlers, `javascript:`/`data:` URLs, iframe/svg/form, style injection, mangled tags) and asserts all of it is dropped; nothing ever reaches an `innerHTML` sink. The feed URL is user-overridable, so the renderer treats feed content as untrusted.
+- **The in-app upgrade integrity chain (signed as of v1.3.2)**: manifest Ed25519 signature verification (public key pinned in `src/updater.js`; unsigned or unverified manifests are refused outright, so no mirror can serve an installable forgery) → manifest validation (semver, path traversal, hash shape, `base` restricted to manifest-relative paths) → per-file SHA-256 + byte size on download → read-back verification of staging → read-back verification after install → backup restore on any failure. The manifest is re-fetched immediately before installing so a stale one can never vouch for different bytes. Boundaries in [Known limitations](#known-limitations).
+- **The update channel is fully decoupled from `feedUrl`** (v1.3.2): the setting redirects the announcement feed only, never the upgrade manifest — previously one settings value could point the update channel at any server with self-consistent hashes, turning "wrote a config field" into "executed arbitrary code in the host process". The announcement override itself is now restricted to https (loopback http excepted, so a locally-hosted mirror and the test suites still work) and may not carry credentials. **The target host is not restricted**: any https address may serve as `feedUrl`, and the plugin polls it on the `feedPollMinutes` period — so in a composition without a connection service (see the auth note above), a local caller who can edit settings can point the process at any external address indefinitely. This is trusted the same way as the plugin's other outbound calls: someone who can write `settings.json` can already install code.
+- **The forward listener binds loopback by resolution, not by spelling** (v1.3.2): a hostname such as `localhost` is resolved with `dns.lookup` first and every answer must be loopback; the listener binds the resolved IP — so a hosts file or enterprise DNS pointing `localhost` at a routable interface can no longer pass the check while the listener hands the lane to the subnet.
+- Uninstalling removes the bundle entry; the plugin leaves no patches behind. Its data directory is plain JSON you can delete.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
