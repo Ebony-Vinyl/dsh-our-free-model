@@ -118,7 +118,8 @@ dsh plugin --profile web add /绝对路径/dsh-our-free-model
 | 想了解 | 看这里 |
 | --- | --- |
 | 安装全流程、桌面端闸门、自检、安装失败排查 | [docs/使用指南.md](docs/使用指南.md) |
-| 模型选择、思考档位、本地转发、局域网、EAC、公告 | [docs/使用指南.md](docs/使用指南.md) |
+| 模型选择、思考档位、本地转发、局域网、公告 | [docs/使用指南.md](docs/使用指南.md) |
+| EAC 渠道（桌面端专属） | [docs/eac-lane-zh.md](docs/eac-lane-zh.md) |
 | 已知边界（延迟、额度、信任边界） | [docs/常见问题.md](docs/常见问题.md) |
 | 实现结构、设计取舍、聚合渠道 / 省 Token / 路由 / 本地网关 | [docs/设计说明.md](docs/设计说明.md) |
 | 离线测试套件、发布签名、上游来源、安全与隐私 | [docs/开发与上游.md](docs/开发与上游.md) |

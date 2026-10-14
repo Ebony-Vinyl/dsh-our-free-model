@@ -119,7 +119,8 @@ Restart the app once afterwards, then open a new conversation — the model pick
 | To learn about | Read |
 | --- | --- |
 | Install, the desktop gate, self-check, install-failure remedies | [docs/usage-guide.md](docs/usage-guide.md) |
-| Model selection, thinking rungs, local forward, LAN, EAC, announcements | [docs/usage-guide.md](docs/usage-guide.md) |
+| Model selection, thinking rungs, local forward, LAN, announcements | [docs/usage-guide.md](docs/usage-guide.md) |
+| The EAC lane (desktop only) | [docs/eac-lane-en.md](docs/eac-lane-en.md) |
 | Known limitations (latency, quota, trust boundary) | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | How it is built, trade-offs, aggregate lane / token savers / routing / gateway | [docs/design-notes.md](docs/design-notes.md) |
 | Offline test suites, release signing, upstream sources, security and privacy | [docs/development-and-upstream.md](docs/development-and-upstream.md) |
