@@ -28,6 +28,5 @@ Signed gateway (the recommended shape): the `worker/` directory ships a Cloudfla
 
 ---
 
----
 
 Back to [README](../README_EN.md)

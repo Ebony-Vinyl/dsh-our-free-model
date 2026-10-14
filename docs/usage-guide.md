@@ -6,23 +6,6 @@ Install, the desktop gate, self-check and install-failure remedies, plus model s
 
 ---
 
-### Install
-
-### Command line (plain `dsh web`)
-
-```bash
-dsh plugin --profile web add /absolute/path/to/dsh-our-free-model
-```
-
-Restart the app once. `--profile` should name the profile you actually use.
-
-### DSHEAC AIO / desktop builds — read this first
-
-The desktop host runs a profile gate before it starts the web app. Its scanner
-accepts **only** the symlinks dsh generates itself under
-`.dsh-module-fallback`; **any other symlink or directory junction anywhere in the
-profile makes the app refuse to boot**, reporting:
-
 ```text
 PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 ```
@@ -241,7 +224,6 @@ also get system-level toasts.
 *Check for updates* → *Upgrade now*. The whole flow runs inside the app
 (download → verify → backup → replace → hot reload); no reinstall, no restart.
 A failed upgrade restores the previous version and reports why.
-
 
 ---
 
