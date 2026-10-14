@@ -62862,6 +62862,9 @@ function textFromContent(content) {
     throw new OpenAiGatewayError("message.content contains an unsupported part");
   }).join("");
 }
+function gatewaySource() {
+  return { kind: "plugin:dsh-openai-gateway" };
+}
 function createGatewayMessage(role, content, source) {
   return { id: randomUUID9(), role, content, source };
 }
@@ -62885,10 +62888,7 @@ async function convertMessage(raw, provider, model, bridge, limits) {
     return createGatewayMessage("system", [{
       type: "text",
       text: rewriteTencentContentFingerprints(textFromContent(value.content), provider)
-    }], {
-      kind: "plugin",
-      plugin: "dsh-openai-gateway"
-    });
+    }], gatewaySource());
   }
   if (role === "user") {
     return createGatewayMessage("user", await partsFromContent(value.content, bridge, limits), { kind: "user" });
@@ -63452,10 +63452,7 @@ async function toMessages(input, provider, model, bridge, limits) {
         messages.push(createGatewayMessage("system", [{
           type: "text",
           text: rewriteTencentContentFingerprints(textFromContent(content), provider)
-        }], {
-          kind: "plugin",
-          plugin: "dsh-openai-gateway"
-        }));
+        }], gatewaySource()));
         continue;
       }
       throw new OpenAiGatewayError(`unsupported message role: ${String(raw.role)}`);
@@ -63543,10 +63540,7 @@ async function toResponsesGenerateOptions(body, signal, reasoningEffortOverride,
     messages.push(createGatewayMessage("system", [{
       type: "text",
       text: rewriteTencentContentFingerprints(body.instructions, provider)
-    }], {
-      kind: "plugin",
-      plugin: "dsh-openai-gateway"
-    }));
+    }], gatewaySource()));
   }
   messages.push(...await toMessages(body.input, provider, model, images.bridge, limits));
   const reasoningEffort = reasoningEffortOverride;

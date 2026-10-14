@@ -254,6 +254,11 @@ export function textFromContent(content: unknown): string {
   }).join('')
 }
 
+/** Produce a fresh V4 source identity for each gateway-owned message (PR #229). */
+export function gatewaySource(): Message['source'] {
+  return { kind: 'plugin:dsh-openai-gateway' } as Message['source']
+}
+
 /**
  * 造一条 DSH 消息。
  *
@@ -306,9 +311,7 @@ async function convertMessage(
     return createGatewayMessage('system', [{
       type: 'text',
       text: rewriteTencentContentFingerprints(textFromContent(value.content), provider),
-    }], {
-      kind: 'plugin', plugin: 'dsh-openai-gateway',
-    })
+    }], gatewaySource())
   }
   if (role === 'user') {
     // ⚠️ user 消息走 parts：图片在这里被真正接收（其它角色不接受图片）。

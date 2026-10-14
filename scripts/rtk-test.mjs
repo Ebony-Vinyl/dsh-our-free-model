@@ -852,7 +852,7 @@ check('the module tree imports nothing but its own relative files', () => {
     return entry.isDirectory() ? walk(absolute) : [absolute]
   })
   const files = walk(root)
-  assert.equal(files.length, 17, '12 filters + 5 top-level modules')
+  assert.equal(files.length, 18, '12 filters + 6 top-level modules')
   const offenders = []
   for (const file of files) {
     const body = fs.readFileSync(file, 'utf8')

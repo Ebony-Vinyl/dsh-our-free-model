@@ -1,7 +1,7 @@
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "base": "../",
-  "publishedAt": "2026-10-11T06:21:23.614Z",
+  "publishedAt": "2026-10-14T09:42:36.364Z",
   "notes": "",
   "files": [
     {
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 2941,
-      "sha256": "65d2cf69f41f94f1cf8d2e25ee605941302dcbe39b01cd748dc13200aa22eabd"
+      "sha256": "1e6e34df59cf782f9a95c05c14f282857db28fc9b0837d57d1ac689298a26e2e"
     },
     {
       "path": "src/adapter.js",
@@ -236,8 +236,8 @@
     },
     {
       "path": "src/token-saver/rtk/autodetect.js",
-      "size": 6695,
-      "sha256": "e88809de7adaa512b648181b73a68631d0d6bad1dfa80cfae92c3ecbb8961f88"
+      "size": 7041,
+      "sha256": "017650d4a88959552dfd6a01b8841fd5caeead462271ae355b7730fbfd5c9416"
     },
     {
       "path": "src/token-saver/rtk/constants.js",
@@ -276,8 +276,8 @@
     },
     {
       "path": "src/token-saver/rtk/filters/grep.js",
-      "size": 2446,
-      "sha256": "1cbd9ae989f5b66894ca49f80a04954ab173d7580aabd9cd60c362433dd5e0e5"
+      "size": 1845,
+      "sha256": "06abe489488e2c796696d4f1b42f91d19c2dfa6b50fadd82d9c8331e15f157b1"
     },
     {
       "path": "src/token-saver/rtk/filters/ls.js",
@@ -303,6 +303,11 @@
       "path": "src/token-saver/rtk/filters/tree.js",
       "size": 1347,
       "sha256": "283ce99b64971c5c83786e5f8d68f78bdbbc67372f80c27af92823b1edf09082"
+    },
+    {
+      "path": "src/token-saver/rtk/hitLine.js",
+      "size": 3188,
+      "sha256": "b87bfe38ea75451b94da3cf202c281245ec2650ae283fcff37cf8e3dfe58d64e"
     },
     {
       "path": "src/token-saver/rtk/index.js",
@@ -331,13 +336,13 @@
     },
     {
       "path": "src/vault-anchor.js",
-      "size": 262,
-      "sha256": "28a156e0da6853e9b72b840637f79ea1a8e005bf7e432878a98ee8cb3eefe897"
+      "size": 192,
+      "sha256": "0ac4dfb79cc037af8a0c568eaa067bfac0402ac84030cb3ad709a7feaafae7f6"
     },
     {
       "path": "src/vault-data.js",
-      "size": 677,
-      "sha256": "4db83a43440a0bddb27e5dd0ef9ecd911ed24d96b7e29f9f940ee20a55cd1147"
+      "size": 566,
+      "sha256": "c5d33a4607a8834615da00c32daa81899bb73f6096bc0a2b0b74f45ba4232f57"
     },
     {
       "path": "src/vault.js",
@@ -356,8 +361,8 @@
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2881871,
-      "sha256": "18c7629f2e65c894b46e24e95b6dfa45397fa1f4490590a645c1e1058264daa9"
+      "size": 2881789,
+      "sha256": "6b7f47a6058e2c7aa8ba7dfe71b0f7c440e433b6a20401d360dc830e35b02871"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
@@ -365,5 +370,5 @@
       "sha256": "6419471effa631519def7797d76d7ede38b9fcfa9a83c2148c8ef5d43355b43d"
     }
   ],
-  "signature": "58OPpF8hNv62ZQ2kPyx7TsgMGrdfinH06A3sDypyyz3qv78y6JjLyUsQAmUwQl/vzWCR3ZCJ+kLFcXzIh4OwDQ=="
+  "signature": "/RB1oyfSnDS9XoHRj0HHzrv6+ZZlEkM0JG6MU75sHxJo/tV+3VH6a4MkVTQo1tPXfBj6HRSuQk5HGCy29+T0DA=="
 }
