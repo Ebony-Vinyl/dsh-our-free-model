@@ -33,8 +33,15 @@ const server = http.createServer((req, res) => {
       return
     }
     activeCase.requests.push({ body, path: req.url })
+    const raw = activeCase.responses[activeCase.requests.length - 1] ?? activeCase.responses[activeCase.responses.length - 1]
+    const answer = typeof raw === 'string' ? { body: raw } : raw
+    if (answer.status !== undefined) {
+      res.writeHead(answer.status, { 'content-type': 'application/json' })
+      res.end(answer.body ?? '')
+      return
+    }
     res.writeHead(200, { 'content-type': 'text/event-stream' })
-    res.end(activeCase.body)
+    res.end(answer.body ?? '')
   })
 })
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -73,9 +80,13 @@ function adapterWith(catalog, settings) {
   })
 }
 
-/** One complete combo turn against the stand-in; returns the seen requests. */
-async function drive(model, maxTokens) {
-  const scenario = { body: healthy, requests: [] }
+/**
+ * One complete combo turn against the stand-in; returns the seen requests.
+ * `responses` is indexed by request ordinal, so a scenario can refuse the
+ * first candidate and answer on the second.
+ */
+async function drive(model, maxTokens, responses = [healthy]) {
+  const scenario = { responses, requests: [] }
   activeCase = scenario
   const controller = new AbortController()
   const stream = adapterWith(CATALOG, { defaultMaxTokens: 32768 }).stream({
@@ -132,6 +143,16 @@ await check('the request sends the chain ceiling even above a link capacity', as
   assert.equal(scenario.requests[0].body.max_tokens, 200000)
 })
 
+await check('every candidate in the chain receives the same chain ceiling', async () => {
+  const scenario = await drive(COMBO_ID, 200000, [
+    { status: 429, body: '{"error":{"message":"rate limit exceeded"}}' },
+    { body: healthy },
+  ])
+  assert.equal(scenario.requests.length, 2, 'the refusal must advance to the second candidate')
+  assert.equal(scenario.requests[0].body.max_tokens, 200000)
+  assert.equal(scenario.requests[1].body.max_tokens, 200000)
+})
+
 await check('a smaller session request still wins over the chain ceiling', async () => {
   const scenario = await drive(COMBO_ID, 4096)
   assert.equal(scenario.requests[0].body.max_tokens, 4096)
@@ -141,7 +162,7 @@ await check('a chain left on the intersection keeps the session default in charg
   const plain = normalizeCombos([{ name: 'plain', models: MODELS }])
   const row = buildComboCatalog(plain, FREE_CATALOG)[0]
   assert.ok(row !== undefined)
-  const scenario = { body: healthy, requests: [] }
+  const scenario = { responses: [healthy], requests: [] }
   activeCase = scenario
   const controller = new AbortController()
   const stream = adapterWith([...FREE_CATALOG, row], { defaultMaxTokens: 32768 }).stream({
