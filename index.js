@@ -1242,11 +1242,14 @@ export function apply(ctx, config) {
         combos: normalizeCombos(settings.get().combos),
         // Every id a chain may reference, with the display name the picker uses —
         // the editor offers a searchable list instead of a free-text field, so a
-        // typo cannot become a chain link that silently never resolves.
+        // typo cannot become a chain link that silently never resolves. The two
+        // capacities ride along so the editor can show what a member brings.
         models: state().catalog.map(entry => ({
           id: entry.id, name: entry.name, channel: entry.channel ?? 'free', vision: entry.vision === true,
           contextWindow: entry.contextWindow, maxOutput: entry.maxOutput,
         })),
+        // The built virtual rows: a stored chain's effective capacity is one of
+        // these, already folding the chain's own override over the intersection.
         usable: state().catalog.filter(isComboEntry).map(publicCombo),
         strategies: ['fallback', 'round-robin'],
       }),
@@ -1255,8 +1258,17 @@ export function apply(ctx, config) {
           || patch.models.length > 1000 || patch.models.some(id => typeof id !== 'string' || id.length > 300)) {
           throw httpError(400, 'models must be an array of model ids')
         }
-        const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models }]), state().catalog)
+        // The editor previews the draft it is editing, typed overrides included:
+        // the capacity line must show what saving this draft would produce.
+        const overrides = {}
+        for (const key of ['contextWindow', 'maxOutput']) {
+          const value = Number(patch[key])
+          const whole = Math.trunc(value)
+          if (Number.isFinite(value) && whole > 0) overrides[key] = whole
+        }
+        const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models, ...overrides }]), state().catalog)
         return { capacity: entries.length ? publicCombo(entries[0]) : null }
+      },
       },
       save: async patch => {
         if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
@@ -2380,6 +2392,8 @@ function publicSettings(settings, forwardInfo, egressInfo) {
       strategy: combo.strategy,
       stickyLimit: combo.stickyLimit,
       enabled: combo.enabled,
+      contextWindow: combo.contextWindow,
+      maxOutput: combo.maxOutput,
     })),
     forward: {
       ...(settings.forward ?? {}),

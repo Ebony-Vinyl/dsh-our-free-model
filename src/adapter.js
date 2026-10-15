@@ -134,8 +134,15 @@ export class FreeModelAdapter {
         defaultMaxTokens: 8192,
       }
     }
-    const ceiling = Math.min(entry.maxOutput, state.settings.defaultMaxTokens ?? 32768)
-    const efforts = effortsFor(entry, undefined, state.settings.defaultMaxTokens)
+    // A chain's own ceiling replaces the session default: the chain setting is
+    // the more specific instruction, and the default 32K would otherwise clamp
+    // every chain that lifted its channel-lane members above it. A chain left
+    // on the members' intersection keeps the session default in charge.
+    const combo = isComboEntry(entry)
+    const override = combo ? entry.maxOutputOverride : undefined
+    const fallbackCeiling = override ?? state.settings.defaultMaxTokens
+    const ceiling = override ?? Math.min(entry.maxOutput, state.settings.defaultMaxTokens ?? 32768)
+    const efforts = effortsFor(entry, undefined, fallbackCeiling)
     return {
       provider,
       id: entry.id,
@@ -249,6 +256,7 @@ export class FreeModelAdapter {
         turnModel: entry.id,
         recordTurn: false,
         allowAdvance: true,
+        maxOutput: entry.maxOutputOverride,
       })
       let committed = false
       let result
@@ -295,7 +303,8 @@ export class FreeModelAdapter {
    *   physically under its own id while the turn belongs to the chain;
    *   `recordTurn: false` leaves the turn record to the caller; `allowAdvance`
    *   makes a pre-output failure report itself as advanceable instead of ending
-   *   the turn outright.
+   *   the turn outright; `maxOutput` is the chain's shared output ceiling,
+   *   which replaces the link's own capacity for this request.
    * @returns the turn's own summary, which only a combo caller reads.
    */
   async * runSingle(options, entry, snapshot, plan = {}) {
@@ -337,7 +346,10 @@ export class FreeModelAdapter {
     const warnings = []
     const resolveImage = this.deps.resolveImage
     const messages = repairToolPairing(options.messages ?? [])
-    const budget = budgetFor(options.reasoningEffort, entry, options.maxTokens, settings.defaultMaxTokens)
+    // A chain carries one ceiling for every member (see `runCombo`); the
+    // request budget and the effort menu both resolve against that number.
+    const capacityEntry = plan.maxOutput === undefined ? entry : { ...entry, maxOutput: plan.maxOutput }
+    const budget = budgetFor(options.reasoningEffort, capacityEntry, options.maxTokens, plan.maxOutput ?? settings.defaultMaxTokens)
     const declared = toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
     const session = sessionForConversation(options.sessionId)

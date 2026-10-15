@@ -27,6 +27,12 @@
  * a chain that advertises a 1M window because its head has one overruns a
  * fallback at 128K. The honest numbers are the ones every candidate can honour.
  *
+ * A chain may override the intersection with its own `contextWindow` and
+ * `maxOutput`. The channel lane cannot read capacities out of its gateway, so
+ * every `chan:` row carries the 128K/32K fallback and the intersection rule
+ * drags a whole chain down to it; the two override fields are how a user who
+ * knows the real numbers lifts one chain without editing every member.
+ *
  * @module src/combos.js
  */
 
@@ -64,7 +70,9 @@ export function comboId(name) {
  * treated as untrusted: a non-array `models` becomes empty (and the combo is
  * then dropped, because a chain with no links is a model that cannot answer),
  * a non-string id is dropped, and an unknown strategy falls back to `fallback`
- * rather than being honoured as a typo.
+ * rather than being honoured as a typo. `contextWindow` and `maxOutput` apply
+ * only as positive whole numbers; anything else leaves the field unset and the
+ * built catalog row keeps the intersection default.
  */
 export function normalizeCombos(raw) {
   const rows = Array.isArray(raw) ? raw : []
@@ -79,6 +87,8 @@ export function normalizeCombos(raw) {
       .filter(value => value !== '' && value !== id))]
     if (models.length === 0) continue
     seen.add(id)
+    const contextWindow = positiveInt(row.contextWindow)
+    const maxOutput = positiveInt(row.maxOutput)
     out.push({
       id,
       name: String(row.name ?? '').trim() || id.slice(COMBO_PREFIX.length),
@@ -86,9 +96,18 @@ export function normalizeCombos(raw) {
       strategy: COMBO_STRATEGIES.includes(row.strategy) ? row.strategy : 'fallback',
       stickyLimit: Number.isFinite(Number(row.stickyLimit)) && Number(row.stickyLimit) > 0 ? Math.trunc(Number(row.stickyLimit)) : 1,
       enabled: row.enabled !== false,
+      ...contextWindow === undefined ? {} : { contextWindow },
+      ...maxOutput === undefined ? {} : { maxOutput },
     })
   }
   return out
+}
+
+/** A positive whole number from untrusted JSON, or undefined when unset. */
+function positiveInt(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined
 }
 
 /**
@@ -121,8 +140,14 @@ export function buildComboCatalog(combos, catalog) {
       // Intersection, not union — see the module header.
       vision: members.every(entry => entry.vision === true),
       reasoning: members.some(entry => entry.reasoning === true),
-      contextWindow: Math.min(...members.map(entry => number(entry.contextWindow) ?? 131072)),
-      maxOutput: Math.min(...members.map(entry => number(entry.maxOutput) ?? 32768)),
+      // An explicit chain setting replaces the intersection for every member;
+      // see the module header for why the channel lane needs the escape hatch.
+      contextWindow: combo.contextWindow ?? Math.min(...members.map(entry => number(entry.contextWindow) ?? 131072)),
+      maxOutput: combo.maxOutput ?? Math.min(...members.map(entry => number(entry.maxOutput) ?? 32768)),
+      // The user's own output ceiling, when one was typed. Left undefined for
+      // an intersection row, so the request path can keep the session default
+      // in charge of that case; a number here overrides it for every member.
+      maxOutputOverride: combo.maxOutput,
       canDisableThinking: members.every(entry => entry.canDisableThinking !== false),
       regionSensitive: false,
       wire: 'chat',

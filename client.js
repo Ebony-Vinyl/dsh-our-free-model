@@ -688,6 +688,13 @@ window.__ModuleLoader__.load({
         'routing.strategy.roundRobin': '轮询',
         'routing.stickyLimit': '轮询粘滞次数',
         'routing.stickyHint': '轮询时同一个模型连续用多少次再换下一个。',
+        'routing.contextWindow': '上下文窗口（token）',
+        'routing.maxOutput': '最大输出（token）',
+        'routing.capacityAuto': '自动',
+        'routing.capacityHint': '留空时按整条链上全部成员的最小值自动计算；填写后，链上每个模型都使用这个值。',
+        'routing.capacityContext': '上下文',
+        'routing.capacityOutput': '输出',
+        'routing.memberCapacity': '这个成员提供的上下文窗口与最大输出',
         'routing.members': '成员（按顺序）',
         'routing.addMember': '添加成员',
         'routing.memberEmpty': '还没有成员——点「添加成员」从清单里挑一个。',
@@ -1378,6 +1385,13 @@ window.__ModuleLoader__.load({
         'routing.strategy.roundRobin': 'Round-robin',
         'routing.stickyLimit': 'Round-robin sticky limit',
         'routing.stickyHint': 'How many calls in a row one model serves before the rotation moves on.',
+        'routing.contextWindow': 'Context window (tokens)',
+        'routing.maxOutput': 'Max output (tokens)',
+        'routing.capacityAuto': 'Auto',
+        'routing.capacityHint': 'Empty means the smallest value across the chain members; a number here applies to every model in the chain.',
+        'routing.capacityContext': 'Context',
+        'routing.capacityOutput': 'Output',
+        'routing.memberCapacity': 'The context window and the max output this member brings',
         'routing.members': 'Members (in order)',
         'routing.addMember': 'Add member',
         'routing.memberEmpty': 'No member yet — press "Add member" to pick one from the roster.',
@@ -5817,11 +5831,27 @@ window.__ModuleLoader__.load({
      * a text field is a link that silently never resolves, and the host has no way
      * to tell "you meant this model" from "this model is gone".
      */
+    /** `131072` -> `128K`; the chain editor shows capacities compactly. */
+    const tokenLabel = value => {
+      const tokens = Number(value)
+      if (!Number.isFinite(tokens) || tokens <= 0) return '—'
+      return tokens >= 1024 * 1024 ? `${Math.round(tokens / (1024 * 1024) * 10) / 10}M` : `${Math.round(tokens / 1024)}K`
+    }
+    /** A positive whole token count from a form field, or undefined when cleared
+     *  or too small to survive the truncation (0.5 is not a capacity). */
+    const tokenValue = value => {
+      const tokens = Number(value)
+      const whole = Math.trunc(tokens)
+      return Number.isFinite(tokens) && whole > 0 ? whole : undefined
+    }
+
     function ChainEditor(props) {
       const { t, chain, models, onSave, onCancel } = props
       const [name, setName] = useState(chain.name ?? '')
       const [strategy, setStrategy] = useState(chain.strategy === 'round-robin' ? 'round-robin' : 'fallback')
       const [stickyLimit, setStickyLimit] = useState(String(chain.stickyLimit ?? 1))
+      const [contextWindow, setContextWindow] = useState(chain.contextWindow > 0 ? String(chain.contextWindow) : '')
+      const [maxOutput, setMaxOutput] = useState(chain.maxOutput > 0 ? String(chain.maxOutput) : '')
       const [enabled, setEnabled] = useState(chain.enabled !== false)
       const [members, setMembers] = useState(Array.isArray(chain.models) ? chain.models : [])
       const [picking, setPicking] = useState(false)
@@ -5830,8 +5860,12 @@ window.__ModuleLoader__.load({
       const byId = new Map(models.map(row => [row.id, row]))
       const lanes = LANE_LABEL(t)
       const preview = useAsync(() => members.length
-        ? post('/combos/preview', { models: members })
-        : Promise.resolve({ capacity: null }), [members, models])
+        ? post('/combos/preview', {
+          models: members,
+          contextWindow: tokenValue(contextWindow),
+          maxOutput: tokenValue(maxOutput),
+        })
+        : Promise.resolve({ capacity: null }), [members, models, contextWindow, maxOutput])
 
       const move = (index, delta) => setMembers(current => {
         const next = [...current]
@@ -5846,6 +5880,8 @@ window.__ModuleLoader__.load({
         setError('')
         try {
           const limit = Number(stickyLimit)
+          const contextWindowTokens = tokenValue(contextWindow)
+          const maxOutputTokens = tokenValue(maxOutput)
           await onSave({
             ...chain.id === undefined ? {} : { id: chain.id },
             name,
@@ -5853,6 +5889,8 @@ window.__ModuleLoader__.load({
             strategy,
             stickyLimit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 1,
             enabled,
+            ...contextWindowTokens === undefined ? {} : { contextWindow: contextWindowTokens },
+            ...maxOutputTokens === undefined ? {} : { maxOutput: maxOutputTokens },
           })
         } catch (failure) { setError(String(failure?.message ?? failure)) } finally { setBusy(false) }
       }
@@ -5890,6 +5928,22 @@ window.__ModuleLoader__.load({
             onChange: () => { if (!busy) setEnabled(value => !value) },
           })),
         strategy === 'round-robin' ? h('p', { className: 'ofm_note' }, t('routing.stickyHint')) : null,
+        h('div', { className: 'ofm_row' },
+          h('div', { className: 'ofm_field' },
+            h('span', null, t('routing.contextWindow')),
+            h('input', {
+              className: 'ofm_input', type: 'number', min: 1, step: 1024, style: { width: 148 },
+              value: contextWindow, disabled: busy, placeholder: t('routing.capacityAuto'),
+              onChange: event => setContextWindow(event.target.value),
+            })),
+          h('div', { className: 'ofm_field' },
+            h('span', null, t('routing.maxOutput')),
+            h('input', {
+              className: 'ofm_input', type: 'number', min: 1, step: 1024, style: { width: 148 },
+              value: maxOutput, disabled: busy, placeholder: t('routing.capacityAuto'),
+              onChange: event => setMaxOutput(event.target.value),
+            }))),
+        h('p', { className: 'ofm_note' }, t('routing.capacityHint')),
         h('div', { className: 'ofm_paneltitle' }, t('routing.members'),
           h('span', { className: 'ofm_sec_hint' }, t('routing.memberCount').replace('{n}', String(members.length)))),
         members.length === 0
@@ -5899,7 +5953,8 @@ window.__ModuleLoader__.load({
             return h('div', { key: `${id}#${index}`, className: 'ofm_member' },
               h('span', { className: 'ofm_id', title: id }, row?.name ?? id),
               h('span', { className: 'ofm_tag' }, lanes[row?.channel] ?? ''),
-              row?.contextWindow > 0 ? h('span', { className: 'ofm_tag' }, `${t('tag.context')} ${kilo(row.contextWindow)}`) : null,
+              row?.contextWindow > 0 ? h('span', { className: 'ofm_tag', title: t('routing.memberCapacity') }, `${t('tag.context')} ${kilo(row.contextWindow)}`) : null,
+              row?.maxOutput > 0 ? h('span', { className: 'ofm_tag', title: t('routing.memberCapacity') }, `${t('tag.output')} ${kilo(row.maxOutput)}`) : null,
               miniBtn('↑', () => move(index, -1), { disabled: busy || index === 0, title: t('routing.moveUp') }),
               miniBtn('↓', () => move(index, 1), { disabled: busy || index === members.length - 1, title: t('routing.moveDown') }),
               miniBtn(t('routing.removeMember'), () => setMembers(current => current.filter((_, at) => at !== index)), { danger: true, disabled: busy }))
