@@ -35,6 +35,7 @@ import { isEacEntry, isKiloEntry } from './src/catalog.js'
 import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
+import { buildChannelCatalog, fetchChannelListing, isChannelEntry } from './src/chan-lane.js'
 import { CODE, UpstreamError } from './src/http.js'
 import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
 import { directFetch } from './src/eac.js'
@@ -424,11 +425,46 @@ export function apply(ctx, config) {
     attributionUserAgent: 'deepseek-harness',
     resolveImage: imageResolver(ctx, logger),
     sealedCredential: sealedCredentialOf,
+    chanGateway: chanGatewayDialTarget,
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
   })
-  const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
+  const { state, adapter, refreshCatalog: coreRefreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
   const runForwarded = modelRuntime.complete
+
+  /**
+   * Every refresh round carries the chan lane too: the same triggers that
+   * re-read the free/sealed/Kilo listings re-read the pack's gateway listing,
+   * so the roster is on one cadence and one button (`POST /refresh`) reaches
+   * all of it. The lane's own sync never throws — a failing round keeps its
+   * previous rows.
+   *
+   * The lane syncs AFTER the round, and the first chan sync waits for the
+   * first round to finish: a chan row that lands before the free listing
+   * would rebuild every chain's links against a catalog that does not yet
+   * carry a listing-only free model, and the chain would read back with a
+   * link missing. The round's own listings come first; then the lane's rows
+   * join them, and every chain is rebuilt against the full set.
+   */
+  let firstCatalogRoundDone = false
+  const firstCatalogRoundWaiters = []
+  const firstCatalogRoundFinished = () => {
+    firstCatalogRoundDone = true
+    for (const resolve of firstCatalogRoundWaiters.splice(0)) resolve()
+  }
+  const afterFirstCatalogRound = () => firstCatalogRoundDone
+    ? undefined
+    : new Promise(resolve => firstCatalogRoundWaiters.push(resolve))
+  const refreshCatalog = async opts => {
+    let result
+    try {
+      result = await coreRefreshCatalog(opts)
+    } finally {
+      firstCatalogRoundFinished()
+    }
+    await syncChannelLane()
+    return result
+  }
 
   // ── registration ────────────────────────────────────────────────────────────
   const routes = () => Object.keys(state().membership)
@@ -718,6 +754,17 @@ export function apply(ctx, config) {
     }
   }
 
+  /**
+   * The gateway's dialable address for the plugin's own lane: `{ port, key }`,
+   * or null when there is no credential (or the gateway is switched off by
+   * env). Read fresh per use — the key rotates and the port moves.
+   */
+  function chanGatewayDialTarget() {
+    const target = chanGatewayTarget()
+    const key = target.enabledByEnv ? target.credential?.key : null
+    return typeof key === 'string' && key !== '' ? { port: target.port, key } : null
+  }
+
   async function syncChanRelay() {
     while (chanRelaySyncInFlight !== null) await chanRelaySyncInFlight.catch(() => {})
     const run = syncChanRelayOnce()
@@ -794,6 +841,67 @@ export function apply(ctx, config) {
     }
   }
 
+  // ── the 白嫖 lane's roster (routing-only) ────────────────────────────────────
+  /**
+   * The pack's gateway serves models the harness's own routes do not name:
+   * they join the merged catalog so a fallback chain can reference them, and
+   * are never advertised as standalone routes (`computeMembership` drops
+   * them). One listing round per refresh; a round that fails keeps the
+   * previous rows and warns once, so a gateway that restarts or a key that is
+   * being re-minted never empties a chain mid-day.
+   */
+  let chanLaneSync = null
+  let chanLaneWarned = false
+  async function syncChannelLane() {
+    while (chanLaneSync !== null) await chanLaneSync.catch(() => {})
+    const run = syncChannelLaneOnce()
+    chanLaneSync = run
+    try { return await run } finally { if (chanLaneSync === run) chanLaneSync = null }
+  }
+  async function syncChannelLaneOnce() {
+    if (disposed) return false
+    await afterFirstCatalogRound()
+    if (disposed) return false
+    const target = chanGatewayDialTarget()
+    if (target === null) {
+      warnChanLane("the channel gateway has no credential yet (or is switched off); keeping the lane's previous roster")
+      return false
+    }
+    try {
+      const rows = await fetchChannelListing({ port: target.port, key: target.key })
+      if (disposed) return false
+      modelRuntime.syncChannelCatalog(buildChannelCatalog(rows))
+      chanLaneWarned = false
+      return true
+    } catch (error) {
+      if (!disposed) warnChanLane(`channel gateway listing failed (${error?.message ?? error}); keeping the lane's previous roster`)
+      return false
+    }
+  }
+  function warnChanLane(message) {
+    if (chanLaneWarned) return
+    chanLaneWarned = true
+    logger.warn?.(`our-free-model: ${message}`)
+  }
+
+  /**
+   * A freshly mounted pack answers its port only after the gateway's own async
+   * start converges, so a single read at mount time can see ECONNREFUSED and
+   * leave the lane empty until the next periodic round. Retry a few times,
+   * stopping as soon as a listing lands; the sync's own warn-once flag keeps
+   * this from becoming a log loop.
+   */
+  async function settleChanLane() {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (disposed) return
+      if (attempt > 0) await new Promise(resolve => {
+        const timer = setTimeout(resolve, 2500)
+        timer.unref?.()
+      })
+      if (disposed) return
+      if (await syncChannelLane()) return
+    }
+  }
 
   // ── egress outlet ───────────────────────────────────────────────────────────
   /** One gateway round trip at a time; the panel polls, the throttle decides. */
@@ -1052,6 +1160,9 @@ export function apply(ctx, config) {
       })
       channelPack = { state: 'ready', error: '' }
       logger.info?.('our-free-model: free-channel pack mounted (CodeArts, CodeBuddy, and 11 more)')
+      // The pack's own gateway is the lane's endpoint; its models become
+      // routing destinations as soon as the listing answers.
+      void settleChanLane()
     }).catch(error => {
       if (stopped) return
       channelPack = { state: 'failed', error: String(error?.message ?? error).slice(0, 300) }
@@ -2298,10 +2409,11 @@ function buildSummary(deps) {
   const feedView = deps.announcements.view()
   const defaultMaxTokens = deps.settings.get().defaultMaxTokens
   // Lanes that carry no availability verdict of their own. The absorbed channels
-  // and the aggregate lane are named by a listing round that already succeeded,
-  // and a combo is a view over rows that were themselves named — none of them is
-  // pinged, so "no verdict" must not render as "unknown".
-  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry)
+  // (EAC, Kilo and the pack's chan lane) and the aggregate lane are named by a
+  // listing round that already succeeded, and a combo is a view over rows that
+  // were themselves named — none of them is pinged, so "no verdict" must not
+  // render as "unknown".
+  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isChannelEntry(entry) || isComboEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
