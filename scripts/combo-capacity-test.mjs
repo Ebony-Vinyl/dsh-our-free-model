@@ -120,6 +120,20 @@ await check('a chain without explicit numbers keeps the intersection', async () 
   assert.equal(plain[0]?.maxOutputOverride, undefined)
 })
 
+await check('a window alone keeps the output side on the intersection', async () => {
+  const rows = buildComboCatalog(normalizeCombos([{ name: 'window-only', models: MODELS, contextWindow: 2000000 }]), FREE_CATALOG)
+  assert.equal(rows[0]?.contextWindow, 2000000)
+  assert.equal(rows[0]?.maxOutput, 64000)
+  assert.equal(rows[0]?.maxOutputOverride, undefined)
+})
+
+await check('an output ceiling alone keeps the window on the intersection', async () => {
+  const rows = buildComboCatalog(normalizeCombos([{ name: 'output-only', models: MODELS, maxOutput: 99999 }]), FREE_CATALOG)
+  assert.equal(rows[0]?.contextWindow, 128000)
+  assert.equal(rows[0]?.maxOutput, 99999)
+  assert.equal(rows[0]?.maxOutputOverride, 99999)
+})
+
 await check('normalize drops non-positive overrides and keeps whole numbers', async () => {
   const dirty = normalizeCombos([
     { name: 'dirty', models: ['deepseek-v4-flash-free'], contextWindow: 0, maxOutput: -5 },
