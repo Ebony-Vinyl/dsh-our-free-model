@@ -18,8 +18,12 @@ const ALWAYS_FREE = new Set(['union-alpha', 'space-bunny-free'])
 
 /**
  * Local capability baseline. `contextWindow`/`maxOutput` are the provider's
- * published capacities; `vision` is what this lane actually accepted under a
- * direct image-input probe, not what a model card claims.
+ * published capacities — for ids whose lane listing publishes no capacity
+ * fields at all (it returns only `id`/`created`/`owned_by`), that means the
+ * models.dev catalog the official client itself reads: the free deepseek rows
+ * below were re-checked there on 2026-10-15 (#345). `vision` is what this lane
+ * actually accepted under a direct image-input probe, not what a model card
+ * claims.
  */
 export const CAPABILITIES = [
   { match: /^mimo.*v2\.6/, vision: true, reasoning: true, contextWindow: 1048576, maxOutput: 131072, canDisableThinking: false },
@@ -30,6 +34,8 @@ export const CAPABILITIES = [
   { match: /^ling/, vision: false, reasoning: true, contextWindow: 128000, maxOutput: 32768 },
   { match: /^space.?bunny/, vision: true, reasoning: true, contextWindow: 262144, maxOutput: 65536 },
   { match: /^union/, vision: true, reasoning: false, contextWindow: 262144, maxOutput: 131072 },
+  { match: /^deepseek-v4\.1-flash/, vision: true, reasoning: true, contextWindow: 200000, maxOutput: 32000 },
+  { match: /^deepseek-v4-flash/, vision: false, reasoning: true, contextWindow: 200000, maxOutput: 128000 },
   { match: /^deepseek/, vision: false, reasoning: true, contextWindow: 128000, maxOutput: 64000 },
   { match: /^jev/, vision: false, reasoning: false, contextWindow: 32768, maxOutput: 4096 },
 ]
@@ -46,6 +52,7 @@ const DISPLAY_NAMES = {
   'space-bunny-free': 'Space Bunny',
   'union-alpha': 'Union Alpha',
   'deepseek-v4-flash-free': 'DeepSeek V4 Flash',
+  'deepseek-v4.1-flash-free': 'DeepSeek V4.1 Flash',
   'jev-1.13-free': 'Jev 1.13',
 }
 

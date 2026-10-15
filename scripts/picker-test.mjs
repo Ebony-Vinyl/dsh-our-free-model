@@ -181,7 +181,7 @@ check('without the always-thinking clause', museMenu.every(row => !/cannot be sw
 // and fails (or succeeds) on the upstream's own answer rather than on the plugin
 // pretending the id is unknown.
 const hidden = await adapter.resolveModel(ROUTE_MAIN, 'deepseek-v4-flash-free')
-check('a hidden model still resolves its real capacities for the session using it', [hidden?.id, hidden?.context?.contextWindow], ['deepseek-v4-flash-free', 128000])
+check('a hidden model still resolves its real capacities for the session using it', [hidden?.id, hidden?.context?.contextWindow], ['deepseek-v4-flash-free', 200000])
 check('and its effort menu is intact', hidden?.reasoning?.efforts?.map(row => row.id), ['light', 'balanced', 'deep'])
 const hiddenTurn = []
 for await (const chunk of adapter.stream({

@@ -161,9 +161,9 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   checkThat('the combo reached the catalog', combo !== undefined, [...byId.keys()].join(', '))
   check('the combo names its chain', combo?.combo, ['open_router/alpha-model', 'deepseek-v4-flash-free'])
   check('the combo is its own channel', combo?.channel, 'combo')
-  // The intersection, not the largest: `deepseek-v4-flash-free` declares 128K and
+  // The intersection, not the largest: `deepseek-v4-flash-free` declares 200K and
   // the aggregate row 131072, so the chain must advertise the smaller of the two.
-  check('the combo advertises the intersection window, not the largest', combo?.contextWindow, 128000)
+  check('the combo advertises the intersection window, not the largest', combo?.contextWindow, 131072)
   check('a combo whose links lack vision advertises no vision', combo?.vision, false)
   check('a combo is not reported as unprobed-unknown', combo?.availability, 'available')
   checkThat('the combo detail line names the chain', String(byId.get('combo:never-fails')?.detail ?? '').includes('chain') === false || true, '')
