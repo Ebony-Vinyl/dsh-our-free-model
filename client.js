@@ -24,6 +24,7 @@ window.__ModuleLoader__.load({
     const module = { exports: {} }
     const exports = module.exports
     const React = require('react')
+    const ReactDOM = require('react-dom')
     const { createElement: h, Fragment, useState, useEffect, useMemo, useRef, useCallback } = React
 
     const NS = 'settings.ourFreeModel'
@@ -363,6 +364,7 @@ window.__ModuleLoader__.load({
         'nav.tab.ledger': '数据看板',
         'nav.tab.logs': '运行日志',
         'nav.tab.gateway': '网关设置',
+        'nav.tab.upgrade': '插件升级',
         'chan.titleSingle': '渠道',
         'dash.title': '数据看板',
         'dash.sub': '渠道模型的 Token 消耗与推理指标：输入/输出/思考/缓存逐项统计，账号与模型双维度透视。',
@@ -975,6 +977,7 @@ window.__ModuleLoader__.load({
         'nav.tab.ledger': 'Dashboard',
         'nav.tab.logs': 'Request log',
         'nav.tab.gateway': 'Gateway',
+        'nav.tab.upgrade': 'Plugin upgrade',
         'chan.titleSingle': 'Channel',
         'dash.title': 'Usage dashboard',
         'dash.sub': 'Token spend and inference metrics for the channel models: input/output/reasoning/cache, pivoted by account and by model.',
@@ -1406,11 +1409,10 @@ window.__ModuleLoader__.load({
 .ofm_stat b{display:block;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
 .ofm_stat span{font-size:10.5px;color:var(--dsw-alias-label-tertiary)}
 /* ══ 公告（首次引导） ══════════════════════════════════════════════════ */
-/* The onboarding slot is mounted inside the collapsed sidebar foot of the shell,
-   so a card that stays in flow inherits a 55 px-wide, overflow-hidden column. The
-   scrim is therefore fixed to the viewport; the shell sets no transform, filter
-   or contain on any ancestor, so nothing re-anchors it. Mask colour, blur and
-   z-index mirror the Modal layer of the shell so this reads as first-party. */
+    /* The onboarding slot is mounted inside the shell, but Announcement portals its
+       scrim into document.body so third-party sidebar stacking contexts cannot trap
+       the fixed overlay. Mask colour, blur and z-index mirror the Modal layer of the
+       shell so this reads as first-party. */
 .ofm_scrim{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;background:var(--dsw-alias-bg-mask-1, rgb(0 0 0 / 32%));backdrop-filter:var(--dsw-mask-blur, blur(8px)) saturate(140%);-webkit-backdrop-filter:var(--dsw-mask-blur, blur(8px)) saturate(140%);animation:ofm-fadein .24s ease}
 @keyframes ofm-fadein{from{opacity:0}to{opacity:1}}
 .ofm_ann{width:min(620px,92vw);max-height:min(86vh,640px);border-radius:18px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 94%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 8%),0 28px 80px rgb(0 0 0 / 40%);overflow:hidden;display:flex;flex-direction:column;animation:ofm-popin .36s cubic-bezier(.16,1,.3,1)}
@@ -3528,6 +3530,13 @@ window.__ModuleLoader__.load({
           h('span', { className: 'ofm_note' }, t('reload.done').replace('{n}', String(settings.reloadCount ?? 0)))))
     }
 
+    function UpgradePage(props) {
+      const { t, settings, onApply, busy } = props
+      return h('div', { className: 'ofm_page' },
+        h(PageHero, { title: t('section.upgrade'), sub: t('section.upgradeHint') }),
+        h(UpgradePanel, { t, settings, onApply, busy }))
+    }
+
     // ── 白嫖模型接入页 ────────────────────────────────────────────────────────
     // Real channel logos carried over from the upstream Channel Pack client (see
     // vendor/channel-pack/NOTICE.md) — the same artwork users know from those
@@ -5533,7 +5542,7 @@ window.__ModuleLoader__.load({
     // The active page lives in localStorage so a reload — or the hot reload the
     // upgrader triggers — comes back to the page the user was reading.
     const TAB_KEY = 'ofm.tab'
-    const TABS = ['free', 'eac', 'channels', 'aggregate', 'saver', 'routing', 'ledger', 'logs', 'gateway']
+    const TABS = ['free', 'eac', 'channels', 'aggregate', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade']
 
     function Shell(props) {
       const { t, data, counts, summary, stats, eacAuth, setEacAuth, eacLogin, busy, setBusy, apply, bench, benches, ctx } = props
@@ -5573,6 +5582,7 @@ window.__ModuleLoader__.load({
         ['ledger', t('nav.tab.ledger'), null],
         ['logs', t('nav.tab.logs'), null],
         ['gateway', t('nav.tab.gateway'), null],
+        ['upgrade', t('nav.tab.upgrade'), null],
       ]
       const nav = h('nav', { className: 'ofm_nav' },
         h('span', { className: 'ofm_navbrand' },
@@ -5604,6 +5614,8 @@ window.__ModuleLoader__.load({
                   ? h(LogsPage, { t, ctx })
                   : tab === 'gateway'
                     ? h(GatewayPage, { t, ctx })
+                    : tab === 'upgrade'
+                      ? h(UpgradePage, { t, settings: data.settings, onApply: apply, busy })
                     : tab === 'eac'
                       ? h(EacPage, { t, data, counts, summary, stats, eacAuth, setEacAuth, eacLogin, busy, apply, bench, benches, refresh, reprobe })
                       : h(FreePage, { t, data, counts, summary, stats, eacAuth, eacLogin, busy, apply, bench, benches, refresh, reprobe })
@@ -5670,8 +5682,7 @@ window.__ModuleLoader__.load({
         h(Section, { title: t('section.forward'), hint: t('section.forwardHint') }, h(Forward, { settings: data.settings, t, onApply: apply, busy })),
         h(Section, { title: t('section.egress'), hint: t('section.egressHint') }, h(Egress, { settings: data.settings, t, onApply: apply, busy })),
         h(Section, { title: t('section.prefs'), hint: t('section.prefsHint') }, h(Preferences, { summary: data, t, onApply: apply, busy })),
-        h(Section, { title: t('section.news'), hint: t('section.newsHint') }, h(NewsPanel, { t })),
-        h(Section, { title: t('section.upgrade'), hint: t('section.upgradeHint') }, h(UpgradePanel, { t, settings: data.settings, onApply: apply, busy })))
+        h(Section, { title: t('section.news'), hint: t('section.newsHint') }, h(NewsPanel, { t })))
     }
 
     function EacPage(props) {
@@ -5734,6 +5745,16 @@ window.__ModuleLoader__.load({
     // ── announcement ──────────────────────────────────────────────────────────
     const PAGES = ['ann.preamble', 'ann.models', 'ann.steps', 'ann.features', 'ann.updates']
 
+    function announcementPortalHost() {
+      let host = document.querySelector('[data-ofm-announcement-root]')
+      if (host === null) {
+        host = document.createElement('div')
+        host.setAttribute('data-ofm-announcement-root', 'true')
+        document.body.appendChild(host)
+      }
+      return host
+    }
+
     function Announcement(props) {
       const { t, complete, openSection, page, setPage, summary, acknowledged } = props
       useEffect(() => { if (acknowledged) complete() }, [acknowledged, complete])
@@ -5749,7 +5770,11 @@ window.__ModuleLoader__.load({
         try { await post(`/announcement/ack?version=${encodeURIComponent(summary?.announcementVersion ?? '')}`) } catch { /* ack is best effort */ }
         complete()
       }
-      return h('div', { className: 'ofm_scrim' },
+      const host = announcementPortalHost()
+      useEffect(() => () => {
+        if (host.parentNode !== null) host.parentNode.removeChild(host)
+      }, [host])
+      return ReactDOM.createPortal(h('div', { className: 'ofm_scrim' },
         h('div', { className: 'ofm_ann', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('title') },
           h('div', { className: 'ofm_annhead' },
             h('h2', { className: 'ofm_anntitle' }, t('title')),
@@ -5763,7 +5788,7 @@ window.__ModuleLoader__.load({
             page === 0 ? h(Button, { kind: 'ghost', onClick: finish }, t('ann.later')) : h(Button, { kind: 'ghost', onClick: () => setPage(p => Math.max(0, p - 1)) }, '‹'),
             last
               ? h(Button, { kind: 'primary', onClick: async () => { await finish(); openSection?.('our-free-model') } }, t('ann.openSettings'))
-              : h(Button, { kind: 'primary', onClick: () => setPage(p => Math.min(PAGES.length - 1, p + 1)) }, '›'))))
+              : h(Button, { kind: 'primary', onClick: () => setPage(p => Math.min(PAGES.length - 1, p + 1)) }, '›')))), host)
     }
 
     const list = (t, keys) => keys.map(key => h('li', { key }, t(key)))

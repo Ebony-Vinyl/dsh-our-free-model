@@ -20,7 +20,7 @@ async function run(model, extra, label) {
   applyFingerprintTools(body, false);
   const t0 = Date.now();
   let firstToken = 0;
-  const res = await fetch(`${B}/zen/v1/chat/completions`, {
+  const res = await fetch(`${B}/inference/v1/chat/completions`, {
     method: "POST", headers: { ...HEADERS, "x-opencode-request": generateRequestId() }, body: JSON.stringify(body), redirect: "error",
   });
   if (!res.ok) { const t = await res.text(); console.log(`FAIL ${label} ${res.status} ${t.slice(0, 200).replace(/\s+/g, " ")}`); return; }

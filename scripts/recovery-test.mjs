@@ -15,7 +15,7 @@ const server = http.createServer((req, res) => {
   const pieces = []
   req.on('data', piece => pieces.push(piece))
   req.on('end', async () => {
-    if (forwardScenario !== undefined && req.method === 'GET' && req.url === '/zen/v1/models') {
+    if (forwardScenario !== undefined && req.method === 'GET' && req.url === '/inference/v1/models') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ data: forwardScenario.models.map(id => ({ id })) }))
       return

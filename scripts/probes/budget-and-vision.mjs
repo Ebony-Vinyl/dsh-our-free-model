@@ -41,7 +41,7 @@ async function post(path, body, anthropic) {
 const chat = (model, extra) => async () => {
   const body = { model, messages: [{ role: "user", content: PROMPT }], stream: true, ...extra };
   applyFingerprintTools(body, false);
-  return post("/zen/v1/chat/completions", body);
+  return post("/inference/v1/chat/completions", body);
 };
 
 async function measure(label, run, n = 3) {
@@ -69,7 +69,7 @@ const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwA
 async function vision(label, model, content) {
   const body = { model, max_tokens: 120, stream: true, messages: [{ role: "user", content }] };
   applyFingerprintTools(body, false);
-  const r = await post("/zen/v1/chat/completions", body);
+  const r = await post("/inference/v1/chat/completions", body);
   log(`  ${label.padEnd(30)} ${r.status} ${r.status === 200 ? "accepted" : r.txt.slice(0, 120).replace(/\s+/g, " ")}`);
 }
 log("===== vision input =====");

@@ -20,8 +20,11 @@ const react = {
 }
 new Function('window', 'Date', source)(window, ClockDate)
 const { buildHeatCells, Heatmap } = bundle.factory(name => {
-  assert.equal(name, 'react')
-  return react
+  if (name === 'react') return react
+  if (name === 'react-dom') {
+    return { createPortal: (children, container) => ({ type: 'portal', children, container }) }
+  }
+  throw new Error(`the browser half may only require react or react-dom; it asked for "${name}"`)
 }).__test
 const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const localDate = key => {

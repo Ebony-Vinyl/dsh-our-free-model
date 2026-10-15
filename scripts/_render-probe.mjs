@@ -128,6 +128,7 @@ new Function('window', 'document', 'navigator', source)(globalThis.window, globa
 const registered = globalThis.__registered
 const exports = registered.factory(name => {
   if (name === 'react') return stubReact
+  if (name === 'react-dom') return { createPortal: (children, container) => ({ __el: true, type: 'portal', props: { container }, children: [children] }) }
   throw new Error(`asked for ${name}`)
 })
 

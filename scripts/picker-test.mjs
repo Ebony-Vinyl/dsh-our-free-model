@@ -1,7 +1,7 @@
 /**
  * What the model picker is allowed to advertise.
  *
- * Issue #3: a model the gateway names in `/zen/v1/models` but refuses to route
+ * Issue #3: a model the gateway names in `/inference/v1/models` but refuses to route
  * at all still appeared in the picker, so picking it spent a turn on a
  * guaranteed failure. The probe already knew — the settings page said 暂不可用 —
  * but `computeMembership` only ever separated the region-gated ones and left

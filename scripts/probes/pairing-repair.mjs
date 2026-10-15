@@ -36,7 +36,7 @@ async function ask(label, harnessMessages) {
   applyFingerprint(body, false)
   try {
     await postStreamed({
-      path: '/zen/v1/chat/completions', body,
+      path: '/inference/v1/chat/completions', body,
       session: mintSessionId(), requestId: mintRequestId(), onData: () => {},
     })
     console.log(`${label.padEnd(34)} ACCEPTED`)

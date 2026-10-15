@@ -41,7 +41,7 @@
 <div align="center">
   <img src="docs/images/qq-group-qr.png" alt="AI 技术交流学习群二维码" width="300">
   <br>
-  <b>QQ 群：386179533（AI 技术交流学习群）</b>
+  <b>QQ 群：974582805（AI 技术交流学习群）</b>
   <br>
   扫码加入群聊，一起交流插件使用心得、反馈问题与分享玩法。
 </div>
@@ -139,7 +139,7 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 
 1. 将发布文件复制至 node_modules/dsh-our-free-model/
 （index.js、client.js、adapter/、src/、locale/、icon.svg、cordis.patch.yml、package.json——adapter/ 不可遗漏：index.js 首行即 import 该目录）
-2. 在 dependencies 中加入 "dsh-our-free-model": "2.2.0"——该版本号跟随仓库 package.json 的 version（版本变更时同步，当前为 2.2.0），不要沿用旧值，也不要写为 link:
+2. 在 dependencies 中加入 "dsh-our-free-model": "2.3.0"——该版本号跟随仓库 package.json 的 version（版本变更时同步，当前为 2.3.0），不要沿用旧值，也不要写为 link:
 3. 在 dsh.profile.bundles 末尾追加 "dsh-our-free-model"
 
 > **把插件写进 `dependencies` 就是把安装目录交给包管理器**（桌面端用 pnpm）。此时应用内升级器

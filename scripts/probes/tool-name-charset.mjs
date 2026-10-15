@@ -31,7 +31,7 @@ for (const [label, tools] of CASES) {
   let outcome
   try {
     await postStreamed({
-      path: '/zen/v1/chat/completions',
+      path: '/inference/v1/chat/completions',
       body,
       session: mintSessionId(),
       requestId: mintRequestId(),

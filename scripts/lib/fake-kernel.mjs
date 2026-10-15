@@ -44,7 +44,7 @@ export function chatFrames(text = 'ok') {
  * Start the stand-in gateway.
  *
  * @param {object} options
- * @param {string[]} options.listing - model ids `GET /zen/v1/models` names
+ * @param {string[]} options.listing - model ids `GET /inference/v1/models` names
  * @param {(id: string, body: object, api: object) => {status?: number, body?: string, socket?: boolean, contentType?: string}} options.answer
  *   what one `POST` to the model's endpoint looks like; `api.refuseAll` etc. are
  *   readable from the returned object so a test can flip verdicts between rounds
@@ -60,7 +60,7 @@ export async function stubUpstream({ listing = [], answer = () => ({ body: chatF
     req.on('data', row => chunks.push(row))
     req.on('end', async () => {
       const url = String(req.url ?? '')
-      if (req.method === 'GET' && url === '/zen/v1/models') {
+      if (req.method === 'GET' && url === '/inference/v1/models') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ data: rows }))
         return

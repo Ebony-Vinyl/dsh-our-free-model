@@ -40,6 +40,10 @@ new Function('window', 'document', 'navigator', source)(globalThis.window, globa
 const problems = []
 const record = globalThis.__registered
 
+if (!source.includes("ReactDOM.createPortal") || !source.includes("data-ofm-announcement-root") || !source.includes('document.body.appendChild(host)')) {
+  problems.push('announcement overlay must use a body-level portal host')
+}
+
 if (record === undefined) {
   problems.push('the bundle never registered itself with the module loader')
 } else {
@@ -48,7 +52,8 @@ if (record === undefined) {
   else {
     const exports = record.factory(name => {
       if (name === 'react') return stubReact
-      throw new Error(`the browser half may only require react; it asked for "${name}"`)
+      if (name === 'react-dom') return { createPortal: (children, container) => ({ type: 'portal', children, container }) }
+      throw new Error(`the browser half may only require react or react-dom; it asked for "${name}"`)
     })
     if (typeof exports.apply !== 'function') problems.push('exports.apply is missing')
     if (!Array.isArray(exports.inject)) problems.push('exports.inject is missing')

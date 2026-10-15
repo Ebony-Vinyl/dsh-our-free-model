@@ -35,7 +35,7 @@ const upstream = http.createServer((req, res) => {
   const chunks = []
   req.on('data', chunk => chunks.push(chunk))
   req.on('end', () => {
-    if (req.method === 'GET' && req.url === '/zen/v1/models') {
+    if (req.method === 'GET' && req.url === '/inference/v1/models') {
       listingCalls++
       signalListingStarted?.()
       const respond = () => {

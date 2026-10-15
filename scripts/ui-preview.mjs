@@ -56,7 +56,7 @@ const BIG_DIFF = [
   '',
 ].join('\n')
 
-const TABS = ['free', 'eac', 'channels', 'aggregate', 'saver', 'routing', 'ledger', 'logs', 'gateway']
+const TABS = ['free', 'eac', 'channels', 'aggregate', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade']
 
 // ── module resolution ────────────────────────────────────────────────────────
 /**

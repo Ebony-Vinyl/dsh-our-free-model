@@ -41,7 +41,7 @@ for (const [label, messages] of CASES) {
   let outcome
   try {
     await postStreamed({
-      path: '/zen/v1/chat/completions', body,
+      path: '/inference/v1/chat/completions', body,
       session: mintSessionId(), requestId: mintRequestId(), onData: () => {},
     })
     outcome = 'ACCEPTED'

@@ -34,7 +34,7 @@ let generations = 0
 const fixture = http.createServer((req, res) => {
   req.resume()
   req.on('end', () => {
-    if (req.url === '/zen/v1/models') {
+    if (req.url === '/inference/v1/models') {
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ data: [{ id: model }] }))
     } else if (req.url.endsWith('/chat/completions')) {

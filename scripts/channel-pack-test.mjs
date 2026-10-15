@@ -148,8 +148,11 @@ try {
   }
   new Function('window', fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8'))(window)
   const { ChannelsPage } = bundle.factory(name => {
-    assert.equal(name, 'react')
-    return react
+    if (name === 'react') return react
+    if (name === 'react-dom') {
+      return { createPortal: (children, container) => ({ type: 'portal', children, container }) }
+    }
+    throw new Error(`the browser half may only require react or react-dom; it asked for "${name}"`)
   }).__test
   const tree = ChannelsPage({ t: key => key, ctx: {}, summary: { channels: { state: 'ready' } } })
   const cards = []

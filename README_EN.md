@@ -114,7 +114,7 @@ To install manually as a real directory, in `<DSH_HOME>/profiles/<profile>/`:
 
 1. Copy the published files into `node_modules/dsh-our-free-model/`
    (`index.js`, `client.js`, `adapter/`, `src/`, `locale/`, `icon.svg`, `cordis.patch.yml`, `package.json` — do not skip `adapter/`: `index.js` imports it on the first line)
-2. Add `"dsh-our-free-model": "2.2.0"` to `dependencies` — that number **tracks the repo's `package.json` `version`** (bump it together; 2.2.0 as of this line), never copy a stale one, and a version spec, not `link:`
+2. Add `"dsh-our-free-model": "2.3.0"` to `dependencies` — that number **tracks the repo's `package.json` `version`** (bump it together; 2.3.0 as of this line), never copy a stale one, and a version spec, not `link:`
 3. Append `"dsh-our-free-model"` to `dsh.profile.bundles`
 
 > **Putting the plugin in `dependencies` hands the install directory to the package manager**

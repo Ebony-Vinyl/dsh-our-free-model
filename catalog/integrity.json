@@ -1,5 +1,5 @@
 {
-  "version": "2.2.0",
+  "version": "2.3.0",
   "algorithm": "sha256",
   "files": [
     {
@@ -14,8 +14,8 @@
     },
     {
       "path": "client.js",
-      "size": 452989,
-      "sha256": "df7666e53b5812ea74df754e2d318cddd09ee1bd6b9938df568d6b691ac9c125"
+      "size": 453849,
+      "sha256": "21c387c6ebe04fc3cf4f9bedac33e53832f6fb7fd92152fd543455f9351774b6"
     },
     {
       "path": "cordis.patch.yml",
@@ -50,7 +50,7 @@
     {
       "path": "package.json",
       "size": 2941,
-      "sha256": "1e6e34df59cf782f9a95c05c14f282857db28fc9b0837d57d1ac689298a26e2e"
+      "sha256": "cc652ab7e93ad5e109b69830e81d7e99f15ed64b99a065c12eabf8f9e5c5d31c"
     },
     {
       "path": "src/adapter.js",
@@ -69,8 +69,8 @@
     },
     {
       "path": "src/catalog.js",
-      "size": 19133,
-      "sha256": "7f20a8589b02b30770d3dfafd4301e4a998a4f5ad5c7bb394277bb1ce4d63c11"
+      "size": 19139,
+      "sha256": "9d9b64218a3e0bf65532868641aed84920c66cf717b07fdbea26a3dfa6e093c9"
     },
     {
       "path": "src/chan-relay.js",
@@ -94,8 +94,8 @@
     },
     {
       "path": "src/core/runtime.js",
-      "size": 15865,
-      "sha256": "163ee1de3d4d59ec48b044f8545cfab91d395db2135845603d2657c1ceed0ac0"
+      "size": 15871,
+      "sha256": "28107b971c11a592fa42d96761cd4ea023af87888ecfa2ec51d2ff0348443952"
     },
     {
       "path": "src/core/stats.js",
@@ -139,8 +139,8 @@
     },
     {
       "path": "src/http.js",
-      "size": 24912,
-      "sha256": "2afb523e410495c1af90105a1c2e9732a34fd306cf7b3829621836f48b866b83"
+      "size": 26656,
+      "sha256": "43b3cb0a62a0476c2602d0500da542090391fa7a81048af721c8c454c9339ac9"
     },
     {
       "path": "src/image-pricing.d.ts",
@@ -169,8 +169,8 @@
     },
     {
       "path": "src/probe.js",
-      "size": 9775,
-      "sha256": "b3a65d3c2be6d8e5e3c9b305a4df64cce699915dc8c6e44273809bef689b2642"
+      "size": 10298,
+      "sha256": "cac99bbacd9067500e2c0e56843bdb82b6ace150d62ab32c57baf5268860e46a"
     },
     {
       "path": "src/providers/index.js",
@@ -329,8 +329,8 @@
     },
     {
       "path": "src/upstream.js",
-      "size": 10968,
-      "sha256": "3be44eb1b5a3aad20c27112d51b40ce7db13d426f849fed32c20c80b4b5a91eb"
+      "size": 15670,
+      "sha256": "256183c8312e1b4c0c1deb2756489dfd25f43d9f208847f3d753aef0e7d3c282"
     },
     {
       "path": "src/vault-anchor.js",

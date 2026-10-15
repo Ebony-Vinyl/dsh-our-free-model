@@ -2,6 +2,18 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-15-v2.3.0-release",
+      "title": "v2.3.0：免费车道迁移与插件升级页独立化",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-15T12:00:00Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.3.0",
+        "label": "查看完整说明"
+      },
+      "html": "<p><b>免费车道</b>：请求迁移到新的 <code>/inference/v1</code> 路径，补齐会话标识、工具指纹和客户端归属处理；会话映射持久化，服务重启后不再丢失。上游 <code>FreeTierError</code> 会明确显示为线路锁定，不再误导重复登录。</p><p><b>插件升级</b>：升级功能独立为导航页，集中展示版本、进度和失败原因，设置页不再重复显示升级面板。</p><p>插件、独立本地服务和 Windows 桌面壳统一升级到 <b>2.3.0</b>。请在设置 → 插件升级中检查更新，独立服务和桌面端用户请使用完整新版程序。</p>"
+    },
+    {
       "id": "2026-10-10-v2.1.0-release",
       "title": "v2.1.0：聚合 API——自带 Key 接入 76 家服务商；省 Token（工具输出压缩实测省 90%）；自动降级链路；原生 /v1/messages",
       "level": "update",

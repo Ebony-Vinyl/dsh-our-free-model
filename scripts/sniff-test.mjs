@@ -80,7 +80,7 @@ async function ask(model, options = {}) {
   const payloads = []
   try {
     await postStreamed({
-      path: '/zen/v1/chat/completions',
+      path: '/inference/v1/chat/completions',
       body: { model, messages: [{ role: 'user', content: 'hi' }], stream: true },
       session: 's', requestId: 'r', onData: payload => payloads.push(payload), ...options,
     })
@@ -188,7 +188,7 @@ let seenBeforeAbort = 0
 const abortedEarly = await new Promise(resolve => {
   setTimeout(() => controller.abort(), 150).unref?.()
   postStreamed({
-    path: '/zen/v1/chat/completions',
+    path: '/inference/v1/chat/completions',
     body: { model: 'jev-1.13-free', messages: [], stream: true },
     session: 's', requestId: 'r', signal: controller.signal,
     onData: () => { seenBeforeAbort++ },
@@ -213,7 +213,7 @@ let delivered = 0
 const abortedMid = await new Promise(resolve => {
   setTimeout(() => controller2.abort(), 120).unref?.()
   postStreamed({
-    path: '/zen/v1/chat/completions',
+    path: '/inference/v1/chat/completions',
     body: { model: 'union-alpha', messages: [], stream: true },
     session: 's', requestId: 'r', signal: controller2.signal,
     onData: () => { delivered++ },

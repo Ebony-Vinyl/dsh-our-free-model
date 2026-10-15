@@ -105,5 +105,27 @@ console.log('\n=== 6. Messages 工具指纹和 Windows Shell 回译 ===')
   check('Messages 推广不增加假 Shell', promoted.tools.some(tool => tool.description?.includes('must not be used')), false)
 }
 
+console.log('\n=== 7. the gate reads a tool as declared only with a real property ===')
+{
+  // Measured 2026-10-14: `bash` + `read` with `properties: {}` are refused
+  // (403 FreeTierError) exactly like an undeclared name, so a decoy has to carry
+  // one property and a caller tool that declares none has to be stamped.
+  const propertiesOf = tool => (tool.function?.parameters ?? tool.parameters ?? tool.input_schema)?.properties ?? {}
+  const decoys = {}
+  applyFingerprint(decoys, false)
+  check('every decoy declares a property', decoys.tools.every(tool => Object.keys(propertiesOf(tool)).length > 0), true)
+  check('bash and read both declare one', ['bash', 'read'].map(name => Object.keys(propertiesOf(decoys.tools.find(tool => tool.function.name === name))).length > 0), [true, true])
+
+  const caller = { tools: [chatTool('bash')] }
+  applyFingerprint(caller, false)
+  check('a caller bash with an empty schema is stamped, not duplicated', caller.tools.filter(tool => tool.function.name === 'bash').length, 1)
+  check('…and keeps the caller description', caller.tools.find(tool => tool.function.name === 'bash').function.description, 'the bash tool')
+  check('…and now declares a property', Object.keys(propertiesOf(caller.tools.find(tool => tool.function.name === 'bash'))).length > 0, true)
+
+  const claudeDecoys = {}
+  applyFingerprint(claudeDecoys, 'claude')
+  check('Messages decoys declare a property too', claudeDecoys.tools.every(tool => Object.keys(propertiesOf(tool)).length > 0), true)
+}
+
 console.log(failures === 0 ? '\nall fingerprint checks passed' : `\n${failures} fingerprint check(s) failed`)
 process.exitCode = failures === 0 ? 0 : 1

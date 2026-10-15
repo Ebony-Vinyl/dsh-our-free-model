@@ -36,6 +36,7 @@ const stubReact = {
 new Function('window', 'document', 'navigator', source)(globalThis.window, globalThis.document, { language: 'zh-CN' })
 const exports = globalThis.__registered.factory(name => {
   if (name === 'react') return stubReact
+  if (name === 'react-dom') return { createPortal: (children, container) => ({ type: 'portal', children, container }) }
   throw new Error(`unexpected require "${name}"`)
 })
 const { parseSafeHtml, safeUrl } = exports.__test
