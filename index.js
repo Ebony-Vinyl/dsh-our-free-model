@@ -1258,14 +1258,25 @@ export function apply(ctx, config) {
     },
     // ── fallback chains ─────────────────────────────────────────────────────
     combos: {
-      list: () => ({
-        combos: normalizeCombos(settings.get().combos),
-        // Every id a chain may reference, with the display name the picker uses —
-        // the editor offers a searchable list instead of a free-text field, so a
-        // typo cannot become a chain link that silently never resolves.
-        models: state().catalog.map(entry => ({ id: entry.id, name: entry.name, channel: entry.channel ?? 'free', vision: entry.vision === true })),
-        strategies: ['fallback', 'round-robin'],
-      }),
+      list: () => {
+        const catalog = state().catalog
+        const built = new Map(catalog.filter(isComboEntry).map(entry => [entry.id, entry]))
+        return {
+          combos: normalizeCombos(settings.get().combos).map(combo => ({
+            ...combo,
+            // What the chain resolves to right now — its own override, or the
+            // members' intersection. Zero when no member is in the roster today.
+            effectiveContextWindow: built.get(combo.id)?.contextWindow ?? 0,
+            effectiveMaxOutput: built.get(combo.id)?.maxOutput ?? 0,
+          })),
+          // Every id a chain may reference, with the display name the picker uses —
+          // the editor offers a searchable list instead of a free-text field, so a
+          // typo cannot become a chain link that silently never resolves. The two
+          // capacities ride along so the editor can show what a member brings.
+          models: catalog.map(entry => ({ id: entry.id, name: entry.name, channel: entry.channel ?? 'free', vision: entry.vision === true, contextWindow: entry.contextWindow ?? 0, maxOutput: entry.maxOutput ?? 0 })),
+          strategies: ['fallback', 'round-robin'],
+        }
+      },
       save: async patch => {
         if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
         const rows = normalizeCombos(patch.combos)
@@ -2361,6 +2372,8 @@ function publicSettings(settings, forwardInfo, egressInfo) {
       strategy: combo.strategy,
       stickyLimit: combo.stickyLimit,
       enabled: combo.enabled,
+      contextWindow: combo.contextWindow,
+      maxOutput: combo.maxOutput,
     })),
     forward: {
       ...(settings.forward ?? {}),
