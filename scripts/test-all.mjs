@@ -52,6 +52,7 @@ const suites = [
   ['chan-relay', 'chan-relay-test.mjs', []],
   ['channel-pack', 'channel-pack-test.mjs', []],
   ['channel-source', 'channel-pack-test.mjs', ['--source', '--channels-only']],
+  ['channel-lane', 'channel-lane-test.mjs', []],
   ['channel-network', 'channel-network-test.mjs', []],
   ['channel-credits-rpc', 'channel-credits-rpc-test.mjs', []],
   ['channel-credits-ui', 'channel-credits-ui-test.mjs', []],
