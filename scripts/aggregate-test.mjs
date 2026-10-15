@@ -27,6 +27,7 @@ import { AGGREGATE_CHANNEL, buildAggregateCatalog, fetchProviderModels, isAggreg
 import { UpstreamError } from '../src/http.js'
 import { toClaudeMessages } from '../src/messages.js'
 import { parseProviderModelId } from '../src/providers/index.js'
+import { REQUEST_RE, SESSION_RE } from '../src/upstream.js'
 import { finishReason, readStream } from '../src/stream.js'
 
 let failures = 0
@@ -107,6 +108,9 @@ check('the registry format maps to the plugin wire',
 check('the registry format rides the row too',
   [row('cerebras/gpt-oss-120b').format, row('anthropic/claude-sonnet-4-20250514').format],
   ['openai-chat', 'anthropic-messages'])
+check('the client gate rides the gated row, and only it',
+  [row('opencode/muse-spark-1.3-contributor-free').clientGate, row('cerebras/gpt-oss-120b').clientGate, row('opencode/muse-spark-1.3-contributor-free').wire],
+  [true, false, 'responses'])
 check('every row is an aggregate row with provider/model identity',
   rows.every(entry => entry.channel === AGGREGATE_CHANNEL && isAggregateEntry(entry)
     && entry.id === `${entry.providerId}/${entry.modelId}`), true)
@@ -177,6 +181,10 @@ check('a base URL override moves the turn and the listing with it',
 const keyless = resolveProvider({ providers: { opencode: { enabled: true } } }, 'opencode')
 check('a keyless provider resolves with no credential and its declared headers',
   [keyless.apiKey, keyless.headers.authorization, keyless.headers['x-opencode-client']], ['', undefined, 'desktop'])
+check('the gated provider serves the responses wire on the inference host',
+  [keyless.gate, keyless.wire, keyless.chatUrl, keyless.headers['user-agent']],
+  [true, 'responses', 'https://opencode.ai/inference/v1/responses', 'dsh-our-free-model opencode/1.18.31'])
+check('an ungated provider reports no gate', plain.gate, false)
 const claude = resolveProvider({ providers: { anthropic: { enabled: true, apiKey: 'sk-ant' } } }, 'anthropic')
 check('an Anthropic row resolves to x-api-key plus the version header',
   [claude.chatUrl, claude.headers['x-api-key'], claude.headers.authorization, claude.headers['anthropic-version'], claude.wire, claude.modelsUrl],
@@ -209,6 +217,7 @@ const liveConfig = {
     cerebras: { enabled: true, apiKey: CEREBRAS_KEY, baseUrl: `${base}/cerebras` },
     anthropic: { enabled: true, apiKey: ANTHROPIC_KEY, baseUrl: `${base}/anthropic` },
     openai_api: { enabled: true, apiKey: 'sk-openai-secret', baseUrl: `${base}/openai` },
+    opencode: { enabled: true, baseUrl: `${base}/opencode` },
   },
 }
 const last = () => seen[seen.length - 1]
@@ -250,6 +259,52 @@ await checkAsync('a streamed answer is pushed through verbatim, in order', async
     [{ type: 'tool-call', id: 'call_7', name: 'read', arguments: '{"path":"x"}' }])
   assert.deepEqual(outcome.usage, { inputTokens: 10, outputTokens: 9, cacheReadTokens: 2, totalTokens: 21 })
   assert.equal(finishReason(outcome.finish).kind, 'tool-calls')
+})
+
+await checkAsync('a gated provider turn carries the client-gate wire', async () => {
+  script = (req, res) => {
+    res.writeHead(401, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: { message: 'missing session', type: 'authentication_error' } }))
+  }
+  const failure = await postAggregateStreamed({
+    config: liveConfig, providerId: 'opencode', modelId: 'muse-spark-1.3-contributor-free',
+    body: {
+      model: 'muse-spark-1.3-contributor-free',
+      input: 'hi',
+      tools: [{ type: 'function', function: { name: 'read', description: 'read', parameters: { type: 'object', properties: { path: { type: 'string' } } } } }],
+    },
+    session: 'ses_0123456789abCdefghijklmnop',
+    onData: () => {},
+  }).then(() => null, error => error)
+  assert.ok(failure instanceof UpstreamError)
+  const request = last()
+  assert.equal(request.url, '/opencode/responses')
+  // Session identity: the conversation's minted id in both headers, verbatim.
+  assert.ok(SESSION_RE.test(request.headers['x-opencode-session']))
+  assert.equal(request.headers['x-opencode-session'], 'ses_0123456789abCdefghijklmnop')
+  assert.equal(request.headers['x-opencode-session-id'], request.headers['x-opencode-session'])
+  assert.ok(REQUEST_RE.test(request.headers['x-opencode-request']))
+  assert.equal(request.headers['x-opencode-project'], 'global')
+  // The registry's declared gate headers ride over the defaults.
+  assert.equal(request.headers.authorization, 'Bearer public')
+  assert.equal(request.headers['x-opencode-client'], 'desktop')
+  assert.equal(request.headers['user-agent'], 'dsh-our-free-model opencode/1.18.31')
+  // The streamed body keeps the caller's tools and gains the stream flag.
+  const sent = JSON.parse(request.body)
+  assert.equal(sent.stream, true)
+  assert.equal(sent.tools[0].function.name, 'read')
+  // A different conversation mints a different identity — and an ungated
+  // provider's turn never carries the gate headers at all.
+  const other = await postAggregateStreamed({
+    config: liveConfig, providerId: 'opencode', modelId: 'muse-spark-1.3-contributor-free',
+    body: { model: 'muse-spark-1.3-contributor-free', input: 'hi' },
+    session: 'ses_fedcba9876540123456789abcd',
+    onData: () => {},
+  }).then(() => null, error => error)
+  assert.ok(other instanceof UpstreamError)
+  assert.notEqual(last().headers['x-opencode-session'], request.headers['x-opencode-session'])
+  const prior = [...seen].reverse().find(record => record.url.startsWith('/cerebras'))
+  assert.equal(prior.headers['x-opencode-session'], undefined)
 })
 
 const COMPLETION = {

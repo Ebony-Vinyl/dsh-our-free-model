@@ -404,7 +404,10 @@ export class FreeModelAdapter {
       // caller's tools exactly as declared, so the fingerprint pass is free-lane
       // only. The aggregate lane is somebody else's gateway entirely — renaming
       // its tools to this lane's decoy quartet would break the caller's calls.
-      const renameMap = sealed || kilo || aggregate ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
+      // The exception is a gated aggregate provider (the opencode free pool):
+      // that gateway is this one, it fingerprints the declared quartet, and the
+      // rename map it returns feeds the same back-translation the free lane uses.
+      const renameMap = sealed || kilo || (aggregate && entry.clientGate !== true) ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
       const controller = new AbortController()
       const onAbort = () => controller.abort(options.signal?.reason)
       options.signal?.addEventListener('abort', onAbort, { once: true })
@@ -427,6 +430,7 @@ export class FreeModelAdapter {
               providerId: entry.providerId,
               modelId: entry.modelId,
               body: payload,
+              session,
               signal: controller.signal,
               onData: value => channel.push(value),
             })

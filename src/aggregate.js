@@ -35,6 +35,14 @@
  * An anthropic-messages row is therefore served on the messages wire end to
  * end, and the poster pushes the provider's own frames through untouched.
  *
+ * Client gate: the opencode free pool's gateway fingerprints every turn as the
+ * genuine OpenCode client and answers 403 FreeTierError otherwise (measured
+ * live 2026-10-15: both session-id headers, a request id, the tool fingerprint
+ * and a user-agent carrying an opencode/<version> token — any one piece
+ * missing fails). The registry marks such a provider `clientGate: true`; the
+ * poster adds the session-identity headers and the adapter runs the free
+ * lane's own tool fingerprint over the payload, rename map included.
+ *
  * Reasoning effort: the registry declares no provider-native effort fields, so
  * a row here declares no thinking menu either. The harness's effort ids are the
  * plugin's own ladder (`light`/`balanced`/`deep`, src/effort.js), which the
@@ -52,6 +60,7 @@
 import { CODE, UpstreamError, classifyFailure, classifyStreamFailure, readHead, readSse, replayStream, sniffBody, transportCause } from './http.js'
 import { egressFetch } from './egress.js'
 import { chatEndpoint, defaultHeaders, getProvider, modelsEndpoint, providerModelId } from './providers/index.js'
+import { gatewayHeaders, mintRequestId, sessionForConversation } from './upstream.js'
 import { displayModelName } from './catalog.js'
 
 /** The channel tag every aggregate row carries, the way EAC and Kilo rows do. */
@@ -213,6 +222,9 @@ function entryOf(provider, modelId, source) {
     contextWindow,
     maxOutput: Math.min(DEFAULT_MAX_OUTPUT, contextWindow),
     wire: WIRE_BY_FORMAT[provider.format],
+    // The client gate rides along so the adapter knows to run the tool
+    // fingerprint over this row's payload (the free-lane-only pass, otherwise).
+    clientGate: provider.clientGate === true,
     source,
     // No declared menu, so the free lane's token ladder is the control and the
     // answer owns the whole window: nothing here doubles a ceiling for
@@ -228,7 +240,7 @@ function entryOf(provider, modelId, source) {
  * @param {object} config - the plugin settings' `aggregate` section:
  *   { enabled: boolean, providers: { [providerId]: { enabled, apiKey, baseUrl?, models?: string[], discovered?: string[], addedAt? } } }
  * @returns {Array<object>} entries shaped like other lanes' rows, plus:
- *   { id: 'provider/model', name, channel:'aggregate', providerId, modelId, format, vision, reasoning, contextWindow, maxOutput, wire: 'chat'|'messages'|'responses', source: 'static'|'discovered' }
+ *   { id: 'provider/model', name, channel:'aggregate', providerId, modelId, format, vision, reasoning, contextWindow, maxOutput, wire: 'chat'|'messages'|'responses', clientGate: boolean, source: 'static'|'discovered' }
  */
 export function buildAggregateCatalog(config) {
   // The section's own switch: a lane the user turned off contributes no rows at
@@ -267,7 +279,7 @@ export function isAggregateEntry(entry) {
  *
  * @param {object} config - the plugin settings' `aggregate` section
  * @param {string} providerId - a registry provider id
- * @returns {{providerId:string, provider:object, apiKey:string, baseUrl:string, format:string, wire:string, chatUrl:string, modelsUrl:string|null, headers:Record<string,string>}}
+ * @returns {{providerId:string, provider:object, apiKey:string, baseUrl:string, format:string, wire:string, chatUrl:string, modelsUrl:string|null, headers:Record<string,string>, gate:boolean}}
  */
 export function resolveProvider(config, providerId) {
   const id = text(providerId)
@@ -311,6 +323,12 @@ export function resolveProvider(config, providerId) {
     chatUrl,
     modelsUrl: effectiveModelsUrl(provider, setting),
     headers,
+    // The registry's client-gate flag (the opencode free pool): a gateway that
+    // fingerprints every turn as the genuine OpenCode client and answers 403
+    // FreeTierError otherwise. The gate rides the headers (session identity,
+    // decided per turn by the poster) and the body (the tool fingerprint the
+    // adapter runs), so resolution only reports it.
+    gate: provider.clientGate === true,
   }
 }
 
@@ -515,18 +533,31 @@ function modelIdsFrom(payload) {
  * @param {object|string} options.body - the request body the caller built for this wire
  * @param {AbortSignal} [options.signal]
  * @param {(payload: string) => void} options.onData - one `data:` payload, in order
+ * @param {string} [options.session] - the harness conversation id; a gated provider mints its client-gate session identity from it
  * @param {number} [options.timeoutMs] - idle budget handed to the shared readers
  * @returns {Promise<{status:number}>}
  */
-export async function postAggregateStreamed({ config, providerId, modelId, body, signal, onData, timeoutMs = TURN_TIMEOUT_MS }) {
+export async function postAggregateStreamed({ config, providerId, modelId, body, signal, onData, timeoutMs = TURN_TIMEOUT_MS, session }) {
   const resolved = resolveProvider(config, providerId)
   const model = text(modelId)
+  // A gated provider's gateway wants every turn shaped like the genuine client:
+  // the minted session identity in both session headers, a request id, the
+  // project header and Bearer public (measured live 2026-10-15 — any one piece
+  // missing answers 403 FreeTierError). The registry's declared headers overlay
+  // those defaults, so the provider's own client flavour and its
+  // opencode/<version>-carrying user-agent win where they speak.
+  const headers = resolved.gate
+    ? {
+      ...gatewayHeaders({ session: sessionForConversation(session ?? `aggregate:${resolved.providerId}`), requestId: mintRequestId(), stream: true }),
+      ...resolved.headers,
+    }
+    : resolved.headers
   const bodyText = typeof body === 'string' ? body : JSON.stringify({ ...body, stream: true })
   let response
   try {
     response = await egressFetch(resolved.chatUrl, {
       method: 'POST',
-      headers: { ...resolved.headers, accept: 'text/event-stream' },
+      headers: { ...headers, accept: 'text/event-stream' },
       body: bodyText,
       redirect: 'error',
       signal,

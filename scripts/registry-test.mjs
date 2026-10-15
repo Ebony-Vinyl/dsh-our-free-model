@@ -242,6 +242,7 @@ check('chatEndpoint covers the three formats on real records', () => {
   assert.equal(chatEndpoint('minimax-cn'), 'https://api.minimaxi.com/anthropic/v1/messages')
   assert.equal(chatEndpoint('nvidia_nim'), 'https://integrate.api.nvidia.com/v1/chat/completions')
   assert.equal(chatEndpoint('openai'), 'https://chatgpt.com/backend-api/codex/responses')
+  assert.equal(chatEndpoint('opencode'), 'https://opencode.ai/inference/v1/responses')
   assert.equal(chatEndpoint('lmstudio'), 'http://localhost:1234/v1/chat/completions')
   assert.equal(chatEndpoint('ollama'), 'http://localhost:11434/v1/chat/completions')
   assert.equal(chatEndpoint('azure_openai'), null)
@@ -250,7 +251,7 @@ check('chatEndpoint covers the three formats on real records', () => {
 
 check('modelsEndpoint returns a declared listing URL or null', () => {
   assert.equal(modelsEndpoint('nvidia_nim'), 'https://integrate.api.nvidia.com/v1/models')
-  assert.equal(modelsEndpoint('opencode'), 'https://opencode.ai/zen/v1/models')
+  assert.equal(modelsEndpoint('opencode'), 'https://opencode.ai/inference/v1/models')
   assert.equal(modelsEndpoint('groq'), 'https://api.groq.com/openai/v1/models')
   assert.equal(modelsEndpoint('anthropic'), null)
   assert.equal(modelsEndpoint('no-such-provider'), null)
@@ -282,6 +283,7 @@ check('defaultHeaders without a key never invents one, and merges declared heade
   assert.equal(defaultHeaders('nvidia_nim').authorization, undefined)
   assert.equal(defaultHeaders('opencode', 'ignored').authorization, undefined)
   assert.equal(defaultHeaders('opencode')['x-opencode-client'], 'desktop')
+  assert.equal(defaultHeaders('opencode')['user-agent'], 'dsh-our-free-model opencode/1.18.31')
   assert.equal(defaultHeaders('minimax-cn', 'k')['anthropic-beta'], 'claude-code-20250219,interleaved-thinking-2025-05-14')
   assert.equal(defaultHeaders('kimchi', 'k')['user-agent'], 'kimchi/0.1.50')
   assert.deepEqual(defaultHeaders('no-such-provider', 'k'), {})
@@ -303,7 +305,7 @@ check('listProviders filters by category, format and auth kind', () => {
     assert.ok(rows.every(provider => provider.category === category), `category ${category} leaked`)
   }
   const responses = listProviders({ format: 'openai-responses' })
-  assert.deepEqual(responses.map(provider => provider.id).sort(), ['openai', 'openai_api'])
+  assert.deepEqual(responses.map(provider => provider.id).sort(), ['openai', 'openai_api', 'opencode'])
   const messages = listProviders({ format: 'anthropic-messages' })
   assert.deepEqual(messages.map(provider => provider.id).sort(), ['anthropic', 'glm', 'minimax-cn'])
   const keyless = listProviders({ authKind: 'none' })
