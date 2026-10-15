@@ -117,6 +117,17 @@ To install manually as a real directory, in `<DSH_HOME>/profiles/<profile>/`:
 2. Add `"dsh-our-free-model": "2.2.0"` to `dependencies` — that number **tracks the repo's `package.json` `version`** (bump it together; 2.2.0 as of this line), never copy a stale one, and a version spec, not `link:`
 3. Append `"dsh-our-free-model"` to `dsh.profile.bundles`
 
+> **Putting the plugin in `dependencies` hands the install directory to the package manager**
+> (pnpm on desktop builds). The in-app upgrader then becomes a *second writer*: the upgrade
+> itself reports success, but the package manager's next resolve finds a directory that no
+> longer matches its layout, fails mid-replace, and takes the whole
+> `node_modules/dsh-our-free-model` with it — the plugin then disappears from the model
+> picker as one group (#335). If you install this way, also set `distribution` to `managed`
+> (in `settings.json` or the bundle config) so the in-app upgrader, the announcement feed and
+> hot reload all stand down and the package manager is the only writer left. The field is
+> one-way: the settings API never accepts it back, and either `config` or `settings` saying
+> `managed` wins.
+
 > Do **not** also add an entry to `cordis.patch.yml`. A bundle referenced from
 > `dsh.profile.bundles` already applies its own patch layer, and registering it
 > twice fails with `duplicate loader entry id: our-free-model`.

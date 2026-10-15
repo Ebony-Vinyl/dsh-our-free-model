@@ -142,6 +142,13 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 2. 在 dependencies 中加入 "dsh-our-free-model": "2.2.0"——该版本号跟随仓库 package.json 的 version（版本变更时同步，当前为 2.2.0），不要沿用旧值，也不要写为 link:
 3. 在 dsh.profile.bundles 末尾追加 "dsh-our-free-model"
 
+> **把插件写进 `dependencies` 就是把安装目录交给包管理器**（桌面端用 pnpm）。此时应用内升级器
+> 成了第二个写入方：升级本身会报成功，但包管理器下一次解析时目录已不符合它的布局，会在替换
+> 途中失败并让整个 `node_modules/dsh-our-free-model` 消失，插件随之从模型清单里整组消失（#335）。
+> 所以走这条路安装时，请同时把 `distribution` 设为 `managed`（`settings.json` 或 bundle config），
+> 让应用内升级、公告 feed 与热重载全部停手，只留包管理器一个写入方。该字段是单向的：设置接口
+> 不接受改回 `self`，`config` 与 `settings` 任一为 `managed` 即生效。
+
 不要再向 cordis.patch.yml 添加条目。被 dsh.profile.bundles 引用的包，其自带的
 patch 层会自动生效；两处同时注册将报错 duplicate loader entry id: our-free-model。
 
