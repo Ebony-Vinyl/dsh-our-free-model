@@ -12,6 +12,9 @@
  */
 
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+import { DATA_DIR_NAME, resolveDshHome } from './store.js'
 
 /**
  * Overridable so the selftest can point the adapter at a dead port and exercise
@@ -52,48 +55,106 @@ function base62From(bytes) {
   return out
 }
 
-let lastStamp = 0
-let seq = 0
+// Time-prefixed id factory, a line-for-line clone of the official client's
+// `tU()` (opencode 1.18.21): `BigInt(Date.now()) * 0x1000n + BigInt(cU)` with a
+// per-millisecond counter shared by session and message mints, the session half
+// taking the bitwise complement. The gateway's free-tier ID gate decodes this
+// field from `x-opencode-session`/`x-opencode-request`: a digest-derived or
+// otherwise non-time id is answered with 403 FreeTierError ("can only be used
+// from within OpenCode"). Verified against the live gateway on 2026-10-13 —
+// time-minted ids pass, sha256-digest ids fail, same body and headers.
+let lastMs = 0
+let mintSeq = 0
+
+function mintHex(complement, timestamp) {
+  if (timestamp !== lastMs) { lastMs = timestamp; mintSeq = 0 }
+  mintSeq += 1
+  const value = BigInt(timestamp) * 0x1000n + BigInt(mintSeq)
+  const A = complement ? ~value : value
+  let hex = ''
+  for (let i = 0; i < 6; i += 1) hex += Number((A >> BigInt(40 - 8 * i)) & 0xffn).toString(16).padStart(2, '0')
+  return hex + base62From(crypto.randomBytes(14))
+}
 
 /** Mint a gateway-shaped canonical session id (time-prefixed, monotonic counter). */
 export function mintSessionId(timestamp = Date.now()) {
-  if (timestamp !== lastStamp) { lastStamp = timestamp; seq = 0 }
-  seq += 1
-  const value = ~(BigInt(timestamp) * 0x1000n + BigInt(seq))
-  let hex = ''
-  for (let i = 0; i < 6; i += 1) hex += Number((value >> BigInt(40 - 8 * i)) & 0xffn).toString(16).padStart(2, '0')
-  return `ses_${hex}${base62From(crypto.randomBytes(14))}`
+  return `ses_${mintHex(true, timestamp)}`
 }
 
 /** Mint a gateway-shaped request id for one turn. */
 export function mintRequestId(timestamp = Date.now()) {
-  const value = BigInt(timestamp) * 0x1000n + 1n
-  let hex = ''
-  for (let i = 0; i < 6; i += 1) hex += Number((value >> BigInt(40 - 8 * i)) & 0xffn).toString(16).padStart(2, '0')
-  return `msg_${hex}${base62From(crypto.randomBytes(14))}`
+  return `msg_${mintHex(false, timestamp)}`
+}
+
+const SESSION_MAP_FILE = 'session-map.json'
+let sessions
+
+function sessionStorePath() {
+  try {
+    return path.join(path.resolve(resolveDshHome(), DATA_DIR_NAME), SESSION_MAP_FILE)
+  } catch {
+    return undefined
+  }
+}
+
+function loadSessions() {
+  if (sessions !== undefined) return sessions
+  sessions = new Map()
+  try {
+    const file = sessionStorePath()
+    if (file === undefined) return sessions
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    for (const [seed, id] of Object.entries(parsed?.sessions ?? {})) {
+      if (typeof id === 'string' && SESSION_RE.test(id)) sessions.set(seed, id)
+    }
+  } catch { /* first run or unreadable store: start empty */ }
+  return sessions
+}
+
+function rememberSession(seed, id) {
+  loadSessions().set(seed, id)
+  try {
+    const file = sessionStorePath()
+    if (file === undefined) return
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    const tmp = `${file}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify({ version: 1, at: Date.now(), sessions: Object.fromEntries(sessions) }, undefined, 2))
+    fs.renameSync(tmp, file)
+  } catch { /* non-fatal: the id still works, it just will not survive a restart */ }
 }
 
 /**
  * Map one downstream conversation onto one stable upstream session.
  *
  * Free-tier quota is accounted per session, so a fresh id per request exhausts
- * it and surfaces as 429 with growing retry-after. A digest of the harness
- * session id gives the same conversation the same canonical session across
- * restarts, which is how the real client behaves.
+ * it and surfaces as 429 with growing retry-after. One conversation therefore
+ * keeps one id — minted with the official time-prefixed algorithm (the gate
+ * rejects anything else), recorded in `session-map.json` under the harness data
+ * dir so the mapping survives restarts the way the real client's own session
+ * ids do.
  */
 export function sessionForConversation(sessionId) {
   if (typeof sessionId === 'string' && SESSION_RE.test(sessionId.trim())) return sessionId.trim()
   const seed = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : 'global'
-  const digest = crypto.createHash('sha256').update(`our-free-model\0${seed}`).digest()
-  return `ses_${digest.subarray(0, 6).toString('hex')}${base62From(digest.subarray(6, 20))}`
+  const remembered = loadSessions().get(seed)
+  if (remembered !== undefined) return remembered
+  const id = mintSessionId()
+  rememberSession(seed, id)
+  return id
 }
 
 /** Stable per-turn request id: retries of the same turn share it. */
+const turnIds = new Map()
+
 export function requestIdFor(sessionId, turnSeed) {
   if (typeof turnSeed !== 'string' || turnSeed === '') return mintRequestId()
-  const digest = crypto.createHash('sha256').update(`our-free-model-req\0${sessionId}\0${turnSeed}`).digest()
-  const id = `msg_${digest.subarray(0, 6).toString('hex')}${base62From(digest.subarray(6, 20))}`
-  return REQUEST_RE.test(id) ? id : mintRequestId()
+  const key = `${sessionId}\0${turnSeed}`
+  const existing = turnIds.get(key)
+  if (existing !== undefined) return existing
+  if (turnIds.size >= 4096) turnIds.clear()
+  const id = mintRequestId()
+  turnIds.set(key, id)
+  return id
 }
 
 /** Strip a trailing "(level)" thinking suffix so lookups hit the base id. */
