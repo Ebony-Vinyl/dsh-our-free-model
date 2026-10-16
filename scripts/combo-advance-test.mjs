@@ -182,6 +182,26 @@ await check('a refusal before any output still advances (the plain case)', async
   assert.equal(run.turns[0].attempts, 2)
 })
 
+// 用户报的现象: 链上一个模型失败, 没切下一个, 一个失败就结束。机制:
+// runCombo 只在 advance===true 时继续下一环, 而 advance 复用了单模型重试语义
+// (shouldAdvance = retryable||cooldownMs>0)。request 级失败(region/上下文/4xx)
+// 对同模型重放无意义, 但换一个模型正是答案 — 不同窗口、不同区域、不同校验。
+for (const [label, refusal] of [
+  ['4xx 普通请求错误', { status: 400, body: '{"error":{"message":"bad request"}}' }],
+  ['上下文超限', { status: 400, body: '{"error":{"code":"context_length_exceeded","message":"too long"}}' }],
+  ['区域封锁', { status: 403, body: '{"error":{"type":"RegionError","message":"not available in your country"}}' }],
+]) {
+  await check(`a chain advances past a request-scoped failure (${label})`, async () => {
+    const run = await drive([
+      refusal,
+      { body: sse({ choices: [{ index: 0, delta: { content: ANSWER } }] }) + sse({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + 'data: [DONE]\n\n' },
+    ])
+    assert.equal(run.scenario.requests.length, 2, 'the chain must try the next candidate after this failure')
+    assert.equal(run.finish?.kind, 'stop', 'the next candidate answers the turn')
+    assert.ok(run.text.includes(ANSWER))
+  })
+}
+
 server.close()
 if (failures > 0) console.error(`combo-advance-test: ${failures} failure(s)`)
 else console.log('combo-advance-test: the chain commits on answers only and fails over on everything else')

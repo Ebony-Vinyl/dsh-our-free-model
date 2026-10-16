@@ -23,6 +23,7 @@ import { CODE, UpstreamError, postStreamed } from './http.js'
 import { postSealedStreamed } from './eac.js'
 import { postKiloStreamed } from './kilo.js'
 import { postAggregateStreamed, isAggregateEntry } from './aggregate.js'
+import { postChannelStreamed, isChannelEntry } from './chan-lane.js'
 import { finishReason, readStream, windowTokens } from './stream.js'
 import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
@@ -30,7 +31,7 @@ import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, con
 import { isEacEntry, isKiloEntry } from './catalog.js'
 import { isComboEntry, comboChain } from './combos.js'
 import { applyTokenSavers, saverConfig } from './token-saver/index.js'
-import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
+import { classifyFailure, describeVerdict } from './route/classify.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
 
 export const ROUTE_MAIN = 'our-free-model'
@@ -49,6 +50,9 @@ export class FreeModelAdapter {
    * @param {object} dependencies
    * @param {() => {catalog: Array<object>, membership: Record<string, string[]>, settings: object, attributionUserAgent: string}} dependencies.state
    * @param {(ref: object) => string | undefined} [dependencies.resolveImage]
+   * @param {() => ({port: number, key: string} | null)} [dependencies.chanGateway]
+   *   The 白嫖 gateway's dialable address, read fresh per turn; null when this
+   *   host has no gateway credential (or it is switched off).
    * @param {(record: object) => void} dependencies.recordUsage
    * @param {(record: object) => void} [dependencies.recordTurn]
    * @param {(message: string) => void} [dependencies.warn]
@@ -130,8 +134,15 @@ export class FreeModelAdapter {
         defaultMaxTokens: 8192,
       }
     }
-    const ceiling = Math.min(entry.maxOutput, state.settings.defaultMaxTokens ?? 32768)
-    const efforts = effortsFor(entry, undefined, state.settings.defaultMaxTokens)
+    // A chain's own ceiling replaces the session default: the chain setting is
+    // the more specific instruction, and the default 32K would otherwise clamp
+    // every chain that lifted its channel-lane members above it. A chain left
+    // on the members' intersection keeps the session default in charge.
+    const combo = isComboEntry(entry)
+    const override = combo ? entry.maxOutputOverride : undefined
+    const fallbackCeiling = override ?? state.settings.defaultMaxTokens
+    const ceiling = override ?? Math.min(entry.maxOutput, state.settings.defaultMaxTokens ?? 32768)
+    const efforts = effortsFor(entry, undefined, fallbackCeiling)
     return {
       provider,
       id: entry.id,
@@ -245,6 +256,7 @@ export class FreeModelAdapter {
         turnModel: entry.id,
         recordTurn: false,
         allowAdvance: true,
+        maxOutput: entry.maxOutputOverride,
       })
       let committed = false
       let result
@@ -291,7 +303,8 @@ export class FreeModelAdapter {
    *   physically under its own id while the turn belongs to the chain;
    *   `recordTurn: false` leaves the turn record to the caller; `allowAdvance`
    *   makes a pre-output failure report itself as advanceable instead of ending
-   *   the turn outright.
+   *   the turn outright; `maxOutput` is the chain's shared output ceiling,
+   *   which replaces the link's own capacity for this request.
    * @returns the turn's own summary, which only a combo caller reads.
    */
   async * runSingle(options, entry, snapshot, plan = {}) {
@@ -324,6 +337,7 @@ export class FreeModelAdapter {
     const sealed = isEacEntry(entry)
     const kilo = isKiloEntry(entry)
     const aggregate = isAggregateEntry(entry)
+    const chan = isChannelEntry(entry)
     // The absorbed channels speak the Chat wire regardless of what their ids
     // resemble; only the free lane splits endpoints per model, and an aggregate
     // row carries the wire its provider actually serves.
@@ -332,7 +346,10 @@ export class FreeModelAdapter {
     const warnings = []
     const resolveImage = this.deps.resolveImage
     const messages = repairToolPairing(options.messages ?? [])
-    const budget = budgetFor(options.reasoningEffort, entry, options.maxTokens, settings.defaultMaxTokens)
+    // A chain carries one ceiling for every member (see `runCombo`); the
+    // request budget and the effort menu both resolve against that number.
+    const capacityEntry = plan.maxOutput === undefined ? entry : { ...entry, maxOutput: plan.maxOutput }
+    const budget = budgetFor(options.reasoningEffort, capacityEntry, options.maxTokens, plan.maxOutput ?? settings.defaultMaxTokens)
     const declared = toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
     const session = sessionForConversation(options.sessionId)
@@ -378,6 +395,14 @@ export class FreeModelAdapter {
         const patch = effortPatchFor(options.reasoningEffort, entry)
         if (patch !== null) Object.assign(payload, patch)
       }
+      // The chan lane is OpenAI-shaped end to end: the chosen level rides as a
+      // plain `reasoning_effort` (no merge patch), and no field at all when the
+      // caller chose nothing. The pack's gateway translates whatever spelling
+      // arrives onto the model's own declared effort ids.
+      if (chan) {
+        const effort = canonicalReasoningEffort(options.reasoningEffort)
+        if (effort !== undefined) payload.reasoning_effort = effort
+      }
       if (sealed) applySealedPacingHint(payload)
       // The token savers run last, after every other mutation, so the byte counts
       // they report and the fingerprint's rename map both describe the body that
@@ -404,7 +429,9 @@ export class FreeModelAdapter {
       // caller's tools exactly as declared, so the fingerprint pass is free-lane
       // only. The aggregate lane is somebody else's gateway entirely — renaming
       // its tools to this lane's decoy quartet would break the caller's calls.
-      const renameMap = sealed || kilo || aggregate ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
+      // The chan lane is the same pack's loopback gateway: it relays the body
+      // to the channel adapter, which does its own shaping.
+      const renameMap = sealed || kilo || aggregate || chan ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
       const controller = new AbortController()
       const onAbort = () => controller.abort(options.signal?.reason)
       options.signal?.addEventListener('abort', onAbort, { once: true })
@@ -430,7 +457,9 @@ export class FreeModelAdapter {
               signal: controller.signal,
               onData: value => channel.push(value),
             })
-            : postStreamed({
+            : chan
+              ? postChannelTurn(this.deps, entry, payload, controller.signal, value => channel.push(value))
+              : postStreamed({
           path: endpointFor(entry.id), body: payload, session,
           requestId: attempt === 0 ? recoveryId : mintRequestId(),
           attributionUserAgent: snapshot.attributionUserAgent,
@@ -490,11 +519,23 @@ export class FreeModelAdapter {
        * — visible text or a streamed tool call — is what `commitsAnswer`
        * commits on, and once committed the combo ignores `advance` anyway, so
        * this predicate and the commit rule stay two views of one definition.
+       *
+       * Every failure that clears the three vetoes advances. It must not be
+       * gated on the single-model retry rule (`shouldAdvance`): that predicate
+       * asks "would re-sending *this* body to *this* model answer differently",
+       * and reads no for the request-scoped failures — a context overflow, a
+       * region refusal, a 4xx. Replaying them is pointless, but the chain is not
+       * replaying them: it is handing the turn to the *next* model, which is
+       * exactly how a smaller window, a different region, or a different
+       * validation is meant to be survived. Gating the chain on that predicate
+       * stopped it at the first candidate for precisely the failures a chain
+       * exists to route around. The number of links the turn may try is the
+       * chain's own bound (`runCombo` walks every candidate once), not a verdict.
        */
       const advanceVerdict = (code, message, status) => {
         if (plan.allowAdvance !== true || options.signal?.aborted === true || sawAnswer) return { advance: false, verdict: null }
         const verdict = classifyFailure({ status, code, message })
-        return { advance: shouldAdvance(verdict), verdict }
+        return { advance: true, verdict }
       }
       try {
         const reader = readStream(channel.read(), wire, renameMap, () => Date.now(), {
@@ -659,6 +700,53 @@ function applySealedPacingHint(payload) {
 }
 
 /**
+ * The caller's chosen thinking level as an OpenAI `reasoning_effort` spelling,
+ * or undefined when nothing was chosen (no field rides then — the gateway's
+ * own default applies).
+ *
+ * The plugin's ladder ids (src/effort.js) are the menu a chan row advertises,
+ * so `balanced` — the harness's default for those rows — arrives on ordinary
+ * turns. The pack's ladder registers `light` but not `balanced`/`deep`, and an
+ * unregistered spelling that reaches a model which declares efforts is a hard
+ * 400 (`unsupported_reasoning_effort`) from the gateway, so the two unmapped
+ * plugin rungs are folded onto the canonical trio. Everything else passes
+ * through as-is: the gateway owns the translation onto the model's own ids.
+ */
+function canonicalReasoningEffort(level) {
+  const value = typeof level === 'string' ? level.trim().toLowerCase() : ''
+  if (value === '') return undefined
+  if (value === 'off' || value === 'disabled' || value === 'none') return 'none'
+  if (value === 'balanced') return 'medium'
+  if (value === 'deep') return 'high'
+  return value
+}
+
+/**
+ * One 白嫖-lane turn: read the gateway's dialable address fresh (its port and
+ * key can both move under the process) and hand the body to the lane's poster.
+ *
+ * A host with no gateway credential — or a gateway switched off — fails as
+ * TRANSPORT, not as a locked lane: the chan lane is a chain member like any
+ * other, and a dead local gateway is exactly the kind of refusal the next
+ * candidate exists to cover.
+ */
+async function postChannelTurn(deps, entry, payload, signal, onData) {
+  const target = typeof deps.chanGateway === 'function' ? deps.chanGateway() : null
+  if (target === null || target === undefined) {
+    throw new UpstreamError('the channel gateway is not reachable on this host (no credential yet, or it is switched off)', CODE.transport)
+  }
+  return postChannelStreamed({
+    port: target.port,
+    key: target.key,
+    providerId: entry.providerId,
+    modelId: entry.modelId,
+    body: payload,
+    signal,
+    onData,
+  })
+}
+
+/**
  * One co-paid-lane turn: unlock the sealed credential for this request frame
  * and hand it straight to the lane's poster. A host the gate refuses — or a
  * seal that does not open — is a non-retryable configuration state, not a
@@ -737,7 +825,7 @@ function toFailure(error) {
  */
 function wireOf(entry) {
   if (isAggregateEntry(entry)) return entry.wire ?? 'chat'
-  if (isEacEntry(entry) || isKiloEntry(entry)) return 'chat'
+  if (isEacEntry(entry) || isKiloEntry(entry) || isChannelEntry(entry)) return 'chat'
   return wireFor(entry.id)
 }
 

@@ -595,7 +595,7 @@ window.__ModuleLoader__.load({
         'saver.level.wenyan': '文言',
         'saver.level.wenyanUltra': '文言·极',
         'routing.title': '路由',
-        'routing.sub': '把若干模型串成一条降级链：链上第一个失败就换下一个，对调用方始终只有一个模型 ID。',
+        'routing.sub': '把若干模型串成一条降级链：链上第一个失败就换下一个，对调用方始终只有一个模型 ID。链上的成员可以来自任意车道，包括白嫖渠道模型。',
         'routing.chains': '已存链路',
         'routing.chainsHint': '链路按输入顺序保存；引用当前不可用模型的链路会原样保留，车道恢复后自己回来。',
         'routing.empty': '还没有降级链',
@@ -608,6 +608,13 @@ window.__ModuleLoader__.load({
         'routing.strategy.roundRobin': '轮询',
         'routing.stickyLimit': '轮询粘滞次数',
         'routing.stickyHint': '轮询时同一个模型连续用多少次再换下一个。',
+        'routing.contextWindow': '上下文窗口（token）',
+        'routing.maxOutput': '最大输出（token）',
+        'routing.capacityAuto': '自动',
+        'routing.capacityHint': '留空时按整条链上全部成员的最小值自动计算；填写后，链上每个模型都使用这个值。',
+        'routing.capacityContext': '上下文',
+        'routing.capacityOutput': '输出',
+        'routing.memberCapacity': '这个成员提供的上下文窗口与最大输出',
         'routing.members': '成员（按顺序）',
         'routing.addMember': '添加成员',
         'routing.memberEmpty': '还没有成员——点「添加成员」从清单里挑一个。',
@@ -638,6 +645,7 @@ window.__ModuleLoader__.load({
         'routing.channel.eac': 'EAC 协付',
         'routing.channel.kilo': 'Kilo',
         'routing.channel.aggregate': '聚合',
+        'routing.channel.chan': '白嫖',
         'routing.channel.combo': '链路',
         'gw.clientsTitle': '接入客户端',
         'gw.clientsHint': '免费车道转发端口（在「免费模型」页的「本地转发」里开关）的接入配方：地址与 Key 按实际绑定的端口与真实密钥生成。',
@@ -1208,7 +1216,7 @@ window.__ModuleLoader__.load({
         'saver.level.wenyan': 'Classical',
         'saver.level.wenyanUltra': 'Classical · ultra',
         'routing.title': 'Routing',
-        'routing.sub': 'Chain several models into one fallback chain: when a link refuses, the next one answers, and the caller still sees a single model id.',
+        'routing.sub': 'Chain several models into one fallback chain: when a link refuses, the next one answers, and the caller still sees a single model id. Members can come from any lane, including the free channel-pack models.',
         'routing.chains': 'Stored chains',
         'routing.chainsHint': 'Chains are stored in the order you entered them; a chain that references a model which is unavailable right now is kept as written and comes back by itself when the lane does.',
         'routing.empty': 'No fallback chain yet',
@@ -1221,6 +1229,13 @@ window.__ModuleLoader__.load({
         'routing.strategy.roundRobin': 'Round-robin',
         'routing.stickyLimit': 'Round-robin sticky limit',
         'routing.stickyHint': 'How many calls in a row one model serves before the rotation moves on.',
+        'routing.contextWindow': 'Context window (tokens)',
+        'routing.maxOutput': 'Max output (tokens)',
+        'routing.capacityAuto': 'Auto',
+        'routing.capacityHint': 'Empty means the smallest value across the chain members; a number here applies to every model in the chain.',
+        'routing.capacityContext': 'Context',
+        'routing.capacityOutput': 'Output',
+        'routing.memberCapacity': 'The context window and the max output this member brings',
         'routing.members': 'Members (in order)',
         'routing.addMember': 'Add member',
         'routing.memberEmpty': 'No member yet — press "Add member" to pick one from the roster.',
@@ -1251,6 +1266,7 @@ window.__ModuleLoader__.load({
         'routing.channel.eac': 'EAC co-paid',
         'routing.channel.kilo': 'Kilo',
         'routing.channel.aggregate': 'Aggregate',
+        'routing.channel.chan': 'Channel pack',
         'routing.channel.combo': 'Chain',
         'gw.clientsTitle': 'Connect a client',
         'gw.clientsHint': 'How the free lane\'s forward port (enabled under "Local forward" on the Free models page) plugs into each client: addresses and keys below are generated from the port that actually bound and the real key.',
@@ -4702,6 +4718,7 @@ window.__ModuleLoader__.load({
       eac: t('routing.channel.eac'),
       kilo: t('routing.channel.kilo'),
       aggregate: t('routing.channel.aggregate'),
+      chan: t('routing.channel.chan'),
       combo: t('routing.channel.combo'),
     })
 
@@ -5251,11 +5268,27 @@ window.__ModuleLoader__.load({
      * a text field is a link that silently never resolves, and the host has no way
      * to tell "you meant this model" from "this model is gone".
      */
+    /**
+     * The chain editor's capacity label. `kilo()`'s decimal fold is the one the
+     * rest of the plugin already uses for the same numbers (the model cards'
+     * context tag), so a user who types 500000 reads 500K here too — a /1024
+     * KiB fold would show 488K beside a model that advertises 500K. Zero (an
+     * unresolved chain's placeholder from `/combos`) keeps the em dash.
+     */
+    const tokenLabel = value => (Number(value) > 0 ? kilo(value) : '—')
+    /** A positive whole token count from a form field, or undefined when cleared. */
+    const tokenValue = value => {
+      const tokens = Number(value)
+      return Number.isFinite(tokens) && tokens > 0 ? Math.trunc(tokens) : undefined
+    }
+
     function ChainEditor(props) {
       const { t, chain, models, onSave, onCancel } = props
       const [name, setName] = useState(chain.name ?? '')
       const [strategy, setStrategy] = useState(chain.strategy === 'round-robin' ? 'round-robin' : 'fallback')
       const [stickyLimit, setStickyLimit] = useState(String(chain.stickyLimit ?? 1))
+      const [contextWindow, setContextWindow] = useState(chain.contextWindow > 0 ? String(chain.contextWindow) : '')
+      const [maxOutput, setMaxOutput] = useState(chain.maxOutput > 0 ? String(chain.maxOutput) : '')
       const [enabled, setEnabled] = useState(chain.enabled !== false)
       const [members, setMembers] = useState(Array.isArray(chain.models) ? chain.models : [])
       const [picking, setPicking] = useState(false)
@@ -5277,6 +5310,8 @@ window.__ModuleLoader__.load({
         setError('')
         try {
           const limit = Number(stickyLimit)
+          const contextWindowTokens = tokenValue(contextWindow)
+          const maxOutputTokens = tokenValue(maxOutput)
           await onSave({
             ...chain.id === undefined ? {} : { id: chain.id },
             name,
@@ -5284,6 +5319,8 @@ window.__ModuleLoader__.load({
             strategy,
             stickyLimit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 1,
             enabled,
+            ...contextWindowTokens === undefined ? {} : { contextWindow: contextWindowTokens },
+            ...maxOutputTokens === undefined ? {} : { maxOutput: maxOutputTokens },
           })
         } catch (failure) { setError(String(failure?.message ?? failure)) } finally { setBusy(false) }
       }
@@ -5321,6 +5358,22 @@ window.__ModuleLoader__.load({
             onChange: () => { if (!busy) setEnabled(value => !value) },
           })),
         strategy === 'round-robin' ? h('p', { className: 'ofm_note' }, t('routing.stickyHint')) : null,
+        h('div', { className: 'ofm_row' },
+          h('div', { className: 'ofm_field' },
+            h('span', null, t('routing.contextWindow')),
+            h('input', {
+              className: 'ofm_input', type: 'number', min: 1, step: 1024, style: { width: 148 },
+              value: contextWindow, disabled: busy, placeholder: t('routing.capacityAuto'),
+              onChange: event => setContextWindow(event.target.value.replace(/\D/g, '')),
+            })),
+          h('div', { className: 'ofm_field' },
+            h('span', null, t('routing.maxOutput')),
+            h('input', {
+              className: 'ofm_input', type: 'number', min: 1, step: 1024, style: { width: 148 },
+              value: maxOutput, disabled: busy, placeholder: t('routing.capacityAuto'),
+              onChange: event => setMaxOutput(event.target.value.replace(/\D/g, '')),
+            }))),
+        h('p', { className: 'ofm_note' }, t('routing.capacityHint')),
         h('div', { className: 'ofm_paneltitle' }, t('routing.members'),
           h('span', { className: 'ofm_sec_hint' }, t('routing.memberCount').replace('{n}', String(members.length)))),
         members.length === 0
@@ -5330,6 +5383,7 @@ window.__ModuleLoader__.load({
             return h('div', { key: `${id}#${index}`, className: 'ofm_member' },
               h('span', { className: 'ofm_id', title: id }, row?.name ?? id),
               h('span', { className: 'ofm_tag' }, lanes[row?.channel] ?? ''),
+              h('span', { className: 'ofm_tag', title: t('routing.memberCapacity') }, `${tokenLabel(row?.contextWindow)} · ${tokenLabel(row?.maxOutput)}`),
               miniBtn('↑', () => move(index, -1), { disabled: busy || index === 0, title: t('routing.moveUp') }),
               miniBtn('↓', () => move(index, 1), { disabled: busy || index === members.length - 1, title: t('routing.moveDown') }),
               miniBtn(t('routing.removeMember'), () => setMembers(current => current.filter((_, at) => at !== index)), { danger: true, disabled: busy }))
@@ -5366,7 +5420,9 @@ window.__ModuleLoader__.load({
         h('div', { className: 'ofm_metrics' },
           h('span', null, chain.id),
           h('span', null, chain.strategy === 'round-robin' ? t('routing.strategy.roundRobin') : t('routing.strategy.fallback')),
-          h('span', null, t('routing.memberCount').replace('{n}', String((chain.models ?? []).length)))),
+          h('span', null, t('routing.memberCount').replace('{n}', String((chain.models ?? []).length))),
+          h('span', null, `${t('routing.capacityContext')} ${tokenLabel(chain.contextWindow ?? chain.effectiveContextWindow)}`),
+          h('span', null, `${t('routing.capacityOutput')} ${tokenLabel(chain.maxOutput ?? chain.effectiveMaxOutput)}`)),
         h('div', { className: 'ofm_row' },
           h('span', { className: 'ofm_note' }, t('routing.resolved')),
           resolved.length === 0

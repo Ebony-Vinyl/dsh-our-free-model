@@ -4,6 +4,7 @@ import { FreeModelAdapter, ROUTE_MAIN, ROUTE_REGION } from '../adapter.js'
 import { buildCatalog, buildEacCatalog, buildKiloCatalog, isEacEntry, isKiloEntry, parseListing, reviveKiloCatalog } from '../catalog.js'
 import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
+import { isChannelEntry } from '../chan-lane.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
 import { CODE, getJson } from '../http.js'
@@ -50,6 +51,7 @@ export function createModelRuntime({
   attributionUserAgent = 'our-free-model',
   resolveImage,
   sealedCredential = () => null,
+  chanGateway = () => null,
   onSealedUnavailable = () => {},
   onTopology = () => {},
 }) {
@@ -59,6 +61,10 @@ export function createModelRuntime({
   /** The aggregate lane: one row per enabled provider/model the user configured.
    *  Derived from settings, not from a listing, so it is rebuilt on every merge. */
   let aggregateCatalog = []
+  /** The 白嫖 channel lane's rows, as the host last read them off the pack's
+   *  loopback gateway. Routing-only: they are merged for chains to reference,
+   *  never advertised standalone (see `computeMembership`). */
+  let channelCatalog = []
   /** The virtual rows a combo contributes; rebuilt last, after every real lane. */
   let comboCatalog = []
   /** The free lane's own roster: the base every other lane is merged onto. */
@@ -79,12 +85,14 @@ export function createModelRuntime({
    *
    * Combos come last on purpose — a chain's links have to already exist as real
    * rows, which is also what makes `buildComboCatalog` drop a link that is gone
-   * instead of keeping a hopeful placeholder.
+   * instead of keeping a hopeful placeholder. The chan lane sits right before
+   * them: a chain may reference a gateway row, and a row the gateway stopped
+   * naming must disappear from the chain exactly like any other lane's.
    */
   const rebuildCatalog = () => {
     const seen = new Set()
     const merged = []
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...channelCatalog]) {
       if (entry === null || entry === undefined || seen.has(entry.id)) continue
       seen.add(entry.id)
       merged.push(entry)
@@ -115,6 +123,7 @@ export function createModelRuntime({
     state,
     resolveImage,
     sealedCredential,
+    chanGateway,
     recordUsage: record => {
       if (disposed) return
       recordUsage(stats, record)
@@ -261,7 +270,10 @@ export function createModelRuntime({
     // (whether a key is configured). A combo is excluded because it has no
     // endpoint of its own: probing one would send the chain's own id to the free
     // lane as a model name, spending quota to collect a verdict about nothing.
-    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry))
+    // The chan lane is excluded for the same reason as the other channels: its
+    // rows are named by the pack's own gateway listing, and a probe here would
+    // send a `chan:` id to the free lane as a model name.
+    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isChannelEntry(entry) && !isComboEntry(entry))
     const results = await probeCatalog(probeable, { attributionUserAgent, signal: lifetime.signal }, (id, result) => {
       if (disposed) return
       availability.edit(value => ({
@@ -333,6 +345,17 @@ export function createModelRuntime({
       emitTopology()
       return catalog
     },
+    // The host owns the gateway listing (it is the side that can read the
+    // gateway's address and credential); this replaces the lane's rows whole,
+    // so a row the gateway stopped naming leaves the merged view — and any
+    // chain link that pointed at it — without a separate pruning pass.
+    syncChannelCatalog(entries) {
+      if (disposed) return catalog
+      channelCatalog = Array.isArray(entries) ? entries.filter(isChannelEntry) : []
+      rebuildCatalog()
+      emitTopology()
+      return catalog
+    },
     get catalog() { return catalog },
     get egress() { return egress },
     get gatewayLatency() { return gatewayLatency },
@@ -355,10 +378,15 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   const results = availabilitySnapshot?.results ?? {}
   const expose = settings?.exposeRegionModels !== false
   const verdictOf = entry => results[entry.id]?.state
-  const probeable = catalog.filter(entry => !entry.channel)
+  // The chan lane is routing-only, so it is out before any of the rules below
+  // read the catalog: the pack already serves those accounts under its own
+  // routes, and advertising `chan:` ids standalone would be a second,
+  // plugin-shaped path to the same accounts.
+  const routable = catalog.filter(entry => !isChannelEntry(entry))
+  const probeable = routable.filter(entry => !entry.channel)
   const refusedAll = probeable.length > 0 && probeable.every(entry => verdictOf(entry) === STATE.unavailable)
-  let usable = catalog.filter(entry => verdictOf(entry) !== STATE.unavailable)
-  if (refusedAll) usable = catalog
+  let usable = routable.filter(entry => verdictOf(entry) !== STATE.unavailable)
+  if (refusedAll) usable = routable
   const main = []
   const region = []
   for (const entry of usable) {
