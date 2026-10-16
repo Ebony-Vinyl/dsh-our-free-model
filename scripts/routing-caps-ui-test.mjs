@@ -124,8 +124,30 @@ await check('the chain card names the effective numbers', async () => {
     onDelete: () => {},
   })
   const text = JSON.stringify(app.nodes())
-  assert.ok(text.includes(`${app.dict.zh['routing.capacityContext']} 977K`), 'the window rides on the card')
-  assert.ok(text.includes(`${app.dict.zh['routing.capacityOutput']} 195K`), 'the ceiling rides on the card')
+  assert.ok(text.includes(`${app.dict.zh['routing.capacityContext']} 1.0M`), 'the window rides on the card')
+  assert.ok(text.includes(`${app.dict.zh['routing.capacityOutput']} 200K`), 'the ceiling rides on the card')
+})
+
+/**
+ * The card's numbers must match the value the user typed and the number the
+ * rest of the plugin shows for the same capacity. Typing 500000 and reading
+ * 488K (a /1024 KiB fold) instead of 500K (the shared `kilo()` /1000 fold) is
+ * the bug this pins: one token count, one label, everywhere.
+ */
+await check('the chain card folds capacities like every other capacity label', async () => {
+  const app = mount('ChainCard', {
+    t: key => app.dict.zh[key],
+    index: 0,
+    chain: { id: 'combo:free', name: 'free', models: ['a'], strategy: 'fallback', contextWindow: 500000, maxOutput: 100000 },
+    resolved: ['a'],
+    missing: [],
+    lookup: new Map(MODELS.map(row => [row.id, row])),
+    onEdit: () => {},
+    onDelete: () => {},
+  })
+  const text = JSON.stringify(app.nodes())
+  assert.ok(text.includes(`${app.dict.zh['routing.capacityContext']} 500K`), `typed 500000 must read 500K, got: ${text.match(/上下文 [^"]*/)?.[0]}`)
+  assert.ok(text.includes(`${app.dict.zh['routing.capacityOutput']} 100K`), `typed 100000 must read 100K, got: ${text.match(/输出 [^"]*/)?.[0]}`)
 })
 
 if (failures > 0) console.error(`routing-caps-ui-test: ${failures} failure(s)`)

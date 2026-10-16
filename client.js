@@ -5268,12 +5268,14 @@ window.__ModuleLoader__.load({
      * a text field is a link that silently never resolves, and the host has no way
      * to tell "you meant this model" from "this model is gone".
      */
-    /** `131072` -> `128K`; the chain editor shows capacities compactly. */
-    const tokenLabel = value => {
-      const tokens = Number(value)
-      if (!Number.isFinite(tokens) || tokens <= 0) return '—'
-      return tokens >= 1024 * 1024 ? `${Math.round(tokens / (1024 * 1024) * 10) / 10}M` : `${Math.round(tokens / 1024)}K`
-    }
+    /**
+     * The chain editor's capacity label. `kilo()`'s decimal fold is the one the
+     * rest of the plugin already uses for the same numbers (the model cards'
+     * context tag), so a user who types 500000 reads 500K here too — a /1024
+     * KiB fold would show 488K beside a model that advertises 500K. Zero (an
+     * unresolved chain's placeholder from `/combos`) keeps the em dash.
+     */
+    const tokenLabel = value => (Number(value) > 0 ? kilo(value) : '—')
     /** A positive whole token count from a form field, or undefined when cleared. */
     const tokenValue = value => {
       const tokens = Number(value)
