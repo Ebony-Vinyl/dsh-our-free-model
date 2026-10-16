@@ -60,6 +60,16 @@ import {
 export const PROVIDER = 'raccoon'
 
 /**
+ * 一轮请求最多让几个账号参与（对齐 buddy / lobsterai / trae / cline / gemini
+ * 的 `MaxRotate = 3`）。即：首次尝试 + 最多 2 次换号。
+ *
+ * ⚠️ 不是「重试 3 次」：换号的前提是**一个字都还没产出**（见 `stream()` 的
+ * 约束 ②），故它绝不会把已生成的正文重放给用户，只是在候选账号之间选一个
+ * 能真正干活的。
+ */
+export const RACCOON_MAX_ROTATE = 3
+
+/**
  * 把 DSH 的档位 id 映射成请求体的 `extra_body.thinking` 字段。
  *
  * ## 为什么是这个形态（实测确证，别改）
@@ -166,8 +176,28 @@ export interface RaccoonAdapterOptions {
   credentialRef: CredentialRef
   /** 解析当前可用凭据。 */
   resolveCredential: (modelId?: string) => Promise<RaccoonCredential | undefined>
-  /** 凭据失效时的处理（raccoon 有 refresh 端点，会真续期）。 */
-  refresh: () => Promise<void>
+  /**
+   * 凭据失效时的处理（raccoon 有 refresh 端点，会真续期）。
+   *
+   * ## ⚠️ 为什么必须传 `accountId`（真实缺陷，审查发现并实测复现）
+   *
+   * 早先这里是无参的，接线侧只好自己猜「该刷哪个账号」，猜法是
+   * `pool.getAvailableAccount(RACCOON.id, '')` —— 而**空 modelId 会让池的
+   * 模型级限流过滤整体短路**（`account-pool.ts`：`if (modelId.length === 0) return true`），
+   * 于是它返回的是「手动顺序第一个 enabled 账号」，**不保证是本次请求在用的那个**。
+   *
+   * 实测的坏场景：账号 A 今日额度耗尽（已被标到 UTC+8 24:00）、账号 B 健康但
+   * token 过期。请求用 B 发出 → 401 → `refresh()` 却刷了 **A**
+   *（桩件实测请求体是 `{"refresh_token":"rt-a"}`）→ B 的 token 从未续期 →
+   * 重发仍 401 → 换号时 A 被 modelId 滤掉、B 已在 `tried` 里 →
+   * `nextAccount` 返回 undefined → 报「没有其它可用账号」。
+   * **而 B 只要续期就能用** —— 换号因此完全失效。
+   *
+   * 故把归属显式化：适配器知道自己这轮用的是哪个账号
+   *（`resolveCurrentAccountId`），接线侧按它精确续期。
+   * `accountId` 为空串时（单凭据模式、或凭据不在池中）由接线侧自行决定回退。
+   */
+  refresh: (accountId: string) => Promise<void>
   /** 拉取远端模型目录；失败时适配器回退兜底表。 */
   fetchRemoteModels?: () => Promise<RaccoonRemoteModel[]>
   /** 读取图片附件的原始字节（内联为 data URL 用）。 */
@@ -190,6 +220,42 @@ export interface RaccoonAdapterOptions {
   ) => Promise<{ data: Uint8Array; mediaType: string } | undefined>
   /** 账号池（目录门控与黑名单）。 */
   accountPool?: AccountPool
+  /**
+   * 换号：取**下一个**可用账号（排除 `tried`）。
+   *
+   * 返回 `undefined` 表示没有别的候选了。
+   *
+   * ## 为什么换号必须由接线侧注入，而不是适配器自己问池
+   *
+   * 选号是一条带策略的链（余额分档 → 限流过滤 → `enabled` 过滤），
+   * 而适配器只该关心「发请求、认失败」。把策略留在 `index.ts`，
+   * 适配器与池之间就只有一个窄接口，日后换选号策略不必动这里。
+   *
+   * ⚠️ 传 `tried` 是**必需**的：池按用户手动顺序返回候选，
+   * **刚失败的那个账号很可能仍排第一**，不排除就会拿回同一个、
+   * 换号形同虚设（本插件在 qoder / cline 上各踩过一次，见
+   * `qoder-adapter.ts` 的 `switchAccountOnQuota` 注释）。
+   */
+  nextAccount?: (
+    modelId: string,
+    tried: ReadonlySet<string>,
+  ) => Promise<{ credential: RaccoonCredential; accountId: string } | undefined>
+  /**
+   * 标记「这个账号在这个模型上刚失败」。
+   *
+   * 池会把该 (账号, 模型) 对排除一段时间，从而让**下一次请求**也不再
+   * 选它 —— 这是「换号」能持久生效的关键：只换当前这一轮，下一轮又
+   * 挑回坏号，用户看到的就是「每次都从头撞一遍」。
+   *
+   * @param quota - 是否为**额度类**失败（无余额 / 积分不足 / 429）。
+   *   `true` 时接线侧应按「当日内不再选它」处理（额度按自然日刷新），
+   *   `false` 时只该做很短的冷却甚至不标记 —— 5xx / 超时是瞬时的，
+   *   按天冷却会把一个健康的账号白白关掉一整天（本插件在 cline 上
+   *   踩过反向的坑：兜底的**短**冷却覆盖了真值的长冷却）。
+   */
+  noteFailure?: (accountId: string, modelId: string, quota: boolean) => Promise<void>
+  /** 调拨账本用的账号归属回报（换号后回报**最终服务**的那个）。 */
+  reportAccount?: (accountId: string) => void
   /** 产品配置；默认 {@link RACCOON}。 */
   product?: RaccoonProduct
   /** 注入的 fetch（测试用）。 */
@@ -367,9 +433,39 @@ export class RaccoonAdapter extends LlmAdapter {
 
     // 1. 取凭据（过期则先续期）
     let credential = await this.options.resolveCredential(options.model)
+
+    /**
+     * 本轮实际使用的账号 id（空串 = 没有池 / 凭据不在池里）。
+     *
+     * ⚠️ **必须在续期之前解析**（真实缺陷，审查发现并实测复现）：
+     * 续期要刷的正是「这一份凭据所属的账号」，而解析归属只能靠凭据本身。
+     * 若先续期再解析，接线侧就只能猜 —— 它猜的是「池里第一个 enabled 账号」，
+     * 在「A 被限流、B 在用」的场景下会**刷成 A**，B 永远续不上，
+     * 换号跟着一起失效（详见 {@link RaccoonAdapterOptions.refresh} 的注释）。
+     *
+     * ⚠️ 局部可变：换号后池的「当前账号」不跟着变，靠回调取值会在两号间来回
+     *（与 gemini / qoder 同因）。
+     */
+    let currentAccountId = await this.resolveCurrentAccountId(credential)
+
     if (credential === undefined || isRaccoonExpired(credential)) {
-      await this.options.refresh()
-      credential = await this.options.resolveCredential(options.model)
+      // ⚠️ **刷新失败不致命**（真实遗漏，与下面 401 分支同一约定）。
+      //
+      // 这是进入 `stream()` 的**第一道门**：凭据一过期就会走到这里。此前没有
+      // try/catch，于是 refresh_token 失效时**直接冒泡** —— 换号逻辑一步都不执行，
+      // 用户只看到「登录态已过期，请重新登录」，而池里另一个健康账号从未被尝试
+      //（行为测试实测：`chat/completions` 被调用 **0** 次）。
+      //
+      // 捕获后继续往下走：拿不到新凭据时仍会带着原凭据尝试，失败则由下面的
+      // 换号分支兜底 —— 单个账号的凭据故障不该让整轮陪葬。
+      try {
+        await this.options.refresh(currentAccountId)
+        credential = await this.options.resolveCredential(options.model)
+        // 续期后凭据可能变了（换了账号或换了 token），归属要重新解析。
+        currentAccountId = await this.resolveCurrentAccountId(credential)
+      } catch (error) {
+        console.warn(`[raccoon] 凭据续期失败，继续尝试（必要时由换号兜底）：${String(error)}`)
+      }
     }
     if (credential === undefined || credential.access_token.length === 0) {
       throw new LlmError('raccoon: no usable credential; log in first', 'MISSING_CREDENTIAL')
@@ -456,31 +552,228 @@ export class RaccoonAdapter extends LlmAdapter {
       }
     }
 
-    let response = await send()
-    // 401/403 时续期一次并重试（raccoon 有 refresh_token 轮换）。
-    if (response.status === 401 || response.status === 403) {
-      await this.options.refresh()
-      const refreshed = await this.options.resolveCredential(options.model)
-      if (refreshed === undefined || refreshed.access_token.length === 0) {
-        throw new LlmError('raccoon: credential expired and refresh failed', 'AUTH', { status: response.status })
+    /**
+     * 换号的状态。
+     *
+     * `tried` 跨轮保留：池按用户手动顺序返回候选，**刚失败的账号很可能仍
+     * 排第一**，不排除就会拿回同一个、换号形同虚设。
+     *
+     * ⚠️ `currentAccountId` 已在上面（取凭据阶段）声明并解析 —— 它必须先于
+     * 续期存在，理由见那里的注释。这里只补进 `tried`。
+     */
+    const tried = new Set<string>()
+    if (currentAccountId !== '') tried.add(currentAccountId)
+    /** 已经试过的账号数（含首轮），用于对齐 `RACCOON_MAX_ROTATE`。 */
+    let attempts = 0
+    /** 最近一次失败的**可读原因**（换号耗尽时如实报出）。 */
+    let lastFailure = ''
+    /**
+     * 最近一次失败应映射成的错误码。
+     *
+     * ⚠️ 不能换号耗尽时统一用 `httpErrorCode(response.status)`：**流内错误帧**
+     * 走的是 HTTP 200，那样会报出 `HTTP_200` 这个自相矛盾的码，还会落进
+     * harness 的可重试集合白重试一轮。`consumeOpenAiSse` 已经把额度类错误
+     * 分类成 `QUOTA_EXCEEDED`（不在该集合里，立即交还用户），必须保住它。
+     */
+    let lastCode = ''
+
+    for (;;) {
+      /**
+       * ① 首轮之后才换号：先按当前凭据发一次。
+       *
+       * 401/403 仍然先续期一次并重发（raccoon 有 refresh_token 轮换）——
+       * 这是**同账号内**的修复，比换号更轻，且不消耗换号预算。
+       */
+      let response = await send()
+      if (response.status === 401 || response.status === 403) {
+        // ⚠️ **刷新失败不致命**（真实遗漏，对齐 `buddy-adapter.ts` L1461-1464 的
+        // 既有约定：*"刷新失败不致命：换号仍有机会，单个账号故障不该让整轮陪葬"*）。
+        //
+        // `refresh()` 在 refresh_token 失效时会抛 `RefreshTokenExpiredError`
+        // （"raccoon: 登录态已过期，请重新登录"）。原先这一行**没有** try/catch，
+        // 于是「账号 A 的凭据坏了、账号 B 完全健康」这个**最该换号**的场景
+        // 反而直接冒泡报错 —— 换号逻辑一行都不会执行
+        //（行为测试实测：推理端点被调用 **0** 次，用户只看到「请重新登录」）。
+        //
+        // 捕获后继续往下走，交给后面的换号分支处理。
+        try {
+          // ⚠️ 传**本轮在用的账号**（`currentAccountId`），不要让它去猜 ——
+          // 接线侧猜的那一套会刷错账号（见 `refresh` 的注释与实测复现）。
+          await this.options.refresh(currentAccountId)
+          const refreshed = await this.options.resolveCredential(options.model)
+          if (refreshed !== undefined && refreshed.access_token.length > 0) {
+            credential = refreshed
+            // 续期后归属可能变了，同步一次，供后续轮次与失败标记使用。
+            currentAccountId = await this.resolveCurrentAccountId(credential)
+            response = await send()
+          }
+        } catch (error) {
+          console.warn(`[raccoon] 刷新凭据失败，改用换号重试：${String(error)}`)
+        }
       }
-      credential = refreshed
-      response = await send()
-    }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new LlmError(`raccoon: ${errorDetail(errorText)}`, httpErrorCode(response.status), { status: response.status })
-    }
+      // ② 成功：消费流。**只有尚未产出任何内容时才允许换号**（见下）。
+      if (response.ok) {
+        let emitted = false
+        try {
+          for await (const chunk of consumeOpenAiSse(response, { signal: options.signal }, {
+            label: 'raccoon',
+            firstTokenTimeoutMs: resolveFirstTokenTimeoutMs(),
+            chunkTimeoutMs: resolveChunkTimeoutMs(),
+            ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
+          })) {
+            emitted = true
+            yield chunk
+          }
+          return
+        } catch (error) {
+          // ⚠️ **已产出内容后绝不能换号**（真实缺陷，2026-09-23 在 lobsterai
+          // 上实测到，同一形状）：换号会重放请求，而新的 `consumeOpenAiSse`
+          // 是**全新的生成器** —— 它的 `block.index` 从 0 重新开始，于是会
+          // 再发一次 `block-start(index=0)`。DSH 对重复块索引是**硬失败**：
+          //
+          //   `dsh-llm/lib/invariant.js`：
+          //     case "block-start":
+          //       if (open.has(chunk.index)) fail(`LLM stream repeated block-start index ${chunk.index}`)
+          //
+          // 于是「额度耗尽」这个可读错误会被升级成 invariant 崩溃，
+          // 还会把两个账号的正文拼在一起 —— 比不换号更糟。
+          //
+          // 此时如实抛出：harness 会重试整个回合，而在那次请求里失败通常
+          // 发生在**首帧**（尚未产出内容），可干净换号。
+          if (emitted) throw error
+          // 传输/超时错误不换号：它多半是网络或本机代理的问题，换个账号
+          // 照样撞 —— 留给 harness 决定是否重试整个回合。
+          if (!(error instanceof LlmError)) throw error
+          lastFailure = error instanceof Error ? error.message : String(error)
+          // 保住流内分类的码（额度类是 `QUOTA_EXCEEDED`，不该被 HTTP 200 覆盖）。
+          lastCode = error.code
+        }
+      } else {
+        lastFailure = await response.text().catch(() => '')
+        lastCode = httpErrorCode(response.status)
+      }
 
-    // ⚠️ 业务失败也可能以 HTTP 200 + SSE 内嵌错误帧返回，由 consumeOpenAiSse 处理。
-    yield* consumeOpenAiSse(response, { signal: options.signal }, {
-      label: 'raccoon',
-      firstTokenTimeoutMs: resolveFirstTokenTimeoutMs(),
-      chunkTimeoutMs: resolveChunkTimeoutMs(),
-      ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
-    })
+      // ③ 记录失败，让**下一次请求**也不再挑这个账号。
+      //
+      // ⚠️ 必须记在**真正失败的那个账号**上（`currentAccountId`），而不是
+      // 下一轮才会被赋值的新账号 —— 标错会把无辜的账号关掉，而坏号仍被
+      // 反复选中（qoder 的单测实测到过 `['acct-A','acct-A']` 这种记录）。
+      if (currentAccountId !== '' && this.options.noteFailure !== undefined) {
+        // 额度类的两个来源：HTTP 状态码/正文（`isRaccoonQuotaFailure`），
+        // 以及**流内错误帧**的分类结果 —— 后者走 HTTP 200，状态码看不出
+        // 任何东西，只能认 `consumeOpenAiSse` 给出的 `QUOTA_EXCEEDED`。
+        const quota = lastCode === 'QUOTA_EXCEEDED'
+          || isRaccoonQuotaFailure(response.status, lastFailure)
+        await this.options.noteFailure(currentAccountId, options.model, quota).catch(() => {})
+      }
+
+      // ④ 换号。用户明确要求「任何报错都切换」，故这里**不对错误分类挑肥拣瘦**
+      // —— 唯一的例外是上面那两条（已产出内容、传输错误），它们换号无益。
+      const reason = describeRaccoonFailure(lastFailure)
+      if (this.options.nextAccount === undefined) {
+        // 无账号池（headless / 单测）：如实报出，不做换号。
+        throw new LlmError(reason, lastCode, { status: response.status })
+      }
+      if (attempts >= RACCOON_MAX_ROTATE - 1) {
+        throw new LlmError(
+          `raccoon: 账号池中 ${tried.size} 个账号均不可用（最近一次：${reason}）`,
+          lastCode,
+          { status: response.status },
+        )
+      }
+
+      const next = await this.options.nextAccount(options.model, tried)
+      if (next === undefined) {
+        // 池里没有别的候选：其余账号可能都已知额度耗尽（无余额），
+        // 或都被限流标记挡着。如实报出最近一次的真实原因。
+        throw new LlmError(
+          `raccoon: 没有其它可用账号 —— ${reason}`,
+          lastCode,
+          { status: response.status },
+        )
+      }
+      attempts += 1
+      tried.add(next.accountId)
+      credential = next.credential
+      currentAccountId = next.accountId
+      // 换号后回报账本：usage 归到**最终服务**的那个账号。
+      this.options.reportAccount?.(next.accountId)
+    }
   }
+
+  /**
+   * 由凭据反查它属于池里的哪个账号（找不到返回空串）。
+   *
+   * 空串表示「这份凭据不在池里」（单凭据回退模式），此时不写失败标记 ——
+   * 池里没有对应条目，`updateModelRateLimit` 会记一条「账号不在列表中」的
+   * 警告，纯噪声。
+   *
+   * ⚠️ `credential` 可以是 `undefined`（取凭据阶段还没拿到凭据时就要先问归属，
+   * 以便**精确续期** —— 见 `refresh` 的注释）。那种情况返回空串，
+   * 由接线侧走「按 id 找不到 → 兜底」的分支。
+   */
+  private async resolveCurrentAccountId(
+    credential: RaccoonCredential | undefined,
+  ): Promise<string> {
+    const pool = this.options.accountPool
+    if (pool === undefined || credential === undefined || credential.access_token.length === 0) {
+      return ''
+    }
+    try {
+      return await pool.findAccountIdByCredential(this.product.id, credential.access_token)
+    } catch {
+      return ''
+    }
+  }
+}
+
+/**
+ * 把「最近一次失败的原文」整理成可以给用户看的单行原因。
+ *
+ * ## 为什么要单独一步
+ *
+ * 失败原文有两个来源，形状不同：
+ *
+ * - **HTTP 非 2xx**：`response.text()` 的裸响应体（可能是 JSON，也可能是
+ *   一段 HTML 错误页）。需要过 `errorDetail()` 把 JSON 里的 `code` /
+ *   `message` 抠成一行。
+ * - **流内错误帧**：`LlmError.message`，**已经**是 `consumeOpenAiSse` 拼好的
+ *   可读串（形如 `raccoon: Billing daily count exceeded`）。再套一次
+ *   `errorDetail()` 只会得到同样的字符串（它不是 JSON），但再补一个
+ *   `raccoon:` 前缀就会变成 `raccoon: raccoon: …` —— 那种重复前缀会让人
+ *   以为是两层错误，排查时白绕一圈。
+ *
+ * 界面上这一行是用户唯一能看到的线索，故两条路径都要给出准确原文，
+ * **不能**退化成「请求失败」这类把证据丢掉的说法。
+ */
+function describeRaccoonFailure(raw: string): string {
+  const detail = errorDetail(raw)
+  return detail.startsWith('raccoon:') ? detail : `raccoon: ${detail}`
+}
+
+/**
+ * 该失败是否属于**额度类**（无余额 / 积分不足 / 限流）。
+ *
+ * ## 为什么要分这两类
+ *
+ * 接线侧对它们的**冷却时长**不同：
+ *
+ * - 额度类：商汤的免费额度按**自然日**结算，故标到 UTC+8 当日 24:00
+ *   （复用 `nextUtc8DayStartMs()`）。标短了会让用户 1 小时后再撞同一堵墙。
+ * - 其它（5xx / 超时 / 请求错误）：**短冷却**，甚至不标 —— 它们是瞬时的，
+ *   按天冷却会把一个健康的账号白白关掉一整天。
+ *
+ * ## 判据
+ *
+ * 状态码 402 / 429 是权威信号；正文关键词是兜底（上游也可能用 200 +
+ * 业务错误码表达额度不足）。关键词刻意**窄**：`balance` / `quota` 这类泛词
+ * 会误伤模型正文里恰好讨论「余额」的情况（`model-queue.ts` 记过这条）。
+ */
+export function isRaccoonQuotaFailure(status: number, text: string): boolean {
+  if (status === 402 || status === 429) return true
+  return /积分不足|额度不足|余额不足|积分用完|额度用尽|没有积分|积分耗尽|insufficient\s+(?:credit|balance|quota|points)/i
+    .test(text)
 }
 
 /** 首 token 超时（毫秒）；可用环境变量覆盖（与其余适配器同约定）。 */

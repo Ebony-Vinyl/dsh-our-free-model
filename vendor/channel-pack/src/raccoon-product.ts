@@ -341,6 +341,23 @@ export function raccoonSupportsImage(modelId: string, tags: readonly string[]): 
   return tags.includes('vision') || tags.includes('image') || tags.includes('image-understanding')
 }
 
+/**
+ * 非额度类失败（5xx / 请求错误 / 认证抖动）的**冷却时长**。
+ *
+ * ## 为什么与额度类分开
+ *
+ * 商汤的免费额度按**自然日**结算（每日发放、当日有效），故额度类失败标到
+ * 「UTC+8 当日 24:00」—— 标短了会让用户 1 小时后再撞同一堵墙。
+ *
+ * 但 5xx / 超时是**瞬时**的：按天冷却会把一个健康的账号白白关掉一整天。
+ * 故这类只冷却 5 分钟 —— 足够让「换号」在下一次请求时生效（用户感知到
+ * 的正是「别老挑那个坏号」），又不至于因为一次上游抖动废掉一个号。
+ *
+ * ⚠️ **不要**把它调成很短（如 5 秒）：那种时长在用户连发几条消息时就会
+ * 过期，坏号又被选中，症状回到「每次都撞同一堵墙」。
+ */
+export const RACCOON_RATE_LIMIT_COOLDOWN_MS = 5 * 60 * 1000
+
 /** Raccoon Work provider 配置。 */
 export const RACCOON: RaccoonProduct = {
   id: 'raccoon',

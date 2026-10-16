@@ -18,9 +18,11 @@ import { TraeAuth } from './trae-auth.js'
 import { ClineAuth } from './cline-auth.js'
 import { LoomyAuth } from './loomy-auth.js'
 import { RaccoonAuth } from './raccoon-auth.js'
+import { RaccoonBalanceSelector } from './raccoon-balance-selector.js'
+import { nextUtc8DayStartMs } from './model-queue.js'
 import { LOOMY } from './loomy-product.js'
 import { LoomyBalanceSelector } from './loomy-balance-selector.js'
-import { RACCOON } from './raccoon-product.js'
+import { RACCOON, RACCOON_RATE_LIMIT_COOLDOWN_MS } from './raccoon-product.js'
 import { ZcodeAuth } from './zcode-auth.js'
 import { registerZcodeLlm } from './zcode-adapter.js'
 import { ZCODE } from './zcode-product.js'
@@ -1062,16 +1064,79 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId: string) => {
       // ⚠️ Loomy **没有 refresh 端点**，这里的 `refresh` 语义是
-      // 「探测凭据是否仍有效」，失效时抛错提示重新登录。
+      // 「探测凭据是否仍有效」，失效时**抛错**提示重新登录。
       //
-      // 仍须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref ——
-      // 否则探测的是另一份凭据，用户会看到「刚登录好却一直认证失败」。
+      // ★ 必须探测**本次请求在用的那个账号**（`accountId` 由适配器传入）——
+      // 早先这里靠 `getAvailableAccount(LOOMY.id, '')` 自己猜，而**空 modelId
+      // 会让池的模型级限流过滤整体短路**（`account-pool.ts`：
+      // `if (modelId.length === 0) return true`），于是它返回「手动顺序第一个
+      // enabled 账号」，不保证是本次在用的那个：在「A 被限流、B 在用」时会探测
+      // 错的账号，B 的凭据因此永远得不到续期。
+      const entry = accountId.length > 0 ? pool.findAccount(accountId) : undefined
+      if (entry !== undefined) {
+        await loomy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+        return
+      }
+      // 兜底：单凭据模式（适配器拿不到归属），或 id 已不在池里（账号被删）。
       const available = await pool.getAvailableAccount(LOOMY.id, '')
       if (available) await loomy.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
       else await loomy.refresh()
     },
+    // ★ 换号：任何失败都切到下一个账号。
+    //
+    // `LoomyAdapter` 原先的失败路径与 `RaccoonAdapter`（本次修复前）**逐行同构**：
+    // 401/403 只重发**同一个**账号、其余失败直接抛，类内没有换号逻辑。
+    // 实测（双账号池、两个号都回额度类错误）：`chat/completions` **只被调用 1 次**，
+    // 第二个账号从未被尝试。
+    //
+    // 选号复用本文件上面那套余额分档（`loomyBalanceSelector`），故不会偏向
+    // 已确认没余额的账号；但保留该选择器「全部候选都没余额时仍返回第一个」
+    // 的**既有行为**（`loomy-balance-selector.ts` 明确记载：让上游去报余额不足，
+    // 错误信息更准确），本次不改变它。
+    nextAccount: async (modelId: string, tried: ReadonlySet<string>) => {
+      const candidates = pool
+        .listAccountsByProvider(LOOMY.id)
+        .filter(a => a.enabled)
+        .filter(a => !tried.has(a.id))
+        .filter((a) => {
+          if (modelId.length === 0) return true
+          if (!a.modelRateLimits) return true
+          const resetAt = a.modelRateLimits[modelId]
+          return resetAt === undefined || resetAt === 0 || Date.now() >= resetAt
+        })
+        .map(a => ({ id: a.id, credentialRef: a.credentialRef }))
+      if (candidates.length === 0) return undefined
+      const picked = await loomyBalanceSelector
+        .select(candidates, { allowPermanent: !pool.permanentLocked(LOOMY.id) })
+        .catch((error: unknown) => {
+          // ⚠️ 不静默吞掉：`select` 抛错会被下面的 `picked.ok` 分支误当成
+          // 「余额门没选出」而退回 `candidates[0]`，可能选到一个没余额的账号。
+          console.warn('[loomy] 换号时余额门查询失败，退回顺序取第一个：', String(error))
+          return { ok: false as const, reason: { kind: 'unknown' as const, errors: [] as string[] } }
+        })
+      // 余额门没选出（全没余额 / 查不到）时退回「顺序取第一个未试过的」。
+      const account = picked.ok ? picked.account : candidates[0]!
+      const credential = await resolveLoomyCredentialByRef(account.credentialRef)
+      if (credential === undefined) return undefined
+      reportLedgerAccount(LOOMY.id, account.id)
+      return { credential, accountId: account.id }
+    },
+    // 失败标记：额度类标到「UTC+8 当日 24:00」（Loomy 的今日赠送额度按自然日
+    // 刷新），其余只冷却 5 分钟 —— 5xx / 超时是瞬时的，按天冷却会把健康账号
+    // 白关一整天。与 qoder / zcode / raccoon 的既有口径一致。
+    noteFailure: async (accountId: string, modelId: string, quota: boolean) => {
+      await pool.updateModelRateLimit(
+        accountId,
+        modelId,
+        quota ? nextUtc8DayStartMs() : Date.now() + RACCOON_RATE_LIMIT_COOLDOWN_MS,
+      )
+      // ⚠️ 额度耗尽要顺手清掉余额缓存：否则那份「还有 5000 额度」的旧读数会
+      // 继续把这个号判为可用整整一个 TTL，用户看到「换了号还是那一个」。
+      if (quota) loomyBalanceSelector.invalidate(accountId)
+    },
+    reportAccount: (accountId: string) => reportLedgerAccount(LOOMY.id, accountId),
     // 远端模型目录：GET /api/v1/models。
     // ⚠️ 必须用 **token 头**（业务端点），不是 Bearer —— 带错会得到
     // `100002 缺少 token`，表现为「模型列表永远停在兜底表」。
@@ -1113,6 +1178,73 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   // 服务名由 RaccoonAuth 依 product.id 派生，注册为 ctx.raccoonAuth。
   // 不注册斜杠命令：入口在 Channel Pack 的 Raccoon 面板。
   const raccoon = new RaccoonAuth(ctx)
+  /**
+   * 商汤账号的余额缓存 + 「不切换到无余额账号」的选号。
+   *
+   * 背景（真实报障）：一个账号没余额后插件不会切到另一个 —— 根因有两层，
+   * 适配器的换号循环与这里的余额门缺一不可。详见
+   * `raccoon-balance-selector.ts` 的模块注释。
+   */
+  const raccoonBalanceSelector = new RaccoonBalanceSelector({
+    product: RACCOON,
+    // 按账号 id 解析凭据（池的公开入口，与「重测已停用账号」走同一条路）。
+    resolveCredential: (accountId: string) =>
+      pool.resolveCredentialForAccount(accountId) as Promise<RaccoonCredential | undefined>,
+  })
+  /**
+   * 从商汤账号池里取下一个可用账号（含余额门）。
+   *
+   * 抽成闭包是因为 `resolveCredential` 与 `nextAccount` 需要**同一套**过滤逻辑
+   * —— 两处各写一份迟早会漂移（本插件在 buddy 上吃过这个亏：两条路径的过滤
+   * 条件不一致，导致「有余额却报没有可用账号」）。
+   *
+   * @param modelId 目标模型（空串 = 不按模型过滤限流标记）。
+   * @param exclude 必须排除的账号 id（已试过的，含刚失败的那个）。
+   */
+  const pickRaccoonAccount = async (
+    modelId: string,
+    exclude?: ReadonlySet<string>,
+  ): Promise<{ accountId: string; credential: RaccoonCredential } | undefined> => {
+    // ① 先取候选（池已按 enabled + 模型限流过滤，exclude 由本函数叠加）。
+    //
+    // ⚠️ 这里**不能**直接用 `getAvailableAccount` 的返回值：它一次只给
+    // 「池认为最好的那一个」，无法枚举候选去过余额门。故先列出候选，
+    // 逐项按余额筛，再解析凭据。
+    const candidates = pool.listAccountsByProvider(RACCOON.id)
+      .filter(a => a.enabled)
+      .filter(a => exclude === undefined || !exclude.has(a.id))
+      .filter((a) => {
+        if (modelId.length === 0) return true
+        if (!a.modelRateLimits) return true
+        const resetAt = a.modelRateLimits[modelId]
+        return resetAt === undefined || resetAt === 0 || Date.now() >= resetAt
+      })
+      .map(a => ({ id: a.id }))
+
+    // ② 余额门：跳过**已知**没余额的账号（用户明确要求）。
+    const picked = await raccoonBalanceSelector.select(candidates)
+    if (picked === undefined) {
+      // ⚠️ 「全部候选都没余额」与「没有候选」必须分开报。
+      //
+      // 混为一谈时，调用方会退到单凭据 ref 并报出 `log in first` ——
+      // 而用户的账号明明登录着、只是没钱，那句话会把人指去重新登录
+      //（与 cline 上那条同款缺陷同因）。
+      if (await raccoonBalanceSelector.allExhausted(candidates)) {
+        throw new LlmError(
+          `Raccoon (商汤)：${candidates.length} 个账号在模型 ${modelId} 上的可用积分都已用尽。`
+          + '请等待每日额度刷新，或到 Channel Pack 的 Raccoon 面板添加/切换账号。',
+          'QUOTA_EXCEEDED',
+        )
+      }
+      return undefined
+    }
+
+    // ③ 解析凭据。用池的公开入口（`resolveCredentialForAccount`）而不是
+    //    自己拼 ref —— 后者是池的私有路径，且 ref 与 id 各存一份、可能不同步。
+    const credential = await pool.resolveCredentialForAccount(picked.id)
+    if (credential === undefined) return undefined
+    return { accountId: picked.id, credential: credential as unknown as RaccoonCredential }
+  }
   const raccoonAdapter = registerRaccoonLlm(ctx, {
     credentialRef: credentialRef(RACCOON.defaultCredentialRef),
     resolveCredential: async (modelId?: string) => {
@@ -1121,15 +1253,15 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
       // provider 实参用 RACCOON.id 而非字面量：写死字面量在改名/多产品场景下
       // 会静默查不到账号（本插件在 workbuddy 上踩过同类坑）。
       // ⚠️ `modelId` 透传：否则模型级限流标记被忽略（详见 buddy 处说明）。
-      const available = await pool.getAvailableAccount(RACCOON.id, modelId ?? '')
-      // `getAvailableAccount` 的凭据类型是 `CodeArtsCredential | BuddyCredential`
-      // 联合（历史遗留），与 `RaccoonCredential` 无充分重叠，故经 `unknown` 转换。
-      // 运行时安全性由 provider 过滤保证：查询用 `RACCOON.id`，取到的必是 raccoon 凭据。
-      if (available) {
+      const picked = await pickRaccoonAccount(modelId ?? '')
+      if (picked !== undefined) {
         // Token 账本（第 2 期）：回报「本笔请求解析出的账号」。
-        reportLedgerAccount(RACCOON.id, available.entry.id)
-        return available.credential as unknown as RaccoonCredential
+        reportLedgerAccount(RACCOON.id, picked.accountId)
+        return picked.credential
       }
+      // ⚠️ 池里有账号、但全被余额门或限流滤掉时，**不能**直接说「没有可用账号」
+      // —— 用户会以为要去重新登录。先把它归因说清楚（与 cline 的同款修复同因）。
+      throwIfAllAccountsRateLimited(RACCOON, modelId)
       const resolved = await ctx.credentials.resolve(credentialRef(RACCOON.defaultCredentialRef))
       if (!resolved) return undefined
       try {
@@ -1138,17 +1270,57 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    // ★ 换号（真实报障的核心修复）：任何失败都切到下一个账号，
+    //   且**不会切到无余额的账号**（余额门在 `pickRaccoonAccount` 里）。
+    nextAccount: async (modelId: string, tried: ReadonlySet<string>) => {
+      const picked = await pickRaccoonAccount(modelId, tried)
+      if (picked === undefined) return undefined
+      reportLedgerAccount(RACCOON.id, picked.accountId)
+      return { credential: picked.credential, accountId: picked.accountId }
+    },
+    // 失败标记：额度类标到「UTC+8 当日 24:00」（商汤免费额度按自然日结算），
+    // 其余只冷却 5 分钟 —— 5xx / 超时是瞬时的，按天冷却会把健康账号白关一整天。
+    noteFailure: async (accountId: string, modelId: string, quota: boolean) => {
+      await pool.updateModelRateLimit(
+        accountId,
+        modelId,
+        quota ? nextUtc8DayStartMs() : Date.now() + RACCOON_RATE_LIMIT_COOLDOWN_MS,
+      )
+      // ⚠️ 额度耗尽要顺手清掉余额缓存：否则那份「还有 100 积分」的旧读数会继续
+      // 把这个号判为可用整整一个 TTL，用户看到「换了号还是那一个」。
+      if (quota) raccoonBalanceSelector.invalidate(accountId)
+    },
+    reportAccount: (accountId: string) => reportLedgerAccount(RACCOON.id, accountId),
+    refresh: async (accountId: string) => {
       // ⚠️ raccoon **有** refresh 端点（与 Loomy 恒 false 不同），这里是真续期。
       //
-      // 仍须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref ——
-      // 否则续期的是另一份凭据，用户会看到「刚登录好却一直认证失败」。
-      const available = await pool.getAvailableAccount(RACCOON.id, '')
-      if (available) {
+      // ★ 必须续期**本次请求在用的那个账号**（`accountId` 由适配器传入）。
+      //
+      // ## 这里曾经有一个真实缺陷（已实测复现）
+      //
+      // 早先适配器不传 id，接线侧只好自己猜：
+      //   `pool.getAvailableAccount(RACCOON.id, '')`
+      // 而**空 modelId 会让池的模型级限流过滤整体短路**
+      // （`account-pool.ts`：`if (modelId.length === 0) return true`），
+      // 于是它返回的是「手动顺序第一个 enabled 账号」——**不保证是本次在用的那个**。
+      //
+      // 实测的坏场景：账号 A 今日额度耗尽（已被标到 UTC+8 24:00）、账号 B 健康但
+      // token 过期。请求用 B 发出 → 401 → 续期却刷了 **A**
+      //（桩件实测请求体 `{"refresh_token":"rt-a"}`）→ B 的 token 从未续期 →
+      // 重发仍 401 → 换号时 A 被 modelId 滤掉、B 已在 `tried` 里 →
+      // 报「没有其它可用账号」。**而 B 只要续期就能用**，换号因此完全失效。
+      const entry = accountId.length > 0 ? pool.findAccount(accountId) : undefined
+      if (entry !== undefined) {
         // ⚠️ **必须传 pool + entry.id**：续期成功后要把新的 `expiresAt` 写回
         // 账号池，否则 UI 会一直显示「已过期」而实际能正常发消息
         //（真实缺陷：JWT 已续到 15:09、账号池仍是 12:02，相差 3.1 小时）。
         // 这条路径正是「发消息时按需续期」，故它是最常触发回写的地方。
+        await raccoon.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+        return
+      }
+      // 兜底：单凭据模式（适配器拿不到归属），或 id 已不在池里（账号被删）。
+      const available = await pool.getAvailableAccount(RACCOON.id, '')
+      if (available) {
         await raccoon.refreshAccountCredential(
           available.entry.credentialRef, pool, available.entry.id,
         )

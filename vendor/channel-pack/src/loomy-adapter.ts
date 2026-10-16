@@ -210,8 +210,48 @@ export interface LoomyAdapterOptions {
    *
    * ⚠️ Loomy **没有 refresh 端点**，故实现只做**有效性探测**并在失效时抛错，
    * 不会（也无法）续期。
+   *
+   * ⚠️ **调用它必须容错**（真实缺陷，与 raccoon 的同款修复一并处理）：
+   * 既然它「失效时抛错」，那么每次 401/403 与「凭据已过期」都会走到这里、
+   * 并且**必然抛错** —— 若外面不 catch，换号逻辑一行都不会执行，用户只看到
+   * 「请重新登录」，而池里另一个健康账号从未被尝试。
+   *
+   * @param accountId 本轮在用的账号 id（空串 = 单凭据模式）。
+   * 传它而不是让接线侧自己猜：接线侧只能猜「池里第一个 enabled 账号」，
+   * 在「A 被限流、B 在用」时会探测**错的账号**（raccoon 上实测复现过）。
    */
-  refresh: () => Promise<void>
+  refresh: (accountId: string) => Promise<void>
+  /**
+   * 换号：取**下一个**可用账号（排除 `tried`）。
+   *
+   * 返回 `undefined` 表示没有别的候选了。
+   *
+   * ## 为什么需要它（真实缺陷，2026-10-16 实测复现）
+   *
+   * 修 raccoon 时把全部 12 个适配器对照了一遍，发现 `LoomyAdapter` 的失败路径
+   * 与 raccoon（修复前）**逐行同构**：401/403 只重发**同一个**账号、其余失败
+   * 直接抛，类内 `nextAccount` / `switchAccountOnQuota` / `tried` 三项全零命中。
+   *
+   * 实测（双账号池、两个账号都回额度类错误）：`chat/completions` 只被调用
+   * **1 次**，用的始终是第一个账号的凭据 —— 第二个账号从未被尝试。
+   *
+   * ⚠️ 传 `tried` 是**必需**的：池按用户手动顺序返回候选，刚失败的那个很可能
+   * 仍排第一，不排除就会拿回同一个（qoder / cline 都踩过，见
+   * `qoder-adapter.ts` 的 `switchAccountOnQuota` 注释）。
+   */
+  nextAccount?: (
+    modelId: string,
+    tried: ReadonlySet<string>,
+  ) => Promise<{ credential: LoomyCredential; accountId: string } | undefined>
+  /**
+   * 标记「这个账号在这个模型上刚失败」，让**下一次请求**也不再选它。
+   *
+   * @param quota - 是否为额度类失败。`true` 时接线侧应记到「当日内不再选它」，
+   *   `false` 时只做短冷却甚至不标 —— 按天冷却会把健康账号白关一整天。
+   */
+  noteFailure?: (accountId: string, modelId: string, quota: boolean) => Promise<void>
+  /** 调拨账本用的账号归属回报（换号后回报**最终服务**的那个）。 */
+  reportAccount?: (accountId: string) => void
   /** 拉取远端模型目录；失败时适配器回退兜底表。 */
   fetchRemoteModels?: () => Promise<LoomyRemoteModel[]>
   /** 读取图片附件的原始字节（内联为 data URL 用）。 */
@@ -421,9 +461,28 @@ export class LoomyAdapter extends LlmAdapter {
     // ⚠️ **必须把模型 id 传给选号器**：Loomy 的选号要先按「该模型是否受限」
     // 过滤账号（限流按模型记），再按余额分档。传空串会让模型级限流失效。
     let credential = await this.options.resolveCredential(options.model)
+    /**
+     * 本轮实际使用的账号 id（空串 = 没有池 / 凭据不在池里）。
+     *
+     * ⚠️ **必须在探测之前解析**：`refresh` 要探测的正是「这一份凭据所属的账号」，
+     * 而解析归属只能靠凭据本身（理由与 raccoon 的修复同源）。
+     * ⚠️ 局部可变：换号后池的「当前账号」不跟着变，靠回调取值会在两号间来回。
+     */
+    let currentAccountId = await this.resolveCurrentAccountId(credential)
+
     if (credential === undefined || isLoomyExpired(credential)) {
-      await this.options.refresh()
-      credential = await this.options.resolveCredential(options.model)
+      // ⚠️ **探测失败不致命**（真实缺陷）：Loomy 无法续期，`refresh()` 在凭据
+      // 失效时**必然抛错**。此前没有 try/catch，于是「账号 A 的凭据坏了、
+      // 账号 B 完全健康」这个**最该换号**的场景反而直接冒泡报错 ——
+      // 换号逻辑一行都不执行，而池里那个健康账号从未被尝试。
+      // 单个账号的凭据故障不该让整轮陪葬（约定见 `buddy-adapter.ts`）。
+      try {
+        await this.options.refresh(currentAccountId)
+        credential = await this.options.resolveCredential(options.model)
+        currentAccountId = await this.resolveCurrentAccountId(credential)
+      } catch (error) {
+        console.warn(`[loomy] 凭据探测失败，继续尝试（必要时由换号兜底）：${String(error)}`)
+      }
     }
     if (credential === undefined || credential.access_token.length === 0) {
       throw new LlmError('loomy: no usable credential; log in first', 'MISSING_CREDENTIAL')
@@ -511,31 +570,162 @@ export class LoomyAdapter extends LlmAdapter {
       }
     }
 
-    let response = await send(credential.access_token)
-    // 401/403 时尝试刷新一次（Loomy 无 refresh 端点，故这里多半会抛错，
-    // 但保留该路径以便将来上游开放续期时自动受益）。
-    if (response.status === 401 || response.status === 403) {
-      await this.options.refresh()
-      const refreshed = await this.options.resolveCredential(options.model)
-      if (refreshed === undefined || refreshed.access_token.length === 0) {
-        throw new LlmError('loomy: credential expired and refresh failed', 'AUTH', { status: response.status })
+    /**
+     * 换号状态。
+     *
+     * `tried` 跨轮保留：池按用户手动顺序返回候选，**刚失败的账号很可能仍排
+     * 第一**，不排除就会拿回同一个、换号形同虚设。
+     */
+    const tried = new Set<string>()
+    if (currentAccountId !== '') tried.add(currentAccountId)
+    /** 已经试过的账号数（含首轮），用于对齐 {@link LOOMY_MAX_ROTATE}。 */
+    let attempts = 0
+    /** 最近一次失败的**可读原因**。 */
+    let lastFailure = ''
+    /** 最近一次失败应映射成的错误码（流内错误帧走 HTTP 200，不能统一用状态码）。 */
+    let lastCode = ''
+
+    for (;;) {
+      let response = await send(credential.access_token)
+
+      if (response.status === 401 || response.status === 403) {
+        // ⚠️ **探测失败不致命**（与上面取凭据阶段同一约定）：Loomy 无法续期，
+        // 这里**必然**抛错。不 catch 的话换号一行都不执行。
+        try {
+          await this.options.refresh(currentAccountId)
+          const refreshed = await this.options.resolveCredential(options.model)
+          if (refreshed !== undefined && refreshed.access_token.length > 0) {
+            credential = refreshed
+            currentAccountId = await this.resolveCurrentAccountId(credential)
+            response = await send(credential.access_token)
+          }
+        } catch (error) {
+          console.warn(`[loomy] 凭据探测失败，改用换号重试：${String(error)}`)
+        }
       }
-      response = await send(refreshed.access_token)
-    }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new LlmError(`loomy: ${errorDetail(errorText)}`, httpErrorCode(response.status), { status: response.status })
-    }
+      // 成功：消费流。**只有尚未产出任何内容时才允许换号**（见下）。
+      if (response.ok) {
+        let emitted = false
+        try {
+          for await (const chunk of consumeOpenAiSse(response, { signal: options.signal }, {
+            label: 'loomy',
+            firstTokenTimeoutMs: resolveFirstTokenTimeoutMs(),
+            chunkTimeoutMs: resolveChunkTimeoutMs(),
+            ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
+          })) {
+            emitted = true
+            yield chunk
+          }
+          return
+        } catch (error) {
+          // ⚠️ **已产出内容后绝不能换号**（真实缺陷，2026-09-23 在 lobsterai 上
+          // 实测到，同一形状）：换号会重放请求，而新的 `consumeOpenAiSse` 是
+          // **全新的生成器** —— 它的 `block.index` 从 0 重新开始，于是会再发一次
+          // `block-start(index=0)`。DSH 对重复块索引是**硬失败**
+          //（`dsh-llm/lib/invariant.js`：`LLM stream repeated block-start index`），
+          // 于是可读的业务错误会被升级成 invariant 崩溃，还会把两个账号的正文
+          // 拼在一起 —— 比不换号更糟。此时如实抛出，交给 harness 重试整个回合。
+          if (emitted) throw error
+          // 传输/超时错误不换号：多半是网络或本机代理的问题，换个账号照样撞。
+          if (!(error instanceof LlmError)) throw error
+          lastFailure = error instanceof Error ? error.message : String(error)
+          lastCode = error.code
+        }
+      } else {
+        lastFailure = await response.text().catch(() => '')
+        lastCode = httpErrorCode(response.status)
+      }
 
-    // ⚠️ 业务失败也可能以 HTTP 200 + SSE 内嵌错误帧返回，由 consumeOpenAiSse 处理。
-    yield* consumeOpenAiSse(response, { signal: options.signal }, {
-      label: 'loomy',
-      firstTokenTimeoutMs: resolveFirstTokenTimeoutMs(),
-      chunkTimeoutMs: resolveChunkTimeoutMs(),
-      ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
-    })
+      // 记录失败，让**下一次请求**也不再挑这个账号。
+      // ⚠️ 必须记在**真正失败的那个账号**上（`currentAccountId`），而不是下一轮
+      // 才会被赋值的新账号 —— 标错会把无辜的账号关掉，而坏号仍被反复选中
+      //（qoder 的单测实测到过 `['acct-A','acct-A']` 这种记录）。
+      if (currentAccountId !== '' && this.options.noteFailure !== undefined) {
+        const quota = lastCode === 'QUOTA_EXCEEDED' || isLoomyQuotaFailure(response.status, lastFailure)
+        await this.options.noteFailure(currentAccountId, options.model, quota).catch(() => {})
+      }
+
+      // 换号：与 raccoon 同策略 —— **任何失败都切换**，不做错误分类挑拣；
+      // 唯一的例外是上面那两条（已产出内容、传输错误），它们换号无益。
+      const reason = describeLoomyFailure(lastFailure)
+      if (this.options.nextAccount === undefined) {
+        throw new LlmError(reason, lastCode, { status: response.status })
+      }
+      if (attempts >= LOOMY_MAX_ROTATE - 1) {
+        throw new LlmError(
+          `loomy: 账号池中 ${tried.size} 个账号均不可用（最近一次：${reason}）`,
+          lastCode,
+          { status: response.status },
+        )
+      }
+      const next = await this.options.nextAccount(options.model, tried)
+      if (next === undefined) {
+        throw new LlmError(`loomy: 没有其它可用账号 —— ${reason}`, lastCode, { status: response.status })
+      }
+      attempts += 1
+      tried.add(next.accountId)
+      credential = next.credential
+      currentAccountId = next.accountId
+      this.options.reportAccount?.(next.accountId)
+    }
   }
+
+  /**
+   * 由凭据反查它属于池里的哪个账号（找不到返回空串）。
+   *
+   * 空串表示「这份凭据不在池里」（单凭据回退模式），此时不写失败标记 ——
+   * 池里没有对应条目，`updateModelRateLimit` 会记一条纯噪声的警告。
+   *
+   * ⚠️ `credential` 可以是 `undefined`：取凭据阶段还没拿到就要先问归属，
+   * 以便**精确探测**（见 `LoomyAdapterOptions.refresh` 的注释）。
+   */
+  private async resolveCurrentAccountId(
+    credential: LoomyCredential | undefined,
+  ): Promise<string> {
+    const pool = this.options.accountPool
+    if (pool === undefined || credential === undefined || credential.access_token.length === 0) {
+      return ''
+    }
+    try {
+      return await pool.findAccountIdByCredential(this.product.id, credential.access_token)
+    } catch {
+      return ''
+    }
+  }
+}
+
+/**
+ * 一轮请求最多让几个账号参与（对齐 buddy / lobsterai / trae / cline / gemini
+ * 与本次修复后的 raccoon 的 `MAX_ROTATE = 3`）。
+ *
+ * ⚠️ 不是「重试 3 次」：换号的前提是**一个字都还没产出**，故它绝不会把已生成的
+ * 正文重放给用户，只是在候选账号之间选一个能真正干活的。
+ */
+export const LOOMY_MAX_ROTATE = 3
+
+/**
+ * 该失败是否属于**额度类**（今日赠送额度用尽 / 永久积分不足 / 限流）。
+ *
+ * 判据与 `raccoon-adapter.ts` 的同名函数同源：状态码 402 / 429 是权威信号，
+ * 正文关键词是兜底。关键词刻意**窄** —— `balance` / `quota` 这类泛词会误伤
+ * 模型正文里恰好讨论「余额」的情况（`model-queue.ts` 记过这条）。
+ */
+export function isLoomyQuotaFailure(status: number, text: string): boolean {
+  if (status === 402 || status === 429) return true
+  return /额度不足|余额不足|积分不足|额度用尽|今日额度|没有额度|insufficient\s+(?:credit|balance|quota|points)/i
+    .test(text)
+}
+
+/**
+ * 把「最近一次失败的原文」整理成可给用户看的单行原因。
+ *
+ * 流内错误帧的 `message` 已经由 `consumeOpenAiSse` 拼好（形如 `loomy: …`），
+ * 再补一次前缀会变成 `loomy: loomy: …` —— 那种重复会让人以为是两层错误。
+ */
+function describeLoomyFailure(raw: string): string {
+  const detail = errorDetail(raw)
+  return detail.startsWith('loomy:') ? detail : `loomy: ${detail}`
 }
 
 /** 首 token 超时（毫秒）；可用环境变量覆盖（与其余适配器同约定）。 */
