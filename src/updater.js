@@ -684,7 +684,14 @@ function readTextFile(file) {
 /** True when a pnpm lockfile records a `specifier` for `name` as a dependency.
  *  The importer's dependency entry is the only place the package name appears
  *  as a bare mapping key with a `specifier` child; pinned `packages:` and
- *  `snapshots:` keys carry `name@<specifier>` and cannot match. */
+ *  `snapshots:` keys carry `name@<specifier>` and cannot match.
+ *
+ *  A `link:` specifier is deliberately not ownership: pnpm records no version
+ *  and no integrity for a link, so it owns the junction and never the bytes.
+ *  Refusing there would disable the one self-upgrade shape that survives a
+ *  full install — a real tree inside the profile declared as a relative
+ *  `link:`. A `file:`, tarball-URL or registry specifier does record a source
+ *  pnpm can re-extract, and stays "owned". */
 function lockfileDeclaresPackage(text, name) {
   const lines = text.split(/\r?\n/)
   const entry = new RegExp(`^(\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*$`)
@@ -696,6 +703,7 @@ function lockfileDeclaresPackage(text, name) {
       const line = lines[child]
       if (line.trim() === '') continue
       if (line.length - line.trimStart().length <= indent) break
+      if (/^\s*"?specifier"?\s*:\s*['"]?link:/.test(line)) return false
       if (/^\s*"?specifier"?\s*:/.test(line)) return true
     }
   }

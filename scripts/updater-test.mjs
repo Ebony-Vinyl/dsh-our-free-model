@@ -628,6 +628,30 @@ check('a plain distribution: self install is not pnpm-owned', () => {
     assert.equal(isPackageManagerOwned(pkg), false, 'another package in the lockfile is not a signal')
   } finally { fs.rmSync(profile, { recursive: true, force: true }) }
 })
+check('a link: specifier is not byte ownership (pnpm owns the junction, not the files)', () => {
+  // The safe way to keep `distribution: self` next to a `dependencies` entry:
+  // the plugin tree lives in a real directory inside the profile and the
+  // dependency is a relative `link:`. pnpm then records no version and no
+  // integrity for it, so it has no source to re-extract and the in-app
+  // upgrader stays the only writer of those bytes. Refusing here would kill
+  // the only self-upgrade shape that survives a full install. See #335.
+  const { profile, pkg } = makeProfilePackage()
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'",
+      '',
+      'importers:',
+      '',
+      '  .:',
+      '    dependencies:',
+      '      dsh-our-free-model:',
+      '        specifier: link:vendor/dsh-our-free-model',
+      '        version: link:vendor/dsh-our-free-model',
+      '',
+    ].join('\n'))
+    assert.equal(isPackageManagerOwned(pkg), false, 'a link: specifier records no bytes for pnpm to own')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
 await checkAsync('apply() refuses to self-upgrade a pnpm-owned install', async () => {
   const { profile, pkg } = makeProfilePackage(OLD)
   const data = makeDataDir()
