@@ -85,6 +85,7 @@ const suites = [
   ['registry', 'registry-test.mjs', []],
   ['route', 'route-test.mjs', []],
   ['combo-advance', 'combo-advance-test.mjs', []],
+  ['combo-id', 'combo-id-test.mjs', []],
   ['prompt-saver', 'prompt-saver-test.mjs', []],
   ['anthropic', 'anthropic-test.mjs', []],
   ['aggregate', 'aggregate-test.mjs', []],

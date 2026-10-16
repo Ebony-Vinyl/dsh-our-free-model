@@ -30,6 +30,8 @@
  * @module src/combos.js
  */
 
+import crypto from 'node:crypto'
+
 export const COMBO_CHANNEL = 'combo'
 export const COMBO_PREFIX = 'combo:'
 export const COMBO_STRATEGIES = ['fallback', 'round-robin']
@@ -41,15 +43,38 @@ export function isComboEntry(entry) {
   return entry?.channel === COMBO_CHANNEL && Array.isArray(entry.combo)
 }
 
-/** `My Fast Chain` -> `combo:my-fast-chain`. */
+/**
+ * `My Fast Chain` -> `combo:my-fast-chain`.
+ *
+ * Every name has to yield an id, and not every name did: the slug strips
+ * everything outside `[a-z0-9]`, a purely non-ASCII name (免費優先) left nothing
+ * behind, and the `''` it returned was dropped one layer down as a malformed row
+ * — the editor answered "saved" for a chain that never reached the file (#379).
+ * A name the slug cannot spell now carries a digest of the name as well:
+ * 免費優先 -> `combo:9f2c…`, 免费 Pro -> `combo:pro-9f2c…`. That digest is what
+ * keeps two names apart the slug alone would fold together — 免費優先 and 付費優先
+ * both slug to nothing, and the second chain would be dropped as a duplicate of
+ * the first. It is a digest of the name, never of the moment, so a reload or a
+ * restart resolves the same id. An empty name still yields ''.
+ */
 export function comboId(name) {
-  const slug = String(name ?? '')
-    .trim()
+  const text = String(name ?? '').trim()
+  if (text === '') return ''
+  const slug = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 48)
-  return slug === '' ? '' : `${COMBO_PREFIX}${slug}`
+  // Printable ASCII is the alphabet the slug reads; a name that stays inside it
+  // and leaves a slug behind is already spelled out in full by that slug.
+  const spelled = slug !== '' && !/[^\x20-\x7e]/.test(text)
+  const parts = spelled ? [slug] : [slug, digestOf(text)]
+  return `${COMBO_PREFIX}${parts.filter(part => part !== '').join('-')}`
+}
+
+/** A stable ASCII handle for a name the slug cannot spell, as `comboId` needs. */
+function digestOf(text) {
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 12)
 }
 
 /**

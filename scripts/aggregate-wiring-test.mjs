@@ -416,6 +416,16 @@ let boundPort = 0
   check('and the chosen strategy', savedCombo.json.combos[0].strategy, 'round-robin')
   checkThat('and the new chain is usable', (await summary()).json.catalog.some(entry => entry.id === 'combo:second-chain'), 'the new chain is not in the catalog')
 
+  // #379: the id is derived from the name, and a name the slug cannot spell used
+  // to yield no id at all — the editor answered "saved" for a chain that never
+  // reached settings.json. The digest path is only worth anything if it survives
+  // this route and the catalog, which is what the checks below ask.
+  const cjk = await post('/combos', { combos: [{ name: '免费优先', models: ['deepseek-v4-flash-free', 'mimo-v2.6-flash-free'], strategy: 'fallback', stickyLimit: 1 }] })
+  check('a chain named in Chinese is saved', cjk.status, 200)
+  check('with its name kept for the picker', cjk.json.combos[0]?.name, '免费优先')
+  checkThat('and an id of its own', /^combo:[a-z0-9-]+$/.test(cjk.json.combos[0]?.id ?? ''), JSON.stringify(cjk.json.combos))
+  checkThat('which reaches the catalog as a virtual model', (await summary()).json.catalog.some(entry => entry.id === cjk.json.combos[0]?.id), 'the chain is not in the catalog')
+
   const saver = await get('/token-saver')
   check('the token-saver page answers', saver.status, 200)
   check('with the RTK switch', saver.json.rtk, true)
