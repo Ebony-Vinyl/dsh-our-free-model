@@ -3331,8 +3331,9 @@
       "env": null,
       "url": null
     },
-    "baseUrl": "https://opencode.ai/zen/v1",
-    "format": "openai-chat",
+    "baseUrl": "https://opencode.ai/inference/v1",
+    "format": "openai-responses",
+    "clientGate": true,
     "models": [
       {
         "id": "muse-spark-1.2-contributor-free",
@@ -3363,12 +3364,13 @@
         "reasoning": null
       }
     ],
-    "notes": "Keyless free pool (noAuth) — the plugin’s own free lane speaks to the same /zen/v1 host and sends the same x-opencode-client header. Per-model wires differ: two models answer over /responses and union-alpha over the Anthropic wire (9router registry comments).",
+    "notes": "Keyless free pool (noAuth). Since the upstream client gate (measured live 2026-10-15) the host is /inference/v1 — /zen/v1 chat answers 403 FreeTierError — and a turn needs the full client-gate wire: both session-id headers, a request id, the tool fingerprint and a user-agent carrying an opencode/<version> token (clientGate: true; see src/aggregate.js and docs/free-lane-wire.md). The muse-spark pair answers /responses (200 verified); jev-1.13-free answers no standard wire (ModelProtocolUnsupported on chat, responses and messages) and union-alpha has been retired from the upstream listing (absent from /inference/v1/models, answers Model is unavailable).",
     "website": "https://opencode.ai",
     "local": false,
     "source": "9router",
-    "modelsUrl": "https://opencode.ai/zen/v1/models",
+    "modelsUrl": "https://opencode.ai/inference/v1/models",
     "headers": {
+      "user-agent": "dsh-our-free-model opencode/1.18.31",
       "x-opencode-client": "desktop"
     }
   },

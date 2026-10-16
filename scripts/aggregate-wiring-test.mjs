@@ -96,6 +96,29 @@ await new Promise(resolve => rejectingServer.listen(0, '127.0.0.1', resolve))
 rejectingServer.unref()
 const rejecting = { base: `http://127.0.0.1:${rejectingServer.address().port}` }
 
+// The gated pool's endpoint (the opencode registry entry): it answers a listing
+// and rejects every turn the way the real gateway rejects a turn without the
+// client-gate wire — which makes the captured request the whole proof.
+const gateRequests = []
+const gateServer = http.createServer((req, res) => {
+  const url = String(req.url ?? '')
+  if (req.method === 'GET' && url.endsWith('/models')) {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ data: [{ id: 'muse-spark-1.3-contributor-free' }] }))
+    return
+  }
+  const chunks = []
+  req.on('data', row => chunks.push(row))
+  req.on('end', () => {
+    gateRequests.push({ method: req.method, url, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') })
+    res.writeHead(401, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: { message: 'missing session', type: 'authentication_error' } }))
+  })
+})
+await new Promise(resolve => gateServer.listen(0, '127.0.0.1', resolve))
+gateServer.unref()
+const gate = { base: `http://127.0.0.1:${gateServer.address().port}`, requests: gateRequests }
+
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-wiring-'))
 process.env.DSH_HOME = home
 const forwardPort = await freePort()
@@ -117,6 +140,8 @@ fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({
       // rather than through the route because the point of the check below is the
       // verdict, not the write path.
       cerebras: { enabled: true, apiKey: 'csk-wiring-test', baseUrl: rejecting.base, addedAt: Date.now() },
+      // The gated keyless pool (clientGate), pointed at the capturing stub.
+      opencode: { enabled: true, baseUrl: gate.base, models: ['muse-spark-1.3-contributor-free'], addedAt: Date.now() },
     },
   },
   combos: [{
@@ -130,6 +155,9 @@ fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({
 }))
 
 const { apply, inject } = await import('../index.js')
+// Imported after the env assignments above: upstream.js reads OUR_FREE_MODEL_BASE
+// at module init, and a top-level import would pin the real host.
+const { REQUEST_RE, SESSION_RE } = await import('../src/upstream.js')
 const routes = []
 const ctx = fakeContext({ inject, mounted: ['llm', 'webServer', 'timer', 'connection', 'attachments'], onRegister: route => routes.push(route) })
 apply(ctx, {})
@@ -207,6 +235,43 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   check('and before minus after is the saving', stats.savings.bytesBefore - stats.savings.bytesAfter, stats.savings.saved)
   checkThat('the panel gets a rendered summary', typeof stats.savings?.summary === 'string' && stats.savings.summary.includes('token saver'), stats.savings?.summary)
   check('the percentage is a number', typeof stats.savings?.percent, 'number')
+}
+
+// ── 2b. the gated pool turns with the client-gate wire ───────────────────────
+{
+  const options = {
+    provider: 'our-free-model',
+    model: 'opencode/muse-spark-1.3-contributor-free',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    sessionId: 'wiring:gate',
+  }
+  const chunks = []
+  for await (const chunk of adapter.stream(options, null)) chunks.push(chunk)
+  checkThat('the gated turn fails only at the credential',
+    chunks.some(chunk => chunk.type === 'finish' && chunk.reason?.kind === 'error'),
+    JSON.stringify(chunks).slice(0, 200))
+
+  const sent = gate.requests[gate.requests.length - 1]
+  check('the gated turn posts on the responses wire', sent.url, '/responses')
+  // The client-gate wire the registry entry asks for, assembled by the poster.
+  check('the session identity rides both headers', sent.headers['x-opencode-session-id'], sent.headers['x-opencode-session'])
+  checkThat('in the canonical shape', SESSION_RE.test(sent.headers['x-opencode-session']), String(sent.headers['x-opencode-session']))
+  checkThat('with a request id', REQUEST_RE.test(sent.headers['x-opencode-request']), String(sent.headers['x-opencode-request']))
+  check('the project header', sent.headers['x-opencode-project'], 'global')
+  check('the pooled credential', sent.headers.authorization, 'Bearer public')
+  check('the declared client flavour', sent.headers['x-opencode-client'], 'desktop')
+  checkThat('and a user-agent carrying the opencode token',
+    String(sent.headers['user-agent']).includes('opencode/'), String(sent.headers['user-agent']))
+  const body = JSON.parse(sent.body)
+  check('the body is streamed', body.stream, true)
+  // The adapter ran the fingerprint over the payload: bash and read are both
+  // declared with at least one schema property, whichever wire shape carries them.
+  const paramsOf = name => {
+    const tool = (body.tools ?? []).find(row => (row.function?.name ?? row.name) === name)
+    return tool?.function?.parameters ?? tool?.parameters ?? null
+  }
+  checkThat('bash is declared with a property', Object.keys(paramsOf('bash')?.properties ?? {}).length >= 1, JSON.stringify(body.tools ?? []).slice(0, 200))
+  checkThat('read is declared with a property', Object.keys(paramsOf('read')?.properties ?? {}).length >= 1, JSON.stringify(body.tools ?? []).slice(0, 200))
 }
 
 // ── 3. a chain walks past a refusing link ────────────────────────────────────
