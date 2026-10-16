@@ -1341,6 +1341,16 @@ export class BuddyAdapter extends LlmAdapter {
     if (options.system !== undefined && options.system.length > 0) {
       messages.unshift({ role: 'system', content: options.system })
     }
+    // WorkBuddy(INTL) 网关第二关：首条消息必须是 system，否则 400
+    // `first message is not system prompt`。DSH 会话若未传 `options.system`，
+    // 首条即 user，直接撞关。此处兜底插入一条最小 system，保证首条恒为 system。
+    //
+    // 仅限定 `workbuddy`：CodeBuddy（copilot.tencent.com）未观察到该要求，
+    // 无差别插入会改变其消息形状。两关是与关系——只补会话头仍会卡在这里，
+    // 报错会从 `conversation id missing` 变成 `first message is not system prompt`。
+    if (this.product.id === 'workbuddy' && (messages.length === 0 || messages[0].role !== 'system')) {
+      messages.unshift({ role: 'system', content: 'You are a helpful assistant.' })
+    }
     const tools = options.tools?.map((tool) => ({
       type: 'function' as const,
       function: {
@@ -1780,6 +1790,22 @@ export class BuddyAdapter extends LlmAdapter {
     // 必须用 set 覆盖（attributionHeaders() 注入的框架 UA 键为小写，
     // 但 Headers 键大小写不敏感，set 能正常覆盖）。
     headers.set('User-Agent', resolveUserAgent(this.product, options.model))
+    // WorkBuddy(INTL) 网关的「会话标识」校验：三个 X-Conversation-* 必须同时出现，
+    // 缺任何一个即 400 + code 11128（msg `conversation id missing`，
+    // displayMsg「请求被拦截，请重新发送」）。
+    //
+    // 证据：官方客户端 resources/app.asar 的请求构造同时下发这三个头；
+    // 实测（同 body / 同出口 IP，仅改头）三者齐 → 200 流式返回，缺任一 → 400。
+    //
+    // `X-Conversation-ID` 必须**按会话稳定**（同一会话跨轮复用），否则前缀缓存
+    // 与服务端会话归因都失效；故复用已有的 `this.sessionId`（与 prompt_cache_key
+    // 同源）。Message/Request 两个 ID 描述单次请求，逐请求新生成。
+    // 仅限定 `workbuddy`：CodeBuddy 未观察到该要求。
+    if (this.product.id === 'workbuddy') {
+      headers.set('X-Conversation-ID', this.sessionId)
+      headers.set('X-Conversation-Message-ID', crypto.randomUUID())
+      headers.set('X-Conversation-Request-ID', crypto.randomUUID())
+    }
     try {
       return await this.fetchImpl(`${this.product.endpoint}/v2/chat/completions`, {
         method: 'POST',

@@ -35281,6 +35281,9 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
     if (options.system !== void 0 && options.system.length > 0) {
       messages.unshift({ role: "system", content: options.system });
     }
+    if (this.product.id === "workbuddy" && (messages.length === 0 || messages[0].role !== "system")) {
+      messages.unshift({ role: "system", content: "You are a helpful assistant." });
+    }
     const tools = options.tools?.map((tool) => ({
       type: "function",
       function: {
@@ -35521,6 +35524,11 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
     headers.set("X-IDE-Version", this.product.clientVersion);
     headers.set(HTTP_HEADER_PRODUCT, this.product.attributionName);
     headers.set("User-Agent", resolveUserAgent(this.product, options.model));
+    if (this.product.id === "workbuddy") {
+      headers.set("X-Conversation-ID", this.sessionId);
+      headers.set("X-Conversation-Message-ID", crypto.randomUUID());
+      headers.set("X-Conversation-Request-ID", crypto.randomUUID());
+    }
     try {
       return await this.fetchImpl(`${this.product.endpoint}/v2/chat/completions`, {
         method: "POST",
