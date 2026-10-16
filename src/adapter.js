@@ -31,7 +31,7 @@ import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, con
 import { isEacEntry, isKiloEntry } from './catalog.js'
 import { isComboEntry, comboChain } from './combos.js'
 import { applyTokenSavers, saverConfig } from './token-saver/index.js'
-import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
+import { classifyFailure, describeVerdict } from './route/classify.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
 
 export const ROUTE_MAIN = 'our-free-model'
@@ -519,11 +519,23 @@ export class FreeModelAdapter {
        * — visible text or a streamed tool call — is what `commitsAnswer`
        * commits on, and once committed the combo ignores `advance` anyway, so
        * this predicate and the commit rule stay two views of one definition.
+       *
+       * Every failure that clears the three vetoes advances. It must not be
+       * gated on the single-model retry rule (`shouldAdvance`): that predicate
+       * asks "would re-sending *this* body to *this* model answer differently",
+       * and reads no for the request-scoped failures — a context overflow, a
+       * region refusal, a 4xx. Replaying them is pointless, but the chain is not
+       * replaying them: it is handing the turn to the *next* model, which is
+       * exactly how a smaller window, a different region, or a different
+       * validation is meant to be survived. Gating the chain on that predicate
+       * stopped it at the first candidate for precisely the failures a chain
+       * exists to route around. The number of links the turn may try is the
+       * chain's own bound (`runCombo` walks every candidate once), not a verdict.
        */
       const advanceVerdict = (code, message, status) => {
         if (plan.allowAdvance !== true || options.signal?.aborted === true || sawAnswer) return { advance: false, verdict: null }
         const verdict = classifyFailure({ status, code, message })
-        return { advance: shouldAdvance(verdict), verdict }
+        return { advance: true, verdict }
       }
       try {
         const reader = readStream(channel.read(), wire, renameMap, () => Date.now(), {
