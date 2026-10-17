@@ -257,6 +257,148 @@ export function fileUrlOf(manifestUrl, manifest, relativePath) {
   return new URL(manifest.base + relativePath.split('/').map(encodeURIComponent).join('/'), manifestUrl).href
 }
 
+/**
+ * Resolve one mutable ref to the commit it currently names.
+ *
+ * Resolution is what makes an update check reproducible: the manifest and every
+ * file below it are then fetched at one immutable SHA, so a branch that moves
+ * mid-upgrade cannot hand the download half of one release and half of another.
+ *
+ * The first implementation asked `api.github.com` alone, and that made update
+ * checking depend on a *third* service the plugin never needs. The REST API
+ * answers `403 rate limit exceeded` once an unauthenticated client has spent its
+ * 60 requests an hour — and a client behind a shared/NAT egress IP shares that
+ * budget with every other user of the same address, so the budget can already be
+ * at zero when the app starts. When that happens every source failed
+ * *resolution* before a single byte of manifest was requested, and the check
+ * reported "no manifest source answered (... HTTP 403)" even though the
+ * repository and its CDN mirrors were serving the release perfectly. Restarting
+ * the app did not help: the quota is per IP per hour, not per process.
+ *
+ * So resolution walks three independent routes, in order, and takes the first
+ * that answers with a full 40-character commit SHA:
+ *
+ * 1. `api.github.com` with `application/vnd.github.sha` — cheapest, and the one
+ *    route that names *tags* (`v2.5.0`) as readily as branches.
+ * 2. The repository's own git smart-HTTP ref advertisement on `github.com`.
+ *    Unauthenticated and not subject to the REST API's quota; it lists every
+ *    branch and tag with its commit. This is the same document `git ls-remote`
+ *    reads, so it is as authoritative as the API for a branch name.
+ * 3. The Atom commit feed for the branch, whose entry ids carry commit SHAs.
+ *    Last resort: it only covers branch heads, and only the most recent ones.
+ *
+ * None of these supply authority: whatever SHA wins, the manifest that arrives
+ * still has to carry the release signature before it is believed. A resolver
+ * that lies only makes this client fetch a *different* (likely stale) release.
+ *
+ * Resolution is memoized per check (`revisions`) so the mirror legs re-use the
+ * first answer instead of resolving again — and so raw and jsDelivr cannot end
+ * up pinned to different snapshots of the same branch.
+ */
+const GIT_SMART_PREFIX = 'application/x-git-upload-pack-advertisement'
+
+/** Route 1: the REST API, which answers a bare SHA with the right Accept. */
+async function resolveViaApi(ref, fetchImpl, signal) {
+  const response = await fetchImpl(`https://api.github.com/repos/${REPO}/commits/${encodeURIComponent(ref)}`, {
+    redirect: 'error', signal,
+    // `application/vnd.github.sha` answers with the bare 40-character SHA. The
+    // default JSON envelope carries the commit's full patch list, and a merge
+    // that touched hundreds of files pushes that document past
+    // MAX_MANIFEST_BYTES — for a payload whose only consumed field is `.sha`
+    // — which failed every update check against exactly the releases a big
+    // merge produced (v2.1.0's own merge commit). The JSON spelling stays as
+    // a fallback for a hop that rewrote the Accept header.
+    headers: { accept: 'application/vnd.github.sha', 'user-agent': 'our-free-model-updater' },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const text = (await response.text()).trim()
+  if (text.length > MAX_MANIFEST_BYTES) throw new Error('response too large')
+  const sha = /^[a-f0-9]{40}$/.test(text) ? text : JSON.parse(text)?.sha
+  if (typeof sha !== 'string' || !/^[a-f0-9]{40}$/.test(sha)) throw new Error('no full commit SHA in response')
+  return sha
+}
+
+/**
+ * Route 2: parse a git upload-pack ref advertisement.
+ *
+ * The body is a sequence of pkt-lines (`<4 hex length><payload>`), opening with
+ * `# service=git-upload-pack` followed by a flush pkt (`0000`) and a delimiter
+ * (`0001`); each following line names one object and one ref, and the first line
+ * of the advertisement appends capability names after a NUL. Both quirks are
+ * handled by dropping the pkt-length prefix and keeping only the payload up to
+ * the first NUL. `0000`/`0001`/`0002` are length-only control packets: they
+ * occupy four bytes and carry no payload, so they must advance the cursor
+ * rather than end the walk — the advertisement opens with one, and treating it
+ * as a malformed length would stop parsing before the first ref was read.
+ *
+ * An annotated tag lists `refs/tags/<name>` (the tag object) and
+ * `refs/tags/<name>^{}` (the commit it peels to); the peeled form is what a
+ * `feed/manifest.json` fetch needs, so it wins when present.
+ */
+export function parseUploadPackRefs(body) {
+  const refs = new Map()
+  let offset = 0
+  while (offset + 4 <= body.length) {
+    const length = Number.parseInt(body.slice(offset, offset + 4), 16)
+    if (length === 0 || length === 1 || length === 2) { offset += 4; continue }
+    if (!Number.isFinite(length) || length < 4) break
+    const payload = body.slice(offset + 4, offset + length)
+    offset += length
+    if (payload.length === 0 || payload.startsWith('#')) continue
+    const clean = payload.split('\0')[0]
+    const match = /^([a-f0-9]{40}) ([^\s]+)/.exec(clean)
+    if (match === null) continue
+    const name = match[2].startsWith('HEAD') ? 'HEAD' : match[2]
+    // Peeled tag lines arrive after the tag object they belong to, so they
+    // overwrite it — which is what the fetch below wants.
+    refs.set(name, match[1])
+  }
+  return refs
+}
+
+/** Which ref names a short ref (`main`, `v2.5.0`) may denote, best first. */
+function candidateRefNames(ref) {
+  return [`refs/heads/${ref}`, `refs/tags/${ref}^{}`, `refs/tags/${ref}`, ...ref === 'HEAD' ? ['HEAD'] : []]
+}
+
+/** Route 2: the repository's own git smart-HTTP ref advertisement. */
+async function resolveViaRefAdvertisement(ref, fetchImpl, signal) {
+  const response = await fetchImpl(`https://github.com/${REPO}/info/refs?service=git-upload-pack`, {
+    redirect: 'error', signal,
+    headers: { accept: GIT_SMART_PREFIX, 'user-agent': 'our-free-model-updater' },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const body = await response.text()
+  if (body.length > MAX_MANIFEST_BYTES * 8) throw new Error('ref advertisement too large')
+  const refs = parseUploadPackRefs(body)
+  for (const name of candidateRefNames(ref)) {
+    const sha = refs.get(name)
+    if (typeof sha === 'string' && /^[a-f0-9]{40}$/.test(sha)) return sha
+  }
+  throw new Error(`no ref named ${ref} in the advertisement`)
+}
+
+/** Route 3: the branch's Atom commit feed, whose entry ids carry SHAs. */
+async function resolveViaCommitFeed(ref, fetchImpl, signal) {
+  const response = await fetchImpl(`https://github.com/${REPO}/commits/${encodeURIComponent(ref)}.atom`, {
+    redirect: 'error', signal,
+    headers: { accept: 'application/atom+xml,application/xml;q=0.9,*/*;q=0.8', 'user-agent': 'our-free-model-updater' },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const body = await response.text()
+  if (body.length > MAX_MANIFEST_BYTES * 8) throw new Error('commit feed too large')
+  const match = /Grit::Commit\/([a-f0-9]{40})/.exec(body)
+  if (match === null) throw new Error('commit feed carried no commit SHA')
+  return match[1]
+}
+
+/** The resolver routes, in the order they are tried. */
+const SNAPSHOT_RESOLVERS = [
+  ['api', resolveViaApi],
+  ['refs', resolveViaRefAdvertisement],
+  ['feed', resolveViaCommitFeed],
+]
+
 /** Pin an official discovery URL without changing the signed manifest format.
  *  A resolution is reused across mirrors in this check, so a moving branch
  *  cannot select different snapshots when raw fails and the CDN takes over.
@@ -284,25 +426,21 @@ async function snapshotManifestSource(source, fetchImpl, signal, revisions) {
   if (!/^[A-Za-z0-9._-]+$/.test(ref)) throw new Error('unsupported update source ref')
   let revision = revisions.get(ref)
   if (revision === undefined) {
-    const response = await fetchImpl(`https://api.github.com/repos/${REPO}/commits/${encodeURIComponent(ref)}`, {
-      redirect: 'error', signal,
-      // `application/vnd.github.sha` answers with the bare 40-character SHA. The
-      // default JSON envelope carries the commit's full patch list, and a merge
-      // that touched hundreds of files pushes that document past
-      // MAX_MANIFEST_BYTES — for a payload whose only consumed field is `.sha`
-      // — which failed every update check against exactly the releases a big
-      // merge produced (v2.1.0's own merge commit). The JSON spelling stays as
-      // a fallback for a hop that rewrote the Accept header.
-      headers: { accept: 'application/vnd.github.sha', 'user-agent': 'our-free-model-updater' },
-    })
-    if (!response.ok) throw new Error(`snapshot resolution failed for ${ref}: HTTP ${response.status}`)
-    const text = (await response.text()).trim()
-    if (text.length > MAX_MANIFEST_BYTES) throw new Error('snapshot resolution response too large')
-    const sha = /^[a-f0-9]{40}$/.test(text) ? text : JSON.parse(text)?.sha
-    if (typeof sha !== 'string' || !/^[a-f0-9]{40}$/.test(sha)) {
-      throw new Error(`snapshot resolution did not return a full commit SHA for ${ref}`)
+    const failures = []
+    for (const [route, resolve] of SNAPSHOT_RESOLVERS) {
+      try {
+        revision = await resolve(ref, fetchImpl, signal)
+        break
+      } catch (error) {
+        failures.push(`${route}: ${error?.message ?? error}`)
+        // A caller-supplied abort is not a reason to try a slower route: the
+        // remaining budget belongs to the manifest fetch this resolution feeds.
+        if (signal?.aborted) break
+      }
     }
-    revision = sha
+    if (revision === undefined) {
+      throw new Error(`snapshot resolution failed for ${ref} (${failures.join('; ')})`)
+    }
     revisions.set(ref, revision)
   }
   url.pathname = `${prefix}${revision}/feed/manifest.json`
