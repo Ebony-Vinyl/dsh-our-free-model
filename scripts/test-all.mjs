@@ -66,6 +66,7 @@ const suites = [
   ['free-lane-wire', 'free-lane-wire-test.mjs', []],
   ['freetier-gate', 'freetier-gate-test.mjs', []],
   ['sniff', 'sniff-test.mjs', []],
+  ['keepalive-watchdog', 'keepalive-watchdog-test.mjs', []],
   ['truncation', 'truncation-test.mjs', []],
   ['recovery', 'recovery-test.mjs', []],
   ['retry-safety', 'retry-safety-test.mjs', []],

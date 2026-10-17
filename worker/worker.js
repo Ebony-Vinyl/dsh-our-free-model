@@ -162,15 +162,7 @@ export default {
       const base = relayUrl(String(env.UPSTREAM_URL ?? ''))
       if (base === null) return JSON_ERROR(500, 'gateway is not configured')
       const upstream = new URL(base.origin + base.pathname.replace(/\/+$/, '') + route.upstream)
-      // A reasoning model can hold the relay's first byte for minutes, and a
-      // proxy in front of this gateway (Cloudflare's ~100s origin timeout,
-      // nginx's 60s default) would kill the lane before the answer starts.
-      // The self-hosted host implements this hook by flushing an SSE head plus
-      // keepalive comments the moment admission passes, so the response has
-      // already begun while the upstream thinks; the Worker host cannot flush
-      // early and leaves the hook unset. Chat turns only — listings are fast.
-      if (route.body === true) ctx?.onUpstreamPending?.()
-      const relayed = await fetch(upstream, {
+      const fetchOptions = {
         method: request.method,
         headers: {
           'content-type': 'application/json',
@@ -179,7 +171,46 @@ export default {
           'user-agent': 'dsh-our-free-model-gateway',
         },
         body: route.body === true ? body : undefined,
+      }
+      // A reasoning model can hold the relay's first byte for minutes, and a
+      // proxy in front of this gateway (Cloudflare's ~100s origin timeout,
+      // nginx's 60s default) would kill the lane before the answer starts.
+      // The self-hosted host implements this hook by flushing an SSE head plus
+      // keepalive comments the moment admission passes, so the response has
+      // already begun while the upstream thinks; the Worker host cannot flush
+      // early and leaves the hook unset. Chat turns only — listings are fast.
+      if (route.body === true) ctx?.onUpstreamPending?.()
+      // An upstream that accepts the request and then never resolves its
+      // response head holds this fetch open indefinitely — no status, no
+      // body, no log line, nothing for the dashboard to count. The client
+      // sees a heartbeat-fed 200 stream that never carries a payload, and
+      // the operator sees nothing at all. Race the fetch with a first-byte
+      // deadline so a dead relay ends as a classified 504 the logs and
+      // dashboard can see. The default sits above the slowest legal first
+      // token measured on this lane (2026-10-11: glm-5.3 23.9 s,
+      // deepseek-v4.1-flash 47.6 s, kimi-k3 215.8 s) and level with the
+      // client's own 300 s turn deadline — a head that has not arrived by
+      // then is dead by every participant's standard. Once the head
+      // resolves, body streaming keeps its own pace; the race is over.
+      const upstreamTimeoutMs = (() => {
+        const n = Number.parseInt(env.UPSTREAM_HEAD_TIMEOUT_MS ?? '300000', 10)
+        return Number.isFinite(n) && n > 0 ? n : 300000
+      })()
+      let headTimer = null
+      const headDeadline = new Promise((_, reject) => {
+        headTimer = setTimeout(() => reject(new Error('upstream response head timed out')), upstreamTimeoutMs)
       })
+      let relayed
+      if (route.body === true) {
+        try {
+          relayed = await Promise.race([fetch(upstream, fetchOptions), headDeadline])
+        } catch (error) {
+          console.log(JSON.stringify({ lane: 'eac', path: url.pathname, status: 504, ms: Date.now() - started, fault: String(error?.message ?? error).slice(0, 120) }))
+          return JSON_ERROR(504, 'upstream did not answer in time')
+        } finally { clearTimeout(headTimer) }
+      } else {
+        relayed = await fetch(upstream, fetchOptions)
+      }
       const headers = new Headers({ 'cache-control': 'no-store' })
       for (const name of PASS_HEADERS) {
         const value = relayed.headers.get(name)
