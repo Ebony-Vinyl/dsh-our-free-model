@@ -151,7 +151,7 @@ function openAiError(res, status, type, message, code = null) {
 function failureReply(res, outcome, anthropic = false, force = false) {
   const failure = forwardFailure(outcome, anthropic)
   if (res.headersSent || (!force && !failure.classified)) return false
-  if (failure.status >= 400 && failure.status < 500 && failure.error.type !== 'rate_limit_error') res.setHeader('x-should-retry', 'false')
+  if (['EAC_UPSTREAM_FAILED', 'NO_PROGRESS'].includes(failure.error.code) || (failure.status >= 400 && failure.status < 500 && failure.error.type !== 'rate_limit_error')) res.setHeader('x-should-retry', 'false')
   if (failure.retryAfterMs !== undefined) res.setHeader('retry-after', String(Math.ceil(failure.retryAfterMs / 1000)))
   json(res, failure.status, anthropic ? { type: 'error', error: failure.error } : { error: { ...failure.error, param: null } })
   return true

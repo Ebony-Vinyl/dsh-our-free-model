@@ -41,8 +41,20 @@ const server = http.createServer((req, res) => {
     res.on('close', release)
     const answer = scenario.answers[ordinal] ?? { status: 500, body: '{"error":{"message":"unexpected extra request"}}' }
     if (answer.socket) { req.destroy(); res.destroy(); return }
+    if (answer.holdHeaders) return
     res.writeHead(answer.status ?? 200, { 'content-type': answer.status ? 'application/json' : 'text/event-stream' })
     const send = () => {
+      if (answer.pieces) {
+        for (const [index, piece] of answer.pieces.entries()) {
+          const timer = setTimeout(() => {
+            if (res.destroyed) return
+            res.write(piece)
+            if (index === answer.pieces.length - 1 && !answer.hold) res.end()
+          }, index * answer.intervalMs)
+          scenario.timers.push(timer)
+        }
+        return
+      }
       if (answer.hold) { res.write(answer.body ?? ': waiting\n\n'); return }
       res.end(answer.body ?? '')
     }
@@ -135,6 +147,7 @@ function setup(model, answers, { settings = {}, options = {}, entryOverrides = {
     state: () => ({ catalog: hideModel ? [] : CATALOG.map(entry => entry.id === model ? { ...entry, ...entryOverrides } : entry), membership: { [ROUTE_MAIN]: MODELS }, settings: { enabled: true, defaultMaxTokens: 32768, ...settings }, attributionUserAgent: 'offline-recovery-test' }),
     recordUsage: row => records.push(row),
     recordTurn: row => turns.push(row),
+    sealedCredential: () => ({ mode: 'direct', base: process.env.OUR_FREE_MODEL_BASE, apiKey: 'fixture' }),
     warn: message => onWarn?.(message, controller),
   })
   const stream = adapter.stream({ provider: ROUTE_MAIN, model, reasoningEffort: 'deep', maxTokens: 4096,
@@ -401,6 +414,43 @@ try {
       checkCut(run, 1)
     })
   }
+
+  for (const [label, answer] of [
+    ['held headers', { holdHeaders: true }],
+    ['heartbeats', { pieces: Array(8).fill(': heartbeat\n\n'), intervalMs: 80, hold: true }],
+    ['empty deltas and usage', { pieces: Array(8).fill(sse({ choices: [{ delta: { content: '' } }], usage: { prompt_tokens: 1, completion_tokens: 0 } })), intervalMs: 80, hold: true }],
+  ]) await check(`EAC ${label} cannot extend the no-progress deadline`, async () => {
+    const run = await drive('union-alpha', [answer], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { enabled: false, progressTimeoutMs: 200 } } })
+    checkFinal(run, 'error', 1)
+    assert.equal(run.finish.failure.code, 'NO_PROGRESS')
+    assert.equal(run.adapter.providerRetryPolicy().retryableCodes.includes('NO_PROGRESS'), false)
+    assert.ok(run.elapsedMs < 2000)
+  })
+
+  for (const kind of ['text', 'reasoning', 'tool']) await check(`EAC actual ${kind} progress keeps a longer stream alive`, async () => {
+    const pieces = Array.from({ length: 7 }, (_, index) => kind === 'tool'
+      ? deltas('chat', { ...(index === 0 ? { toolName: 'test_tool' } : {}), toolArgs: index === 0 ? '{"x":"' : index === 6 ? '"}' : 'x' })
+      : deltas('chat', { [kind]: 'progress' }))
+    pieces.push(deltas('chat', { text: ANSWER }) + terminal('chat'))
+    const run = await drive('union-alpha', [{ pieces, intervalMs: 80 }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { progressTimeoutMs: 200 } } })
+    assert.equal(run.scenario.requests.length, 1)
+    assert.notEqual(run.finish.kind, 'error')
+    assert.ok(run.elapsedMs > 200)
+  })
+
+  await check('EAC stops after partial text when only heartbeats follow', async () => {
+    const run = await drive('union-alpha', [{ pieces: [deltas('chat', { text: ANSWER }), ...Array(8).fill(': heartbeat\n\n')], intervalMs: 80, hold: true }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { progressTimeoutMs: 200 } } })
+    checkFinal(run, 'error', 1)
+    assert.equal(run.finish.failure.code, 'NO_PROGRESS')
+    assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
+  })
+
+  await check('EAC server errors retain failure and do not replay the native turn', async () => {
+    const run = await drive('union-alpha', [{ status: 500, body: JSON.stringify({ error: { type: 'server_error', message: 'fixture failure' } }) }], { entryOverrides: { channel: 'eac' } })
+    checkFinal(run, 'error', 1)
+    assert.equal(run.finish.failure.code, 'EAC_UPSTREAM_FAILED')
+    assert.equal(run.adapter.providerRetryPolicy().retryableCodes.includes(run.finish.failure.code), false)
+  })
 
   for (const phase of ['首段', '续写段']) {
     await check(`Responses ${phase} response.failed 缺 status 仍必须返回失败`, async () => {

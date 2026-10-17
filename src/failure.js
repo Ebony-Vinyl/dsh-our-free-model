@@ -25,6 +25,8 @@ export function forwardFailure(outcome, anthropic = false) {
     CLIENT_ERROR: [400, 'invalid_request_error'],
     ABORTED: [400, 'invalid_request_error'],
     TIMEOUT: [504, 'server_error'],
+    EAC_UPSTREAM_FAILED: [502, 'server_error'],
+    NO_PROGRESS: [504, 'server_error'],
   }
   const byStatus = { 400: 'invalid_request_error', 401: 'authentication_error', 403: 'permission_error', 404: 'invalid_request_error', 429: 'rate_limit_error' }
   const [fallbackStatus, type] = classes[failure.code] ?? [502, byStatus[failure.status] ?? 'server_error']
