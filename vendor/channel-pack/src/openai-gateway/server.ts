@@ -476,6 +476,7 @@ export function createOpenAiGateway(options: OpenAiGatewayOptions): OpenAiGatewa
       if (server === undefined) return
       const current = server
       server = undefined
+      current.closeAllConnections?.()
       await new Promise<void>((resolve) => current.close(() => resolve()))
       logger.info('[openai-gateway] 已关闭')
     },
