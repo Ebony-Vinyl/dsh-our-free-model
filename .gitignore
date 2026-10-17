@@ -9,6 +9,10 @@ Thumbs.db
 .verify/
 .aio-backup/
 .probe-*
+# esbuild scratch bundles the promo suites write INSIDE the repo (a stray
+# package.json in the temp root breaks bare-specifier resolution). Cleaned on
+# success, but a crash or a killed run leaves them behind.
+.ofm-*/
 
 # Editor
 .idea/
