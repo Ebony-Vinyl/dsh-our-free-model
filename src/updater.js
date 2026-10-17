@@ -30,6 +30,8 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 
 const REPO = 'Ebony-Vinyl/dsh-our-free-model'
+/** This package's own name, as a package manager records it in the profile. */
+const PACKAGE_NAME = 'dsh-our-free-model'
 
 /** Discovery locations, in preference order. Official mutable refs are resolved
  *  to a full commit before fetching either the manifest or its files. Mirrors
@@ -644,6 +646,103 @@ export function verifyInstalled(pkgDir, manifest) {
 }
 
 /**
+ * Does a package manager own the installed copy?
+ *
+ * The desktop "real directory" install adds the plugin to the profile's
+ * `dependencies`, which hands `<profile>/node_modules/dsh-our-free-model` to
+ * pnpm. With the default `distribution: self` the in-app upgrader then becomes
+ * a second writer on a pnpm-owned directory; on Windows pnpm's own atomic
+ * replace fails partway and leaves `dsh-our-free-model_tmp_<pid>_<n>` behind.
+ *
+ * Two exact, filesystem-local records prove that ownership, both read beside
+ * the profile root (two levels above `pkgDir`):
+ *
+ * - the profile's `pnpm-lock.yaml` declares this package as a dependency: a
+ *   `specifier` entry keyed by the package name;
+ * - the profile's `node_modules/.modules.yaml` lists
+ *   `dsh-our-free-model@<specifier>` under `hoistedLocations`.
+ *
+ * A `node_modules/` directory inside the plugin copy is deliberately not a
+ * signal: under pnpm's hoisted linker a tarball dependency installs without
+ * one, so that heuristic would miss exactly the installs this guards.
+ *
+ * @param {string} pkgDir - the installed package directory
+ * @returns {boolean}
+ */
+export function isPackageManagerOwned(pkgDir) {
+  const profileDir = path.dirname(path.dirname(path.resolve(pkgDir)))
+  const lockfile = readTextFile(path.join(profileDir, 'pnpm-lock.yaml'))
+  if (lockfile !== undefined && lockfileDeclaresPackage(lockfile, PACKAGE_NAME)) return true
+  const modules = readTextFile(path.join(profileDir, 'node_modules', '.modules.yaml'))
+  return modules !== undefined && modulesHoistsPackage(modules, PACKAGE_NAME)
+}
+
+function readTextFile(file) {
+  try { return fs.readFileSync(file, 'utf8') } catch { return undefined }
+}
+
+/** True when a pnpm lockfile records a `specifier` for `name` as a dependency.
+ *  The importer's dependency entry is the only place the package name appears
+ *  as a bare mapping key with a `specifier` child; pinned `packages:` and
+ *  `snapshots:` keys carry `name@<specifier>` and cannot match.
+ *
+ *  A `link:` specifier is deliberately not ownership: pnpm records no version
+ *  and no integrity for a link, so it owns the junction and never the bytes.
+ *  Refusing there would disable the one self-upgrade shape that survives a
+ *  full install — a real tree inside the profile declared as a relative
+ *  `link:`. A `file:`, tarball-URL or registry specifier does record a source
+ *  pnpm can re-extract, and stays "owned". */
+function lockfileDeclaresPackage(text, name) {
+  const lines = text.split(/\r?\n/)
+  const entry = new RegExp(`^(\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*$`)
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = entry.exec(lines[index])
+    if (match === null) continue
+    const indent = match[1].length
+    for (let child = index + 1; child < lines.length; child += 1) {
+      const line = lines[child]
+      if (line.trim() === '') continue
+      if (line.length - line.trimStart().length <= indent) break
+      if (/^\s*"?specifier"?\s*:\s*['"]?link:/.test(line)) return false
+      if (/^\s*"?specifier"?\s*:/.test(line)) return true
+    }
+  }
+  return false
+}
+
+/** True when `node_modules/.modules.yaml` hoists `name@<specifier>`. pnpm
+ *  writes this file as JSON on newer releases and as YAML on older ones, so
+ *  the JSON spelling is parsed and the YAML spelling scanned by indentation. */
+function modulesHoistsPackage(text, name) {
+  let parsed
+  try { parsed = JSON.parse(text) } catch { parsed = undefined }
+  if (parsed !== undefined) {
+    const hoisted = parsed?.hoistedLocations
+    if (hoisted === null || typeof hoisted !== 'object') return false
+    return Object.keys(hoisted).some(key => key.startsWith(`${name}@`))
+  }
+  const lines = text.split(/\r?\n/)
+  const header = /^(\s*)"?hoistedLocations"?\s*:/
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = header.exec(lines[index])
+    if (match === null) continue
+    const indent = match[1].length
+    for (let child = index + 1; child < lines.length; child += 1) {
+      const line = lines[child]
+      if (line.trim() === '') continue
+      if (line.length - line.trimStart().length <= indent) break
+      if (line.includes(`${name}@`)) return true
+    }
+  }
+  return false
+}
+
+/** The refusal `apply` raises for a package-manager-owned copy. Carries
+ *  `statusCode: 409`, the settings API's refusal convention for an install
+ *  whose bytes another writer owns (see index.js `MANAGED_MESSAGE`). */
+const PACKAGE_MANAGER_REFUSAL = 'this installation is owned by pnpm; the in-app upgrade would be a second writer and can corrupt the copy — update it with pnpm (or reinstall from a release)'
+
+/**
  * The upgrade lifecycle. The optional activate callback lets the Host include
  * hot reload in the transaction; standalone release audits only install files.
  */
@@ -800,6 +899,13 @@ export class PluginUpdater {
    */
   async apply({ version, onProgress = () => {}, activate } = {}) {
     if (upgradeLocks.has(this.deps.pkgDir)) throw new Error('an upgrade is already running')
+    // A package-manager-owned copy is refused before any transaction state is
+    // touched or a manifest is fetched: the in-app upgrader would be a second
+    // writer on a directory pnpm replaces atomically, which corrupts the
+    // install on Windows.
+    if (isPackageManagerOwned(this.deps.pkgDir)) {
+      throw Object.assign(new Error(PACKAGE_MANAGER_REFUSAL), { statusCode: 409 })
+    }
     this.reconcileRecovery()
     const priorState = this.loadUpgradeState()
     if (['installing', 'activating', 'recovery-required'].includes(priorState?.phase)) {

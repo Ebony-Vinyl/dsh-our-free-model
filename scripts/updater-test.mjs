@@ -15,7 +15,7 @@ import os from 'node:os'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
-import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, signManifest, verifyManifestSignature, stableStringify, PINNED_MANIFEST_PUBLIC_KEY } from '../src/updater.js'
+import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, isPackageManagerOwned, signManifest, verifyManifestSignature, stableStringify, PINNED_MANIFEST_PUBLIC_KEY } from '../src/updater.js'
 import { selfReload } from '../src/reload.js'
 const CONTROLLED_DEFAULTS = ['http://127.0.0.1:1/never.json']
 
@@ -567,6 +567,116 @@ await checkAsync('apply() drops files the new release removed', async () => {
   assert.equal(fs.existsSync(path.join(updater.backupDir, '.git', 'HEAD')), false, 'the rollback copy holds the package, not the repository')
   fs.rmSync(pkg, { recursive: true, force: true })
   fs.rmSync(data, { recursive: true, force: true })
+})
+
+// ── package-manager ownership (issue #335) ───────────────────────────────────
+// The desktop "real directory" install adds the plugin to the profile's
+// `dependencies`, so pnpm owns `<profile>/node_modules/dsh-our-free-model`.
+// With the default `distribution: self` the in-app upgrader would be a second
+// writer on that directory; it must refuse instead of corrupting the install.
+// Both signals are read beside the profile root, two levels above the package.
+function makeProfilePackage(version = OLD) {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-profile-'))
+  const pkg = path.join(profile, 'node_modules', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  for (const [rel, body] of Object.entries(version === OLD ? oldFiles : newFiles)) {
+    const target = path.join(pkg, rel)
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(target, body)
+  }
+  return { profile, pkg }
+}
+// A real `pnpm-lock.yaml` importer record for this package (lockfileVersion 9).
+const PNPM_LOCKFILE = [
+  "lockfileVersion: '9.0'",
+  '',
+  'importers:',
+  '',
+  '  .:',
+  '    dependencies:',
+  '      dsh-our-free-model:',
+  '        specifier: file:../dsh-our-free-model-2.3.0.tgz',
+  '        version: file:../dsh-our-free-model-2.3.0.tgz',
+  '',
+].join('\n')
+check('signal 1: a pnpm-lock.yaml specifier for the package marks it as pnpm-owned', () => {
+  const { profile, pkg } = makeProfilePackage()
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), PNPM_LOCKFILE)
+    assert.equal(isPackageManagerOwned(pkg), true)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('signal 2: a hoistedLocations entry in .modules.yaml marks it as pnpm-owned', () => {
+  const { profile, pkg } = makeProfilePackage()
+  try {
+    fs.writeFileSync(path.join(profile, 'node_modules', '.modules.yaml'), JSON.stringify({
+      layoutVersion: 5,
+      nodeLinker: 'hoisted',
+      hoistedLocations: { 'dsh-our-free-model@file:../dsh-our-free-model-2.3.0.tgz': ['node_modules/dsh-our-free-model'] },
+    }, undefined, 2))
+    assert.equal(isPackageManagerOwned(pkg), true)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('a plain distribution: self install is not pnpm-owned', () => {
+  const { profile, pkg } = makeProfilePackage()
+  try {
+    // A `node_modules/` directory inside the copy is deliberately not a signal:
+    // under pnpm's hoisted linker the tarball dependency installs without one.
+    fs.mkdirSync(path.join(pkg, 'node_modules', 'dep'), { recursive: true })
+    assert.equal(isPackageManagerOwned(pkg), false, 'a nested node_modules/ inside the copy is not a signal')
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      some-other-plugin:\n        specifier: 1.0.0\n        version: 1.0.0\n")
+    assert.equal(isPackageManagerOwned(pkg), false, 'another package in the lockfile is not a signal')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('a link: specifier is not byte ownership (pnpm owns the junction, not the files)', () => {
+  // The safe way to keep `distribution: self` next to a `dependencies` entry:
+  // the plugin tree lives in a real directory inside the profile and the
+  // dependency is a relative `link:`. pnpm then records no version and no
+  // integrity for it, so it has no source to re-extract and the in-app
+  // upgrader stays the only writer of those bytes. Refusing here would kill
+  // the only self-upgrade shape that survives a full install. See #335.
+  const { profile, pkg } = makeProfilePackage()
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'",
+      '',
+      'importers:',
+      '',
+      '  .:',
+      '    dependencies:',
+      '      dsh-our-free-model:',
+      '        specifier: link:vendor/dsh-our-free-model',
+      '        version: link:vendor/dsh-our-free-model',
+      '',
+    ].join('\n'))
+    assert.equal(isPackageManagerOwned(pkg), false, 'a link: specifier records no bytes for pnpm to own')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+await checkAsync('apply() refuses to self-upgrade a pnpm-owned install', async () => {
+  const { profile, pkg } = makeProfilePackage(OLD)
+  const data = makeDataDir()
+  let fetched = 0
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), PNPM_LOCKFILE)
+    const updater = new PluginUpdater({
+      pkgDir: pkg, dataDir: data, settings: () => ({}),
+      fetchImpl: async () => { fetched += 1; throw new Error('the refusal must happen before any fetch') },
+      defaultSources: [`${base}/repo/feed/manifest.json`], manifestPublicKey: TEST_PUBLIC_KEY,
+    })
+    await assert.rejects(() => updater.apply({}), error => {
+      assert.match(error.message, /owned by pnpm/)
+      assert.match(error.message, /reinstall/)
+      assert.equal(error.statusCode, 409, 'the refusal carries the settings-API refusal status')
+      return true
+    })
+    assert.equal(fetched, 0, 'no manifest is fetched for a refused install')
+    assert.equal(updaterVersion(pkg), OLD, 'the installed package is untouched')
+    assert.equal(fs.existsSync(path.join(data, 'upgrade-stage')), false, 'nothing is staged')
+    assert.equal(updater.history.length, 0, 'a refusal is not a failed upgrade')
+  } finally {
+    fs.rmSync(profile, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
 })
 await checkAsync('a failed apply leaves the installed package and history consistent', async () => {
   const pkg = makePackage(OLD)
