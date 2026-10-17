@@ -338,6 +338,10 @@ const registered = globalThis.__registered
 if (registered === undefined) { console.log('PROBE: bundle never registered'); process.exit(1) }
 const exports = registered.factory(name => {
   if (name === 'react') return stubReact
+  // The bundle asks for react-dom at module scope (client.js:27) even though the
+  // badge path never renders through it: the settings panel mounts with it.
+  // Nothing under test touches the DOM, so an inert object is the honest stub.
+  if (name === 'react-dom') return { createRoot: () => ({ render: () => {}, unmount: () => {} }) }
   throw new Error(`asked for ${name}`)
 })
 
