@@ -128,7 +128,7 @@ function openExternal(url) {
 export const inject = ['llm']
 
 /** Where the plugin's own announcement copy lives; bump it to re-announce. */
-export const ANNOUNCEMENT_VERSION = '2026-10-17.3'
+export const ANNOUNCEMENT_VERSION = '2026-10-17.2'
 
 /**
  * Who owns the plugin's bytes — the distribution mode:
@@ -1805,6 +1805,17 @@ function createApiRoutes(deps) {
       }
       if (method === 'POST' && routePath === '/eac/logout') {
         return send(200, await deps.eacAuth.logout())
+      }
+      // The channel pack hands back a login URL whose caller must open it while
+      // the click is still fresh, and a renderer that refuses popups (the
+      // desktop webview) has no way to — but the host can, with the same spawn
+      // the EAC lane already uses. Nothing here is trusted: the URL is checked
+      // against the http(s) shape `openExternal` enforces and length-capped.
+      if (method === 'POST' && routePath === '/open-external') {
+        const body = await readJson(req)
+        const target = typeof body?.url === 'string' ? body.url.trim().slice(0, 2048) : ''
+        if (!/^https?:\/\//i.test(target)) return send(400, { error: 'bad-url' })
+        return send(200, { ok: true, opened: openExternal(target) })
       }
       if (method === 'GET' && routePath === '/pool') {
         try { return send(200, await deps.pool()) } catch (error) {

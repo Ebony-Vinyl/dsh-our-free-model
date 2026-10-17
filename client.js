@@ -4096,17 +4096,38 @@ window.__ModuleLoader__.load({
       // moment, so the card can poll against it.
       const startLogin = async () => {
         setBusy('add'); setNotice('')
+        // Claim the tab here, inside the click's transient activation, and send
+        // it to the login URL once the pack answers: waiting until after the
+        // await is exactly what gets a popup blocked. The window is named
+        // rather than opened with `noopener` — that flag hands back a null
+        // handle, leaving nothing to navigate — and its opener is cleared by
+        // hand while the blank document is still same-origin.
+        let popup = null
+        try { popup = window.open('about:blank', 'ofm-login') } catch { popup = null }
+        if (popup !== null && popup !== undefined) { try { popup.opener = null } catch { /* stays blank */ } }
+        const abandonPopup = () => {
+          if (popup !== null && popup !== undefined && popup.closed !== true) { try { popup.close() } catch { /* not ours to close */ } }
+        }
         try {
           const value = await rpc('account.create', { provider: channel.id }, 90_000)
           const accountId = value?.accountId
           const url = value?.loginUrl
           if (typeof accountId !== 'string' || accountId === '') throw new Error('bad-answer')
           if (typeof url === 'string' && url !== '') {
-            try { window.open(url, '_blank', 'noopener') } catch { /* the modal offers the link too */ }
-          }
+            let opened = false
+            if (popup !== null && popup !== undefined && popup.closed !== true) {
+              try { popup.location.replace(url); opened = true } catch { opened = false }
+            }
+            if (!opened) {
+              // The desktop webview refuses popups outright; the host can still
+              // reach the system browser, which is where the flow has to finish.
+              try { opened = (await post('/open-external', { url }))?.opened === true } catch { opened = false }
+            }
+            if (!opened) { try { window.open(url, '_blank', 'noopener') } catch { /* the modal offers the link too */ } }
+          } else { abandonPopup() }
           setLogin({ accountId, url: typeof url === 'string' ? url : '', startedAt: Date.now() })
           setOpen('accounts')
-        } catch (error) { onError(channel, error) } finally { setBusy('') }
+        } catch (error) { abandonPopup(); onError(channel, error) } finally { setBusy('') }
       }
 
       // Poll the placeholder until its credential lands. Ten minutes matches the
