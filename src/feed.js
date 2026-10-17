@@ -38,6 +38,13 @@ const REPO = 'Ebony-Vinyl/dsh-our-free-model'
 export const DEFAULT_FEED_SOURCES = [
   `https://raw.githubusercontent.com/${REPO}/main/feed/announcements.json`,
   `https://cdn.jsdelivr.net/gh/${REPO}@main/feed/announcements.json`,
+  // A raw.githubusercontent.com proxy, for the networks where both origins above
+  // are slow or intermittently unreachable (see the note on the updater's
+  // DEFAULT_MANIFEST_SOURCES). The feed is a plain read with no signature of its
+  // own — the client sanitizes every item it renders — so this leg only has to
+  // return the same bytes; the cache-buster below keeps a proxy's edge from
+  // serving a stale copy.
+  `https://gh-proxy.com/https://raw.githubusercontent.com/${REPO}/main/feed/announcements.json`,
   `https://raw.githubusercontent.com/${REPO}/master/feed/announcements.json`,
 ]
 

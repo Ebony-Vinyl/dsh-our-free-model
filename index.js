@@ -41,7 +41,7 @@ import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
 import { unlockSealedLane } from './src/vault.js'
-import { DEFAULT_LEVEL, budgetLadder } from './src/effort.js'
+import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort.js'
 import { windowTokens } from './src/stream.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
@@ -128,7 +128,7 @@ function openExternal(url) {
 export const inject = ['llm']
 
 /** Where the plugin's own announcement copy lives; bump it to re-announce. */
-export const ANNOUNCEMENT_VERSION = '2026-09-25.1'
+export const ANNOUNCEMENT_VERSION = '2026-10-17.3'
 
 /**
  * Who owns the plugin's bytes — the distribution mode:
@@ -2325,7 +2325,9 @@ function buildSummary(deps) {
       latencyMs: unprobed(entry) ? undefined : snapshot.results?.[entry.id]?.latencyMs,
       // What each rung of the effort menu will really put on the wire for this
       // model, so the page never shows a 32K "output ceiling" beside a call that
-      // was cut off at 8K. A model with no effort menu has no ladder to show.
+      // was cut off at 8K. A model with no effort menu has no ladder to show;
+      // a menu model's rungs are flat (its level, not the ladder, is the wire
+      // control), which is what the card's "default ceiling" tag then reads.
       ...(entry.reasoning === true ? { budgets: budgetLadder(entry, undefined, defaultMaxTokens) } : {}),
       // `null` here is what the picker does not advertise; the roster still lists
       // those models, because "the probe refused it" is the user's only evidence.

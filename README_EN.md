@@ -60,7 +60,7 @@
 - **Hot reload** — upgrades and code changes take effect immediately, no app restart; also available as a manual button and an optional file watcher.
 - **Region-aware, per egress** — models gated by geography are separated into their own `region-limited` group instead of failing mid-turn. Switch your network exit and the next probe reclassifies them automatically.
 - **The body decides what it is, not the header** — under load this gateway answers 200 with a JSON `Content-Type` over a perfectly ordinary SSE frame stream. The plugin sniffs the first bytes and replays them into the stream, so the turn keeps streaming instead of being thrown away — and a working model is never demoted to `unavailable` because one header lied.
-- **Thinking effort that actually binds** — `Light / Balanced / Deep` map to output-token budgets of 2 048 / 8 192 / the model's full capacity, and are recorded per call. A model that cannot switch thinking off (MiMo V2.6 among them) gets the whole ladder doubled to 4 096 / 16 384 / capacity, because there thinking and the visible answer compete for the one ceiling; every model card in the settings page prints the number it will actually send. This is not a `reasoning_effort` string thrown at an endpoint that ignores it (see [Why a budget](#why-a-budget-and-not-reasoning_effort)).
+- **Thinking effort that actually binds** — two kinds of model, two kinds of control. A model that declares thinking levels (DeepSeek V4.1 Flash, GLM 5.3 Flash among them) gets its own level menu (Off / Low / High / Max …), and the selected level is sent as-is in the upstream `reasoning_effort` field — which this gateway validates, so a value outside the set is a 400. A model with no level menu (MiMo V2.6 among them) gets the budget ladder: `Light / Balanced / Deep` map to output-token budgets of 2 048 / 8 192 / the model's full capacity, and a model that cannot switch thinking off gets the whole ladder doubled to 4 096 / 16 384 / capacity, because there thinking and the visible answer compete for the one ceiling. Both are recorded per call, and every model card in the settings page prints either the levels or the number it will actually send (see [Thinking effort](#thinking-effort-a-level-menu-or-a-budget-ladder)).
 - **Works without a browser UI** — only `llm` is a hard dependency, so the plugin activates on a headless composition such as dsh-tui and still serves its models. The dashboard half lives on its own fiber and mounts itself when `webServer` appears, so a composition that loads plugins before its HTTP server exists still gets its settings page. Availability probing and the background loops run on plain timers.
 - **Usage dashboard, local only** — token heatmap, cumulative curve by total or per model, output speed and time-to-first-token sampled per call. Nothing is uploaded.
 - **OpenAI-compatible forward port** — expose these models to any other local tool through a base URL plus a generated API key.
@@ -70,7 +70,7 @@
 - **Token savers** — three things: tool-output compaction (RTK) rewrites `tool_result` content in place before the request is sent (git diff / status / log, grep, find, ls, tree, build logs, numbered file dumps, search listings, duplicate log lines) — measured live, a 40 KB `git diff` lost 90% of its bytes and the model still answered about it; prompt shaping offers the caveman and ponytail families, every level off by default; and five local answers that never call a provider. The settings page reports bytes before/after, percent saved, blocks compacted and calls measured, from the same stats rows the usage charts read.
 - **Routing (fallback chains)** — chain models from any lane into one named chain that appears in the picker and on the gateway as the virtual model `combo:<name>`. `fallback` always starts at the head; `round-robin` rotates the starting point and stays there for N turns. A link that fails *before any answer delta* is discarded whole, so the switch is invisible to the caller — and reasoning deltas deliberately do not count as content, so "thought for a minute, then hit a quota wall" is the case failover exists for.
 - **The local gateway speaks Anthropic natively** — new `POST /v1/messages` (streaming and non-streaming, with `thinking`/`tool_use` blocks, a real `stop_reason` and an in-stream `error` event when a turn fails after the headers went out) and `POST /v1/messages/count_tokens` (a local estimate — the plugin ships no tokenizer); `/v1/models` now advertises every lane, the aggregate rows and the chains included. The gateway page's new *Connect a client* section generates copy-ready recipes — Claude Code, Codex `config.toml`, the OpenAI and Anthropic SDKs, curl, and a LAN variant when the relay is up — from the port that actually bound and the key that is actually required.
-- **Eleven tabs beside the old six** — Aggregate, Token savers, Routing, Plugin upgrade and Recommended projects join Free models, EAC models, Free channels, Dashboard, Request log and Gateway; the motion pass (card rise on mount, page fade on tab switch, an animated savings meter, hover lifts) respects `prefers-reduced-motion` and collapses to one column at panel width. The Recommended-projects page carries the two companion repositories — EAC-Desktop and EAC-Pack — with a description, a direct link and a star button each, and their live star, fork and last-push numbers read from GitHub (absent, never invented, when GitHub cannot be reached).
+- **Eleven tabs beside the old six** — Aggregate, Token savers, Routing, Plugin upgrade and Recommended projects join Free models, EAC models, Free channels, Dashboard, Request log and Gateway; the motion pass (card rise on mount, page fade on tab switch, an animated savings meter, hover lifts) respects `prefers-reduced-motion` and collapses to one column at panel width. The Recommended-projects page carries the three companion repositories — EAC-Desktop, EAC-Pack and EAC-design-world — with a description, a direct link and a star button each, and their live star, fork and last-push numbers read from GitHub (absent, never invented, when GitHub cannot be reached).
 - **Clean names in the UI** — no mojibake, no upstream vendor strings leaking into your model picker.
 
 ## What you get
@@ -392,14 +392,31 @@ Design decisions worth knowing:
 - **The token savers run on the single choke point, and they fail open.** Prompt injection and tool-output compaction run after every other mutation has been applied — the fingerprint rename, the effort patch, the sealed lane's pacing hint — at `payloadFor()`, the one place both the adapter's own dispatch and the local gateway (which dials through the adapter) pass through, so every lane and every recovery segment is compacted. Every step fails open: a saver that throws is skipped, a filter that throws passes the original text through, an unrecognised body shape is left alone — a request must never fail over the thing that was supposed to make it cheaper.
 - **A combo is a virtual catalog row, so failover is resolved in the adapter.** A chain joins the merged catalog as `channel:'combo'` plus a list of real model ids, which is why the picker advertises it and the gateway dials it by name like any other row; the chain is expanded and advanced inside the adapter's `runStream()`, so neither caller has to know about failover.
 
-### Why a budget, and not `reasoning_effort`
+### Thinking effort: a level menu, or a budget ladder
 
-Passing a reasoning-effort string upstream was measured to be a no-op on this
-lane: repeated samples at three different nominal effort levels produced
-statistically indistinguishable reasoning tokens. Shipping a control that does
-nothing is worse than shipping no control, so effort is implemented as a hard
-output-token ceiling, which does bind — recorded reasoning tokens rise
-monotonically with the level.
+Two kinds of model, two kinds of control.
+
+A model that declares thinking levels (its listing carries `reasoning_options`
+with `effort.values`) gets a **level menu**: the selected level is sent as-is
+in the upstream `reasoning_effort` field, the same shape the EAC and Kilo lanes
+use. That is the 2026-10-17 re-probe result — the lane did ignore the field
+back on 2026-09-24, but it now **validates** it: a value outside the set
+answers `400 invalid_value` naming the accepted set
+(`none|minimal|low|medium|high|xhigh|max`), and reasoning volume really does
+move with the level (`deepseek-v4.1-flash-free`, medians over three samples:
+none 0, low 793, high 700, xhigh 1405, max 1906). So the menu offers only the
+levels that model declares; a model whose set has no off rung (GLM 5.3 Flash,
+whose `none` does not actually stop it thinking) is not given one.
+
+A model with no level menu (its listing offers only `toggle` or
+`budget_tokens`, or no `reasoning_options` at all) keeps the **budget ladder**:
+effort is a hard output-token ceiling, which does bind — recorded reasoning
+tokens rise monotonically with the level. Inventing a rung the upstream cannot
+express would claim a capability the model never had.
+
+Window and output ceilings follow the 9router / models.dev convention
+(`limit.context` / `limit.output`, `modalities.input`); the upstream listing
+publishes an id and nothing else.
 
 ### Three kernel behaviours that cost real debugging time
 

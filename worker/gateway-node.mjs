@@ -677,6 +677,10 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
   // server carries it so a test can close both, and so callers can read the
   // same counts /stats-data reports.
   server.authGate = auth
+  server.once('close', () => {
+    clearInterval(loopSampler)
+    loopDelay.disable()
+  })
   return server
 }
 

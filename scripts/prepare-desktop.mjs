@@ -24,7 +24,7 @@ export function stageDesktopService(destination) {
     }
   }
   tree('src', file => /\.(js|json)$/.test(file))
-  for (const name of ['cli', 'service', 'management', 'login-terminal', 'eac']) copy(`packages/standalone/${name}.mjs`)
+  for (const name of ['cli', 'service', 'management', 'login-terminal', 'open-external', 'eac']) copy(`packages/standalone/${name}.mjs`)
   tree('packages/standalone/channels', file => file.endsWith('.mjs'))
   tree('packages/standalone/web', file => /\.(html|js|css|json)$/.test(file))
   copy('packages/standalone/package.json')

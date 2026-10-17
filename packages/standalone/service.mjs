@@ -137,6 +137,7 @@ export async function startStandalone({
     if (settings.writeFailed) throw new Error('could not persist the standalone API key')
     eac = createStandaloneEac({
       dataDir,
+      ...process.env.OFM_TEST_UPSTREAM ? { openExternal: async () => false } : {},
       onSaved: () => { void runtime?.refreshSealedLane().catch(error => logger.warn?.(`EAC 清单刷新失败：${error.message}`)) },
     })
     runtime = createModelRuntime({

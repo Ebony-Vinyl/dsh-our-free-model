@@ -12,11 +12,13 @@ let requestLifetime = new AbortController()
 const ctx = {
   connection: { rpc: {
     async call(_base, _method, payload, signal) {
+      const lifetime = requestLifetime.signal
       const response = await fetch('/api/management/channels/rpc', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload), signal: AbortSignal.any([signal, requestLifetime.signal]), credentials: 'same-origin',
+        body: JSON.stringify(payload), signal: AbortSignal.any([signal, lifetime]), credentials: 'same-origin',
       })
       const result = await response.json()
+      lifetime.throwIfAborted()
       if (response.status === 401) window.dispatchEvent(new CustomEvent('ofm:unauthorized'))
       if (!response.ok) throw new Error(result.error ?? '渠道请求失败')
       return result
@@ -137,7 +139,6 @@ function EacPage({ summary }) {
       h('div', null, h('div', { className: 'heading-eyebrow' }, 'WORKSPACE / EAC'),
         h('h1', null, 'EAC 协付渠道'), h('p', null, '使用本机独立授权，连接共享资源池。'))),
     h(EacAuth, { t, auth, eacLogin: login }),
-    login.pending ? h('a', { href: login.pending.url, target: '_blank', rel: 'noreferrer noopener' }, '打开 GitHub 授权页面 ↗') : null,
     h('div', { className: 'ofm_hero' },
       h('h3', null, 'EAC 实时资源池'),
       pool == null ? h('p', null, pool === undefined ? '正在查询资源池…' : '资源池暂时无法查询，请稍后刷新。')

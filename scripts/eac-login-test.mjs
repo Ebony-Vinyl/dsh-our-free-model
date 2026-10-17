@@ -211,6 +211,11 @@ pollResult = () => new Response('{"status":"expired"}')
 await firePoll(); login = page.render()
 assert.equal(login.pending, null); assert.equal(login.notice, 'eac.sessionExpired'); assert.equal(storage.size, 0)
 page.unmount()
+const pendingTree = EacAuth({ t, auth: { available: true }, eacLogin: { ...login, pending: { link, url: 'https://gateway.invalid/auth' } } })
+const pendingLinks = []
+const collectLinks = node => { if (!node || typeof node !== 'object') return; if (node.type === 'a') pendingLinks.push(node); for (const child of node.children ?? []) { if (Array.isArray(child)) child.forEach(collectLinks); else collectLinks(child) } }
+collectLinks(pendingTree)
+assert.ok(pendingLinks.some(node => node.props.href === 'https://gateway.invalid/auth' && node.props.target === '_blank'), '等待授权面板必须提供可点击的授权链接')
 const tree = EacAuth({ t, auth: { available: true, unverified: true }, eacLogin: { ...login, pending: null } })
 assert.ok(JSON.stringify(tree).includes('eac.pillUnknown'))
 assert.equal(JSON.stringify(tree).includes('eac.pillCompat'), false)

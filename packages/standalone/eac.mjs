@@ -4,9 +4,10 @@ import { openSeal } from '../../src/vault.js'
 import { readEacUser, writeEacUser, clearEacUser, EAC_USER_FILE } from '../../src/eac-user.js'
 import { createEacLoginPoller } from '../../src/eac-login.js'
 import { directFetch } from '../../src/eac.js'
+import { openExternal as openSystemBrowser } from './open-external.mjs'
 
 /** 独立产品自己的 EAC 入口；插件仍走 unlockSealedLane 的宿主判定。 */
-export function createStandaloneEac({ dataDir, onSaved = () => {}, credentialOf = openSeal, fetch = directFetch }) {
+export function createStandaloneEac({ dataDir, onSaved = () => {}, credentialOf = openSeal, fetch = directFetch, openExternal = openSystemBrowser }) {
   const file = path.join(dataDir, EAC_USER_FILE)
   const readUser = () => readEacUser(file)
   let closed = false
@@ -74,7 +75,10 @@ export function createStandaloneEac({ dataDir, onSaved = () => {}, credentialOf 
       const link = crypto.randomBytes(24).toString('base64url')
       const prepared = await poller.prepare(link)
       if (prepared.error) return prepared
-      return { link, url: `${rootOf(lane)}/auth/github/start?link=${link}`, opened: false }
+      const url = `${rootOf(lane)}/auth/github/start?link=${link}`
+      let opened = false
+      try { opened = await openExternal(url) === true } catch {}
+      return { link, url, opened }
     },
     poll: link => poller.poll(link),
     cancel: link => poller.cancel(link),

@@ -36,6 +36,32 @@ for (const [saved, prefersDark, expected, storageUnavailable] of [
     `主题初始化：保存值=${saved}，系统深色=${prefersDark}，存储不可用=${!!storageUnavailable}`)
 }
 assert.match(html, /type="module".+src="\/assets\/app.js"/)
+// 侧边栏靠基础层的 position: sticky 吸附。主题层（[data-theme] 前缀）若给它补 position，
+// 特异性更高就会覆盖 sticky，切到深色后整条侧边栏跟着主界面一起滚走。
+// 只允许基础层与窄屏断点声明 .sidebar 的 position，主题层一律不许。
+const sheet = fs.readFileSync(new URL('app.css', web), 'utf8')
+const rules = [...sheet.matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({ selectors: selectors.trim(), body }))
+// 只看作用在侧边栏"元素本身"的选择器；::before 这类装饰伪元素的 position 不受影响。
+const isSidebarElement = selectors => selectors.split(',')
+  .map(part => part.replace(/\[[^\]]*\]/g, '').trim())
+  .some(part => part === '.sidebar' || part.endsWith('> .sidebar'))
+const themedSidebarPosition = rules.filter(rule =>
+  /\[data-theme/.test(rule.selectors) && isSidebarElement(rule.selectors) && /position\s*:/.test(rule.body))
+assert.deepEqual(themedSidebarPosition.map(rule => rule.selectors), [],
+  '主题层不得声明 .sidebar 的 position，否则会覆盖基础层的 sticky')
+const baseSidebar = rules.find(rule => rule.selectors === '.sidebar' && /position\s*:\s*sticky/.test(rule.body))
+assert.ok(baseSidebar, '侧边栏必须由基础层保持 position: sticky')
+// 构建会压缩选择器（`.app-shell > *:not(.sidebar)` 会变成 `.app-shell>:not(.sidebar)`），
+// 所以按语义判断：主题层里任何覆盖 .app-shell 直接子元素的定位规则都必须排除侧边栏。
+const themedShellChild = rules.filter(rule =>
+  /\[data-theme/.test(rule.selectors) && /\.app-shell\s*:?\s*>/.test(rule.selectors) && /position\s*:/.test(rule.body))
+assert.ok(themedShellChild.length > 0, '应当保留主题层对 .app-shell 子元素的层级修正')
+for (const rule of themedShellChild) {
+  assert.ok(/not\(\s*\.sidebar\s*\)/.test(rule.selectors),
+    `主题层覆盖 .app-shell 子元素的定位时必须排除侧边栏：${rule.selectors.slice(0, 90)}`)
+}
+assert.ok(/::view-transition-new\(root\)/.test(sheet), '主题切换必须有新主题的扩散层')
+assert.ok(/clip-path:\s*circle\(/.test(sheet), '扩散必须用圆形 clip-path')
 assert.ok(!html.includes('channels-'), '渠道不应在登录首屏预加载')
 assert.ok(!html.includes('models-'), '模型页面不应在登录首屏预加载')
 assert.ok(!html.includes('usage-'), '用量页面不应在登录首屏预加载')

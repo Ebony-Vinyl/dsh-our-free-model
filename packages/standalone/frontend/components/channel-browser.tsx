@@ -40,7 +40,12 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
     const timer = setInterval(() => { void reload() }, 45000)
     return () => { mounted.current = false; sequence.current++; clearInterval(timer) }
   }, [rpc, reload])
-  useEffect(() => { if (selected) detailHeading.current?.focus() }, [selected])
+  useEffect(() => {
+    if (selected) {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      detailHeading.current?.focus({ preventScroll: true })
+    }
+  }, [selected])
   const onChanged = useCallback(() => {
     void reload()
     window.dispatchEvent(new CustomEvent('ofm:channels'))

@@ -23,6 +23,7 @@ const sourceFiles = [
   'packages/standalone/service.mjs',
   'packages/standalone/management.mjs',
   'packages/standalone/login-terminal.mjs',
+  'packages/standalone/open-external.mjs',
   'packages/standalone/eac.mjs',
   ...['business', 'contracts', 'credentials', 'images', 'runtime', 'worker']
     .map(name => `packages/standalone/channels/${name}.mjs`),

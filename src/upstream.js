@@ -33,6 +33,17 @@
  * this port follows): 9router `open-sse/utils/opencodeFingerprint.js` +
  * `open-sse/executors/opencode.js` at v0.5.104.
  *
+ * Re-verified 2026-10-17 after every request started answering 403: the gate
+ * also validates the session id's *encoding*, not only its `ses_…` shape. The
+ * twelve hex digits must be the descending `~(ts_ms << 12 | counter)` value with
+ * counter 1–63 (low 12 bits `0xfc0–0xfff`); an ascending `ts << 12` value or a
+ * sha256 digest is refused with 403 FreeTierError. See
+ * {@link SESSION_DESCENDING_RE} and {@link canonicalizeSession}, and the
+ * reference implementation at https://github.com/jasonxu114514/opencode2api
+ * (`internal/identity/request.go`). A live control on the same egress IP showed
+ * that the official 2.0.32 CLI's exact bytes pass while a fresh ascending id
+ * 403s, so this is an identity check and not IP rate limiting.
+ *
  * @module src/upstream.js
  */
 
@@ -125,6 +136,55 @@ const MESSAGES_MODELS = new Set(['union-alpha'])
 
 export const SESSION_RE = /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/
 
+/**
+ * The time half of a canonical session id the upstream free tier actually accepts.
+ *
+ * ⚠️ 形状对还不够（2026-10-17 实测）：官方客户端用 `Identifier.descending()`
+ * 铸造时间戳 —— 48 位的 `~(ts_ms << 12 | counter)`，取反把低 12 位变成
+ * `0xFFF - counter`。上游只放行 counter 1–63，即低 12 位落在 `0xfc0–0xfff`
+ * （前 9 位任意 hex，第 10 位 `c`–`f`，后两位任意）。任何其它编码 —— 包括
+ * `ts_ms << 12` 这种升序写法、以及 sha256 摘要 —— 即使 `ses_` 形状完全正确，
+ * 也会被 403 FreeTierError 拒掉。参考实现：
+ * https://github.com/jasonxu114514/opencode2api `internal/identity/request.go`
+ * （`descendingTimePartPattern`）。
+ */
+export const SESSION_DESCENDING_RE = /^[0-9a-f]{9}f[c-f][0-9a-f]$/
+
+/** Whether `id` is a session the upstream free tier will accept as-is. */
+export function isCanonicalSession(id) {
+  return typeof id === 'string' && SESSION_RE.test(id.trim()) && SESSION_DESCENDING_RE.test(id.trim().slice(4, 16))
+}
+
+/**
+ * Re-encode any session id into the descending layout the gate accepts, keeping
+ * one conversation pinned to one upstream session.
+ *
+ * The digest is the same `ses\0<signal>` sha256 the reference gateway uses, so a
+ * given downstream conversation always maps to the same upstream id. Counter 1
+ * keeps the low 12 bits at `0xffe`, inside the accepted window.
+ */
+export function canonicalizeSession(signal) {
+  const digest = crypto.createHash('sha256').update(`ses\0${signal}`).digest()
+  const current = ((BigInt(digest[0]) << 28n | BigInt(digest[1]) << 20n | BigInt(digest[2]) << 12n |
+    BigInt(digest[3]) << 4n | BigInt(digest[4]) >> 4n) << 12n) | 1n
+  const inverted = ~current & 0xffffffffffffn
+  const timeHex = inverted.toString(16).padStart(12, '0')
+  return `ses_${timeHex}${base62Fixed(digest.subarray(6, 16), 14)}`
+}
+
+/** Render `bytes` as exactly `width` base62 characters (big-endian). */
+function base62Fixed(bytes, width) {
+  let n = 0n
+  for (const byte of bytes) n = (n << 8n) | BigInt(byte)
+  const base = 62n
+  const out = new Array(width)
+  for (let i = width - 1; i >= 0; i -= 1) {
+    out[i] = BASE62[Number(n % base)]
+    n /= base
+  }
+  return out.join('')
+}
+
 const ANTHROPIC_API_VERSION = '2023-06-01'
 
 function base62From(bytes) {
@@ -136,7 +196,13 @@ function base62From(bytes) {
 let lastStamp = 0
 let seq = 0
 
-/** Mint a gateway-shaped canonical session id (time-prefixed, monotonic counter). */
+/**
+ * Mint a gateway-shaped canonical session id (time-prefixed, monotonic counter).
+ *
+ * The encoding is the gate's: `~(ts_ms * 0x1000 + counter)`, whose low 12 bits
+ * land at `0xfff - counter`. The counter resets every millisecond, so a burst of
+ * mints inside one millisecond stays inside the accepted 1–63 window.
+ */
 export function mintSessionId(timestamp = Date.now()) {
   if (timestamp !== lastStamp) { lastStamp = timestamp; seq = 0 }
   seq += 1
@@ -197,21 +263,24 @@ function rememberSession(seed, id) {
  *
  * Free-tier quota is accounted per session, so a fresh id per request exhausts
  * it and surfaces as 429 with growing retry-after. The gateway also checks the
- * id's *shape*: the twelve hex digits must be the time encoding that
- * `mintSessionId()` produces, and the counter inside that encoding must stay
- * small (measured upstream: 0–16 pass, ≥ 100 is refused with 403 FreeTierError).
- * A sha256 digest, or any other random hex, is refused the same way even when
- * every other header is right (measured 2026-10-14). `mintSessionId()` resets
- * its counter every millisecond, so minting once per conversation and caching it
- * keeps both properties: one stable session per conversation, and the canonical
- * shape with a real counter.
+ * id's *encoding*, not just its shape: the twelve hex digits must carry the
+ * descending timestamp layout `mintSessionId()` produces, with a counter in the
+ * accepted 1–63 window (measured 2026-10-17; the reference gateway's
+ * `descendingTimePartPattern` documents the same window). A sha256 digest, an
+ * ascending `ts << 12` value, or any other random hex is refused with 403
+ * FreeTierError even when every other header is right.
+ *
+ * ⇒ A downstream-supplied id is only forwarded verbatim when it already carries
+ * the accepted encoding ({@link isCanonicalSession}); anything else is
+ * deterministically re-encoded into the descending layout, so a conversation
+ * keeps one stable upstream session instead of drawing 403s.
  */
 export function sessionForConversation(sessionId) {
-  if (typeof sessionId === 'string' && SESSION_RE.test(sessionId.trim())) return sessionId.trim()
+  if (typeof sessionId === 'string' && isCanonicalSession(sessionId)) return sessionId.trim()
   const seed = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : 'global'
   const remembered = loadSessions().get(seed)
-  if (remembered !== undefined) return remembered
-  const minted = mintSessionId()
+  if (remembered !== undefined && isCanonicalSession(remembered)) return remembered
+  const minted = canonicalizeSession(seed)
   rememberSession(seed, minted)
   return minted
 }

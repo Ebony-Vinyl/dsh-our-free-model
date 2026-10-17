@@ -130,11 +130,19 @@ async function readBody(req) {
     chunks.push(chunk)
   }
   if (size === 0) return {}
+  let value
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    value = JSON.parse(Buffer.concat(chunks).toString('utf8'))
   } catch {
     throw httpError(400, 'request body is not valid JSON')
   }
+  // Every endpoint below reads fields off the body (`model`, `messages`, ...).
+  // A parsed `null`, array or scalar would turn that read into a TypeError and
+  // answer 500 with an internal message; it is caller input, so it is a 400.
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw httpError(400, 'request body must be a JSON object')
+  }
+  return value
 }
 
 function json(res, status, payload) {
@@ -844,41 +852,55 @@ async function chatCompletions(req, res, complete, options = {}) {
 
   openStreamHeaders(res, options.heartbeatMs)
   sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }] })
-  const outcome = await complete({ model, openAi: body }, (chunk) => {
-    if (res.destroyed) return
-    if (chunk.type === 'text-delta') {
-      sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: chunk.text }, finish_reason: null }] })
-      return
-    }
-    if (chunk.type === 'reasoning-delta') {
-      sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { reasoning: chunk.text }, finish_reason: null }] })
-      return
-    }
-    if (chunk.type === 'tool-call-delta') {
-      const action = tools.admit(chunk)
-      if (action.kind === 'drop') return
-      sendSse(res, {
-        id, object: 'chat.completion.chunk', created, model,
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{
-              index: action.openAiIndex,
-              ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
-            }],
-          },
-          finish_reason: null,
-        }],
-      })
-      if (action.args) {
-        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
+  let outcome
+  try {
+    outcome = await complete({ model, openAi: body }, (chunk) => {
+      if (res.destroyed) return
+      if (chunk.type === 'text-delta') {
+        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: chunk.text }, finish_reason: null }] })
+        return
       }
-      return
+      if (chunk.type === 'reasoning-delta') {
+        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { reasoning: chunk.text }, finish_reason: null }] })
+        return
+      }
+      if (chunk.type === 'tool-call-delta') {
+        const action = tools.admit(chunk)
+        if (action.kind === 'drop') return
+        sendSse(res, {
+          id, object: 'chat.completion.chunk', created, model,
+          choices: [{
+            index: 0,
+            delta: {
+              tool_calls: [{
+                index: action.openAiIndex,
+                ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
+              }],
+            },
+            finish_reason: null,
+          }],
+        })
+        if (action.args) {
+          sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
+        }
+        return
+      }
+      if (chunk.type === 'usage') {
+        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [], usage: toOpenAiUsage(chunk.usage) })
+      }
+    })
+  } catch (error) {
+    // Headers and the initial role chunk are already on the wire, so the only
+    // honest place for a dispatch failure is the stream itself. Ending silently
+    // here is the empty-200 this endpoint's non-streaming branch already fixed.
+    options.trace?.setOutcome('failed')
+    if (!res.destroyed) {
+      sendSse(res, { error: { message: String(error?.message ?? error), type: 'server_error' } })
+      res.write('data: [DONE]\n\n')
+      res.end()
     }
-    if (chunk.type === 'usage') {
-      sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [], usage: toOpenAiUsage(chunk.usage) })
-    }
-  })
+    return
+  }
   if (outcome.error !== undefined) {
     // The status line went out with the first SSE header, so 200 is already spent
     // — but a turn the lane refused must still say so. Answering a refusal with a
@@ -1031,24 +1053,36 @@ async function responsesEndpoint(req, res, complete, options = {}) {
       say('response.output_item.added', { output_index: index, item: { type: 'function_call', item_id: `fc_${index}`, call_id: `fc_${index}`, name, arguments: '' } })
     }
     let usage
-    const outcome = await complete({ model, openAi, responses: true, responsesBody: body }, (chunk) => {
-      if (res.destroyed) return
-      if (chunk.type === 'text-delta') {
-        announceMessage()
-        say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, delta: chunk.text })
-        return
+    let outcome
+    try {
+      outcome = await complete({ model, openAi, responses: true, responsesBody: body }, (chunk) => {
+        if (res.destroyed) return
+        if (chunk.type === 'text-delta') {
+          announceMessage()
+          say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, delta: chunk.text })
+          return
+        }
+        if (chunk.type === 'tool-call-delta') {
+          const action = tools.admit(chunk)
+          if (action.kind === 'drop') return
+          announceCall(action.openAiIndex, action.name ?? '')
+          say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(action.openAiIndex)}`, output_index: callIndexes.get(action.openAiIndex), delta: action.args })
+          return
+        }
+        if (chunk.type === 'usage') {
+          usage = toOpenAiUsage(chunk.usage)
+        }
+      })
+    } catch (error) {
+      // `response.created` is already on the wire; report the failure with the
+      // event the protocol defines instead of ending a 200 after one frame.
+      options.trace?.setOutcome('failed')
+      if (!res.destroyed) {
+        say('response.failed', { response: response({ status: 'failed', error: { message: String(error?.message ?? error) } }) })
+        res.end()
       }
-      if (chunk.type === 'tool-call-delta') {
-        const action = tools.admit(chunk)
-        if (action.kind === 'drop') return
-        announceCall(action.openAiIndex, action.name ?? '')
-        say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(action.openAiIndex)}`, output_index: callIndexes.get(action.openAiIndex), delta: action.args })
-        return
-      }
-      if (chunk.type === 'usage') {
-        usage = toOpenAiUsage(chunk.usage)
-      }
-    })
+      return
+    }
     if (outcome.error !== undefined) {
       if (failureReply(res, outcome)) return
       say('response.failed', { response: response({ status: 'failed', error: forwardFailure(outcome).error }) })
@@ -1131,7 +1165,12 @@ async function responsesEndpoint(req, res, complete, options = {}) {
  * without spending a single upstream token (see `src/local-optimize.js`).
  */
 async function messagesEndpoint(req, res, complete, options = {}) {
-  const body = await readBody(req)
+  let body
+  try { body = await readBody(req) }
+  catch (error) {
+    anthropicError(res, error.statusCode ?? 400, 'invalid_request_error', error.message)
+    return
+  }
   options.trace?.step('body_received')
   const parsed = fromAnthropicRequest(body)
   if (parsed.error !== undefined) {
@@ -1188,7 +1227,20 @@ async function messagesEndpoint(req, res, complete, options = {}) {
   const outcome = { text: '', thinking: '', toolCalls: [], usage: undefined, truncated: false, error: undefined }
 
   if (!wantsStream) {
-    const result = await complete(request, chunk => { foldAnthropicOutcome(outcome, chunk) })
+    let result
+    try {
+      result = await complete(request, chunk => { foldAnthropicOutcome(outcome, chunk) })
+    } catch (error) {
+      // This wire has its own error envelope; letting a thrown 404/400 fall
+      // through to the OpenAI-shaped top-level handler breaks Anthropic SDKs.
+      options.trace?.setOutcome('failed')
+      const status = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+        ? error.statusCode
+        : 500
+      const type = status === 404 ? 'not_found_error' : status >= 500 ? 'api_error' : 'invalid_request_error'
+      anthropicError(res, status, type, error?.message ?? error)
+      return
+    }
     if (result.error !== undefined) {
       failureReply(res, result, true, true)
       return

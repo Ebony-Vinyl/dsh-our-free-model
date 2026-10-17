@@ -24,6 +24,7 @@ import path from 'node:path'
 export const PICK_REPOS = Object.freeze([
   Object.freeze({ id: 'eac-desktop', repo: 'Ebony-Vinyl/EAC-Desktop' }),
   Object.freeze({ id: 'eac-pack', repo: 'Ebony-Vinyl/EAC-Pack' }),
+  Object.freeze({ id: 'eac-design-world', repo: 'Ebony-Vinyl/EAC-design-world' }),
 ])
 
 /**

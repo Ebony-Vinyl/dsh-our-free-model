@@ -43,6 +43,7 @@ function stubGitHub(answers) {
 const ANSWER = {
   'Ebony-Vinyl/EAC-Desktop': { stargazers_count: 2034, forks_count: 74, pushed_at: '2026-10-14T02:48:05Z' },
   'Ebony-Vinyl/EAC-Pack': { stargazers_count: 47, forks_count: 1, pushed_at: '2026-10-09T08:58:09Z' },
+  'Ebony-Vinyl/EAC-design-world': { stargazers_count: 7, forks_count: 0, pushed_at: '2026-10-17T06:58:22Z' },
 }
 
 await checkAsync('a good answer becomes the numbers the page shows', async () => {

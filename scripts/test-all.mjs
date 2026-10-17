@@ -53,6 +53,8 @@ const suites = [
   ['forward-boot', 'forward-boot-test.mjs', []],
   ['standalone', 'standalone-test.mjs', []],
   ['desktop', 'desktop-test.mjs', []],
+  ['standalone-desktop-regression', 'standalone-desktop-regression-test.mjs', []],
+  ['standalone-page-lifecycle', 'standalone-page-lifecycle-test.mjs', []],
   ['standalone-management', 'standalone-management-test.mjs', []],
   ['standalone-frontend', 'standalone-frontend-test.mjs', []],
   ['standalone-channels', 'standalone-channels-test.mjs', []],

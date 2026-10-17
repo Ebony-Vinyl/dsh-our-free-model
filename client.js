@@ -59,10 +59,25 @@ window.__ModuleLoader__.load({
         'tag.thinkingShared': '思考不可关',
         'tag.rung': '默认档上限',
         'tag.rungTitle': '各档位实际发出的输出上限：{ladder}。档位是思考与回答共用的额度，且不会超过上面的最长输出与设置里的单次上限。',
+        'tag.levels': '思考档',
+        'tag.levelsTitle': '该模型自己声明的思考档位，选中后按原值下发到上游的 reasoning_effort 字段；档位之外的取值会被上游拒绝。',
+        'effort.off': '关闭',
+        'effort.minimal': '最小',
+        'effort.low': '低',
+        'effort.medium': '中',
+        'effort.high': '高',
+        'effort.xhigh': '极高',
+        'effort.max': '最大',
         'tag.context': '上下文',
         'tag.output': '最长输出',
         'tag.latency': '首字',
         'tag.eacChannel': 'EAC 渠道 · 协付',
+        'tag.new': 'NEW',
+        'tag.newTitle': '新上线的模型，经 EAC 渠道转发自 OpenCode 免费车道。',
+        'tag.hot': '爆',
+        'tag.hotTitle': '当前最热门的免费模型之一。',
+        'tag.fast': '高速',
+        'tag.fastTitle': '响应快、吞吐高，适合长对话与连续调用。',
         'tag.kiloChannel': 'Kilo 渠道 · 免费池（prompt 可能被上游记录用于改进服务，勿发送敏感内容）',
         'roster.noLane': 'EAC 协付模型在当前运行环境不可用：宿主未提供可识别的桌面 / Web 配置，因此不加载该渠道。',
         'section.models': '模型清单',
@@ -221,6 +236,7 @@ window.__ModuleLoader__.load({
         'bench.result': '首帧 {ttft}ms · 输出 {tps} tok/s · 推理 {reasoning} tok',
         'ann.preamble': '前言',
         'ann.models': '模型清单',
+        'ann.newlane': '新模型上线',
         'ann.steps': '使用步骤',
         'ann.features': '功能介绍',
         'ann.later': '稍后再说',
@@ -228,7 +244,10 @@ window.__ModuleLoader__.load({
         'ann.openSettings': '打开设置页',
         'ann.p1': '免密：安装即可用，不需要注册、不需要填任何 API Key。',
         'ann.p2': '清单跟随上游：模型集合、上下文长度与能力每次刷新都重新拉取。',
-        'ann.p3': '诚实的能力声明：探测不出来的能力不会显示，思考强度档位是真实生效的输出预算上限。',
+        'ann.p3': '诚实的能力声明：探测不出来的能力不会显示，思考强度档位是真实生效的输出上限。',
+        'ann.n1': '两个新模型已通过 EAC 渠道上线，由 OpenCode 免费车道转发：DeepSeek V4.1 Flash Free 与 GLM 5.3 Flash Free。',
+        'ann.n2': '它们排在 EAC 模型页最前面，带红色 NEW / 爆 徽标和「高速」标签，一眼就能找到。',
+        'ann.n3': '两个模型都真实支持思考档位（低 / 高 / 最大），DeepSeek 还能关闭思考；档位直接下发到上游，不是提示词。',
         'ann.s1': '在输入框的模型选择器里选 “Our Free Model” 分组下的任意模型。',
         'ann.s2': '需要更强推理时点开 Effort 档位；它是真实下发的输出预算，不是提示词。',
         'ann.s3': '想被其它本地工具调用：设置页 → 本地转发 → 启用，把 Base URL 和 Key 填进去。',
@@ -321,6 +340,7 @@ window.__ModuleLoader__.load({
         'picks.liveFailed': '暂时读不到 GitHub 数据，数字稍后自动补上——不影响下面的链接。',
         'picks.getDesktop': '下载安装',
         'picks.getPack': '安装说明',
+        'picks.getDesign': '安装说明',
         'picks.star': '点个 Star',
         'picks.starHint': '在 GitHub 上打开并点 Star',
         'picks.desktop.badge': '桌面工作台',
@@ -337,6 +357,13 @@ window.__ModuleLoader__.load({
         'picks.pack.tag2': '批量安装 / 更新',
         'picks.pack.tag3': '皮肤预览',
         'picks.pack.tag4': '摘要校验',
+        'picks.design.badge': '设计工作台',
+        'picks.design.tagline': '在本地把视频和设计做完，不把素材交给别人。',
+        'picks.design.body': 'DeepSeek Harness 的本地视频制作与设计插件：多轨剪辑、模板与设计体系、原生预览画布，成品导出为真实文件。全流程在本机完成，素材与工程留在自己硬盘上。',
+        'picks.design.tag1': '多轨剪辑',
+        'picks.design.tag2': '模板与设计体系',
+        'picks.design.tag3': '原生预览画布',
+        'picks.design.tag4': '真实文件导出',
         'free.title': '免费模型',
         'free.sub': '免登录、免 Key、免配置：模型清单跟随上游刷新，可用性由这台机器实测。',
         'free.tankLabel': '免费车道可用度',
@@ -701,10 +728,25 @@ window.__ModuleLoader__.load({
         'tag.thinkingShared': 'Thinking always on',
         'tag.rung': 'Default ceiling',
         'tag.rungTitle': 'What each rung actually sends: {ladder}. A rung is one ceiling shared by thinking and the answer, and it never exceeds the max output above or the per-call ceiling in settings.',
+        'tag.levels': 'Thinking levels',
+        'tag.levelsTitle': 'The levels this model declares itself; the selected one is sent as-is in the upstream reasoning_effort field, and a value outside the set is rejected upstream.',
+        'effort.off': 'Off',
+        'effort.minimal': 'Minimal',
+        'effort.low': 'Low',
+        'effort.medium': 'Medium',
+        'effort.high': 'High',
+        'effort.xhigh': 'Extra high',
+        'effort.max': 'Max',
         'tag.context': 'Context',
         'tag.output': 'Max output',
         'tag.latency': 'First token',
         'tag.eacChannel': 'EAC lane · co-paid',
+        'tag.new': 'NEW',
+        'tag.newTitle': 'Just added: relayed to the EAC lane from OpenCode’s free tier.',
+        'tag.hot': '爆',
+        'tag.hotTitle': 'One of the most requested free models right now.',
+        'tag.fast': 'Fast',
+        'tag.fastTitle': 'Quick first token and high throughput — good for long or back-to-back turns.',
         'tag.kiloChannel': 'Kilo channel · free pool (prompts may be logged by the upstream provider — never send sensitive content)',
         'roster.noLane': 'The co-paid EAC models are unavailable in this composition: the host did not present a recognized desktop or web profile, so the lane is not loaded.',
         'section.models': 'Model roster',
@@ -863,6 +905,7 @@ window.__ModuleLoader__.load({
         'bench.result': 'first frame {ttft}ms · {tps} tok/s · {reasoning} reasoning tokens',
         'ann.preamble': 'Preamble',
         'ann.models': 'Model roster',
+        'ann.newlane': 'New models',
         'ann.steps': 'How to use',
         'ann.features': 'What it does',
         'ann.later': 'Later',
@@ -871,6 +914,9 @@ window.__ModuleLoader__.load({
         'ann.p1': 'No credentials: install and use it — no sign-up, no API key to paste.',
         'ann.p2': 'The roster follows upstream: models, context lengths and capabilities are re-fetched on every refresh.',
         'ann.p3': 'Honest capability claims: anything a probe cannot confirm stays hidden, and each effort level is a real output budget.',
+        'ann.n1': 'Two new models are live on the EAC lane, relayed from OpenCode’s free tier: DeepSeek V4.1 Flash Free and GLM 5.3 Flash Free.',
+        'ann.n2': 'They lead the EAC models page, marked with a red NEW / 爆 badge and a “Fast” tag.',
+        'ann.n3': 'Both expose real thinking levels (Low / High / Max), and DeepSeek can also switch thinking off; the level goes to the upstream as-is, not as a prompt hint.',
         'ann.s1': 'Pick any model under the “Our Free Model” group in the composer’s model selector.',
         'ann.s2': 'For harder reasoning, open the Effort menu — it sends a real budget, not a prompt hint.',
         'ann.s3': 'To serve other local tools: Settings → Local forward → enable, then copy the base URL and key.',
@@ -963,6 +1009,7 @@ window.__ModuleLoader__.load({
         'picks.liveFailed': 'GitHub numbers are unreachable right now; they will fill in later — the links below are unaffected.',
         'picks.getDesktop': 'Download',
         'picks.getPack': 'Install guide',
+        'picks.getDesign': 'Install guide',
         'picks.star': 'Star it',
         'picks.starHint': 'Open GitHub and star',
         'picks.desktop.badge': 'Desktop workbench',
@@ -979,6 +1026,13 @@ window.__ModuleLoader__.load({
         'picks.pack.tag2': 'Batch install / update',
         'picks.pack.tag3': 'Skin previews',
         'picks.pack.tag4': 'Digest verification',
+        'picks.design.badge': 'Design workbench',
+        'picks.design.tagline': 'Finish video and design work locally, without handing your footage to anyone.',
+        'picks.design.body': 'A local video-production and design plugin for DeepSeek Harness: multi-track editing, templates and a design system, a native preview canvas, and exports that are real files. The whole pipeline runs on this machine, so footage and projects stay on your own disk.',
+        'picks.design.tag1': 'Multi-track editing',
+        'picks.design.tag2': 'Templates & design system',
+        'picks.design.tag3': 'Native preview canvas',
+        'picks.design.tag4': 'Real file export',
         'free.title': 'Free models',
         'free.sub': 'No login, no key, no setup: the roster follows upstream, availability is measured from this machine.',
         'free.tankLabel': 'Free-lane availability',
@@ -1385,6 +1439,12 @@ window.__ModuleLoader__.load({
 .ofm_tags{display:flex;gap:5px;flex-wrap:wrap}
 .ofm_tag{font-size:10.5px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 70%,transparent);border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}
 .ofm_chantag{font-size:10px;font-weight:650;padding:2px 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-business-primary) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 9%,transparent);color:var(--dsw-alias-state-business-primary);white-space:nowrap}
+/* ══ 新品/热门徽标与高速标签（置顶的 opencode 免费模型） ═════════════════ */
+.ofm_newtag{flex:none;font-size:9.5px;font-weight:750;letter-spacing:.4px;padding:2px 7px;border-radius:999px;color:#fff;background:var(--dsw-alias-state-error-primary);box-shadow:0 1px 4px color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,transparent);white-space:nowrap;text-transform:uppercase}
+.ofm_hottag{flex:none;font-size:10px;font-weight:700;line-height:1;padding:2px 6px;border-radius:999px;color:#fff;background:var(--dsw-alias-state-error-primary);box-shadow:0 1px 4px color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,transparent);white-space:nowrap}
+.ofm_tag.fast{color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 10%,transparent);font-weight:650}
+.ofm_card.pinned{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 42%,var(--dsw-alias-border-l2));box-shadow:inset 0 1px 0 rgb(255 255 255 / 6%),0 2px 6px color-mix(in srgb,var(--dsw-alias-state-error-primary) 14%,transparent),0 6px 18px color-mix(in srgb,var(--dsw-alias-state-error-primary) 8%,transparent)}
+.ofm_card.pinned:hover{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 62%,var(--dsw-alias-border-l2))}
 .ofm_metrics{display:flex;gap:12px;font-size:11px;color:var(--dsw-alias-label-tertiary);flex-wrap:wrap}
 .ofm_metrics b{color:var(--dsw-alias-label-secondary);font-weight:600;font-variant-numeric:tabular-nums}
 .ofm_note{font-size:11px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
@@ -2737,21 +2797,41 @@ window.__ModuleLoader__.load({
       const stateKey = `state.${m.availability}`
       const dim = m.availability !== 'available'
       const rung = (m.budgets ?? []).find(row => row.isDefault === true)
-      return h('article', { className: 'ofm_card' + (dim ? ' dim' : '') },
+      // A model that declares its own thinking levels shows them beside the
+      // ceiling tag, so the card names what the composer's Effort menu offers.
+      // Each id is looked up with a literal call so the dictionary lint can see
+      // the key, and an id with no translation falls back to the id itself.
+      const levelName = id => id === 'disabled' || id === 'none' ? t('effort.off')
+        : id === 'minimal' ? t('effort.minimal')
+          : id === 'low' ? t('effort.low')
+            : id === 'medium' ? t('effort.medium')
+              : id === 'high' ? t('effort.high')
+                : id === 'xhigh' ? t('effort.xhigh')
+                  : id === 'max' ? t('effort.max') : id
+      const levels = Array.isArray(m.efforts) && m.efforts.length > 0
+        ? m.efforts.map(levelName).join(' / ')
+        : undefined
+      return h('article', { className: 'ofm_card' + (dim ? ' dim' : '') + (m.pinned === true ? ' pinned' : '') },
         h('div', { className: 'ofm_cardhead' },
           m.channel === 'eac' ? h('span', { className: 'ofm_chantag', title: t('tag.eacChannel') }, 'EAC') : null,
           m.channel === 'eac' && locked === true ? h('span', { className: 'ofm_chantag', title: t('eac.lockedTitle') }, '🔒') : null,
           m.channel === 'kilo' ? h('span', { className: 'ofm_chantag', title: t('tag.kiloChannel') }, 'Kilo') : null,
           h('span', { className: 'ofm_cardname', title: m.name }, m.name),
+          m.isNew === true ? h('span', { className: 'ofm_newtag', title: t('tag.newTitle') }, t('tag.new')) : null,
+          m.hot === true ? h('span', { className: 'ofm_hottag', title: t('tag.hotTitle') }, t('tag.hot')) : null,
           h('span', { className: 'ofm_badge ' + m.availability }, t(stateKey))),
-        h('div', { className: 'ofm_id', title: m.id }, m.id),
+        h('div', { className: 'ofm_id', title: m.id }, m.label ?? m.id),
         h('div', { className: 'ofm_tags' },
+          m.fast === true ? h('span', { className: 'ofm_tag fast', title: t('tag.fastTitle') }, t('tag.fast')) : null,
           h('span', { className: 'ofm_tag' }, m.vision ? t('tag.vision') : t('tag.text')),
           m.reasoning ? h('span', { className: 'ofm_tag' }, m.canDisableThinking === false ? t('tag.thinkingShared') : t('tag.thinking')) : null,
           h('span', { className: 'ofm_tag' }, `${t('tag.context')} ${kilo(m.contextWindow)}`),
           h('span', { className: 'ofm_tag' }, `${t('tag.output')} ${kilo(m.maxOutput)}`),
-          rung === undefined ? null : h('span', { className: 'ofm_tag', title: t('tag.rungTitle').replace('{ladder}', m.budgets.map(row => `${row.name} ${kilo(row.tokens)}`).join(' · ')) },
-            `${t('tag.rung')} ${kilo(rung.tokens)}`)),
+          rung === undefined ? null
+            : h('span', { className: 'ofm_tag', title: t('tag.rungTitle').replace('{ladder}', m.budgets.map(row => `${row.name} ${kilo(row.tokens)}`).join(' · ')) },
+              `${t('tag.rung')} ${kilo(rung.tokens)}`),
+          levels === undefined ? null
+            : h('span', { className: 'ofm_tag', title: t('tag.levelsTitle') }, `${t('tag.levels')} ${levels}`)),
         m.channel === 'eac' && locked === true
           ? h(Fragment, null,
             h('p', { className: 'ofm_note' }, t('eac.lockedNote')),
@@ -2780,8 +2860,12 @@ window.__ModuleLoader__.load({
       const roster = only === undefined ? summary.catalog
         : only === 'eac' ? summary.catalog.filter(m => m.channel === 'eac')
           : summary.catalog.filter(m => m.channel !== 'eac')
-      const available = roster.filter(m => m.route === 'our-free-model' || (only === 'eac' && m.channel === 'eac'))
-      const limited = roster.filter(m => m.route === 'our-free-model-region')
+      // Featured rows lead their group: the pinned flag rides the catalog row, so
+      // the order is the same on the EAC page and in the onboarding roster, and a
+      // row that is not featured keeps its upstream order.
+      const lead = list => [...list].sort((a, b) => (b.pinned === true ? 1 : 0) - (a.pinned === true ? 1 : 0))
+      const available = lead(roster.filter(m => m.route === 'our-free-model' || (only === 'eac' && m.channel === 'eac')))
+      const limited = lead(roster.filter(m => m.route === 'our-free-model-region'))
       // 只有拿到过明确判定（网关答过 /eac/status）且未授权时才上锁：状态未知
       // 不该显示一把凭空的锁，网关不可达时本地记录仍算已授权。
       const locked = auth !== undefined && auth.available === true && auth.authorized !== true
@@ -3045,7 +3129,7 @@ window.__ModuleLoader__.load({
         const current = ++attempt.current
         setBusy(true); setNotice('')
         try {
-          const started = await post('/eac/login/start', undefined, 20_000)
+          const started = await post('/eac/login/start', undefined, 30_000)
           if (current !== attempt.current) return
           if (started?.error !== undefined) { setNotice(t('eac.startFailed').replace('{reason}', started.error)); return }
           updatePending({ link: started.link, url: started.url, startedAt: Date.now() })
@@ -3093,7 +3177,7 @@ window.__ModuleLoader__.load({
               h('div', null, t('eac.waiting')),
               h(Button, { kind: 'ghost', disabled: busy, onClick: cancel }, t('eac.cancel')),
               h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-                h('code', { className: 'ofm_mono', style: { padding: '4px 8px', flex: 1, minWidth: 200, wordBreak: 'break-all' } }, pending.url),
+                h('a', { href: pending.url, target: '_blank', rel: 'noreferrer noopener', className: 'ofm_mono', style: { padding: '4px 8px', flex: 1, minWidth: 0, overflowWrap: 'anywhere' } }, pending.url),
                 h(Button, { kind: 'ghost', onClick: () => copy(pending.url, ok => { if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1600) } }) }, copied ? t('eac.copied') : t('eac.copy')))))
           : null,
         notice !== '' ? h('p', { className: 'ofm_note' }, notice) : null)
@@ -3655,9 +3739,11 @@ window.__ModuleLoader__.load({
     const RECO_LINKS = {
       desktop: { repo: 'https://github.com/Ebony-Vinyl/EAC-Desktop', extra: 'https://github.com/Ebony-Vinyl/EAC-Desktop/releases' },
       pack: { repo: 'https://github.com/Ebony-Vinyl/EAC-Pack', extra: 'https://github.com/Ebony-Vinyl/EAC-Pack#git-安装' },
+      designWorld: { repo: 'https://github.com/Ebony-Vinyl/EAC-design-world', extra: 'https://github.com/Ebony-Vinyl/EAC-design-world#安装' },
     }
     const RECO_DESKTOP_MARK = 'M1.4 3.1h13.2a.7.7 0 01.7.7v6a.7.7 0 01-.7.7H1.4a.7.7 0 01-.7-.7v-6a.7.7 0 01.7-.7zM5.6 12h4.8v1.4H5.6z'
     const RECO_PACK_MARK = 'M8 1.2l6.3 3.2L8 7.6 1.7 4.4 8 1.2zM12.9 7.3l1.4.7L8 11.2 1.7 8l1.4-.7L8 9.8l4.9-2.5zM12.9 10.6l1.4.7L8 14.5 1.7 11.3l1.4-.7L8 13.1l4.9-2.5z'
+    const RECO_DESIGN_MARK = 'M2.6 1.6h7.1l3.7 3.7v7.1a2 2 0 01-2 2H2.6a2 2 0 01-2-2V3.6a2 2 0 012-2zm.9 1.9v7.6h9V6.1h-2.5a1 1 0 01-1-1V3.5H3.5zm8.7 2.1h.6v-1.4l-.6-.6v2zM4.2 7.1h7.6a.7.7 0 010 1.4H4.2a.7.7 0 010-1.4zm0 3h5.2a.7.7 0 010 1.4H4.2a.7.7 0 010-1.4z'
     const RECO_EXT_MARK = 'M3.75 2A1.75 1.75 0 002 3.75v8.5C2 13.216 2.784 14 3.75 14h8.5A1.75 1.75 0 0014 12.25v-4.5a.75.75 0 00-1.5 0v4.5a.25.25 0 01-.25.25h-8.5a.25.25 0 01-.25-.25v-8.5a.25.25 0 01.25-.25h4.5a.75.75 0 000-1.5h-4.5zM9.5 2a.75.75 0 000 1.5h2.19L7.22 7.97a.75.75 0 101.06 1.06l4.47-4.47v2.19a.75.75 0 001.5 0v-4a.75.75 0 00-.75-.75h-4z'
 
     /** 2,034 — a star count is read, not computed, so it keeps its separators. */
@@ -3778,6 +3864,15 @@ window.__ModuleLoader__.load({
             body: t('picks.pack.body'),
             chips: [t('picks.pack.tag1'), t('picks.pack.tag2'), t('picks.pack.tag3'), t('picks.pack.tag4')],
             repoUrl: RECO_LINKS.pack.repo, extraUrl: RECO_LINKS.pack.extra, extraLabel: t('picks.getPack'),
+          }),
+          h(RecoCard, {
+            t, index: 2, stat: statOf('eac-design-world'), mark: RECO_DESIGN_MARK,
+            name: 'EAC-design-world', repo: 'Ebony-Vinyl/EAC-design-world',
+            badge: t('picks.design.badge'),
+            tagline: t('picks.design.tagline'),
+            body: t('picks.design.body'),
+            chips: [t('picks.design.tag1'), t('picks.design.tag2'), t('picks.design.tag3'), t('picks.design.tag4')],
+            repoUrl: RECO_LINKS.designWorld.repo, extraUrl: RECO_LINKS.designWorld.extra, extraLabel: t('picks.getDesign'),
           })),
         picks.status === 'error' ? h('p', { className: 'ofm_reconote' }, t('picks.liveFailed')) : null,
         h('p', { className: 'ofm_reconote' }, t('picks.foot')))
@@ -5992,7 +6087,7 @@ window.__ModuleLoader__.load({
     }
 
     // ── announcement ──────────────────────────────────────────────────────────
-    const PAGES = ['ann.preamble', 'ann.models', 'ann.steps', 'ann.features', 'ann.updates']
+    const PAGES = ['ann.preamble', 'ann.newlane', 'ann.models', 'ann.steps', 'ann.features', 'ann.updates']
 
     function announcementPortalHost() {
       let host = document.querySelector('[data-ofm-announcement-root]')
@@ -6048,7 +6143,10 @@ window.__ModuleLoader__.load({
         h('h3', null, t('ann.preamble')),
         h('p', null, t('ann.pitch')),
         h('ul', null, list(t, ['ann.p1', 'ann.p2', 'ann.p3'])))
-      if (page === 1) {
+      if (page === 1) return h(Fragment, null,
+        h('h3', null, t('ann.newlane')),
+        h('ul', null, list(t, ['ann.n1', 'ann.n2', 'ann.n3'])))
+      if (page === 2) {
         // Advertised models first: this page is the tour a new user reads before
         // they pick anything, and a refused id at the top of it is a bad first
         // impression of a lane that is actually working.
@@ -6061,10 +6159,10 @@ window.__ModuleLoader__.load({
             h('span', null, `${t(`state.${m.availability}`)} · ${m.vision ? t('tag.vision') : t('tag.text')} · ${kilo(m.contextWindow)}`)))),
           rows.some(m => m.availability === 'region-blocked') ? h('p', { className: 'ofm_note' }, t('hint.region')) : null)
       }
-      if (page === 2) return h(Fragment, null,
+      if (page === 3) return h(Fragment, null,
         h('h3', null, t('ann.steps')),
         h('ul', null, list(t, ['ann.s1', 'ann.s2', 'ann.s3', 'ann.s4'])))
-      if (page === 3) return h(Fragment, null,
+      if (page === 4) return h(Fragment, null,
         h('h3', null, t('ann.features')),
         h('ul', null, list(t, ['ann.f1', 'ann.f2', 'ann.f3', 'ann.f4', 'ann.f5'])))
       return h(Fragment, null,

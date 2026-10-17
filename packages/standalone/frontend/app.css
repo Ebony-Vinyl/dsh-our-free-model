@@ -125,7 +125,7 @@ main { flex: 1; min-width: 0; }
 .console-breadcrumb strong { font-weight: 500; color: var(--ink-soft); }
 .console-topbar-status { font-size: 11px; }
 .topbar-divider { height: 13px; width: 1px; background: var(--line); margin: 0 4px; }
-.page { max-width: 1440px; margin: 0 auto; padding: 30px 32px; }
+.page { width: 100%; min-width: 0; max-width: 1440px; margin: 0 auto; padding: 30px 32px; }
 .dashboard-heading, .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 25px; }
 .heading-eyebrow, .eyebrow { display: block; color: var(--dsw-alias-label-tertiary); font-size: 10px; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 .dashboard-heading p, .page-heading p { font-size: 13px; margin-top: 7px; }
@@ -236,6 +236,11 @@ main { flex: 1; min-width: 0; }
 .provider-detail-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 23px; }
 .provider-detail-sidebar { background: transparent; border: 0; border-right: 1px solid var(--line); border-radius: 0; padding: 0 20px 0 0; }
 .provider-detail-sidebar p { font-size: 11px; margin: 3px 0 25px; }
+.ofm_root .ui-card.provider-detail-sidebar { padding: 18px !important; align-self: start; }
+.ofm_root .provider-detail-sidebar h2:focus { outline: none !important; box-shadow: none !important; }
+@media (min-width: 951px) and (max-width: 1100px) {
+  .provider-detail-layout { grid-template-columns: 170px minmax(0, 1fr); gap: 16px; }
+}
 .detail-label { font-size: 10px; color: #8b93a0; margin-bottom: 9px; }
 .detail-provider-link { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; border: 0; background: transparent; border-radius: 5px; padding: 8px; margin: 2px 0; font-size: 11px; color: var(--dsw-alias-label-secondary); transition: background 150ms var(--ease-out-expo), color 150ms var(--ease-out-expo); }
 .detail-provider-link.active { background: var(--accent-soft); color: var(--green); }
@@ -244,6 +249,10 @@ main { flex: 1; min-width: 0; }
 .provider-detail-description p { font-size: 12px; margin: 5px 0 17px; }
 .detail-security-note { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; color: #7b8593; margin-top: 17px; }
 .ofm_root { font-family: inherit; color: var(--ink); }
+#channel-root { gap: 16px; }
+.ofm_root > .dashboard-heading { margin-bottom: 0; }
+.ofm_root > .channel-summary-strip { margin-bottom: 0; padding: 14px 0; }
+.ofm_root > .provider-detail { margin-top: 0; }
 .ofm_root * { letter-spacing: 0 !important; }
 .ofm_root .ofm_seg { display: flex; flex-wrap: wrap; gap: 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; padding: 0; margin: 0; }
 .ofm_root .ofm_seg button { background: none; color: var(--dsw-alias-label-secondary); border: 0; border-radius: 0; padding: 10px 0 12px; font-size: 12px; }
@@ -863,7 +872,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2ede4; borde
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background: radial-gradient(120% 90% at 50% 40%, transparent 58%, rgba(4, 5, 8, 0.42) 100%);
 }
-[data-theme="dark"] .sidebar, [data-theme="dark"] .topbar, [data-theme="dark"] main, [data-theme="dark"] .app-shell > * { position: relative; z-index: 1; }
+/* 侧边栏吸附靠基础层的 position: sticky（z-index 也已由基础层给到 1）。
+   这里绝不能给侧边栏补 position，否则它会退回 relative，跟着主界面一起滚走。 */
+[data-theme="dark"] .topbar, [data-theme="dark"] main, [data-theme="dark"] .app-shell > *:not(.sidebar) { position: relative; z-index: 1; }
 [data-theme="dark"] ::selection { background: rgba(0, 208, 192, 0.24); color: #eafffd; }
 
 /* ---------- 侧边栏深色 ---------- */
@@ -1458,6 +1469,33 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2ede4; borde
 /* ---------- 主题切换过渡（避免生硬闪变） ---------- */
 body, .app-shell, .sidebar, .topbar, .ui-card, .login-card, .login-shell, .loading-screen {
   transition: background-color 300ms var(--ease-out-expo), color 300ms var(--ease-out-expo), border-color 300ms var(--ease-out-expo);
+}
+
+/* ---------- 主题切换：从按钮位置向四周扩散 ----------
+   由 shell.tsx 的 toggle 调 startViewTransition 驱动；这里只描述"新主题"如何盖住旧主题。
+   扩散圆心取 --theme-reveal-x/y（按钮中心，视口坐标），半径取到视口最远角。
+   不支持 View Transition 的宿主（或 prefers-reduced-motion）由 JS 直接切换，看不到这一段。 */
+::view-transition-old(root) {
+  animation: none;
+  /* 旧主题保持不动，等新主题的圆盘扫过来 */
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-reveal-in 560ms var(--ease-out-expo) both;
+}
+/* 关掉 root 分组自带的缩放/淡入，只留上面这一条扩散 */
+::view-transition-group(root) { animation: none; }
+@keyframes theme-reveal-in {
+  from { clip-path: circle(0 at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%)); }
+  to { clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%)); }
+}
+/* 扩散进行中：暂停 300ms 的底色过渡，避免新主题快照抓到"过渡中间色" */
+.theme-transitioning, .theme-transitioning * {
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }
 
 /* ---------- Spinner（旋转指示器，只动 transform） ---------- */

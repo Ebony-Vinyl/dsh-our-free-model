@@ -114,19 +114,19 @@ check('a repo whose numbers never arrived still renders its card', () => {
   assert.equal(withClass(tree, 'ofm_recostar').length, 1)
 })
 
-check('the page renders both projects and the ask', () => {
+check('the page renders all three projects and the ask', () => {
   const tree = PicksPage({ t: zh })
-  assert.equal(withClass(tree, 'ofm_recocard').length, 2)
-  assert.equal(withClass(tree, 'ofm_recostar').length, 2)
+  assert.equal(withClass(tree, 'ofm_recocard').length, 3)
+  assert.equal(withClass(tree, 'ofm_recostar').length, 3)
   const hrefs = withClass(tree, 'ofm_recostar').map(node => node.props.href)
-  assert.deepEqual(hrefs, ['https://github.com/Ebony-Vinyl/EAC-Desktop', 'https://github.com/Ebony-Vinyl/EAC-Pack'])
+  assert.deepEqual(hrefs, ['https://github.com/Ebony-Vinyl/EAC-Desktop', 'https://github.com/Ebony-Vinyl/EAC-Pack', 'https://github.com/Ebony-Vinyl/EAC-design-world'])
   assert.equal(text(tree).includes('picks.foot'), true)
 })
 
-check('the two projects are the ones the announcement names', () => {
+check('the three projects are the ones the announcement names', () => {
   const tree = PicksPage({ t: zh })
   const page = text(tree)
-  for (const name of ['EAC-Desktop', 'EAC-Pack']) assert.equal(page.includes(name), true, `${name} is on the page`)
+  for (const name of ['EAC-Desktop', 'EAC-Pack', 'EAC-design-world']) assert.equal(page.includes(name), true, `${name} is on the page`)
 })
 
 // The announcement is the only thing that tells users the page exists, and it is
@@ -148,11 +148,12 @@ check('the shipped announcement links both projects through the sanitizer', () =
     for (const child of node.children ?? []) walk(child)
   }
   for (const node of parseSafeHtml(item.html)) walk(node)
-  for (const repo of ['https://github.com/Ebony-Vinyl/EAC-Desktop', 'https://github.com/Ebony-Vinyl/EAC-Pack']) {    assert.equal(hrefs.includes(repo), true, `${repo} is linked`)
+  for (const repo of ['https://github.com/Ebony-Vinyl/EAC-Desktop', 'https://github.com/Ebony-Vinyl/EAC-Pack', 'https://github.com/Ebony-Vinyl/EAC-design-world']) {
+    assert.equal(hrefs.includes(repo), true, `${repo} is linked`)
   }
   const body = words.join(' ')
-  for (const name of ['EAC-Desktop', 'EAC-Pack']) assert.equal(body.includes(name), true, `${name} is named`)
+  for (const name of ['EAC-Desktop', 'EAC-Pack', 'EAC-design-world']) assert.equal(body.includes(name), true, `${name} is named`)
 })
 
-console.log(failures === 0 ? '\npicks-ui: two cards, two working asks' : `\n${failures} check(s) failed`)
+console.log(failures === 0 ? '\npicks-ui: three cards, three working asks' : `\n${failures} check(s) failed`)
 process.exitCode = failures === 0 ? 0 : 1

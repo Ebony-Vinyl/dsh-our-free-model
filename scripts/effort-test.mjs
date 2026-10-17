@@ -27,7 +27,7 @@ const check = (name, actual, expected) => {
  */
 const stub = await stubUpstream({ listing: ['mimo-v2.6-flash-free'], answer: () => ({ body: chatFrames('done') }) })
 process.env.OUR_FREE_MODEL_BASE = stub.base
-const { MIN_BUDGET, budgetFor, budgetLadder, resolveLevel } = await import('../src/effort.js')
+const { MIN_BUDGET, budgetFor, budgetLadder, effortPatchFor, resolveLevel } = await import('../src/effort.js')
 const { buildCatalog } = await import('../src/catalog.js')
 const { FreeModelAdapter, ROUTE_MAIN } = await import('../src/adapter.js')
 
@@ -102,6 +102,46 @@ await sentBudget({ reasoningEffort: 'light' })
 check('a named rung is recorded as itself', records.at(-1).effort, 'light')
 await sentBudget({ reasoningEffort: 'turbo' })
 check('a rung the plugin does not declare is recorded as the default it became', records.at(-1).effort, 'balanced')
+
+// ── the free lane's own ids that declare a real level menu ───────────────────
+// Re-probed 2026-10-17: the gateway now validates `reasoning_effort` and the
+// level moves the reasoning volume, so the ids that publish a level set carry
+// it on the wire instead of the token ladder — the same shape the absorbed
+// channels use. A model with no declared set keeps the ladder untouched.
+const DS = catalog('deepseek-v4.1-flash-free')
+const GLM = catalog('glm-5.3-flash-free')
+check('the served capacity is the measured 1M window, not the published floor', DS.contextWindow, 1048576)
+check('and the same for glm', GLM.contextWindow, 1048576)
+check('deepseek declares its own level menu', DS.efforts, ['disabled', 'low', 'high', 'max'])
+check('glm declares only the levels it honours — no Off rung', GLM.efforts, ['low', 'high', 'max'])
+check('glm therefore cannot be told to stop thinking', GLM.canDisableThinking, false)
+check('a declared level goes on the wire as reasoning_effort',
+  effortPatchFor('max', DS), { reasoning_effort: 'max' })
+check('the off rung maps to the wire value that switches thinking off',
+  effortPatchFor('disabled', DS), { reasoning_effort: 'none' })
+// A menu model's level is the wire control, so its ceiling is the capacity —
+// bounded here only by the plugin default the test passes in (32768), never by
+// a ladder rung (which would have cut it to 2048/8192).
+check('a menu model is not cut to a ladder rung', budgetFor('low', DS, undefined, DEFAULTS), DEFAULTS)
+check('and with no fallback it spends the whole measured capacity', budgetFor('low', DS, undefined, undefined), 384000)
+
+{
+  const records2 = []
+  const adapter2 = new FreeModelAdapter({
+    state: () => ({ catalog: [DS], membership: { [ROUTE_MAIN]: [DS.id] }, settings: { enabled: true, defaultMaxTokens: DEFAULTS }, attributionUserAgent: 'test/1.0' }),
+    recordUsage: record => records2.push(record),
+    warn: () => {},
+  })
+  const sent = async options => {
+    const before = stub.requests.length
+    for await (const chunk of adapter2.stream({ provider: ROUTE_MAIN, model: DS.id, messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }], ...options })) void chunk
+    return stub.requests[before].body
+  }
+  check('the selected level rides the request body', (await sent({ reasoningEffort: 'high' })).reasoning_effort, 'high')
+  check('and the recorded effort is that same level', records2.at(-1).effort, 'high')
+  check('the off level sends the wire value, not the word disabled',
+    (await sent({ reasoningEffort: 'disabled' })).reasoning_effort, 'none')
+}
 
 // ── DSML leak scrubbing ──────────────────────────────────────────────────────
 // DeepSeek v4 models sometimes stream their internal control markup as visible

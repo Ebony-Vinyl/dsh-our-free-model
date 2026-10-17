@@ -31,12 +31,35 @@ import crypto from 'node:crypto'
 
 const REPO = 'Ebony-Vinyl/dsh-our-free-model'
 
+/**
+ * A GitHub raw proxy. On networks where `raw.githubusercontent.com` and
+ * `cdn.jsdelivr.net` are slow or intermittently unreachable (measured
+ * 2026-10-17 from a mainland-CN link: raw took 16.6 s and frequently timed out
+ * against the 15 s budget, jsDelivr answered in ~11 s but also dropped runs),
+ * this proxy answered the same bytes in ~1.3 s. It is a *transport* for the
+ * same `raw.githubusercontent.com` path, so the snapshot resolver can pin it to
+ * a full commit exactly like the direct origin — the proxy never becomes a
+ * mutable-branch install source.
+ *
+ * The proxy is only ever asked for an immutable commit-SHA path (see
+ * {@link snapshotManifestSource}); a mirror that answered a different commit's
+ * bytes would fail the manifest signature and the per-file SHA-256 checks, so
+ * it is untrusted by construction, the same as every other mirror.
+ */
+const RAW_PROXY = 'https://gh-proxy.com'
+
+/** Wrap a raw.githubusercontent.com URL in the proxy, keeping the inner URL intact. */
+function viaRawProxy(inner) {
+  return `${RAW_PROXY}/https://raw.githubusercontent.com/${inner}`
+}
+
 /** Discovery locations, in preference order. Official mutable refs are resolved
  *  to a full commit before fetching either the manifest or its files. Mirrors
  *  remain untrusted: only the existing Ed25519 signature authorizes content. */
 export const DEFAULT_MANIFEST_SOURCES = [
   `https://raw.githubusercontent.com/${REPO}/main/feed/manifest.json`,
   `https://cdn.jsdelivr.net/gh/${REPO}@main/feed/manifest.json`,
+  viaRawProxy(`${REPO}/main/feed/manifest.json`),
   `https://raw.githubusercontent.com/${REPO}/master/feed/manifest.json`,
 ]
 
@@ -244,8 +267,14 @@ async function snapshotManifestSource(source, fetchImpl, signal, revisions) {
   if (url.protocol !== 'https:' || url.port || url.username || url.password) return source
   const rawPrefix = `/${REPO}/`
   const cdnPrefix = `/gh/${REPO}@`
+  // The raw proxy wraps a raw.githubusercontent.com URL after its own origin, so
+  // its path is `/https://raw.githubusercontent.com/<REPO>/<ref>/feed/…`. It is
+  // recognized as a transport for the raw origin and pinned to the same commit
+  // as the direct source — never left as a mutable branch.
+  const proxiedRawPrefix = `/https://raw.githubusercontent.com/${REPO}/`
   const prefix = url.hostname === 'raw.githubusercontent.com' ? rawPrefix
-    : url.hostname === 'cdn.jsdelivr.net' ? cdnPrefix : null
+    : url.hostname === 'cdn.jsdelivr.net' ? cdnPrefix
+      : url.hostname === 'gh-proxy.com' ? proxiedRawPrefix : null
   if (prefix === null || !url.pathname.startsWith(prefix)) return source
   const match = /^([^/]+)\/feed\/manifest\.json$/.exec(url.pathname.slice(prefix.length))
   if (match === null) return source

@@ -14,12 +14,38 @@
 import { baseModelId, isResponsesModel } from './upstream.js'
 
 /** Ids that are free-tier without carrying the `-free` suffix. */
-const ALWAYS_FREE = new Set(['union-alpha', 'space-bunny-free'])
+/** Free-tier ids the listing does not mark with a `-free` suffix. `big-pickle`
+ *  is the lane's own long-standing free id (9router keeps the same id in its
+ *  `KNOWN_FREE_OPENCODE_MODELS` for exactly this reason); models.dev prices it
+ *  at 0/0. */
+const ALWAYS_FREE = new Set(['union-alpha', 'space-bunny-free', 'big-pickle'])
 
 /**
  * Local capability baseline. `contextWindow`/`maxOutput` are the provider's
  * published capacities; `vision` is what this lane actually accepted under a
  * direct image-input probe, not what a model card claims.
+ *
+ * ## The free lane declares real thinking levels (2026-10-17)
+ *
+ * The lane's own probe on 2026-09-24 concluded that `reasoning_effort` was
+ * ignored here, so thinking strength was built as an output-token ladder
+ * instead (see {@link module:src/effort.js}). A re-probe on 2026-10-17 found
+ * that conclusion no longer holds: the gateway now **validates** the field
+ * (an undeclared value answers `400 invalid_value` with the accepted set, e.g.
+ * `none|minimal|low|medium|high|xhigh|max`) and the level measurably moves the
+ * reasoning volume — on `deepseek-v4.1-flash-free`, medians over three samples
+ * ran none 0, low 793, high 700, xhigh 1405, max 1906.
+ *
+ * So an entry that declares `efforts` carries the model's own level menu and
+ * its level rides the wire as `reasoning_effort`, exactly like the absorbed
+ * channels — `effortPatch` uses `$effort` as the selected level's placeholder,
+ * and `effortOffPatch` replaces it for the off rung. The declared set is the
+ * model's own contract (models.dev's `reasoning_options`); a level outside it
+ * would be a value the upstream may reject, so it is not offered.
+ *
+ * An entry with no `efforts` keeps the free lane's token-budget ladder: its
+ * reasoning cannot be levelled on the wire, and a rung that only cut the answer
+ * would be a control the model never promised to honour.
  */
 export const CAPABILITIES = [
   { match: /^mimo.*v2\.6/, vision: true, reasoning: true, contextWindow: 1048576, maxOutput: 131072, canDisableThinking: false },
@@ -33,6 +59,88 @@ export const CAPABILITIES = [
   { match: /^deepseek/, vision: false, reasoning: true, contextWindow: 128000, maxOutput: 64000 },
   { match: /^jev/, vision: false, reasoning: false, contextWindow: 32768, maxOutput: 4096 },
 ]
+
+/**
+ * Per-id overrides for the ids the lane actually serves today, where the family
+ * pattern above would mis-state the model. Keyed by exact base id, consulted
+ * before {@link CAPABILITIES}, so a pattern can stay the family-wide default.
+ *
+ * ## Where these numbers come from (the 9router / models.dev convention)
+ *
+ * The gateway's listing discloses an id and nothing else, and this lane's own
+ * probes are expensive and rate-limited. 9router answers the same question by
+ * reading models.dev's `opencode` entry for every id it serves — the same
+ * source the official CLI uses (`packages/core/src/models-dev.ts`) — and so
+ * does this plugin's channel-pack side (`vendor/channel-pack/src/
+ * opencode-capability.ts`). This table adopts that convention for the free
+ * lane's own catalog: `modalities.input` gives `vision`, `limit.context` /
+ * `limit.output` give the window and output ceiling, and `reasoning_options`
+ * gives the thinking menu.
+ *
+ * ### The level menu is the declared `effort.values`, and only that
+ *
+ * 9router's `thinkingLevels.js` derives its picker from `reasoning_options`
+ * the same way, and its `normalizeEfforts` (channel-pack) is explicit that
+ * only `type:'effort'` produces levels — `toggle` and `budget_tokens` produce
+ * **none**, because the wire's one expression is `reasoning_effort` and a
+ * fabricated rung is a value the upstream may reject (it **validates** the
+ * field: an undeclared value answers `400 invalid_value` naming the accepted
+ * set). So a `toggle`-only model declares no menu here and keeps the free
+ * lane's token ladder; a `budget_tokens` model does the same.
+ *
+ * ### Where this table departs from models.dev, and why
+ *
+ * - `contextWindow`: models.dev publishes `200000` for the `-free` ids, but
+ *   the same upstream accepted a ~1M-token prompt on `deepseek-v4.1-flash-free`
+ *   (1025229 prompt tokens, 200) and on `glm-5.3-flash-free` (900694, 200), so
+ *   the published figure is a floor, not the wire's limit. The served window
+ *   is used, matching what `deepseek-v4.1-flash` (the paid id) publishes.
+ * - `disabled` rung: offered only where the model's own `effort.values`
+ *   includes `none`. GLM 5.3 Flash does not list `none`, and four samples at
+ *   `none` still spent a median 552 reasoning tokens — an Off rung there would
+ *   be a control the model does not honour.
+ * - `space-bunny-free` declares `low…max` with no `none`; a `none` request is
+ *   rejected outright, so its menu has no Off rung either.
+ * - `vision` for `longcat-2.5-preview-free` follows the channel-pack's
+ *   measured override (models.dev lists `image`, but an image request 500s).
+ */
+const FREE_ID_OVERRIDES = {
+  // models.dev: effort low|high|max; limit 200000/32000 (floor — see above).
+  'deepseek-v4.1-flash-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 384000,
+    efforts: ['disabled', 'low', 'high', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+    effortOffPatch: { reasoning_effort: 'none' },
+  },
+  // models.dev: effort low|high|max. No `none` in the set, and thinking does
+  // not switch off in practice, so the menu starts at low.
+  'glm-5.3-flash-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 131072,
+    efforts: ['low', 'high', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: effort none|minimal|low|medium|high|xhigh; 1M window.
+  'nemotron-3.5-super-vl-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 131072,
+    efforts: ['disabled', 'minimal', 'low', 'medium', 'high', 'xhigh'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+    effortOffPatch: { reasoning_effort: 'none' },
+  },
+  // models.dev: effort low|medium|high|xhigh|max; 1M window, 524288 output.
+  'space-bunny-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 524288,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: 1M window, 131072 output, reasoning_options `toggle` only →
+  // no level menu, so the free lane's token ladder applies.
+  'longcat-2.5-preview-free': {
+    vision: false, contextWindow: 1048576, maxOutput: 131072,
+  },
+  // models.dev: 200000/32000, no reasoning_options. The lane accepted a
+  // 265360-token prompt, so the window is the served one.
+  'big-pickle': { vision: true, contextWindow: 262144, maxOutput: 131072 },
+}
 
 /** Human-facing display names, so a raw upstream id never reaches the picker. */
 const DISPLAY_NAMES = {
@@ -64,9 +172,12 @@ export function isFreeLane(modelId) {
   return /(?:^|[-_])free(?:$|[-_.])/.test(base)
 }
 
-/** Look up the baseline capacities for one model id. */
+/** Look up the baseline capacities for one model id. An exact id override for a
+ *  model the lane serves today wins over the family-wide pattern. */
 export function capabilitiesFor(modelId) {
   const base = baseModelId(modelId)
+  const override = FREE_ID_OVERRIDES[base]
+  if (override !== undefined) return { reasoning: true, ...override }
   for (const entry of CAPABILITIES) if (entry.match.test(base)) return entry
   return { vision: false, reasoning: true, contextWindow: 131072, maxOutput: 32768 }
 }
@@ -115,8 +226,19 @@ export function buildCatalog(ids) {
       reasoning: caps.reasoning !== false,
       contextWindow: number(caps.contextWindow) ?? 131072,
       maxOutput: number(caps.maxOutput) ?? 32768,
-      canDisableThinking: caps.canDisableThinking !== false,
+      canDisableThinking: Array.isArray(caps.efforts)
+        ? caps.efforts.includes('disabled')
+        : caps.canDisableThinking !== false,
       regionSensitive: isRegionSensitive(base),
+      // A model that declares its own thinking menu carries it end to end, the
+      // same shape the absorbed channels use: the level is the real control on
+      // the wire. Without a menu the free lane's token-budget ladder applies.
+      ...Array.isArray(caps.efforts) ? {
+        efforts: [...caps.efforts],
+        effortDefault: caps.effortDefault,
+        ...caps.effortPatch === undefined ? {} : { effortPatch: caps.effortPatch },
+        ...caps.effortOffPatch === undefined ? {} : { effortOffPatch: caps.effortOffPatch },
+      } : {},
     })
   }
   return entries
@@ -144,6 +266,10 @@ export const EAC_CHANNEL = 'eac'
 export const EAC_TAG = 'EAC'
 
 const EAC_DISPLAY_NAMES = {
+  // The OpenCode free lane is relayed server-side; the org prefix is routing
+  // detail, so the picker shows the model's own name with the lane's Free mark.
+  'opencode/deepseek-v4.1-flash-free': 'DeepSeek V4.1 Flash Free',
+  'opencode/glm-5.3-flash-free': 'GLM 5.3 Flash Free',
   'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
   'moonshotai/kimi-k2.6': 'Kimi K2.6',
   'moonshotai/kimi-k3': 'Kimi K3',
@@ -173,6 +299,28 @@ const EAC_DISPLAY_NAMES = {
  * fall back to the family-standard `reasoning_effort` field.
  */
 const EAC_CAPABILITIES = [
+  // The OpenCode free lane. models.dev declares reasoning_options
+  // [{type:"effort", values:["low","high","max"]}] for both ids, and the upstream
+  // answers on its OpenAI wire, so the selected level rides `reasoning_effort`
+  // verbatim. `disabled` maps to the upstream's own off value ("none"), which
+  // zeroes the reasoning tokens — a level that is enforced, not a hint.
+  // Capacities are the underlying model's own, not the free listing's rounded
+  // floor: both are the same model the canonical entries below describe, so the
+  // numbers are copied from them (1M window; 384K / 131K output) and were
+  // re-checked against the upstream, which accepts max_tokens up to 384000.
+  {
+    match: /^opencode\/deepseek-v4/,
+    vision: true, reasoning: true, contextWindow: 1048576, maxOutput: 384000,
+    efforts: ['disabled', 'low', 'high', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+    effortOffPatch: { reasoning_effort: 'none' },
+  },
+  {
+    match: /^opencode\/glm-5\.3-flash/,
+    vision: true, reasoning: true, contextWindow: 1048576, maxOutput: 131072,
+    efforts: ['low', 'high', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
   {
     match: /^deepseek-ai\/deepseek-v4/,
     vision: true, reasoning: true, contextWindow: 1048576, maxOutput: 384000,
@@ -212,6 +360,15 @@ const EAC_CAPABILITIES = [
   },
 ]
 
+/**
+ * Ids the EAC page leads with. The two OpenCode free models are pinned to the
+ * top of their group and carry the NEW / 爆 badges and the 高速 tag.
+ */
+const EAC_FEATURED = new Set([
+  'opencode/deepseek-v4.1-flash-free',
+  'opencode/glm-5.3-flash-free',
+])
+
 /** `org/model` → the model's own name under the channel tag. */
 export function eacDisplayName(modelId) {
   const base = String(modelId ?? '').trim()
@@ -248,6 +405,11 @@ export function buildEacCatalog(ids) {
     entries.push({
       id,
       name: eacDisplayName(id),
+      // The card's small line under the name. The `id` keeps its `org/` prefix —
+      // that is what keeps this row distinct from the free lane's same-named
+      // model during the merge — but the prefix is routing detail, so the line
+      // shows the model's own id.
+      label: id.includes('/') ? id.slice(id.indexOf('/') + 1) : id,
       channel: EAC_CHANNEL,
       wire: 'chat',
       vision: caps.vision === true,
@@ -256,6 +418,9 @@ export function buildEacCatalog(ids) {
       maxOutput: number(caps.maxOutput) ?? 32768,
       canDisableThinking: Array.isArray(caps.efforts) ? caps.efforts.includes('disabled') : false,
       regionSensitive: false,
+      // Featured rows sort to the top of the EAC page and carry the marks the
+      // client renders; the fields are additive, so every other row is untouched.
+      ...EAC_FEATURED.has(id) ? { pinned: true, isNew: true, hot: true, fast: true } : {},
       // The model's declared thinking menu, copied from ZCode's built-in config.
       ...Array.isArray(caps.efforts) ? { efforts: [...caps.efforts], effortDefault: caps.effortDefault } : {},
       ...caps.effortPatch === undefined ? {} : { effortPatch: caps.effortPatch },

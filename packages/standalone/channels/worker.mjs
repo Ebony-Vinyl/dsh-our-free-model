@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { createCredentials } from './credentials.mjs'
 import { attachments } from './images.mjs'
+import { toChatMessages, toToolDefs } from '../../../src/messages.js'
 import {
   apply, toGenerateOptions, toResponsesGenerateOptions, normalizeReasoningEffort,
   responsesReasoningEffort, normalizeMaxTokens, responsesMaxOutputTokens, markGatewayChannel,
@@ -89,13 +90,28 @@ async function rpc(call, signal) {
   return reply.result
 }
 
+/**
+ * Project the Anthropic/harness request shape onto the OpenAI body the channel
+ * adapters parse. `/v1/messages` hands over harness messages and flat tools,
+ * not an `openAi` body; without this the adapter rejects the turn for having no
+ * messages and silently loses tools, max_tokens and temperature.
+ */
+function harnessBody(request) {
+  const body = { messages: toChatMessages(Array.isArray(request.messages) ? request.messages : []) }
+  if (Array.isArray(request.tools) && request.tools.length > 0) body.tools = toToolDefs(request.tools)
+  if (typeof request.maxTokens === 'number') body.max_tokens = request.maxTokens
+  if (typeof request.temperature === 'number') body.temperature = request.temperature
+  if (typeof request.reasoningEffort === 'string' && request.reasoningEffort !== '') body.reasoning_effort = request.reasoningEffort
+  return body
+}
+
 async function complete(request, id, signal) {
   const slash = request.model.indexOf('/')
   const provider = request.model.slice(0, slash)
   const model = request.model.slice(slash + 1)
   // 禁用模型和供应商必须同时影响统一 API，不能只隐藏页面。
   if (!(await ctx.llm.listModels(provider)).some(row => row.id === model)) throw Object.assign(new Error('模型不存在或已停用'), { statusCode: 404 })
-  const body = { ...request.responsesBody ?? request.openAi, model: request.model }
+  const body = { ...(request.responsesBody ?? request.openAi ?? harnessBody(request)), model: request.model }
   const resolved = await ctx.llm.resolveModel(provider, model, signal)
   const effort = normalizeReasoningEffort(request.responses ? responsesReasoningEffort(body) : body.reasoning_effort, resolved, provider, model,
     notice => logger.info(`${request.model}：思考档位 ${notice.requested} ${notice.applied ? `映射为 ${notice.applied}` : '使用模型默认'}`))

@@ -24,7 +24,7 @@ import { postSealedStreamed } from './eac.js'
 import { postKiloStreamed } from './kilo.js'
 import { postAggregateStreamed, isAggregateEntry } from './aggregate.js'
 import { finishReason, readStream, windowTokens } from './stream.js'
-import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, resolveLevel } from './effort.js'
+import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, hasDeclaredEffortMenu, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
@@ -373,11 +373,13 @@ export class FreeModelAdapter {
       // 403 FreeTierError（旧实现靠它压住工具调用）。压制手段改为续写指令本身
       // ——`recoveryMessages()` 的正文里已经写着「Do not call tools」，这条提示
       // 是 v1 时代就有的，不依赖 tool_choice。
-      // Both absorbed channels carry a declared thinking menu whose level is
-      // the real control on the wire: the selected level rides the request as
-      // the model's own effort field (a JSON merge patch, ZCode's declaration
-      // shape). The free lane keeps its token-budget behaviour untouched.
-      if (sealed || kilo) {
+      // A declared thinking menu means the selected level is the real control
+      // on the wire: it rides the request as the model's own effort field (a
+      // JSON merge patch, ZCode's declaration shape). The free lane's own ids
+      // now declare menus too (see `src/catalog.js`), so the gate is the entry
+      // rather than the lane — an entry without a menu still keeps the free
+      // lane's token-budget behaviour, untouched.
+      if (sealed || kilo || hasDeclaredEffortMenu(entry)) {
         const patch = effortPatchFor(options.reasoningEffort, entry)
         if (patch !== null) Object.assign(payload, patch)
       }

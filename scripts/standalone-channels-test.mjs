@@ -178,6 +178,30 @@ try {
     const ledger = await rpc('usage.tokenLedger', {})
     assert.ok(JSON.stringify(ledger).includes('fixture-free'))
   })
+  await check('Anthropic Messages 经真实渠道适配器保留消息、系统提示、工具与生成参数', async () => {
+    const before = requests.length
+    const body = {
+      model: 'buddy/fixture-free',
+      max_tokens: 123,
+      temperature: 0.2,
+      system: 'be brief',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi anthropic' }] }],
+      tools: [{ name: 'lookup', description: 'look up', input_schema: { type: 'object', properties: { q: { type: 'string' } } } }],
+    }
+    const reply = await api('/v1/messages', body)
+    assert.equal(reply.response.status, 200, JSON.stringify(reply.value))
+    assert.equal(reply.value.type, 'message')
+    assert.ok(reply.value.content.some(block => block.type === 'text' && block.text === 'account-ok'), JSON.stringify(reply.value))
+    assert.ok(reply.value.content.some(block => block.type === 'tool_use' && block.name === 'lookup'), JSON.stringify(reply.value))
+    const sent = requests.slice(before).find(row => row.pathname.endsWith('/chat/completions'))
+    assert.ok(sent, 'the channel must receive the converted Anthropic request')
+    assert.equal(sent.body.max_tokens, 123)
+    assert.equal(sent.body.temperature, 0.2)
+    const text = JSON.stringify(sent.body.messages)
+    assert.ok(text.includes('be brief'), text)
+    assert.ok(text.includes('hi anthropic'), text)
+    assert.equal(sent.body.tools[0].function.name, 'lookup')
+  })
   await check('内联图片真实传到渠道，远程 URL 与伪造图片被拒绝', async () => {
     const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
     const reply = await api('/v1/chat/completions', { model: 'buddy/fixture-free', messages: [{ role: 'user', content: [{ type: 'text', text: 'what' }, { type: 'image_url', image_url: { url: `data:image/png;base64,${png}` } }] }] })

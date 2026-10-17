@@ -1,12 +1,13 @@
 /**
- * The free lane's wire facts, re-measured against the live gateway on 2026-10-14
- * and re-checked against the **v2** client fingerprint on 2026-10-16.
+ * The free lane's wire facts, re-measured against the live gateway on 2026-10-14,
+ * re-checked against the **v2** client fingerprint on 2026-10-16, and re-checked
+ * against the session-encoding gate on 2026-10-17.
  *
  * These are the things that changed and that a future edit can silently break:
- * the lane's base path, the four session headers, the shape of the session id,
- * the User-Agent (now the canonical v2 token and nothing else), and the absence
- * of the v1-only `x-opencode-request` header. The tool gate's own contract lives
- * in `fingerprint-test.mjs`.
+ * the lane's base path, the four session headers, the shape *and encoding* of
+ * the session id, the User-Agent (now the canonical v2 token and nothing else),
+ * and the absence of the v1-only `x-opencode-request` header. The tool gate's
+ * own contract lives in `fingerprint-test.mjs`.
  *
  * Run: node scripts/free-lane-wire-test.mjs
  */
@@ -75,25 +76,31 @@ console.log('\n=== 2. the four v2 session headers, and no v1-only request header
   check('streaming accept', headers.accept, 'text/event-stream')
 }
 
-console.log('\n=== 3. the session id has to be minted, not derived ===')
+console.log('\n=== 3. the session id must carry the descending encoding the gate accepts ===')
 {
   const id = up.sessionForConversation('wire:conversation')
   check('canonical shape', up.SESSION_RE.test(id), true)
-  // The twelve hex digits are the 48-bit complement of `ms * 0x1000 + seq`, so
-  // they only carry the mint time modulo 2^36 ms — enough to prove the id was
-  // minted rather than digested, which is what the gateway checks. The counter
-  // inside that encoding has to stay small (upstream: 0–16 pass, ≥ 100 is a 403).
+  // The gate validates the encoding, not only the `ses_…` shape (measured
+  // 2026-10-17). The twelve hex digits are the 48-bit complement of
+  // `ts_ms << 12 | counter`, so the counter reads as `0xfff - counter` and has
+  // to land in 1–63 — low 12 bits inside 0xfc0–0xfff.
   const encoded = BigInt(`0x${id.slice(4, 16)}`)
-  const stamp = Number(((~encoded) & 0xffffffffffffn) >> 12n) % 2 ** 36
   const counter = Number((~encoded) & 0xfffn)
-  check('hex carries the mint time', Math.abs(stamp - (Date.now() % 2 ** 36)) < 5000, true)
-  check('the counter stays real', counter > 0 && counter <= 16, true)
+  check('the encoding is descending', up.SESSION_DESCENDING_RE.test(id.slice(4, 16)), true)
+  check('the counter stays in the accepted 1-63 window', counter > 0 && counter <= 63, true)
   check('one conversation, one session', up.sessionForConversation('wire:conversation'), id)
   check('another conversation, another session', up.sessionForConversation('wire:other') !== id, true)
   const saved = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'session-map.json'), 'utf8'))
   check('session mapping is persisted outside the user directory', saved.sessions['wire:conversation'], id)
   const caller = 'ses_ffffffffffffABCDEFGHIJKLMN'
   check('a canonical caller id passes through', up.sessionForConversation(caller), caller)
+  // A caller id with the right shape but the wrong encoding is a 403 upstream,
+  // so it must be re-encoded rather than forwarded (probed live 2026-10-17).
+  const ascending = 'ses_123456789abcABCDEFGHIJKLMN'
+  const reencoded = up.sessionForConversation(ascending)
+  check('an ascending caller id is re-encoded', reencoded === ascending, false)
+  check('and the re-encoded id is canonical', up.isCanonicalSession(reencoded), true)
+  check('and it stays stable per conversation', up.sessionForConversation(ascending), reencoded)
 }
 
 console.log('\n=== 4. the v2 tool gate: read + shell, official definitions, no tool_choice none ===')

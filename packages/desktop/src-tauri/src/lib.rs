@@ -1,3 +1,4 @@
+mod external;
 mod service;
 
 use service::ServiceProcess;
@@ -94,7 +95,15 @@ fn show_main(app: &tauri::AppHandle, address: &str) -> tauri::Result<()> {
         .center()
         .decorations(false)
         .initialization_script(titlebar_script(&origin))
-        .on_navigation(move |url| url.origin().ascii_serialization() == origin)
+        .on_navigation(move |url| {
+            if url.origin().ascii_serialization() == origin { return true; }
+            if let Err(message) = external::open_external(url) { eprintln!("{message}"); }
+            false
+        })
+        .on_new_window(|url, _| {
+            if let Err(message) = external::open_external(&url) { eprintln!("{message}"); }
+            tauri::webview::NewWindowResponse::Deny
+        })
         .build()?;
     Ok(())
 }
