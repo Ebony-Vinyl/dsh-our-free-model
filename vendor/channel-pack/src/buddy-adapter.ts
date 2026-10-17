@@ -429,6 +429,10 @@ function errorMessage(error: unknown): string {
  */
 function isContentRejection(body: string): boolean {
   if (body.length === 0) return false
+  // ⚠️ 严禁将 11128（请求形状/参数缺失）误判为 11140（内容安全审查）。
+  // WorkBuddy (INTL) 网关会话头/参数缺失时返回 code 11128 + msg 'request illegal'，
+  // 若误判会导致客户端参数问题反噬账号，错误触发 markPolicyBlockedAccount 施加 30 分钟冷却。
+  if (/"code"\s*:\s*"?11128(?!\d)/.test(body)) return false
   return /"code"\s*:\s*11140/.test(body)
     || /request illegal/i.test(body)
     || /安全审核|safety review/i.test(body)

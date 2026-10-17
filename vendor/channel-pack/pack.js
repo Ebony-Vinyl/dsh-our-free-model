@@ -34755,6 +34755,7 @@ function errorMessage2(error) {
 }
 function isContentRejection(body) {
   if (body.length === 0) return false;
+  if (/"code"\s*:\s*"?11128(?!\d)/.test(body)) return false;
   return /"code"\s*:\s*11140/.test(body) || /request illegal/i.test(body) || /安全审核|safety review/i.test(body);
 }
 var BUDDY_POLICY_BLOCK_COOLDOWN_MS = 30 * 6e4;
