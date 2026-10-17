@@ -57,6 +57,14 @@ import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPer
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver/prompts.js'
 import { OPTIMIZATIONS } from './src/local-optimize.js'
 import { createModelRuntime, createRuntimeStores } from './src/core/runtime.js'
+import { installTosGuard } from './src/tos-guard.js'
+
+// Make the runtime's optional QoS marking best-effort before any request can be
+// sent. Node's built-in undici marks every HTTP/1.1 socket without a try/catch,
+// and on macOS that syscall returns EINVAL for some socket states, which would
+// otherwise escape as an uncaught exception and take the host process down with
+// it (see src/tos-guard.js and issue #263).
+installTosGuard()
 
 export { fromOpenAiMessages } from './src/core/completion.js'
 import { buildStats } from './src/core/stats.js'

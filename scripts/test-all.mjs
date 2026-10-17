@@ -40,6 +40,7 @@ const suites = [
   ['client-lint', 'client-lint.mjs', []],
   ['heatmap', 'heatmap-test.mjs', []],
   ['trust', 'trust-test.mjs', []],
+  ['tos-guard', 'tos-guard-test.mjs', []],
   ['sanitize', 'sanitize-test.mjs', []],
   ['feed', 'feed-test.mjs', []],
   ['picks', 'picks-test.mjs', []],
