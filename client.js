@@ -329,12 +329,12 @@ window.__ModuleLoader__.load({
         'star.cta': '点个 Star',
         'star.title': '在 GitHub 上给本仓库点 Star',
         'picks.title': '推荐项目',
-        'picks.sub': '同一作者的两个开源项目：一个把 Agent 装进原生桌面，一个让上百个插件和谐共存。用得上，就顺手点个 Star。',
-        'picks.foot': 'Star 是开源项目唯一的「工资条」——它决定作者还能投入多少时间。两个项目都免费、开源、无广告，点一下就是最实在的支持。',
+        'picks.sub': '同一作者的一组开源项目，各自解决一件事：把 Agent 装进原生桌面、让上百个插件和谐共存、把视频和设计留在这台机器上。用得上，就顺手点个 Star。',
+        'picks.foot': 'Star 是开源项目唯一的「工资条」——它决定作者还能投入多少时间。这里的项目都免费、开源、无广告，点一下就是最实在的支持。',
         'picks.stars': 'Stars',
         'picks.forks': 'Forks',
         'picks.fork': 'Fork',
-        'picks.totalStars': '两个项目共 {n} 个 Star',
+        'picks.totalStars': '{c} 个推荐项目共 {n} 个 Star',
         'picks.updated': '最近更新',
         'picks.stale': '缓存数据',
         'picks.liveFailed': '暂时读不到 GitHub 数据，数字稍后自动补上——不影响下面的链接。',
@@ -998,12 +998,12 @@ window.__ModuleLoader__.load({
         'star.cta': 'Star',
         'star.title': 'Star this repository on GitHub',
         'picks.title': 'Recommended projects',
-        'picks.sub': 'Two open-source projects by the same author: one puts the agent on a native desktop, the other keeps hundreds of plugins living together. If they are useful, a star is the thanks they understand.',
-        'picks.foot': 'A star is the only payslip an open-source project gets — it decides how much more time the author can spend. Both projects are free, open source and ad-free; one click is the most concrete support there is.',
+        'picks.sub': 'A set of open-source projects by the same author, each solving one thing: putting the agent on a native desktop, keeping hundreds of plugins living together, and keeping video and design work on this machine. If they are useful, a star is the thanks they understand.',
+        'picks.foot': 'A star is the only payslip an open-source project gets — it decides how much more time the author can spend. Every project here is free, open source and ad-free; one click is the most concrete support there is.',
         'picks.stars': 'Stars',
         'picks.forks': 'Forks',
         'picks.fork': 'Fork',
-        'picks.totalStars': '{n} stars across both projects',
+        'picks.totalStars': '{n} stars across {c} projects',
         'picks.updated': 'Last push',
         'picks.stale': 'cached',
         'picks.liveFailed': 'GitHub numbers are unreachable right now; they will fill in later — the links below are unaffected.',
@@ -3735,7 +3735,8 @@ window.__ModuleLoader__.load({
     // 问题」，动作是「一眼能看到的星按钮」，数字是宿主 /picks 取回的真实 Star /
     // Fork / 最近提交——拿不到就整块不显示，绝不用占位数字凑版面（这块页面的
     // 全部说服力都在数字是真的）。每张卡片的文案按语言直写 t('字面量')，字典
-    // 保持可 grep；两个仓库的地址与「第二个动作」在这里各写一份。
+    // 保持可 grep；每个仓库的地址与「第二个动作」在这里各写一份 —— 卡片条数就是这
+    // 一页的项目数，凡是「几个项目」的话都由 RECO_LINKS 的条数说出来，不写死。
     const RECO_LINKS = {
       desktop: { repo: 'https://github.com/Ebony-Vinyl/EAC-Desktop', extra: 'https://github.com/Ebony-Vinyl/EAC-Desktop/releases' },
       pack: { repo: 'https://github.com/Ebony-Vinyl/EAC-Pack', extra: 'https://github.com/Ebony-Vinyl/EAC-Pack#git-安装' },
@@ -3832,10 +3833,15 @@ window.__ModuleLoader__.load({
         const timer = setTimeout(() => { setRetried(true); picks.reload() }, 6000)
         return () => clearTimeout(timer)
       }, [retried, numbers, picks.status, picks.reload])
-      // The two counts the page is asking for, added up — social proof the reader
-      // can check against the cards below, and nothing at all when GitHub has not
+      // Every count the page is asking for, added up — social proof the reader can
+      // check against the cards below, and nothing at all when GitHub has not
       // answered (an invented total would poison the one claim this page makes).
-      const total = repos.reduce((sum, row) => sum + (typeof row.stars === 'number' ? row.stars : 0), 0)
+      // How many projects that total covers is read from the rows that actually
+      // answered, never written into the copy: adding a project to the roster then
+      // cannot leave a stale "N projects" behind, and both figures in the sentence
+      // come from the same read.
+      const counted = repos.filter(row => typeof row.stars === 'number')
+      const total = counted.reduce((sum, row) => sum + row.stars, 0)
       return h('div', { className: 'ofm_page' },
         h('header', { className: 'ofm_hero ofm_glass' },
           h('span', { className: 'ofm_recoglow', 'aria-hidden': 'true' }),
@@ -3844,7 +3850,7 @@ window.__ModuleLoader__.load({
               h('h2', null, t('picks.title')),
               h('p', { className: 'ofm_pagesub' }, t('picks.sub'))),
             h('div', { className: 'ofm_pills' },
-              total > 0 ? h(Pill, { strong: true }, t('picks.totalStars').replace('{n}', grouped(total))) : null,
+              total > 0 ? h(Pill, { strong: true }, t('picks.totalStars').replace('{n}', grouped(total)).replace('{c}', grouped(counted.length))) : null,
               h(StarButton, { t })))),
         h('div', { className: 'ofm_recogrid' },
           h(RecoCard, {
@@ -6358,7 +6364,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject
     exports.name = 'our-free-model'
     // Headless test seams use the same stub React as scripts/client-lint.mjs.
-    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard }
+    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, DICT }
     return module.exports
   },
 })

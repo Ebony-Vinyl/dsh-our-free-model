@@ -2,11 +2,16 @@
  * The recommendation page's rendering, without a browser.
  *
  * The page has one job — send the reader to a repository to press Star — so the
- * checks below are about exactly that: both cards exist, each one's star button
+ * checks below are about exactly that: every card exists, each one's star button
  * and second action point at that project's own repository, and the numbers are
  * real or absent. A missing number must leave the row out rather than print a
  * placeholder, because a page whose whole argument is "these figures are live"
  * loses that argument the moment one of them is invented.
+ *
+ * The roster grows — it went from two projects to three — so nothing about how
+ * many there are may be written into the copy: the checks at the end hold the
+ * dictionary to that, and to the count arriving as the `{c}` placeholder the page
+ * fills from the same read that produces the star total.
  *
  * Run: node scripts/picks-ui-test.mjs
  */
@@ -28,11 +33,12 @@ new Function('window', 'document', 'navigator', source)(
   { __ModuleLoader__: { load: value => { record = value } } },
   { createElement: () => ({ setAttribute() {}, style: {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {}, removeChild() {} } },
   { language: 'zh-CN' })
-const { PicksPage, RecoCard, parseSafeHtml } = record.factory(name => {
+const deps = name => {
   if (name === 'react') return react
   if (name === 'react-dom') return { createPortal: (children, container) => ({ type: 'portal', children, container }) }
   throw new Error(`the browser half may only require react or react-dom; it asked for "${name}"`)
-}).__test
+}
+const { PicksPage, RecoCard, parseSafeHtml, DICT } = record.factory(deps).__test
 
 let failures = 0
 const check = (name, fn) => {
@@ -129,11 +135,30 @@ check('the three projects are the ones the announcement names', () => {
   for (const name of ['EAC-Desktop', 'EAC-Pack', 'EAC-design-world']) assert.equal(page.includes(name), true, `${name} is on the page`)
 })
 
+// The roster has grown once already (two projects became three) and will grow
+// again, so the copy may not carry the number: the sentence takes it as `{c}`,
+// filled by the page from the same read that adds the star total up, while the
+// prose that frames it says "a set of projects" and stays true at any size.
+check('the copy never states how many projects there are', () => {
+  for (const locale of ['zh', 'en']) {
+    const words = DICT[locale]
+    assert.ok(words !== undefined, `${locale} dictionary is registered`)
+    for (const key of ['picks.sub', 'picks.foot', 'picks.totalStars']) {
+      const line = words[key]
+      assert.equal(typeof line, 'string', `${locale} ${key} exists`)
+      const lowered = line.toLowerCase()
+      for (const stale of ['两个', '两张', 'both', 'two ']) assert.equal(lowered.includes(stale), false, `${locale} ${key} does not count the projects ("${stale}")`)
+    }
+    assert.equal(words['picks.totalStars'].includes('{n}'), true, `${locale} totalStars takes the star count`)
+    assert.equal(words['picks.totalStars'].includes('{c}'), true, `${locale} totalStars takes the project count`)
+  }
+})
+
 // The announcement is the only thing that tells users the page exists, and it is
-// published by a separate push — so it has to name the same two repositories the
-// page renders, and its HTML has to survive the client's allowlist parser with
-// both links intact. A typo in one URL here is a broken promise, not a style nit.
-check('the shipped announcement links both projects through the sanitizer', () => {
+// published by a separate push — so it has to name the same repositories the page
+// renders, and its HTML has to survive the client's allowlist parser with every
+// link intact. A typo in one URL here is a broken promise, not a style nit.
+check('the shipped announcement links every project through the sanitizer', () => {
   const feed = JSON.parse(fs.readFileSync(new URL('../feed/announcements.json', import.meta.url), 'utf8'))
   const item = feed.announcements.find(row => row.id === '2026-10-16-picks-page')
   assert.ok(item !== undefined, 'the picks announcement is in the feed')
