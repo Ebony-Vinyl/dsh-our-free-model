@@ -203,7 +203,16 @@ export const SETTINGS_INITIAL = {
   },
   /** Named fallback chains. A combo is a virtual model whose answer comes from
    *  the first link that produces output; see src/combos.js. */
-  combos: [],
+  combos: [
+    {
+      id: 'combo:recommended-free',
+      name: '推荐免费组',
+      models: ['deepseek-v4.1-flash-free', 'glm-5.3-flash-free', 'space-bunny-free'],
+      strategy: 'fallback',
+      stickyLimit: 1,
+      enabled: true,
+    },
+  ],
   /** The five local answers that avoid a provider call entirely: a quota probe,
    *  a shell command prefix, a session title, a suggestion, a filepath list.
    *  They are pure request-shape matches, so a false positive would answer a real
