@@ -63,7 +63,7 @@ import type {
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { normalizeHarnessMessages } from './message-shape.js'
+import { collectHarnessSystem, normalizeHarnessMessages } from './message-shape.js'
 import { resolveToolPairing } from './sse.js'
 
 /**
@@ -95,7 +95,12 @@ export function buildMinimaxMessagesPayload(options: {
     messages: serializeMinimaxMessages(options.messages, options.images),
   }
   if (options.maxTokens !== undefined) payload.max_tokens = options.maxTokens
-  if (options.system !== undefined && options.system !== '') payload.system = options.system
+  // 同 `gemini-messages.ts`：`options.system` 不是系统提示词的唯一载体，
+  // messages 首位的 `role:'system'` 消息同样承载它（见 `collectHarnessSystem`）。
+  const systemText = [options.system, collectHarnessSystem(options.messages)]
+    .filter((text): text is string => typeof text === 'string' && text !== '')
+    .join('\n\n')
+  if (systemText !== '') payload.system = systemText
   if (options.temperature !== undefined) payload.temperature = options.temperature
   if (options.stop !== undefined && options.stop.length > 0) payload.stop_sequences = [...options.stop]
   if (options.tools !== undefined && options.tools.length > 0) {
@@ -253,9 +258,10 @@ export function serializeMinimaxMessages(
   }
 
   for (const message of normalized) {
-    // ⚠️ system 角色不可能出现在这里（DSH 把它放在 options.system），
-    // 但真出现时按 user 处理会让模型把它当用户指令 —— 故显式跳过。
-    // ⚠️ `developer`（只承载工具增删元数据的角色）由归一化层一并丢弃。
+    // ⚠️ 本模块把 messages 原样序列化（`options.messages` 未经归一化），
+    // system 消息不可能靠归一化层消失，必须在此显式跳过：它的归宿是顶层
+    // `payload.system`，按 user 处理会让模型把它当用户指令。文本由
+    // `collectHarnessSystem` 单独收集，此处只负责不重复下发。
     if (message.role === 'system') continue
 
     const content: Array<Record<string, unknown>> = []

@@ -37,7 +37,7 @@ import type {
   ToolSchema,
 } from '@deepseek-ai/dsh-llm'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import { normalizeHarnessMessages } from './message-shape.js'
+import { collectHarnessSystem, normalizeHarnessMessages } from './message-shape.js'
 import { readWithIdleTimeout, resolveToolPairing } from './sse.js'
 import type { GeminiInlineImage, GeminiModelSpec } from './gemini.js'
 import {
@@ -213,8 +213,11 @@ export function translateGeminiRequest(options: TranslateGeminiRequestOptions): 
 
   const contents: GeminiContent[] = []
   for (const message of normalized) {
-    // system 由 `options.system` 单独承载（DSH 不会把 system 放进 messages，
-    // 真出现时按 user 处理会让模型把它当用户指令 —— 故显式跳过）。
+    // system 由 `options.system` 单独承载，**同时**也是 messages 首位的
+    // `role:'system'` 消息（见 `collectHarnessSystem`）。此处跳过是因为它的
+    // 归宿是 `systemInstruction`，不是因为可以丢弃 —— 早前版本按字面照做，
+    // 当 `options.system` 为空时整段提示词就此消失（issue #<占位>）。
+    // 真按 user 处理会让模型把它当用户指令，故仍不放进 `contents`。
     // `developer`（只承载工具增删元数据）由归一化层一并丢弃。
     if (message.role === 'system') continue
 
@@ -314,8 +317,14 @@ export function translateGeminiRequest(options: TranslateGeminiRequestOptions): 
     sessionId,
   }
 
-  if (options.system !== undefined && options.system !== '') {
-    request.systemInstruction = { role: 'system', parts: [{ text: options.system }] }
+  // `options.system` 与 messages 里的 system 消息承载同一段提示词；两者都收，
+  // 空者自动消失，非空且不同时按「显式字段在前」拼接（与 `dsh-llm-deepseek`
+  // 的 `[options.system, historySystem].filter(Boolean).join('\n\n')` 一致）。
+  const systemText = [options.system, collectHarnessSystem(normalized)]
+    .filter((text): text is string => typeof text === 'string' && text !== '')
+    .join('\n\n')
+  if (systemText !== '') {
+    request.systemInstruction = { role: 'system', parts: [{ text: systemText }] }
   }
 
   if (options.tools !== undefined && options.tools.length > 0) {

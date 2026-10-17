@@ -144,3 +144,53 @@ export function normalizeHarnessMessages<T extends HarnessMessageLike>(
   }
   return normalized
 }
+
+/**
+ * 收集**消息承载**的 system 文本。
+ *
+ * ## 为什么需要
+ *
+ * DSH 把系统提示词放在 `GenerateOptions.system`（见 `dsh-llm` 的
+ * `GenerateOptions`），**同时**把它作为 `role:'system'` 消息放进
+ * `options.messages` 的首位。两处内容一致，任取其一即可 —— 但只有
+ * `dsh-llm-deepseek` 做了一次「把 `system` 消息提到 `system` 字段」的提升。
+ *
+ * Gemini / MiniMax 的序列化实现**只**读 `options.system`（`gemini-messages.ts`
+ * 与 `minimax-messages.ts` 的注释都写着「DSH 不会把 system 放进 messages」），
+ * 于是把 `role:'system'` 显式 `continue` 掉。该假设不成立时，整段系统提示词
+ * ——身份、人格、工具说明、以及别的插件注册的提示词段—— 会在**没有任何报错**
+ * 的情况下从请求里消失。表现为模型不遵守任何指令，却照常回答。
+ *
+ * 实证：同一份 64470 字符的提示词（sha256 `400265a601fd`）在两个 provider 下
+ * 行为相反 —— deepseek 复述了提示词里的 Bangla 偏好，Gemini 从未复述。
+ *
+ * ## 取舍
+ *
+ * 收集放在**共享模块**而不是两个适配器各自实现：三处（含 Minimax）都要同一
+ * 判据，重复实现必然漂移。`developer` 不参与收集 —— 它只承载工具增删元数据，
+ * 不是系统提示词。
+ *
+ * @param messages - harness 传入的完整消息序列（归一化前后均可）。
+ * @returns 各 system 消息文本按出现顺序以空行连接；无 system 消息时返回 `''`。
+ */
+export function collectHarnessSystem(messages: readonly HarnessMessageLike[]): string {
+  const parts: string[] = []
+  for (const message of messages) {
+    if (message === null || typeof message !== 'object' || message.role !== 'system') continue
+    const content = message.content
+    const text = typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content
+          .filter((block): block is { type: string; text: string } => (
+            typeof block === 'object' && block !== null
+            && (block as { type?: unknown }).type === 'text'
+            && typeof (block as { text?: unknown }).text === 'string'
+          ))
+          .map(block => block.text)
+          .join('\n')
+        : ''
+    if (text !== '') parts.push(text)
+  }
+  return parts.join('\n\n')
+}
