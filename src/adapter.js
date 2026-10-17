@@ -606,6 +606,9 @@ export class FreeModelAdapter {
         if (error?.code === CODE.region) this.deps.onRegionBlocked?.(entry.id)
         const aborted = options.signal?.aborted === true
         let failure = toFailure(error)
+        if ((delivered || partialOutcome?.sawToolCall === true) && this.providerRetryPolicy().retryableCodes.includes(failure.code)) {
+          failure = { ...failure, code: 'STREAM_CUT' }
+        }
         if (!aborted && (recovering || expired)) {
           failure = { ...failure, code: recovering || delivered || partialOutcome?.sawToolCall === true ? 'STREAM_CUT' : CODE.timeout,
             message: expired

@@ -575,7 +575,8 @@ export function anthropicFrames(chunk, state) {
         const carried = string(reason.failure?.message)
         const message = carried !== '' ? carried : reason.kind === 'aborted' ? 'request aborted' : 'our free model failed the turn'
         state.stopReason = null
-        frames.push(sseFrame('error', { type: 'error', error: { type: 'api_error', message } }))
+        const failure = carryFailure(reason.failure, reason.kind)
+        frames.push(sseFrame('error', { type: 'error', error: forwardFailure({ error: message, failure }, true).error }))
         frames.push(sseFrame('message_stop', { type: 'message_stop' }))
         break
       }
@@ -768,7 +769,10 @@ export function foldAnthropicOutcome(outcome, chunk) {
       break
     case 'finish':
       if (chunk.reason?.kind === 'max-tokens') outcome.truncated = true
-      if (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted') outcome.error = chunk.reason.failure?.message
+      if (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted') {
+        outcome.failure = carryFailure(chunk.reason.failure, chunk.reason.kind)
+        outcome.error = outcome.failure.message
+      }
       break
     default: break
   }
@@ -826,3 +830,4 @@ export function countTokens(body) {
     input_tokens: BASE_TOKENS + Math.ceil(textChars / CHARS_PER_TOKEN) + images * IMAGE_TOKENS + toolTokens,
   }
 }
+import { carryFailure, forwardFailure } from './failure.js'

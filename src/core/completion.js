@@ -1,5 +1,6 @@
 import { ROUTE_MAIN, ROUTE_REGION } from '../adapter.js'
 import { toOpenAiUsage } from '../forward.js'
+import { carryFailure } from '../failure.js'
 
 export function routableModelIds(snapshot) {
   const membership = new Set(snapshot.membership[ROUTE_MAIN] ?? [])
@@ -171,7 +172,10 @@ export function foldForwardOutcome(outcome, chunk) {
     case 'usage': outcome.usage = toOpenAiUsage(chunk.usage); break
     case 'finish':
       if (chunk.reason?.kind === 'max-tokens') outcome.truncated = true
-      if (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted') outcome.error = chunk.reason.failure?.message
+      if (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted') {
+        outcome.failure = carryFailure(chunk.reason.failure, chunk.reason.kind)
+        outcome.error = outcome.failure.message
+      }
       break
     default: break
   }

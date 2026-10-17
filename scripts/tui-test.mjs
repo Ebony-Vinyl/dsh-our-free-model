@@ -217,13 +217,11 @@ const refused = await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/completions
   body: JSON.stringify({ model: 'space-bunny-free', messages: [{ role: 'user', content: 'hi' }] }),
 })
 const refusedBody = await refused.json()
-check('a refused forward call is a failure', refused.status, 502)
+check('a refused forward call retains its upstream client status', refused.status, 400)
 check('and says what the gateway said', /unavailable/i.test(refusedBody.error?.message ?? ''), true)
 stub.api.refuseAll = false
 
-// The same refusal on the streaming side, where the status line was already spent
-// on the SSE headers: it has to say so in the body rather than close the stream as
-// though the model had answered with an empty turn.
+// An early refusal retains its HTTP status even when streaming was requested.
 stub.api.refuseAll = true
 const streamedRefusal = await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/completions`, {
   method: 'POST',
@@ -231,7 +229,8 @@ const streamedRefusal = await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/com
   body: JSON.stringify({ model: 'space-bunny-free', messages: [{ role: 'user', content: 'hi' }], stream: true }),
 })
 const streamedText = await streamedRefusal.text()
-check('a refused streaming call carries an error frame', /"error"/.test(streamedText), true)
+check('a refused streaming call retains its upstream client status', streamedRefusal.status, 400)
+check('a refused streaming call carries an error', /"error"/.test(streamedText), true)
 check('and not a clean stop', /finish_reason":"stop/.test(streamedText), false)
 stub.api.refuseAll = false
 

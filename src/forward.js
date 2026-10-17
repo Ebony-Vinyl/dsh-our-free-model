@@ -37,6 +37,8 @@ import { performance } from 'node:perf_hooks'
 import { baseModelId, FINGERPRINT_TOOLS } from './upstream.js'
 import { anthropicFrames, anthropicMessage, countTokens, foldAnthropicOutcome, fromAnthropicRequest } from './anthropic.js'
 import { toMessagesResponse, tryOptimizations } from './local-optimize.js'
+import { carryFailure, forwardFailure } from './failure.js'
+import { deferStreamResponse } from './deferred-response.js'
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024
 const REQUEST_ID_HEADER = 'x-ofm-request-id'
@@ -143,6 +145,16 @@ function json(res, status, payload) {
 
 function openAiError(res, status, type, message, code = null) {
   json(res, status, { error: { message, type, param: null, code } })
+}
+
+/** Send classified early failures before committing an SSE success status. */
+function failureReply(res, outcome, anthropic = false, force = false) {
+  const failure = forwardFailure(outcome, anthropic)
+  if (res.headersSent || (!force && !failure.classified)) return false
+  if (failure.status >= 400 && failure.status < 500 && failure.error.type !== 'rate_limit_error') res.setHeader('x-should-retry', 'false')
+  if (failure.retryAfterMs !== undefined) res.setHeader('retry-after', String(Math.ceil(failure.retryAfterMs / 1000)))
+  json(res, failure.status, anthropic ? { type: 'error', error: failure.error } : { error: { ...failure.error, param: null } })
+  return true
 }
 
 /**
@@ -621,8 +633,9 @@ async function serveCompletion(req, res, complete, endpoint, heartbeatMs, trace,
   socket?.once('close', abort)
   res.once('close', abort)
   if (req.aborted || req.destroyed || socket?.destroyed) abort()
+  const staged = deferStreamResponse(res, heartbeatMs ?? SSE_HEARTBEAT_MS)
   try {
-    await endpoint(req, res, async (request, onChunk) => {
+    await endpoint(req, staged.response, async (request, onChunk) => {
       trace.step('dispatch')
       let sawDelta = false
       const tracedChunk = typeof onChunk !== 'function' ? undefined : chunk => {
@@ -631,17 +644,24 @@ async function serveCompletion(req, res, complete, endpoint, heartbeatMs, trace,
           : chunk.type === 'tool-call-delta' && typeof chunk.argumentsDelta === 'string' && chunk.argumentsDelta.length > 0
         if (!sawDelta && hasContent) {
           sawDelta = true
+          staged.commit()
           trace.step('first_delta')
         }
         onChunk(chunk)
       }
-      const result = await complete({ ...request, signal: controller.signal }, tracedChunk)
+      let result
+      try { result = await complete({ ...request, signal: controller.signal }, tracedChunk) }
+      catch (error) {
+        const failure = carryFailure({ ...error, message: String(error?.message ?? error) }, controller.signal.aborted ? 'aborted' : 'error')
+        result = { text: '', toolCalls: [], error: failure.message, failure }
+      }
       const outcome = result.error !== undefined ? 'failed' : result.truncated === true ? 'truncated' : 'completed'
       trace.setOutcome(outcome)
       trace.step('generation_finished', { outcome })
       return result
     }, { heartbeatMs, trace, ...extra })
   } finally {
+    staged.dispose()
     req.removeListener('aborted', abort)
     socket?.removeListener('close', abort)
     res.removeListener('close', abort)
@@ -797,7 +817,7 @@ async function chatCompletions(req, res, complete, options = {}) {
     const outcome = await complete({ model, openAi: body })
     // 截断或恢复失败即使已有部分正文，也不能返回正常完成。
     if (outcome.error !== undefined) {
-      openAiError(res, 502, 'server_error', outcome.error)
+      failureReply(res, outcome, false, true)
       return
     }
     const calls = executableCalls(outcome, tools)
@@ -864,7 +884,8 @@ async function chatCompletions(req, res, complete, options = {}) {
     // — but a turn the lane refused must still say so. Answering a refusal with a
     // clean `finish_reason: stop` and no content is the empty-200 this endpoint's
     // non-streaming branch fixed, arriving by the other door.
-    sendSse(res, { error: { message: String(outcome.error), type: 'server_error' } })
+    if (failureReply(res, outcome)) return
+    sendSse(res, { error: forwardFailure(outcome).error })
     res.write('data: [DONE]\n\n')
     res.end()
     return
@@ -1029,7 +1050,8 @@ async function responsesEndpoint(req, res, complete, options = {}) {
       }
     })
     if (outcome.error !== undefined) {
-      say('response.failed', { response: response({ status: 'failed', error: { message: String(outcome.error) } }) })
+      if (failureReply(res, outcome)) return
+      say('response.failed', { response: response({ status: 'failed', error: forwardFailure(outcome).error }) })
       res.end()
       return
     }
@@ -1071,7 +1093,7 @@ async function responsesEndpoint(req, res, complete, options = {}) {
 
   const outcome = await complete({ model, openAi, responses: true, responsesBody: body })
   if (outcome.error !== undefined) {
-    openAiError(res, 502, 'server_error', outcome.error)
+    failureReply(res, outcome, false, true)
     return
   }
   const suppressedRows = suppressedOnlyNote(outcome, executableCalls(outcome, tools))
@@ -1168,7 +1190,7 @@ async function messagesEndpoint(req, res, complete, options = {}) {
   if (!wantsStream) {
     const result = await complete(request, chunk => { foldAnthropicOutcome(outcome, chunk) })
     if (result.error !== undefined) {
-      anthropicError(res, 502, 'api_error', result.error)
+      failureReply(res, result, true, true)
       return
     }
     const suppressed = suppressedOnlyNote(outcome, executableCalls(outcome, ANTHROPIC_TOOL_WIRE))
@@ -1187,6 +1209,7 @@ async function messagesEndpoint(req, res, complete, options = {}) {
   try {
     result = await complete(request, chunk => {
       foldAnthropicOutcome(outcome, chunk)
+      if (chunk.type === 'finish' && outcome.error !== undefined && !res.headersSent && forwardFailure(outcome).classified) return
       for (const frame of anthropicFrames(chunk, state)) write(frame)
     })
   } catch (error) {
@@ -1198,16 +1221,18 @@ async function messagesEndpoint(req, res, complete, options = {}) {
     // reason, so the failure is rendered as the error event the protocol has for
     // exactly this. (The adapter reports its own failures as a `finish` chunk
     // rather than a throw, so this path is the pre-chunk one.)
-    result = { error: String(error?.message ?? error) }
+    const failure = carryFailure({ ...error, message: String(error?.message ?? error) })
+    result = { error: failure.message, failure }
   }
   if (result.error === undefined && state.finished !== true) {
     const suppressed = suppressedOnlyNote(outcome, executableCalls(outcome, ANTHROPIC_TOOL_WIRE))
     if (suppressed !== null) result = { error: suppressed }
   }
+  if (result.error !== undefined && failureReply(res, result, true)) return
   if (result.error !== undefined && state.finished !== true) {
     // `state.finished` keeps a turn that already closed its own stream from
     // getting a second `message_stop`, which strict clients reject.
-    for (const frame of anthropicFrames({ type: 'finish', reason: { kind: 'error', failure: { message: String(result.error) } } }, state)) write(frame)
+    for (const frame of anthropicFrames({ type: 'finish', reason: { kind: 'error', failure: result.failure ?? { message: String(result.error) } } }, state)) write(frame)
   }
   res.end()
 }

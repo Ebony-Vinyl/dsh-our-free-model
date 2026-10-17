@@ -478,6 +478,9 @@ export async function * readStream(lines, wire, renameMap, now = () => Date.now(
       if (!text.startsWith('{')) continue
       let payload
       try { payload = JSON.parse(text) } catch { continue }
+      if ((payload.type === 'response.failed' || payload.response?.status === 'failed') && payload.response?.error) {
+        throw classifyFailure(undefined, { error: payload.response.error })
+      }
       if (payload.type === 'error' || payload.error) {
         // Classify an in-stream refusal exactly as an error *envelope* is
         // classified, because everything downstream decides off `code`. This throw

@@ -392,6 +392,16 @@ try {
     assert.ok(run.records.every(row => row.recovered !== true))
   })
 
+  for (const model of ['mimo-v2.6-flash-free', 'union-alpha', 'muse-spark-1.3-contributor-free']) {
+    const wire = wireFor(model)
+    await check(`${wire}: partial answer followed by an explicit server error cannot replay the turn`, async () => {
+      const error = { type: 'server_error', message: 'provider failed' }
+      const event = wire === 'responses' ? { type: 'response.failed', response: { status: 'failed', error } } : { type: 'error', error }
+      const run = await drive(model, [{ body: deltas(wire, { text: ANSWER }) + sse(event) }])
+      checkCut(run, 1)
+    })
+  }
+
   for (const phase of ['首段', '续写段']) {
     await check(`Responses ${phase} response.failed 缺 status 仍必须返回失败`, async () => {
       const failed = sse({ type: 'response.failed', response: { usage: { input_tokens: 11, output_tokens: 7 } } })

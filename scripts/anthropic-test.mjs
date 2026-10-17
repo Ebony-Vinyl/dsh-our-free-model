@@ -423,7 +423,7 @@ check('max-tokens wins over a tool call the ceiling cut', () => {
 check('error -> an error event and message_stop, with no message_delta', () => {
   const { state, parsed } = finishOf({ kind: 'error', failure: { message: 'upstream 503', code: 'UPSTREAM' } })
   assert.deepEqual(parsed.map(frame => frame.event), ['message_start', 'error', 'message_stop'])
-  assert.deepEqual(parsed[1].payload, { type: 'error', error: { type: 'api_error', message: 'upstream 503' } })
+  assert.deepEqual(parsed[1].payload, { type: 'error', error: { type: 'api_error', message: 'upstream 503', code: 'UPSTREAM' } })
   assert.equal(state.stopReason, null)
 })
 

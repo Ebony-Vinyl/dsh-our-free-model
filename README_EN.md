@@ -206,6 +206,8 @@ POST /v1/messages                streaming and non-streaming (Anthropic Messages
 POST /v1/messages/count_tokens   local estimate; the plugin ships no tokenizer
 ```
 
+Forwarding preserves permission, quota and rate-limit error classifications. Refusals received before content or the first heartbeat retain their HTTP error status; later failures use protocol error events rather than empty answers or successful completion. Permission refusals and exhausted quotas carry a non-retryable hint; temporary rate limits retain `Retry-After`. Bare JSON errors following SSE heartbeats are recognized. `[DONE]` ends reading, and idle deadlines and cancellation interrupt pending reads.
+
 If another program holds the port, the listener does not die: it retries the same
 port for a few rounds (a listener that just closed, or a portproxy rule that was
 just removed, frees its port within a few hundred milliseconds), then walks to the
