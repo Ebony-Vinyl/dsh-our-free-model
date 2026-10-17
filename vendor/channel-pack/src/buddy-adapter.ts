@@ -1148,14 +1148,19 @@ export class BuddyAdapter extends LlmAdapter {
    * 变体标记，名字随开关跳变。
    */
   listAllModels(): readonly { id: string; name: string; promo?: PromotionBadge }[] {
-    const source = this.remoteModels ?? this.staticFallbackModels()
+    const remote = this.remoteModels
+    const source = remote ?? this.staticFallbackModels()
     // ⚠️ 促销徽标走**独立字段** `promo`（不再是 `description`）：设置页的行由
     // `model.list` 拼出，那里会把这个字段原样搬给客户端。`description` 是宿主与
     // 各适配器共用的通用字段（Cline / lobsterai 用它下发模型介绍），拿它当促销
     // 判据会把宣传语画成促销胶囊（用户报障「其他供应商出现奇怪的标签」）。
     // `promotionView` 是**展示时实时**重算的（见其注释），故这里不会把夜间
     // 判定冻结进目录。
-    return source.map((model) => {
+    // ⚠️ 兜底表（`BuddyFallbackModel`）**没有**促销字段——它是编译期快照，价格会变。
+    // 只有在**没有远端目录**时才走到它，此时无标可挂（不是"没有促销"，是"不知道"）。
+    // `remote` 收窄后直接遍历它，`promotionView` 才拿得到带促销字段的行类型。
+    if (remote === undefined) return source.map((model) => ({ id: model.id, name: displayNameFor(model, source) }))
+    return remote.map((model) => {
       const badge = promotionView(model).badge
       return {
         id: model.id,
@@ -1171,14 +1176,29 @@ export class BuddyAdapter extends LlmAdapter {
     // ⚠️ 必须返回 `[]` 而**不能抛错**（抛错会被归入 catalog 的 `failures`）。
     if (!await providerCatalogVisible(this.options.accountPool, this.product.id)) return []
     await this.ensureRemoteModels()
-    const source = this.remoteModels ?? this.staticFallbackModels()
+    const remote = this.remoteModels
+    // ⚠️ `source` 是联合类型（远端 vs 兜底表），只用于显示名的同名消歧；促销判定
+    // 与遍历都在 `remote` 收窄后进行（它才带 promotion/modelTier 字段）。
+    const source = remote ?? this.staticFallbackModels()
     // 用户在 Channel Pack 关闭的模型（黑名单制：不在表里即默认打开）。
     // 按本适配器的产品 id 取表，CodeBuddy 与 WorkBuddy 的开关互不影响。
     const disabled = this.options.accountPool?.disabledModelsFor(this.product.id)
     const listed = disabled === undefined || disabled.size === 0
       ? source
       : source.filter((model) => !disabled.has(model.id))
-    return listed.map((model) => {
+    // 兜底表没有促销字段（编译期快照）：那里无标可挂，也不写 description 的促销文案。
+    if (remote === undefined) {
+      return listed.map((model) => ({
+        provider: this.product.id,
+        id: model.id,
+        name: displayNameFor(model, listed),
+        inputModalities: this.inputModalitiesFor(model.id),
+      }))
+    }
+    const shown = disabled === undefined || disabled.size === 0
+      ? remote
+      : remote.filter((model) => !disabled.has(model.id))
+    return shown.map((model) => {
       const view = promotionView(model)
       return {
         provider: this.product.id,

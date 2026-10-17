@@ -1002,8 +1002,12 @@ export function promotionView(
   // 仅日期范围、无 daily 窗口的免费促销是「限免」（活动期内任意时刻免费，如 Hy3）。
   // 注意不能用 hasTimeWindow（它把 validFrom/validUntil 也算作窗口），否则会把
   // 日期范围的限免误判成错峰。
-  const hasDaily = typeof schedule === 'object' && schedule !== null
-    && Array.isArray(schedule.daily) && schedule.daily.length > 0
+  // `schedule` 来自远端 JSON，类型上只保证是 `object`；`daily` 要再收窄一次
+  // 才能取 `.length`（TS 不会因为 `Array.isArray` 过了就替你认出字段）。
+  const daily = typeof schedule === 'object' && schedule !== null
+    ? (schedule as { daily?: unknown }).daily
+    : undefined
+  const hasDaily = Array.isArray(daily) && daily.length > 0
   const active = promotionActiveNow(promo, now)
   const offPeakRate = isFree ? '免费' : normalizeDiscountedRate(detail?.discountedCredits)
   // 无价格的活动没有 `note` 可言（那个函数是绕着价格写的），但仍有徽标。

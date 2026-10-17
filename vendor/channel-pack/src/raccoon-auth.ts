@@ -109,6 +109,15 @@ export interface RaccoonRemoteModel {
   contextWindow: number
   maxTokens: number
   supportsImage: boolean
+  /**
+   * 原始计费字段（促销状态 / 倍率 / 时段）。
+   *
+   * 展示名把促销压成了一个字符串（`x0.5→x0.25`），而设置页要画**结构化**
+   * 胶囊，从名字反解析正是这套改造要消灭的做法——故把归一后的 meta 一并
+   * 带出，交给 {@link raccoonPromoBadge} 转成 `promo`。缺省表示这条远端
+   * 条目没有计费字段（不是"没有促销"，是上游没给）。
+   */
+  meta?: RaccoonModelMeta
 }
 
 /** `RaccoonAuth` 的构造选项。 */

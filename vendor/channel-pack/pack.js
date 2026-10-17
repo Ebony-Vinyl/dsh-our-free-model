@@ -34165,7 +34165,8 @@ function promotionView(model, now = /* @__PURE__ */ new Date()) {
   const factor = detail !== void 0 && typeof detail.factor === "number" ? detail.factor : void 0;
   const isFree = factor === 0;
   const schedule = promo.schedule;
-  const hasDaily = typeof schedule === "object" && schedule !== null && Array.isArray(schedule.daily) && schedule.daily.length > 0;
+  const daily = typeof schedule === "object" && schedule !== null ? schedule.daily : void 0;
+  const hasDaily = Array.isArray(daily) && daily.length > 0;
   const active = promotionActiveNow(promo, now);
   const offPeakRate = isFree ? "\u514D\u8D39" : normalizeDiscountedRate(detail?.discountedCredits);
   const note = detail === void 0 ? void 0 : buildPromotionNote(promo, offPeakRate, isFree, active) ?? void 0;
@@ -35368,8 +35369,10 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
    * 变体标记，名字随开关跳变。
    */
   listAllModels() {
-    const source = this.remoteModels ?? this.staticFallbackModels();
-    return source.map((model) => {
+    const remote = this.remoteModels;
+    const source = remote ?? this.staticFallbackModels();
+    if (remote === void 0) return source.map((model) => ({ id: model.id, name: displayNameFor(model, source) }));
+    return remote.map((model) => {
       const badge = promotionView(model).badge;
       return {
         id: model.id,
@@ -35381,10 +35384,20 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
   async listModels(_provider) {
     if (!await providerCatalogVisible(this.options.accountPool, this.product.id)) return [];
     await this.ensureRemoteModels();
-    const source = this.remoteModels ?? this.staticFallbackModels();
+    const remote = this.remoteModels;
+    const source = remote ?? this.staticFallbackModels();
     const disabled = this.options.accountPool?.disabledModelsFor(this.product.id);
     const listed = disabled === void 0 || disabled.size === 0 ? source : source.filter((model) => !disabled.has(model.id));
-    return listed.map((model) => {
+    if (remote === void 0) {
+      return listed.map((model) => ({
+        provider: this.product.id,
+        id: model.id,
+        name: displayNameFor(model, listed),
+        inputModalities: this.inputModalitiesFor(model.id)
+      }));
+    }
+    const shown = disabled === void 0 || disabled.size === 0 ? remote : remote.filter((model) => !disabled.has(model.id));
+    return shown.map((model) => {
       const view = promotionView(model);
       return {
         provider: this.product.id,
