@@ -175,6 +175,10 @@ function normalizeRemoteModel(entry: Record<string, unknown>): RaccoonRemoteMode
   return {
     id,
     name: raccoonDisplayName(meta),
+    // ⚠️ 原始计费字段一并带上：展示名把促销压成了一个字符串
+    // （`x0.5→x0.25`），而设置页要画**结构化**胶囊（独立字段 `promo`），
+    // 从名字反解析正是这套改造要消灭的做法。见 `raccoonPromoBadge`。
+    meta,
     contextWindow: readPositiveInt(params.context_window ?? entry.context_window),
     maxTokens: readPositiveInt(params.max_tokens),
     // ⚠️ **不能只看 tags**：`vision` 是客户端「Raccoon-Auto 选模」的偏好标签，

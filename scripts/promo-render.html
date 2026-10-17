@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>促销价渲染快照 · e2e</title>
+<style>
+  body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:#0f1115; color:#e6e6e6; padding:24px; }
+  h2 { font-weight:600; }
+  .panel { background:#1a1d23; border:1px solid #2a2e37; border-radius:10px; padding:14px 16px; margin:12px 0; max-width:560px; }
+  .model-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; background:#21252e; margin:8px 0; }
+  .model-name { font-weight:600; color:#fff; flex:1; min-width:0; }
+  .model-badge { font-size:10px; padding:1px 7px; border-radius:999px; white-space:nowrap;
+    color:#7aa2ff; border:1px solid rgba(122,162,255,.55); }
+  .tag { color:#ffd479; }
+</style></head><body>
+  <h2>模型选择器渲染快照（促销价 e2e · 含徽标）</h2>
+  <div class="panel"><b>夜间 23:30 (Asia/Shanghai)</b><ul style="list-style:none;padding:0;margin:0">
+    
+    <li class="model-row">
+      <span class="model-name">Hy4 preview · x0 (错峰)</span>
+      <span class="model-badge" title="错峰时段23:00-08:00·限免·至11月1日">错峰时段23:00-08:00·限免·至11月1日</span>
+    </li>
+
+    <li class="model-row">
+      <span class="model-name">Hy3 · x0.00 (限免)</span>
+      <span class="model-badge" title="限免·至11月1日">限免·至11月1日</span>
+    </li>
+
+    <li class="model-row">
+      <span class="model-name">DeepSeek V4.1 Flash · x0.03</span>
+      
+    </li>
+
+    <li class="model-row">
+      <span class="model-name">GLM-5.3 · x0.79 (常时)</span>
+      <span class="model-badge" title="错峰时段09:00-12:00/14:00-18:00·非高峰x0.32·至10月31日">错峰时段09:00-12:00/14:00-18:00·非高峰x0.32·至10月31日</span>
+    </li>
+  </ul></div>
+  <div class="panel"><b>白天 12:00 (Asia/Shanghai)</b><ul style="list-style:none;padding:0;margin:0">
+    
+    <li class="model-row">
+      <span class="model-name">Hy4 preview · x0.29 (常时)</span>
+      <span class="model-badge" title="错峰时段23:00-08:00·限免·至11月1日">错峰时段23:00-08:00·限免·至11月1日</span>
+    </li>
+
+    <li class="model-row">
+      <span class="model-name">Hy3 · x0.00 (限免)</span>
+      <span class="model-badge" title="限免·至11月1日">限免·至11月1日</span>
+    </li>
+
+    <li class="model-row">
+      <span class="model-name">DeepSeek V4.1 Flash · x0.03</span>
+      
+    </li>
+
+    <li class="model-row">
+      <span class="model-name">GLM-5.3 · x0.79 (常时)</span>
+      <span class="model-badge" title="错峰时段09:00-12:00/14:00-18:00·非高峰x0.32·至10月31日">错峰时段09:00-12:00/14:00-18:00·非高峰x0.32·至10月31日</span>
+    </li>
+  </ul></div>
+  <p style="color:#8a8f98">倍率与状态词按<strong>当前时刻实时</strong>推算；长标注（活动截止日 + 时段窗口）渲染为<strong>徽标胶囊</strong>（本插件自绘 CSS，不依赖宿主透传），不塞进模型名。</p>
+</body></html>
