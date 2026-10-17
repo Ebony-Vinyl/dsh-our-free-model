@@ -39418,7 +39418,9 @@ function promotionActiveNow2(promotion, now) {
     if (m === null) return void 0;
     const h = Number(m[1]);
     const min = Number(m[2]);
-    return h < 24 && min < 60 ? h * 60 + min : void 0;
+    if (min >= 60) return void 0;
+    if (h === 24 && min === 0) return 24 * 60;
+    return h < 24 ? h * 60 + min : void 0;
   };
   const start = toMinutes(windowStart);
   const end = toMinutes(windowEnd);
@@ -40692,14 +40694,23 @@ function traeDiscountActiveNow(model, now = /* @__PURE__ */ new Date()) {
   if (model.discountEndsAtSec !== void 0 && now.getTime() >= model.discountEndsAtSec * 1e3) return false;
   const windows = model.discountWindows;
   if (windows === void 0 || windows.length === 0) return snapshot ?? true;
-  const minutesNow = now.getHours() * 60 + now.getMinutes();
-  const isoWeekday = (now.getDay() + 6) % 7 + 1;
+  const utc8 = new Date(now.getTime() + 8 * 36e5);
+  const minutesNow = utc8.getUTCHours() * 60 + utc8.getUTCMinutes();
+  const isoWeekday = (utc8.getUTCDay() + 6) % 7 + 1;
+  const isoWeekdayPrev = isoWeekday === 1 ? 7 : isoWeekday - 1;
   for (const slot2 of windows) {
     if (typeof slot2.startMinute !== "number" || typeof slot2.endMinute !== "number") continue;
-    if (Array.isArray(slot2.weekdays) && slot2.weekdays.length > 0 && !slot2.weekdays.includes(isoWeekday)) continue;
     const { startMinute: start, endMinute: end } = slot2;
-    const hit = start <= end ? minutesNow >= start && minutesNow < end : minutesNow >= start || minutesNow < end;
-    if (hit) return true;
+    const crossesMidnight = start > end;
+    const inSecondHalf = crossesMidnight && minutesNow < end;
+    const inFirstHalf = start <= end ? minutesNow >= start && minutesNow < end : minutesNow >= start;
+    const hit = inFirstHalf || inSecondHalf;
+    if (!hit) continue;
+    if (Array.isArray(slot2.weekdays) && slot2.weekdays.length > 0) {
+      const day2 = inSecondHalf ? isoWeekdayPrev : isoWeekday;
+      if (!slot2.weekdays.includes(day2)) continue;
+    }
+    return true;
   }
   return false;
 }

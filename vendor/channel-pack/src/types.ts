@@ -848,6 +848,20 @@ export interface RpcModelListResponse {
    * 展开 fold 都为兼容分支白付一次目录读取（绝大多数模型本来就没促销）。
    * 能力位只回答一条：「我搬得动 promo」。老 pack 没有这个键，消费端据此
    * 才走 `description` 兼容通路。缺失即不写键（与全仓约定一致）。
+   *
+   * ## 兼容矩阵（连同它已知的缺口，写清楚比留着让人猜好）
+   *
+   * | 组合 | 行为 |
+   * |---|---|
+   * | 新客户端 + 新 pack | 走 `promo`，完整能力（结构化胶囊） |
+   * | 新客户端 + 老 pack | 能力位缺失 → 走 `description` 兼容通路 |
+   * | **老客户端 + 新 pack** | **促销标注不显示**：老客户端只认 `description`，而 TRAE / Qoder 的 pack 只写 `promo`（目前只有 Buddy 两条通路都写） |
+   *
+   * ⚠️ 最后一行是**刻意接受**的缺口，不是遗漏：`client.js` 与
+   * `vendor/channel-pack` 同仓、同版本、同一次发布——pack 由插件自己随包分发，
+   * 没有独立升级通道，因此「装上新 pack 却留着上一代客户端」不是受支持的组合。
+   * 若将来把 pack 拆成可单独升级的分发物，这一行必须重新处理，且那时的正解是
+   * 让四个 producer 统一保留 `description`，而不是在这里加版本协商。
    */
   promoTransport?: true
 }

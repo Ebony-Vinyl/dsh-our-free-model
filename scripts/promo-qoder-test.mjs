@@ -181,6 +181,35 @@ for (const [name, expected] of [
     'next night')
 }
 
+// ── `24:00` is a legal window end ("to midnight") ────────────────────────────
+//
+// `24:00` 是上游表达「到午夜」的写法（TRAE 的 `end_minute: 1440` 同一语义）。
+// 它一旦被判为非法，`promotionActiveNow` 就整体退回**冻结快照**
+// `promotion.active`——time-decay 缺陷会在恰好带 24:00 的数据上原地复活。
+// 下面这份快照是**夜里采集**的（active: true），到中午必须被推回 false。
+{
+  const TO_MIDNIGHT = {
+    id: 'qmodel_2400', name: 'Qwen3.6-Max',
+    priceFactor: 0.2,
+    promotion: {
+      active: true, discountFactor: 0.2, beforePromotionPriceFactor: 0.5,
+      windowStart: '22:00', windowEnd: '24:00',
+    },
+  }
+  const at = when => new Date(`2026-10-09T${when}:00+08:00`)
+  check('24:00 窗口：22:30 在窗口内 → active=true',
+    qoder.qoderPromoBadge(TO_MIDNIGHT, at('22:30'))?.active === true, '22:30')
+  check('24:00 窗口：中午不在窗口内 → active=false（不采信冻结快照）',
+    qoder.qoderPromoBadge(TO_MIDNIGHT, at('12:00'))?.active === false, 'noon')
+  check('24:00 窗口：中午实付价回落到原价 x0.5',
+    qoder.qoderPromoBadge(TO_MIDNIGHT, at('12:00'))?.price?.effective === 'x0.5',
+    JSON.stringify(qoder.qoderPromoBadge(TO_MIDNIGHT, at('12:00'))?.price))
+  // 24:30 是笔误，必须按解析失败处理（退回快照），不能被当成 1470 分。
+  const TYPO = { ...TO_MIDNIGHT, promotion: { ...TO_MIDNIGHT.promotion, windowEnd: '24:30' } }
+  check('24:30 是非法写法 → 退回快照 active=true（不做臆测）',
+    qoder.qoderPromoBadge(TYPO, at('12:00'))?.active === true, 'typo falls back')
+}
+
 // ── the "free" label must decay too (priceFactor 0 captured at night) ────────
 {
   const FREE_AT_NIGHT = {

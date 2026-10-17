@@ -1171,15 +1171,26 @@ export function promotionActiveNow(promotion: QoderModelPromotion, now: Date): b
     const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim())
     if (m === null) return undefined
     const h = Number(m[1]); const min = Number(m[2])
-    return h < 24 && min < 60 ? h * 60 + min : undefined
+    if (min >= 60) return undefined
+    // ⚠️ `24:00` 必须收下：上游就用它表示「到午夜」（TRAE 的 `end_minute: 1440`
+    // 也被呈现成同一写法）。只允许 `24:00` 这一种——`24:30` 是笔误，按解析
+    // 失败处理。否则解析器一返回 undefined，本函数就整体退回到**冻结快照**
+    // `promotion.active`，time-decay 缺陷会在恰好带 24:00 的数据上复活。
+    if (h === 24 && min === 0) return 24 * 60
+    return h < 24 ? h * 60 + min : undefined
   }
   const start = toMinutes(windowStart)
   const end = toMinutes(windowEnd)
   if (start === undefined || end === undefined) return promotion.active
 
-  // 取 UTC+8 的「墙上时间」（目录时区与用户一致，故无需真实时区换算）
+  // 取 UTC+8 的「墙上时间」。**不用 `now.getHours()`**：那是宿主机本地时区，
+  // 海外服务器上跑会整体漂移（TRAE 的历史实现就是这个坑，见
+  // `traeDiscountActiveNow` 现在也改走同一口径）。徽标契约带 `timezone` 字段，
+  // 展示端与判定端必须是同一个时区，否则窗口在两地之间对不上。
   const utc8 = new Date(now.getTime() + 8 * 3_600_000)
   const minutes = utc8.getUTCHours() * 60 + utc8.getUTCMinutes()
+  // `end === 1440` 是「到午夜」，等价于 0 分钟闭区间上界（当前写法已天然成立：
+  // `minutes < 1440` 对一天内所有时刻都为真）。写成显式分支只为让意图可读。
   return start <= end
     ? minutes >= start && minutes < end
     : minutes >= start || minutes < end

@@ -702,19 +702,37 @@ export function traeDiscountActiveNow(model: TraeRemoteModel, now: Date = new Da
   if (model.discountEndsAtSec !== undefined && now.getTime() >= model.discountEndsAtSec * 1000) return false
   const windows = model.discountWindows
   if (windows === undefined || windows.length === 0) return snapshot ?? true
-  // minutes-since-midnight（本地墙上时间，与上游 `time_windows` 同一口径）
-  const minutesNow = now.getHours() * 60 + now.getMinutes()
-  // 上游 `weekdays` 为 1..7（1=周一）；`Date.getDay()` 是 0..6（0=周日）。
-  const isoWeekday = ((now.getDay() + 6) % 7) + 1
+  // 分钟制窗口按 **UTC+8** 的墙上时间判定，与 Qoder（`promotionActiveNow`）同口径。
+  // ⚠️ 不能用 `now.getHours()`：那是宿主机本地时区，海外服务器上跑窗口会整体漂移，
+  // 而徽标契约写的 `timezone` 只有一个值，展示端与判定端必须对齐。
+  const utc8 = new Date(now.getTime() + 8 * 3_600_000)
+  const minutesNow = utc8.getUTCHours() * 60 + utc8.getUTCMinutes()
+  // 上游 `weekdays` 为 1..7（1=周一）；`getUTCDay()` 是 0..6（0=周日）。
+  const isoWeekday = ((utc8.getUTCDay() + 6) % 7) + 1
+  // 跨零点窗口的**前半段**（`minutes >= start`）落在开窗日，**后半段**
+  // （`minutes < end`，即次日凌晨）落在次日。weekdays 记的是「开窗那天」，
+  // 所以凌晨那半段必须按**前一天**的星期判定。
+  //
+  // ⚠️ 曾经这里只判 `isoWeekday`：窗口 `[1320, 480]` + `weekdays: [5]`（周五
+  // 22:00 开窗到周六 08:00）在周六 00:30 会被判成「周六不在名单里」而跳过，
+  // 凌晨那一半白丢。分钟翻转处理了、星期翻转没有，是同一个 bug 的两半。
+  const isoWeekdayPrev = isoWeekday === 1 ? 7 : isoWeekday - 1
   for (const slot of windows) {
     if (typeof slot.startMinute !== 'number' || typeof slot.endMinute !== 'number') continue
-    if (Array.isArray(slot.weekdays) && slot.weekdays.length > 0 && !slot.weekdays.includes(isoWeekday)) continue
     const { startMinute: start, endMinute: end } = slot
-    // 跨零点（如 22:00→08:00 = 1320→480）与同日窗口分别判定。
-    const hit = start <= end
+    const crossesMidnight = start > end
+    // 命中窗口的哪一半，决定了该拿哪一天的星期去核对。
+    const inSecondHalf = crossesMidnight && minutesNow < end
+    const inFirstHalf = start <= end
       ? minutesNow >= start && minutesNow < end
-      : minutesNow >= start || minutesNow < end
-    if (hit) return true
+      : minutesNow >= start
+    const hit = inFirstHalf || inSecondHalf
+    if (!hit) continue
+    if (Array.isArray(slot.weekdays) && slot.weekdays.length > 0) {
+      const day = inSecondHalf ? isoWeekdayPrev : isoWeekday
+      if (!slot.weekdays.includes(day)) continue
+    }
+    return true
   }
   return false
 }

@@ -444,6 +444,36 @@ const OFF_PEAK_WINDOWS = [
     traeAdapter.traePromoBadge(weekdayOnly, new Date('2026-10-10T02:00:00+08:00'))?.active === false, 'sat')
 }
 
+// ── a window that CROSSES midnight keeps the weekday of the day it OPENED ────
+//
+// 上面那组只覆盖同日窗口（0–480），跨零点的**星期翻转**没被测到：窗口
+// `[1320, 480]` + `weekdays: [5]`（周五 22:00 开窗、周六 08:00 收口）在
+// 周六 00:30 属于**周五那一场**，必须 active；而周六 23:30 是周六自己那场，
+// 周六不在名单里 → 不生效。曾经的实现只判「今天」的星期，把凌晨那一半白丢。
+{
+  const crossing = parseOne(entry('decay-crossing-weekday', {
+    rate: 0.72,
+    activityDiscount: {
+      enable: true, subKey: 'off_peak_discount',
+      data: {
+        current: { discount_type: 'none', before_consumption_rate: 0.72, consumption_rate: 0.72, discount: 100 },
+        off_peak: {
+          before_consumption_rate: 0.72, after_consumption_rate: 0.36, discount: 50,
+          time_windows: [{ weekdays: [5], start_minute: 1320, end_minute: 480 }],
+        },
+      },
+    },
+  }))
+  const activeAt = when => traeAdapter.traePromoBadge(crossing, new Date(`2026-10-${when}+08:00`))?.active
+  check('跨零点+周五：周五 23:30 在窗口前半段 → active=true', activeAt('09T23:30:00') === true, 'fri night')
+  check('跨零点+周五：周六 00:30 是周五那场的后半段 → active=true',
+    activeAt('10T00:30:00') === true, 'sat early (this is the regression)')
+  check('跨零点+周五：周六 12:00 已收口 → active=false', activeAt('10T12:00:00') === false, 'sat noon')
+  check('跨零点+周五：周六 23:30 属周六那场（不在名单）→ active=false',
+    activeAt('10T23:30:00') === false, 'sat night')
+  check('跨零点+周五：周日 00:30 属周六那场 → active=false', activeAt('11T00:30:00') === false, 'sun early')
+}
+
 // ── no window (member_discount) must NOT be clocked out ─────────────────────
 {
   // A member price has no time window; greying it by clock would be a lie, so
