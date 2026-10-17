@@ -260,40 +260,22 @@ export function fileUrlOf(manifestUrl, manifest, relativePath) {
 /**
  * Resolve one mutable ref to the commit it currently names.
  *
- * Resolution is what makes an update check reproducible: the manifest and every
- * file below it are then fetched at one immutable SHA, so a branch that moves
- * mid-upgrade cannot hand the download half of one release and half of another.
+ * Update checking used to ask `api.github.com` alone. That API rate limits
+ * unauthenticated clients to 60 requests an hour *per IP*, so on a shared or
+ * already-spent egress address every source died here — reporting "no manifest
+ * source answered (... HTTP 403)" while raw and jsDelivr were serving the
+ * release fine. Restarting did not help: the budget is per IP, not per process.
  *
- * The first implementation asked `api.github.com` alone, and that made update
- * checking depend on a *third* service the plugin never needs. The REST API
- * answers `403 rate limit exceeded` once an unauthenticated client has spent its
- * 60 requests an hour — and a client behind a shared/NAT egress IP shares that
- * budget with every other user of the same address, so the budget can already be
- * at zero when the app starts. When that happens every source failed
- * *resolution* before a single byte of manifest was requested, and the check
- * reported "no manifest source answered (... HTTP 403)" even though the
- * repository and its CDN mirrors were serving the release perfectly. Restarting
- * the app did not help: the quota is per IP per hour, not per process.
+ * So resolution walks three independent routes and takes the first full
+ * 40-character SHA: the REST API (cheapest, and the one route that names
+ * *tags*), the repository's git ref advertisement on `github.com` (the document
+ * `git ls-remote` reads, and not rate limited), and the branch's Atom commit
+ * feed as a last resort.
  *
- * So resolution walks three independent routes, in order, and takes the first
- * that answers with a full 40-character commit SHA:
- *
- * 1. `api.github.com` with `application/vnd.github.sha` — cheapest, and the one
- *    route that names *tags* (`v2.5.0`) as readily as branches.
- * 2. The repository's own git smart-HTTP ref advertisement on `github.com`.
- *    Unauthenticated and not subject to the REST API's quota; it lists every
- *    branch and tag with its commit. This is the same document `git ls-remote`
- *    reads, so it is as authoritative as the API for a branch name.
- * 3. The Atom commit feed for the branch, whose entry ids carry commit SHAs.
- *    Last resort: it only covers branch heads, and only the most recent ones.
- *
- * None of these supply authority: whatever SHA wins, the manifest that arrives
- * still has to carry the release signature before it is believed. A resolver
- * that lies only makes this client fetch a *different* (likely stale) release.
- *
- * Resolution is memoized per check (`revisions`) so the mirror legs re-use the
- * first answer instead of resolving again — and so raw and jsDelivr cannot end
- * up pinned to different snapshots of the same branch.
+ * None of them supply authority: whatever SHA wins, the manifest still has to
+ * carry the release signature before it is believed, and every file is still
+ * checked against the signed size and sha256. A resolver that lies can only
+ * make this client fetch a different (likely stale) release.
  */
 const GIT_SMART_PREFIX = 'application/x-git-upload-pack-advertisement'
 
@@ -334,6 +316,9 @@ async function resolveViaApi(ref, fetchImpl, signal) {
  * An annotated tag lists `refs/tags/<name>` (the tag object) and
  * `refs/tags/<name>^{}` (the commit it peels to); the peeled form is what a
  * `feed/manifest.json` fetch needs, so it wins when present.
+ *
+ * @param {string} body - the raw `info/refs` advertisement
+ * @returns {Map<string, string>} ref name (as advertised) to its commit SHA
  */
 export function parseUploadPackRefs(body) {
   const refs = new Map()
