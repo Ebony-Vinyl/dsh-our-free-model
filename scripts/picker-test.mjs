@@ -176,6 +176,22 @@ check('a model that can think nothing at all keeps the published rungs',
   museMenu.map(row => row.description.match(/^(\d+) K/)?.[1]), ['2', '8', '32'])
 check('without the always-thinking clause', museMenu.every(row => !/cannot be switched off/.test(row.description)), true)
 
+// The kernel reads `systemPromptUpdate` off `resolveModel()` and validates it
+// strictly — only `'in-history'` is accepted, anything else fails resolution
+// with `INVALID_MODEL_INFO` — so a wire that cannot actually reuse a mid-array
+// system snapshot must not claim the mode. `chat` and `responses` keep the
+// system message where it sits, so an appended snapshot is still read as the
+// effective prompt; `messages` folds every system block into one leading
+// top-level field, where an appended snapshot would land after everything it
+// invalidates and buy a rewrite rather than a cache hit.
+const modeOf = async id => adapter.resolveModel(ROUTE_MAIN, id)
+check('a chat-wire model declares the in-history prompt mode', (await modeOf('mimo-v2.6-flash-free'))?.systemPromptUpdate, 'in-history')
+check('a responses-wire model declares it too', (await modeOf('muse-spark-1.3-contributor-free'))?.systemPromptUpdate, 'in-history')
+check('the messages wire leaves it undeclared, so the host keeps rewriting the leading system node',
+  'systemPromptUpdate' in (await modeOf('union-alpha')), false)
+check('a model the catalog does not carry still declares it, because its wire falls back to chat',
+  (await modeOf('never-heard-of-it-free'))?.systemPromptUpdate, 'in-history')
+
 // Hiding a model is about *selection*, not about breaking a session that already
 // picked it: the composer still resolves it, and a turn still reaches the gateway
 // and fails (or succeeds) on the upstream's own answer rather than on the plugin
