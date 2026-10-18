@@ -304,7 +304,8 @@ async function convertMessage(
   if (!raw || typeof raw !== 'object') throw new OpenAiGatewayError('messages entries must be objects')
   const value = raw as OpenAiChatMessage
   const role = value.role
-  if (role === 'system') {
+  // 外部客户端的 developer 指令按 Responses 入口的约定映射为 system。
+  if (role === 'system' || role === 'developer') {
     // ⚠️ 腾讯系（`buddy` / `workbuddy`）后端有**内容级**风控：客户端自带的
     // 模板句（如 ZCode 的 gitStatus 注入）会让整轮请求 400 + 11128。
     // 改写只作用于 system、且只改腾讯系 —— 依据见 ./tencent-fingerprint.ts。

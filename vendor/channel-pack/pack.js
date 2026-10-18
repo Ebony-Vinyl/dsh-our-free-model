@@ -63311,7 +63311,7 @@ async function convertMessage(raw, provider, model, bridge, limits) {
   if (!raw || typeof raw !== "object") throw new OpenAiGatewayError("messages entries must be objects");
   const value = raw;
   const role = value.role;
-  if (role === "system") {
+  if (role === "system" || role === "developer") {
     return createGatewayMessage("system", [{
       type: "text",
       text: rewriteTencentContentFingerprints(textFromContent(value.content), provider)
