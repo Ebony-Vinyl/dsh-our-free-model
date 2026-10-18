@@ -110,6 +110,7 @@ const suites = [
   ['prompt-saver', 'prompt-saver-test.mjs', []],
   ['anthropic', 'anthropic-test.mjs', []],
   ['aggregate', 'aggregate-test.mjs', []],
+  ['aggregate-effort', 'aggregate-effort-test.mjs', []],
   ['aggregate-wiring', 'aggregate-wiring-test.mjs', []],
   ['gateway-source', 'gateway-source-test.mjs', []],
 ].filter(([name]) => (mode === 'contributor' ? !['manifest', 'release'].includes(name)

@@ -28,7 +28,8 @@ import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor,
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
-import { isComboEntry, comboChain } from './combos.js'
+import { isComboEntry, comboChain, comboTimeout } from './combos.js'
+import { hasGeneratedOutput } from './output-delta.js'
 import { applyTokenSavers, saverConfig } from './token-saver/index.js'
 import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
@@ -238,9 +239,19 @@ export class FreeModelAdapter {
       return
     }
     const tried = []
+    const deadline = started + comboTimeout(entry.totalTimeoutMs, 60000)
     for (let index = 0; index < candidates.length; index += 1) {
+      if (options.signal?.aborted) {
+        rejectedTurn(index)
+        yield { type: 'finish', reason: { kind: 'aborted', failure: { message: 'request aborted', code: CODE.aborted } } }
+        return
+      }
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) { tried.push('chain first-output deadline exceeded'); break }
       const candidate = candidates[index]
-      const iterator = this.runSingle(options, candidate, snapshot, {
+      const controller = new AbortController()
+      const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal
+      const iterator = this.runSingle({ ...options, signal }, candidate, snapshot, {
         wire: wireOf(candidate),
         turnModel: entry.id,
         recordTurn: false,
@@ -249,16 +260,46 @@ export class FreeModelAdapter {
       let committed = false
       let result
       const held = []
-      while (true) {
-        const row = await iterator.next()
-        if (row.done === true) { result = row.value; break }
-        if (committed) { yield row.value; continue }
-        held.push(row.value)
-        if (commitsAnswer(row.value)) {
-          committed = true
-          for (const chunk of held) yield chunk
-          held.length = 0
+      const timedOut = Symbol('first-output-timeout')
+      const cancelled = Symbol('caller-aborted')
+      let wake
+      const stopped = new Promise(resolve => { wake = resolve })
+      const onAbort = () => wake(cancelled)
+      options.signal?.addEventListener('abort', onAbort, { once: true })
+      const waitMs = Math.min(comboTimeout(entry.firstOutputTimeoutMs, 20000), remaining)
+      const timer = setTimeout(() => {
+        wake(timedOut)
+        controller.abort(new Error('combo first-output deadline exceeded'))
+      }, waitMs)
+      try {
+        while (true) {
+          const row = committed ? await iterator.next() : await Promise.race([stopped, iterator.next()])
+          if (row === cancelled) {
+            yield { type: 'finish', reason: { kind: 'aborted', failure: { message: 'request aborted', code: CODE.aborted } } }
+            rejectedTurn(index + 1)
+            return
+          }
+          if (row === timedOut) {
+            held.length = 0
+            result = { advance: true, verdict: classifyFailure({ code: 'timeout', message: `no answer within ${waitMs}ms` }) }
+            break
+          }
+          if (row.done === true) { result = row.value; break }
+          if (committed) { yield row.value; continue }
+          held.push(row.value)
+          if (commitsAnswer(row.value)) {
+            committed = true
+            clearTimeout(timer)
+            for (const chunk of held) yield chunk
+            held.length = 0
+          }
         }
+      } finally {
+        clearTimeout(timer)
+        options.signal?.removeEventListener('abort', onAbort)
+        controller.abort()
+        // Do not block failover on a transport that ignores cancellation.
+        void iterator.return().catch(() => {})
       }
       if (committed) {
         this.deps.recordTurn?.({ at: started, model: entry.id, ok: result?.ok === true, recovered: result?.recovered === true, attempts: index + 1, origin: 'harness' })
@@ -382,6 +423,12 @@ export class FreeModelAdapter {
       if (sealed || kilo || hasDeclaredEffortMenu(entry)) {
         const patch = effortPatchFor(options.reasoningEffort, entry)
         if (patch !== null) Object.assign(payload, patch)
+      }
+      // API-compatible relays must preserve the caller's explicit effort.
+      // Their static registry rows need not advertise an effort menu.
+      if (aggregate && typeof options.reasoningEffort === 'string' && options.reasoningEffort.trim()) {
+        if (wire === 'responses') payload.reasoning = { ...payload.reasoning, effort: options.reasoningEffort }
+        else if (wire === 'chat') payload.reasoning_effort = options.reasoningEffort
       }
       if (sealed) applySealedPacingHint(payload)
       // The token savers run last, after every other mutation, so the byte counts
@@ -519,7 +566,7 @@ export class FreeModelAdapter {
             }
             if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-call-delta') {
               delivered = true
-              if (firstDeltaAt === undefined) firstDeltaAt = Date.now()
+              if (firstDeltaAt === undefined && hasGeneratedOutput(chunk)) firstDeltaAt = Date.now()
             }
             blocks.accept(chunk)
             yield chunk
@@ -766,7 +813,8 @@ function wireOf(entry) {
 function commitsAnswer(chunk) {
   if (chunk === null || typeof chunk !== 'object') return false
   if (chunk.type === 'text-delta') return typeof chunk.text === 'string' && chunk.text.trim() !== ''
-  if (chunk.type === 'tool-call-delta') return true
+  if (chunk.type === 'tool-call-delta') return (typeof chunk.name === 'string' && chunk.name.trim() !== '')
+    || (typeof chunk.argumentsDelta === 'string' && chunk.argumentsDelta !== '')
   if (chunk.type !== 'block-end') return false
   if (chunk.block?.type === 'reasoning') return false
   if (chunk.block?.type === 'text') return typeof chunk.block.text === 'string' && chunk.block.text.trim() !== ''

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { foldForwardOutcome } from '../../../src/core/completion.js'
+import { hasGeneratedOutput } from '../../../src/output-delta.js'
 import { recordTurn, recordUsage } from '../../../src/store.js'
 
 /** 一实例一 Worker，避免原渠道业务的模块单例串目录、串账号。 */
@@ -92,7 +93,7 @@ export async function createChannelRuntime({ dataDir, logger = console, stats })
       try {
         const { signal, ...wire } = request
         await call('complete', { request: wire }, signal, chunk => {
-          if (!first) first = Date.now()
+          if (!first && hasGeneratedOutput(chunk)) first = Date.now()
           foldForwardOutcome(outcome, chunk)
           onChunk?.(chunk)
         }, 30 * 60000)
