@@ -1,12 +1,18 @@
 #!/usr/bin/env node
-// Menyembunyikan model mati dari daftar /v1/models.
+// Membersihkan daftar sembunyi: hanya menyisakan id yang belum terverifikasi
+// hidup. Tidak pernah menambah id baru ke daftar sembunyi.
 //
 // KEEP berisi id yang sudah diverifikasi merespons 200 lewat gateway. Id lain
-// yang masih diiklankan akan ditambahkan ke hiddenModelIds.
+// yang masih tersembunyi akan dilepas dari hiddenModelIds.
+//
+// Skrip ini SENGAJA tidak menambah id baru ke daftar sembunyi. /v1/models hanya
+// memuat model yang sudah lolos filter, jadi id yang muncul di sana justru
+// kemungkinan besar hidup — menyembunyikannya otomatis akan salah. Untuk
+// menyembunyikan model, lakukan sadar lewat POST /api/management/settings.
 //
 // PENTING: /v1/models hanya memuat model yang SUDAH lolos filter, jadi listing
 // itu tidak boleh dipakai sebagai satu-satunya sumber. Daftar sembunyi yang ada
-// di settings ikut digabung, supaya id yang sudah tersembunyi tidak pernah
+// di settings dibaca langsung, supaya id yang sudah tersembunyi tidak pernah
 // hilang hanya karena ia tidak muncul di listing.
 //
 // Penyembunyian ini reversibel: katalog tidak diubah, jadi cukup buang id dari
@@ -65,22 +71,21 @@ async function listModels() {
 const advertised = await listModels()
 const existingHidden = Array.isArray(settings.hiddenModelIds) ? settings.hiddenModelIds : []
 
-// Gabungan: id yang tampil sekarang + id yang sudah tersembunyi. Tanpa langkah
-// ini, id tersembunyi yang tidak muncul di listing akan terhapus dari daftar.
-const universe = [...new Set([...advertised, ...existingHidden])]
-const hidden = universe.filter(id => !KEEP.includes(id)).sort()
-const shown = universe.filter(id => KEEP.includes(id))
+// Hanya melepas id yang ada di KEEP. Id tersembunyi di luar KEEP dibiarkan
+// tersembunyi; id yang diiklankan tetapi tidak ada di KEEP hanya dilaporkan.
+const hidden = existingHidden.filter(id => !KEEP.includes(id)).sort()
+const shown = advertised.filter(id => KEEP.includes(id))
 const missing = KEEP.filter(id => !advertised.includes(id))
-const added = hidden.filter(id => !existingHidden.includes(id))
 const removed = existingHidden.filter(id => !hidden.includes(id))
+const unknown = advertised.filter(id => !KEEP.includes(id) && !existingHidden.includes(id))
 
 console.log(`model diiklankan   : ${advertised.length}`)
 console.log(`tersembunyi sekarang: ${existingHidden.length}`)
 console.log(`dipertahankan      : ${shown.length}`)
 console.log(`akan tersembunyi   : ${hidden.length}`)
-if (added.length > 0) console.log(`  + baru disembunyikan: ${added.join(', ')}`)
 if (removed.length > 0) console.log(`  - dilepas           : ${removed.join(', ')}`)
 if (missing.length > 0) console.log(`PERINGATAN: id KEEP tidak sedang diiklankan -> ${missing.join(', ')}`)
+if (unknown.length > 0) console.log(`PERINGATAN: id baru di luar KEEP (tidak disembunyikan) -> ${unknown.join(', ')}`)
 
 if (!write) {
   console.log('\n(dry-run) tambahkan --write untuk menerapkan')
