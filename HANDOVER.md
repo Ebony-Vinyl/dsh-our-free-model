@@ -721,5 +721,6 @@ Jangan hapus entri tanpa persetujuan user.
 - Frontend `dsh-ofm` **sudah 100% Bahasa Indonesia** (dict `zh` di `client.js`
   kini berisi teks Indonesia dan menjadi fallback yang tampil). Ini belum
   pernah dicatat di HANDOVER sebelum sesi ini.
-- `scripts/tmp-probe-zed-payload.mjs` adalah satu-satunya alat reproduksi
-  payload ala Zed; pertahankan (bukan sampah sementara).
+- `scripts/ofm-probe-zed-shape.mjs` (dulu `tmp-probe-zed-payload.mjs`) adalah
+  satu-satunya alat reproduksi payload ala Zed; pertahankan (bukan sampah
+  sementara). Jalankan: `node scripts/ofm-probe-zed-shape.mjs "<id>"`.
