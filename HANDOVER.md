@@ -396,3 +396,88 @@ node scripts/ofm-hide-dead-models.mjs
   (403) ≠ `nvidia/nemotron-3.5-super-vl:free` (200, baris Kilo).
 - **`ofm-hide-dead-models.mjs --write`** kini aman, tetapi tetap jalankan dry-run
   lebih dulu dan periksa baris `+`/`-`.
+
+# SESI 15h — 2026-10-18 — 20 model masuk picker Zed (vision diperbaiki)
+
+## 17. Jawaban pertanyaan terakhir
+
+**`nvidia/nemotron-3.5-super-vl:free` sudah masuk Zed?** Sebelum sesi ini: BELUM.
+Sekarang: SUDAH, dengan `capabilities.images: true`.
+
+**Support vision?** Ya. `~/.our-free-model/catalog.json` → `kiloRows` mencatat
+`vision: true`, `contextWindow: 1000000`, `maxOutput: 131072`.
+
+Alasannya dulu tidak terdeteksi: `/v1/models` TIDAK mengirim flag vision untuk
+baris channel Kilo (hanya `gemini/*` yang mengirim `input:[text,image]` +
+`vision:true`). Jadi Zed tidak bisa menebak; `images` harus ditulis manual.
+
+## 18. Yang berubah di settings Zed
+
+| Item | Sebelum | Sesudah |
+|---|---|---|
+| Entri `available_models` | 6 | **20** |
+| Entri `images: true` | 0 | **6** |
+
+Enam baris ber-vision yang sekarang benar:
+
+- `nvidia/nemotron-3.5-super-vl:free`
+- `dots-studio/dots-3-note-preview:free`
+- `open_router/dots-studio/dots-3-note-preview:free`
+- `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`
+- `openrouter/free`
+- `gemini/gemini-3.8-flash`
+
+(`openrouter/free` dan `gemini` dulu salah `false`.)
+
+## 19. Skrip baru: `scripts/ofm-zed-add-models.mjs`
+
+Bedah string, bukan round-trip JSON — komentar kepala dan EOL di luar array utuh.
+Idempoten: hanya menambah yang belum ada dan memperbaiki `images` yang meleset
+dari katalog. Sumber kapabilitas = `catalog.json` → `kiloRows`.
+
+```bash
+node scripts/ofm-zed-add-models.mjs            # dry-run
+node scripts/ofm-zed-add-models.mjs --write    # tulis + backup .bak-ofm-N
+node scripts/ofm-zed-add-models.mjs --write <id> [id...]  # hanya id tertentu
+```
+
+Catatan `max_output_tokens`: gateway membatasi output dengan
+`Math.min(entry.maxOutput, defaultMaxTokens ?? 32768)` (`src/adapter.js:133`).
+Karena `defaultMaxTokens` = 32768, skrip menulis batas efektif itu, bukan angka
+katalog mentah (mis. 131072 / 460800) yang toh akan dipotong gateway.
+Pengecualian: model dengan `maxOutput < 32768` (mis. `liquid/lfm-2.5-2.6b` → 8192).
+
+## 20. Perbaikan skrip lain
+
+- `scripts/ofm-zed-prune-models.mjs`
+  - `KEEP_EXACT` diperluas ke 15 id baru, jadi `--write` tidak lagi memangkas
+    model Kilo yang sudah hidup. Dry-run sekarang: **20 → 20, hapus 0**.
+  - Deteksi penyedia diganti dari `"Our-Free-Local"` menjadi
+    `"Our-Free-Local":` — nama itu juga muncul di `agent.favorite_models`
+    (`provider: "Our-Free-Local"`), yang dulu memicu false positive
+    "penyedia muncul lebih dari sekali".
+
+## 21. EOL
+
+Berkas Zed memang sudah campur sebelum sesi ini (302 CRLF + 101 LF).
+Skrip baru menormalkan **hanya blok `available_models`** ke satu EOL (LF);
+sisa berkas tidak disentuh. Validasi menolak hasil dengan EOL campur di array.
+
+## 22. Sisa pekerjaan (diperbarui)
+
+- [ ] **Restart Zed** agar picker memuat 20 model (settings tidak di-watch).
+- [ ] Ulangi probe `thinkingmachines/inkling-small:free` besok (429 harian).
+      Id ini `vision: true` dan BELUM masuk daftar Zed.
+- [ ] Rotasi API key OpenRouter — sudah terekspos di chat.
+- [ ] (Opsional) terjemahkan 180 baris komentar kode di `client.js`.
+
+## 23. Verifikasi sesi ini
+
+```
+byte 19625 | entri 20 | header true | array CRLF 0 | favorite_models utuh
+```
+
+```bash
+node scripts/ofm-zed-add-models.mjs   # 20 -> 20, ditambah 0, images 0
+node scripts/ofm-zed-prune-models.mjs # 20 -> 20, dihapus 0
+```

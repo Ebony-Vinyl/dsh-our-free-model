@@ -26,7 +26,24 @@ const SETTINGS = path.join(
 
 const PROVIDER = 'Our-Free-Local';
 const KEEP_PREFIX = 'open_router/';
-const KEEP_EXACT = new Set(['openrouter/free', 'gemini/gemini-3.8-flash']);
+const KEEP_EXACT = new Set([
+  'openrouter/free',
+  'gemini/gemini-3.8-flash',
+  'kilo-auto/free',
+  'nvidia/nemotron-3.5-super-vl:free',
+  'reflection/beam-free',
+  'stealth/glyph-cluster',
+  'xingchen-agi/xing4.0-29b-a4b:free',
+  'dots-studio/dots-3-note-preview:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'nvidia/nemotron-3.5-lightning:free',
+  'poolside/laguna-s-2.1:free',
+  'poolside/laguna-xs-2.1:free',
+  'cohere/north-mini-code:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+]);
 const WRITE = process.argv.includes('--write');
 
 const BACKSLASH = String.fromCharCode(92);
@@ -124,9 +141,10 @@ function keep(name) {
 
 const raw = fs.readFileSync(SETTINGS, 'utf8');
 
-const providerAt = raw.indexOf('"' + PROVIDER + '"');
+const providerDef = QUOTE + PROVIDER + QUOTE + ':';
+const providerAt = raw.indexOf(providerDef);
 if (providerAt < 0) fail(`penyedia "${PROVIDER}" tidak ditemukan`);
-if (raw.indexOf('"' + PROVIDER + '"', providerAt + 1) >= 0) {
+if (raw.indexOf(providerDef, providerAt + 1) >= 0) {
   fail(`penyedia "${PROVIDER}" muncul lebih dari sekali`);
 }
 
