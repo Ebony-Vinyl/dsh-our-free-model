@@ -63,7 +63,25 @@ export async function prepareDesktop({ nodeExecutable = process.execPath, nodeLi
   fs.rmSync(resourceDirectory, { recursive: true, force: true })
   stageDesktopService(path.join(resourceDirectory, 'service'))
   fs.mkdirSync(path.join(resourceDirectory, 'runtime'), { recursive: true })
-  fs.copyFileSync(nodeExecutable, path.join(resourceDirectory, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node'))
+  const runtimeBinary = path.join(resourceDirectory, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node')
+  fs.copyFileSync(nodeExecutable, runtimeBinary)
+  // 安装包瘦身（仅 macOS）：官方 Node 发布二进制带着完整调试符号，比运行时
+  // 实际需要的大约 20 MB。strip 后必须补 ad-hoc 签名——macOS 上签名失效的内嵌
+  // 二进制会直接卡死无法执行（本机实测）。任何一步失败都退回原始二进制：瘦身
+  // 是优化，不是前提；外层 .app 稍后仍会被统一签名。
+  if (process.platform === 'darwin') {
+    try {
+      const before = fs.statSync(runtimeBinary).size
+      execFileSync('strip', ['-x', runtimeBinary])
+      execFileSync('codesign', ['--sign', '-', '--force', runtimeBinary])
+      const probe = execFileSync(runtimeBinary, ['-p', 'process.version'], { env: cleanEnv, encoding: 'utf8' })
+      if (probe.trim() !== runtime.version) throw new Error(`瘦身后运行异常：${probe.trim()}`)
+      console.log(`Node 运行时已瘦身：${(before / 1048576).toFixed(1)} MB → ${(fs.statSync(runtimeBinary).size / 1048576).toFixed(1)} MB`)
+    } catch (error) {
+      console.warn(`Node 运行时瘦身失败，保留原始二进制：${error.message}`)
+      fs.copyFileSync(nodeExecutable, runtimeBinary)
+    }
+  }
   fs.writeFileSync(path.join(resourceDirectory, 'runtime/LICENSE'), license)
   fs.writeFileSync(path.join(resourceDirectory, 'runtime/version.json'), JSON.stringify(runtime) + '\n')
   console.log(`桌面资源已生成：完整独立服务及 Node ${runtime.version} ${runtime.arch}`)
