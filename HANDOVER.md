@@ -613,3 +613,113 @@ thinkingmachines/inkling-small:free (429 harian)
 nvidia/nemotron-3.5-content-safety:free (404 tanpa tool use — final)
 mimo-v2.6-flash-free                (hidup, sengaja tidak dipakai)
 ```
+
+---
+
+# SESI 15k — 2026-10-19 — Akar 400/403: blokir IP OpenCode, bukan payload
+
+## 32. Ringkasan
+
+User memilih `DeepSeek V4.1 Flash (free) · sementara` di Zed dan menerima
+`Request failed upstream HTTP 400`. Investigasi sesi ini membuktikan bahwa
+**bentuk payload bukan penyebabnya**: lima varian payload ala Zed (minimal,
+`tools`, `stream_options`, riwayat multi-turn + `tool` role, dan gabungan
+lengkap dengan `parallel_tool_calls` + `temperature`) semuanya dijawab **403**
+oleh upstream dengan pesan yang sama:
+
+```json
+{"error":{"message":"OpenCode's free models aren't available from your current network because we've detected abusive traffic from this IP address. This isn't related to your account. If you're on a VPN or proxy, turn it off and try again, or subscribe to OpenCode Go at https://opencode.ai/go to keep building.","type":"permission_error","code":"LANE_LOCKED","param":null}}
+```
+
+Artinya: **blokir IP/ASN di sisi OpenCode**, bukan kuota 2 jam, bukan
+kredensial, bukan `reasoning_effort`, dan bukan gate klien.
+
+### Koreksi hipotesis lama
+
+- ❌ `reasoning_effort: "medium"` menyebabkan 400 — **SALAH**. Semua varian,
+  termasuk yang tanpa `reasoning_effort`, tetap 403.
+- ❌ `parallel_tool_calls`, `stream_options`, atau riwayat `tool` — **SALAH**.
+- ❌ Workaround openchamber#5086 ("gate butuh tool `read`") — tidak berlaku.
+- ✅ Penyebab nyata: `LANE_LOCKED` karena IP publik mesin ini ditandai
+  "abusive traffic".
+
+`~/.our-free-model/stats.json` mendukung: request sukses sampai
+`2026-10-18T19:02Z`, lalu FAIL cepat (0,7–1,1 s, `noUsage:true`) sejak
+`19:04Z` — pola khas penolakan gate, bukan timeout model.
+
+## 33. Perubahan kode
+
+### `src/http.js` → `classifyFailure`
+
+Sebelumnya hanya satu teks yang dikenali sebagai `LANE_LOCKED`:
+`/free tier can only be used from within/i`. Teks blokir-IP yang baru jatuh ke
+cabang `type === 'permission_error'` → `PERMISSION_DENIED`, sehingga pesan ke
+user tidak menjelaskan bahwa masalahnya ada di jaringan, bukan akun.
+
+Sekarang cabang `LANE_LOCKED` mengenali tiga hal:
+
+1. `error.code === 'LANE_LOCKED'` (sinyal machine-readable, tahan perubahan
+   redaksi),
+2. `/abusive traffic|available from your current network/i`, dan
+3. teks lama `/free tier can only be used from within/i`.
+
+Untuk kasus blokir-IP, pesan upstream **tetap dipertahankan** lalu ditambah
+petunjuk Bahasa Indonesia:
+
+> — IP/jaringan ini diblokir sementara oleh OpenCode (bukan kredensial atau
+> kuota); coba jaringan lain seperti tethering, atau tunggu sampai blokirnya
+> dicabut
+
+Urutan lama tetap: `REGION_BLOCKED` diperiksa lebih dulu, jadi penolakan
+region tidak berubah menjadi `LANE_LOCKED`.
+
+### `scripts/freetier-gate-test.mjs`
+
+Ditambah 5 pemeriksaan:
+
+- penolakan level-IP → `LANE_LOCKED`,
+- kata-kata upstream dipertahankan,
+- petunjuk Indonesia ditambahkan,
+- `code: LANE_LOCKED` saja (tanpa teks dikenal) tetap `LANE_LOCKED`,
+- `403 permission_error` biasa tetap `PERMISSION_DENIED`.
+
+### Verifikasi
+
+```
+node scripts/freetier-gate-test.mjs   → all checks passed (16)
+node scripts/route-test.mjs           → agree
+node scripts/stream-failure-test.mjs  → 80/80 pass
+node scripts/retry-safety-test.mjs    → all 8 shapes classified
+```
+
+## 34. Status tiga model `· sementara`
+
+| Id | Status saat ini |
+|---|---|
+| `big-pickle` | 403 blokir IP |
+| `deepseek-v4.1-flash-free` | 403 blokir IP |
+| `glm-5.3-flash-free` | 403 blokir IP |
+
+**Keputusan produk belum diambil.** Sesuai §29, bila blokir berlanjut pilihannya:
+(a) biarkan dengan label `· sementara` (user bisa mencoba lagi setelah IP
+pulih), atau (b) sembunyikan lewat `hiddenModelIds` + hapus dari picker Zed.
+Jangan hapus entri tanpa persetujuan user.
+
+## 35. Langkah berikutnya
+
+1. **Restart gateway** agar perubahan `src/http.js` berlaku (tidak ada
+   file-watching): hentikan PID lama lalu jalankan ulang
+   `packages\standalone\cli.mjs --port 18900`.
+2. Uji dari jaringan lain (tethering HP) dengan payload yang sama. Bila 200 →
+   konfirmasi blokir per-IP/ASN, bukan kode OFM.
+3. Cek IP publik: `curl -s https://api.ipify.org`.
+4. Bila tetap 403, putuskan hide vs biarkan (lihat §34).
+5. Rotasi API key OpenRouter (sudah terekspos di chat) — masih backlog.
+
+## 36. Catatan yang belum tercatat sebelumnya
+
+- Frontend `dsh-ofm` **sudah 100% Bahasa Indonesia** (dict `zh` di `client.js`
+  kini berisi teks Indonesia dan menjadi fallback yang tampil). Ini belum
+  pernah dicatat di HANDOVER sebelum sesi ini.
+- `scripts/tmp-probe-zed-payload.mjs` adalah satu-satunya alat reproduksi
+  payload ala Zed; pertahankan (bukan sampah sementara).

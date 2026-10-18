@@ -142,8 +142,23 @@ export function classifyFailure(status, payload, retryAfterMs) {
   // the credential branch and the generic 4xx fallthrough, and the availability
   // probe reads it as a lane-level lock (src/probe.js) instead of leaving the
   // model in the picker as "unknown".
-  if (type === 'FreeTierError' || /free tier can only be used from within/i.test(flat)) {
-    return new UpstreamError(message, CODE.laneLocked, { status, type })
+  //
+  // The same gate also refuses a whole *network*: "OpenCode's free models
+  // aren't available from your current network because we've detected abusive
+  // traffic from this IP address" (code LANE_LOCKED). No credential change
+  // clears that either, and its wording reads like an account or quota problem,
+  // so it gets an explicit hint instead of the bare upstream sentence. The
+  // machine-readable code is honored as well, so a reworded refusal keeps
+  // landing here rather than in the generic permission branch below.
+  const networkLocked = /abusive traffic|available from your current network/i.test(flat)
+  if (type === 'FreeTierError'
+    || String(error.code ?? '').toUpperCase() === 'LANE_LOCKED'
+    || networkLocked
+    || /free tier can only be used from within/i.test(flat)) {
+    const hint = networkLocked
+      ? ' — IP/jaringan ini diblokir sementara oleh OpenCode (bukan kredensial atau kuota); coba jaringan lain seperti tethering, atau tunggu sampai blokirnya dicabut'
+      : ''
+    return new UpstreamError(message + hint, CODE.laneLocked, { status, type })
   }
   if (type === 'permission_error') return new UpstreamError(message, CODE.permission, { status, type })
   // An HTML page at 401/403 is the front proxy speaking, not the credential

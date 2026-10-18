@@ -58,6 +58,33 @@ check('it keeps the upstream message', typed.message, GATE_PAYLOAD.error.message
 const prose = classifyFailure(403, { error: { message: "OpenCode's free tier can only be used from within OpenCode." } })
 check('the prose alone classifies as a lane lock', prose.code, CODE.laneLocked)
 
+// The same gate also refuses a whole network: "we've detected abusive traffic
+// from this IP address" (code LANE_LOCKED). It is still a lane-level refusal
+// no credential can clear, but its wording reads like an account or quota
+// problem, so the classifier appends an actionable hint after the upstream's
+// own sentence.
+const IP_BLOCK_PAYLOAD = {
+  type: 'error',
+  error: {
+    type: 'permission_error',
+    code: 'LANE_LOCKED',
+    message: "OpenCode's free models aren't available from your current network because we've detected abusive traffic from this IP address. This isn't related to your account. If you're on a VPN or proxy, turn it off and try again, or subscribe to OpenCode Go at https://opencode.ai/go to keep building.",
+  },
+}
+const ipBlocked = classifyFailure(403, IP_BLOCK_PAYLOAD)
+check('an IP-level refusal is a lane lock', ipBlocked.code, CODE.laneLocked)
+check('it keeps the upstream words', ipBlocked.message.startsWith(IP_BLOCK_PAYLOAD.error.message), true)
+check('it appends an actionable hint', /IP\/jaringan ini diblokir sementara/.test(ipBlocked.message), true)
+
+// A reworded refusal that still carries the machine-readable code must not
+// slip back into the generic permission branch.
+const coded = classifyFailure(403, { error: { type: 'permission_error', code: 'LANE_LOCKED', message: 'some future wording' } })
+check('the LANE_LOCKED code alone classifies as a lane lock', coded.code, CODE.laneLocked)
+
+// The new branch must not swallow an ordinary permission refusal.
+const plainPermission = classifyFailure(403, { error: { type: 'permission_error', message: 'nope' } })
+check('a plain permission 403 stays permission-denied', plainPermission.code, CODE.permission)
+
 // --- The probe: a locked model stops advertising itself. ---
 const entry = id => ({ id, name: id, availability: 'available', vision: false, reasoning: true, contextWindow: 128000, maxOutput: 8192 })
 const locked = await probeModel(entry('gate-model-free'), { attributionUserAgent: 'test/1.0' })
