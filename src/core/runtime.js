@@ -124,6 +124,9 @@ export function createModelRuntime({
     state,
     resolveImage,
     sealedCredential,
+    // 限额闸门只读的当日账本：直接给 stats store 本体。checkQuota 内部对
+    // JsonStore（有 get()）取 get()、对裸对象直读，两种形态都吃得下。
+    stats,
     recordUsage: record => {
       if (disposed) return
       recordUsage(stats, record)

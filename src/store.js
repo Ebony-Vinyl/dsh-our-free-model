@@ -201,6 +201,14 @@ export const SETTINGS_INITIAL = {
     enabled: true,
     providers: {},
   },
+  /** 积分限额：按模型设每日请求数 / token 量 / 积分上限，到点自动拦下。
+   *  默认关闭、没有任何预置限额——限额是用户自己的账本，替用户预设一个
+   *  「0 上限」等于替他把门焊死。配置形状见 src/quota.js 的 normalizeQuota。 */
+  quota: {
+    enabled: false,
+    onExceed: 'deny',
+    models: {},
+  },
   /** Named fallback chains. A combo is a virtual model whose answer comes from
    *  the first link that produces output; see src/combos.js.
    *  Ships one sensible default so a fresh install shows a single "推荐免费组"
