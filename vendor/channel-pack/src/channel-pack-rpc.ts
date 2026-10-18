@@ -1425,8 +1425,36 @@ function registerChannelPackEndpoints(
             // 续期定时器归属该产品自己的服务实例
             ;(product.id === CODEBUDDY.id ? buddy : workbuddy).scheduleRefresh()
             const credential = parseBuddyCredential(flow.access)
+            const userId = credential?.user_id
+            const label = credential?.nickname ?? id
+            // ★★ 同登录去重（与 zcode 分支一致；zcode 那处是 2026-10-02 修复的
+            // 「真实缺陷」，本处是同一缺陷在免费渠道 CodeBuddy / WorkBuddy 上的延伸）：
+            // 此前 buddy 系只「新增」不「判重」，同一账号点两次「添加账号」会出现
+            // 两条完全一样的启用条目，UI 上无法区分、本机删除时也容易删错。
+            // 判据用服务端下发的 `user_id`（稳定），不用本机随机生成的设备指纹；
+            // 命中既有条目则把新条目标成「重复，已停用」——既退出自动选号
+            // （不重复消耗额度），又保留给用户自行删除（不自动删，否则 login.poll
+            // 会把这次成功登录误报成失败）。
+            if (typeof userId === 'string' && userId.length > 0) {
+              const existingId = await pool.findAccountIdByIdentityField(product.id, 'user_id', userId)
+              if (existingId.length > 0 && existingId !== id) {
+                ctx.logger.warn(
+                  `[channel-pack] ${product.id} 该账号（user_id=${userId}）已存在于 ${existingId}，` +
+                  `新条目 ${id} 已自动停用（不参与选号，可自行删除）`,
+                )
+                await pool.updateAccount(id, {
+                  nickname: `${label}（重复，已停用）`,
+                  enabled: false,
+                  // Buddy 的 expires_at 是字符串形式的毫秒时间戳，
+                  // 必须用 credentialExpiresAtMs 解析（Date.parse 对纯数字串会得到 NaN）。
+                  expiresAt: credential ? credentialExpiresAtMs(credential) : undefined,
+                  refreshable: Boolean(credential?.refresh_token),
+                })
+                return
+              }
+            }
             await pool.updateAccount(id, {
-              nickname: credential?.nickname ?? id,
+              nickname: label,
               // Buddy 的 expires_at 是字符串形式的毫秒时间戳，
               // 必须用 credentialExpiresAtMs 解析（Date.parse 对纯数字串会得到 NaN）。
               expiresAt: credential ? credentialExpiresAtMs(credential) : undefined,
