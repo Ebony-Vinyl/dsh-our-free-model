@@ -233,12 +233,12 @@ await checkAsync('a decoy tool call never reaches the streaming client', async (
     chunks: [
       { type: 'text-delta', index: 1, text: 'let me check' },
       // The model dialed the fingerprint placeholder: the caller declared no such tool.
-      { type: 'tool-call-delta', index: 2, id: 'call_d', name: 'shell', argumentsDelta: '{"command"' },
+      { type: 'tool-call-delta', index: 2, id: 'call_d', name: 'read', argumentsDelta: '{"path"' },
       { type: 'tool-call-delta', index: 2, argumentsDelta: ':"ls"}' },
-      { type: 'block-end', index: 2, block: { type: 'tool-call', id: 'call_d', name: 'shell', arguments: '{"command":"ls"}' } },
+      { type: 'block-end', index: 2, block: { type: 'tool-call', id: 'call_d', name: 'read', arguments: '{"path":"x"}' } },
       { type: 'finish', reason: { kind: 'tool-calls' } },
     ],
-    outcome: { text: 'let me check', toolCalls: [{ slot: 2, id: 'call_d', name: 'shell', arguments: '{"command":"ls"}' }] },
+    outcome: { text: 'let me check', toolCalls: [{ slot: 2, id: 'call_d', name: 'read', arguments: '{"path":"x"}' }] },
   })
   const response = await authFetch(base, '/v1/chat/completions', {
     model: 'mimo-v2.6-flash-free', stream: true,
@@ -262,13 +262,13 @@ await checkAsync('a decoy tool call never reaches the streaming client', async (
 await checkAsync('a turn whose only output was a suppressed call is reported, not answered empty', async () => {
   // A guarded lane, not `makeLane`: the non-streaming path calls `complete`
   // without an `onChunk`, and the shared helper forwards chunks unconditionally.
-  const outcome = { text: '', toolCalls: [{ slot: 0, id: 'call_s', name: 'shell', arguments: '{"command":"git diff --no-compact"}' }] }
+  const outcome = { text: '', toolCalls: [{ slot: 0, id: 'call_s', name: 'read', arguments: '{"path":"x"}' }] }
   const lane = {
     complete: async (request, onChunk) => {
       if (typeof onChunk === 'function') {
         for (const chunk of [
-          { type: 'tool-call-delta', index: 0, id: 'call_s', name: 'shell', argumentsDelta: '{"command":"git diff --no-compact"}' },
-          { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_s', name: 'shell', arguments: '{"command":"git diff --no-compact"}' } },
+          { type: 'tool-call-delta', index: 0, id: 'call_s', name: 'read', argumentsDelta: '{"path":"x"}' },
+          { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_s', name: 'read', arguments: '{"path":"x"}' } },
           { type: 'finish', reason: { kind: 'tool-calls' } },
         ]) onChunk(chunk)
       }
@@ -280,14 +280,14 @@ await checkAsync('a turn whose only output was a suppressed call is reported, no
   const body = await streamed.text()
   assert.deepEqual(toolCallDeltas(body), [], 'the undeclared call still must not reach the client')
   const error = sseFrames(body).map(frame => frame.error?.message).find(Boolean)
-  assert.ok(typeof error === 'string' && error.includes('shell'), `the stream must name the call it suppressed, got ${JSON.stringify(error)}`)
+  assert.ok(typeof error === 'string' && error.includes('read'), `the stream must name the call it suppressed, got ${JSON.stringify(error)}`)
   const finish = sseFrames(body).map(frame => frame.choices?.[0]?.finish_reason).filter(Boolean)
   assert.deepEqual(finish, [], 'a turn reported as failed carries no clean finish frame')
 
   const plain = await authFetch(base, '/v1/chat/completions', { model: 'mimo-v2.6-flash-free' })
   assert.equal(plain.status, 502, 'the non-streaming surface reports it as a failure too')
   const payload = JSON.parse(await plain.text())
-  assert.ok(String(payload.error?.message ?? '').includes('shell'), `got ${JSON.stringify(payload)}`)
+  assert.ok(String(payload.error?.message ?? '').includes('read'), `got ${JSON.stringify(payload)}`)
 })
 
 // The counter-case, so the note cannot swallow a legitimate truncation: a cut
@@ -337,7 +337,7 @@ await checkAsync('non-streaming drops decoys and unexecutable calls after a cut'
     outcome: {
       text: '',
       toolCalls: [
-        { slot: 0, id: 'call_d', name: 'shell', arguments: '{}' },
+        { slot: 0, id: 'call_d', name: 'read', arguments: '{}' },
         { slot: 1, id: 'call_b', name: 'mytool', arguments: '{"x":' },
         { slot: 2, id: 'call_g', name: 'mytool', arguments: '{"y":1}' },
       ],
@@ -585,7 +585,7 @@ check('a non-empty caller list keeps its real tools and gains the gate names', (
   applyFingerprint(body, false)
   // v2 keeps the caller's own names (`pwsh` stays `pwsh`) and appends the two
   // gate declarations under their official names.
-  assert.deepEqual(body.tools.map(tool => tool.function.name), ['pwsh', 'glob', 'read', 'shell'])
+  assert.deepEqual(body.tools.map(tool => tool.function.name), ['pwsh', 'glob', 'bash', 'edit', 'grep', 'read'])
   assert.equal(String(body.tools[0].function.description).includes('unavailable'), false)
   assert.equal(String(body.tools[1].function.description).includes('unavailable'), false)
   assert.equal(body.tool_choice, undefined)
@@ -594,7 +594,7 @@ check('a non-empty caller list keeps its real tools and gains the gate names', (
 check('an empty caller list still gets the gate names, and no tool_choice', () => {
   const body = { tools: [] }
   applyFingerprint(body, false)
-  assert.deepEqual(body.tools.map(tool => tool.function.name), ['read', 'shell'])
+  assert.deepEqual(body.tools.map(tool => tool.function.name), ['bash', 'edit', 'glob', 'grep', 'read'])
   // v1 forced `tool_choice: 'none'` here; v2 answers that value with 403.
   assert.equal(body.tool_choice, undefined)
 })
@@ -602,7 +602,7 @@ check('an empty caller list still gets the gate names, and no tool_choice', () =
 await checkAsync('a caller tool reusing a gate name is mapped back to the caller name', async () => {
   const body = { tools: toToolDefs([normalizeTool(openAiTool('read'))], 'chat') }
   const map = applyFingerprint(body, false)
-  assert.equal(map.get('read_client'), 'read')
+  assert.equal(map.size, 0); assert.equal(body.tools[0].function.name, 'read')
 })
 
 await checkAsync('the lane receives the caller tools the client sent', async () => {

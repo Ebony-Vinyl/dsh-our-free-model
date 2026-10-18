@@ -261,11 +261,11 @@ try {
       assert.equal(first.body.model, model)
       assert.equal(continuation.body.model, model)
       assert.equal(first.headers['x-opencode-session'], continuation.headers['x-opencode-session'], '续写保留原逻辑会话')
-      // v2 指纹：v1 的 `x-opencode-request` 头已被上游按名字拒掉（403），四个会话头
-      // 必须同值，且这个头不能再出现。
-      assert.equal('x-opencode-request' in continuation.headers, false, '不得再发 v1 的 x-opencode-request')
-      assert.equal(continuation.headers['x-session-affinity'], continuation.headers['x-opencode-session'], 'v2 会话头同值')
-      assert.equal(continuation.headers['x-session-id'], continuation.headers['x-opencode-session'], 'v2 会话头同值')
+      // legacy 指纹（2026-10-18）：`x-opencode-request` 重新成为 v1.3.7 请求形状的一部分，
+      // 会话头继续同值。
+      assert.equal(typeof continuation.headers['x-opencode-request'], 'string', 'legacy 车道必须带 x-opencode-request')
+      assert.equal(continuation.headers['x-session-affinity'], continuation.headers['x-opencode-session'], '会话头同值')
+      assert.equal(continuation.headers['x-session-id'], continuation.headers['x-opencode-session'], '会话头同值')
       assert.ok(JSON.stringify(continuation.body).includes(TASK), '续写必须携带原任务')
       assert.ok(JSON.stringify(continuation.body).includes(CHECKPOINT), '续写必须携带已完成推理检查点')
       assert.notDeepEqual(continuation.body, first.body, '不能原样重发整轮')
@@ -368,10 +368,11 @@ try {
       checkFinal(run, 'stop', 1)
       assert.equal(run.records[0].recoveryScheduled, undefined)
     })
-    await check(`${wire}: 首段输出预算烧尽的纯思考空停不再追加请求`, async () => {
+    await check(`${wire}: 首段输出预算烧尽的纯思考空停不追加请求但报空响应`, async () => {
       const run = await drive(model, [{ body: deltas(wire, { reasoning: CHECKPOINT }) + terminal(wire, { output: 4096 }) }])
-      checkFinal(run, 'stop', 1)
+      checkFinal(run, 'error', 1)
       assert.equal(run.records[0].recoveryScheduled, undefined, '预算不足不应记 recoveryScheduled')
+      assert.equal(run.finish?.failure?.code, 'EMPTY_RESPONSE', '空停必须显式报错，不能静默 stop')
     })
     // chat 线不存在「带终帧却无 token」的正常收尾：finish_reason 一到就有 token，没有终帧则属于断流。
     if (wire !== 'chat') {

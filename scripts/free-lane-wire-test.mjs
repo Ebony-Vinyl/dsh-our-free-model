@@ -1,13 +1,13 @@
 /**
- * The free lane's wire facts, re-measured against the live gateway on 2026-10-14,
- * re-checked against the **v2** client fingerprint on 2026-10-16, and re-checked
- * against the session-encoding gate on 2026-10-17.
+ * The free lane's wire facts, re-measured against the live gateway on
+ * 2026-10-18 after `/inference/v1` started answering 403 FreeTierError for every
+ * free id.
  *
- * These are the things that changed and that a future edit can silently break:
- * the lane's base path, the four session headers, the shape *and encoding* of
- * the session id, the User-Agent (now the canonical v2 token and nothing else),
- * and the absence of the v1-only `x-opencode-request` header. The tool gate's
- * own contract lives in `fingerprint-test.mjs`.
+ * The lane is back on the legacy `/zen/v1` origin with the v1.3.7 request
+ * shape: the `opencode/1.18.31 (<os> <arch>; <runtime>)` User-Agent,
+ * `x-opencode-request`, a `prj_<24hex>` project id, the session headers, and
+ * lightweight `bash`/`edit`/`glob`/`grep`/`read` stubs. The tool gate's own
+ * contract lives in `fingerprint-test.mjs`.
  *
  * Run: node scripts/free-lane-wire-test.mjs
  */
@@ -50,29 +50,30 @@ const check = (name, actual, expected) => {
 }
 const declared = (body, name) => (body.tools ?? []).find(tool => (tool.function?.name ?? tool.name) === name)
 
-console.log('=== 1. the lane lives under /inference/v1 ===')
+console.log('=== 1. the lane lives under /zen/v1 ===')
 {
-  check('chat model', up.endpointFor('cat-jam-free'), '/inference/v1/chat/completions')
-  check('responses model', up.endpointFor('muse-spark-1.3-contributor-free'), '/inference/v1/responses')
-  check('messages model', up.endpointFor('union-alpha'), '/inference/v1/messages')
+  check('chat model', up.endpointFor('cat-jam-free'), '/zen/v1/chat/completions')
+  check('responses model', up.endpointFor('muse-spark-1.3-contributor-free'), '/zen/v1/responses')
+  check('messages model', up.endpointFor('union-alpha'), '/zen/v1/messages')
   check('wire for chat', up.wireFor('cat-jam-free'), 'chat')
   check('wire for responses', up.wireFor('muse-spark-1.3-contributor-free'), 'responses')
   check('wire for messages', up.wireFor('union-alpha'), 'messages')
 }
 
-console.log('\n=== 2. the four v2 session headers, and no v1-only request header ===')
+console.log('\n=== 2. the v1.3.7 headers, including x-opencode-request ===')
 {
   const session = 'ses_0123456789abABCDEFGHIJKLMN'
   const headers = up.gatewayHeaders({ session, stream: true })
   check('pooled credential', headers.authorization, 'Bearer public')
   check('reported as the cli client', headers['x-opencode-client'], 'cli')
   check('session header', headers['x-opencode-session'], session)
-  check('session-id header repeats it', headers['x-opencode-session-id'], session)
   check('session affinity repeats it', headers['x-session-affinity'], session)
   check('session id repeats it', headers['x-session-id'], session)
-  // v1 sent `x-opencode-request`; v2 answers that header with 403 FreeTierError.
-  check('no x-opencode-request', 'x-opencode-request' in headers, false)
-  check('the User-Agent is the canonical v2 token', headers['user-agent'], 'opencode/latest/2.0.26/cli')
+  // The legacy gate expects the v1 correlation header again.
+  check('x-opencode-request is present', typeof headers['x-opencode-request'], 'string')
+  check('…and carries the msg_ shape', headers['x-opencode-request'].startsWith('msg_'), true)
+  check('the project id is canonical prj_<24hex>', /^prj_[0-9a-f]{24}$/.test(headers['x-opencode-project']), true)
+  check('the User-Agent is the v1.3.7 shape', /^opencode\/1\.18\.31 \([^)]+; [^)]+\)$/.test(headers['user-agent']), true)
   check('streaming accept', headers.accept, 'text/event-stream')
 }
 
@@ -103,35 +104,29 @@ console.log('\n=== 3. the session id must carry the descending encoding the gate
   check('and it stays stable per conversation', up.sessionForConversation(ascending), reencoded)
 }
 
-console.log('\n=== 4. the v2 tool gate: read + shell, official definitions, no tool_choice none ===')
+console.log('\n=== 4. the legacy tool gate: bash + read stubs, caller tools untouched ===')
 {
-  const empty = { tool_choice: 'none' }
+  const empty = {}
   up.applyFingerprint(empty, false)
+  check('bash is declared', declared(empty, 'bash') !== undefined, true)
   check('read is declared', declared(empty, 'read') !== undefined, true)
-  check('shell is declared', declared(empty, 'shell') !== undefined, true)
-  check('the read schema is the official one', declared(empty, 'read').function.parameters.required, ['path'])
-  check('the shell schema is the official one', declared(empty, 'shell').function.parameters.required, ['command'])
-  check('a caller tool_choice none is dropped', empty.tool_choice, undefined)
+  check('the stub schema is empty', declared(empty, 'read').function.parameters, { type: 'object', properties: {} })
 
   const claude = {}
   up.applyFingerprint(claude, 'claude')
-  check('Messages shape uses input_schema', declared(claude, 'read').input_schema.required, ['path'])
+  check('Messages shape uses input_schema', declared(claude, 'read').input_schema.type, 'object')
 
-  // A caller tool that reuses a gate name with another definition moves aside,
-  // and the response side still restores the caller's own spelling.
-  const caller = { tools: [{ type: 'function', function: { name: 'read', description: 'the caller read', parameters: { type: 'object', properties: {} } } }] }
+  // The legacy gate does not compare definitions, so a caller tool that reuses
+  // a gate name keeps its own schema and is never renamed.
+  const caller = { tools: [{ type: 'function', function: { name: 'read', description: 'the caller read', parameters: { type: 'object', properties: { q: { type: 'string' } } } } }] }
   const map = up.applyFingerprint(caller, false)
   check('only one declaration carries the gate name', caller.tools.filter(tool => tool.function.name === 'read').length, 1)
-  check('…and it is the official definition', declared(caller, 'read').function.parameters.required, ['path'])
-  check('the caller declaration survived under an alias', caller.tools.find(tool => tool.function.name === 'read_client').function.description, 'the caller read')
-  check('…and the alias restores the caller name', up.restoreToolName('read_client', map), 'read')
+  check('…and it is still the caller definition', declared(caller, 'read').function.description, 'the caller read')
+  check('nothing was aliased', map.size, 0)
 }
 
-console.log('\n=== 5. the User-Agent is the canonical v2 token, whatever the host attributes ===')
+console.log('\n=== 5. the User-Agent is the legacy token, whatever the host attributes ===')
 {
-  // v2 matches the whole string against `opencode/<channel>/<version>/<client>`,
-  // so the harness attribution cannot ride along any more: a v1 token is refused
-  // by name, and a prefixed/suffixed string is no longer a v2 client.
   await postStreamed({
     path: up.endpointFor('cat-jam-free'),
     body: { model: 'cat-jam-free', messages: [{ role: 'user', content: 'ping' }], stream: true },
@@ -141,26 +136,22 @@ console.log('\n=== 5. the User-Agent is the canonical v2 token, whatever the hos
     timeoutMs: 5000,
   })
   const sent = seen[seen.length - 1]
-  check('the request reached the chat path', sent.url, '/inference/v1/chat/completions')
+  check('the request reached the chat path', sent.url, '/zen/v1/chat/completions')
   check('the refused token is gone', /deepseek[-_]harness/i.test(sent.headers['user-agent'] ?? ''), false)
-  check('the UA is the canonical v2 token', sent.headers['user-agent'], up.CLIENT_UA)
-  check('…and carries no attribution suffix', sent.headers['user-agent'].includes(' '), false)
-  check('session-id went out', typeof sent.headers['x-opencode-session-id'] === 'string', true)
-  check('the four session headers agree', [
+  check('the UA is the legacy token', sent.headers['user-agent'], up.CLIENT_UA)
+  check('session headers agree', [
     sent.headers['x-opencode-session'],
     sent.headers['x-session-affinity'],
     sent.headers['x-session-id'],
-  ].every(value => value === sent.headers['x-opencode-session-id']), true)
-  check('no v1 request header went out', 'x-opencode-request' in sent.headers, false)
+  ].every(value => value === sent.headers['x-opencode-session']), true)
+  check('the v1 request header went out', typeof sent.headers['x-opencode-request'], 'string')
 }
 
-console.log('\n=== 6. 目录请求与推理请求使用同一串 v2 UA ===')
+console.log('\n=== 6. 目录请求与推理请求使用同一串 legacy UA ===')
 {
-  // The host still passes an attribution UA (its API is unchanged); the v2
-  // fingerprint means this lane cannot put it on the wire.
-  const attributionUserAgent = 'our-free-model-standalone/2.3.0'
-  await getJson('/inference/v1/models', { attributionUserAgent })
-  check('目录请求使用 v2 指纹 UA', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
+  const attributionUserAgent = 'our-free-model-standalone/2.5.2'
+  await getJson('/zen/v1/models', { attributionUserAgent })
+  check('目录请求使用 legacy 指纹 UA', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
   await postStreamed({
     path: up.endpointFor('mimo-v2.6-flash-free'),
     body: { model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'ping' }], stream: true },
@@ -171,7 +162,7 @@ console.log('\n=== 6. 目录请求与推理请求使用同一串 v2 UA ===')
   })
   check('推理请求使用同一串', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
   const unrelated = 'other-client/3.0 (+https://example.com/our-free-model-standalone)'
-  await getJson('/inference/v1/models', { attributionUserAgent: unrelated })
+  await getJson('/zen/v1/models', { attributionUserAgent: unrelated })
   check('任何归属串都不再改变线上 UA', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
 }
 

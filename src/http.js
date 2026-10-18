@@ -363,14 +363,10 @@ async function readRemainder(head, signal) {
 /**
  * The User-Agent this lane sends.
  *
- * ⚠️ v2 指纹（2026-10-14 起）要求这一串**原样单独**出现：形状
- * `opencode/<channel>/<version>/<client>`、major ≥ 2，且按整串匹配。旧实现
- * 「归属 UA + `opencode/1.18.x`」的拼接方式现在两处都会踩雷 —— v1 版本号被按名字
- * 拒掉，任何前后缀又会让整串不再是 v2 客户端形状。
- *
- * ⇒ 本车道的 UA 就是官方那一串，归属信息不再随行；归属仍保留在其余车道
- * （channel pack / EAC / Kilo 各自带自己的 UA）。`attributionUserAgent` 因此在本
- * 车道上不再影响线上字节，参数保留是为了不动宿主 API 与调用方签名。
+ * The legacy `/zen/v1` gate fingerprints `opencode/1.18.31 (<os> <arch>;
+ * <runtime>)`; the value must be sent as-is, so attribution text is not
+ * appended here. Attribution stays on the other lanes (channel pack / EAC /
+ * Kilo), each of which carries its own UA.
  */
 function userAgentWith(_attribution) {
   return CLIENT_UA

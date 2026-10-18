@@ -36,18 +36,16 @@ const upstream = http.createServer((req, res) => {
   const chunks = []
   req.on('data', chunk => chunks.push(chunk))
   req.on('end', () => {
-    if (req.url.startsWith('/inference/v1/')) {
+    if (req.url.startsWith('/zen/v1/')) {
       anonymousRequests.push({ method: req.method, headers: req.headers })
-      // v2 指纹：上游只认 `opencode/<channel>/<version>/<client>` 这一整串。
-      // 旧实现模拟的是「按名字拒掉独立服务的归属 UA」，那条规则属于 v1；
-      // v2 反过来 —— 拼接了归属的串不再是 v2 客户端，同样被拒。
-      if (req.method === 'POST' && !/^opencode\/[a-z0-9-]+\/\d+\.\d+\.\d+\/[a-z0-9-]+$/i.test(req.headers['user-agent'] ?? '')) {
+      // legacy 指纹：上游只认 `opencode/1.18.31 (<os> <arch>; <runtime>)` 这一整串。
+      if (req.method === 'POST' && !/^opencode\/1\.18\.31 \([^)]+; [^)]+\)$/.test(req.headers['user-agent'] ?? '')) {
         res.writeHead(403, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: { name: 'FreeTierError', message: 'OpenCode free tier client rejected' } }))
         return
       }
     }
-    if (req.method === 'GET' && req.url === '/inference/v1/models') {
+    if (req.method === 'GET' && req.url === '/zen/v1/models') {
       listingCalls++
       signalListingStarted?.()
       const respond = () => {
@@ -257,11 +255,11 @@ try {
     assert.equal(kilo.status, 200)
     assert.equal((await kilo.json()).choices[0].message.content, 'kilo-ok')
   })
-  await check('独立服务的目录、探测和推理都带 v2 客户端指纹', () => {
+  await check('独立服务的目录、探测和推理都带 legacy 客户端指纹', () => {
     assert.ok(anonymousRequests.some(req => req.method === 'GET'))
     assert.ok(anonymousRequests.filter(req => req.method === 'POST').length >= 4)
     for (const req of anonymousRequests) {
-      assert.equal(req.headers['user-agent'], 'opencode/latest/2.0.26/cli')
+      assert.match(req.headers['user-agent'], /^opencode\/1\.18\.31 \([^)]+; [^)]+\)$/)
     }
   })
   await check('unknown models are refused before spending an upstream call', async () => {

@@ -5149,10 +5149,10 @@ input:disabled, select:disabled, textarea:disabled, .ui-input:disabled {
 :root:not([data-theme="dark"]) .usage-total-line,
 :root:not([data-theme="dark"]) .chart-total-line { display: none !important; }
 /* ==== 修复②④⑤ END ==== */
-/* ⑥ 渠道页搜索框：给图标让位，不再压字 */
+/* ⑥ Kotak pencarian halaman saluran: beri ruang ikon, jangan menimpa teks */
 :root:not([data-theme="dark"]) .channel-search input,
-:root:not([data-theme="dark"]) input[placeholder*="搜索渠道"],
-:root:not([data-theme="dark"]) input[placeholder*="搜索模型"] {
+:root:not([data-theme="dark"]) input[placeholder*="Cari kanal"],
+:root:not([data-theme="dark"]) input[placeholder*="Cari model"] {
   padding-left: 34px !important;
 }
 

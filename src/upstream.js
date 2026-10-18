@@ -1,6 +1,15 @@
 /**
  * Upstream wire for the免密 free lane.
  *
+ * ⚠️ 2026-10-18: the `/inference/v1` gate began answering 403 FreeTierError for
+ * every free id even with the v2 fingerprint below. A live probe showed the
+ * legacy `/zen/v1` origin still accepts the pre-2.x (v1.3.7) shape — it
+ * answered 429 FreeUsageLimitError, which means the gate passed and only the
+ * per-IP quota was exhausted. The module therefore speaks v1.3.7 again:
+ * `opencode/1.18.31 (<os> <arch>; <runtime>)`, `x-opencode-request`, a
+ * `prj_<24hex>` project id, and lightweight `bash`/`edit`/`glob`/`grep`/`read`
+ * stubs. The v2 facts below are retained as history.
+ *
  * Every fact encoded here was verified against the live gateway on 2026-09-24
  * by direct request: the public pooled
  * credential, the client fingerprint headers, the per-model endpoint split, the
@@ -59,68 +68,43 @@ import { DATA_DIR_NAME, resolveDshHome } from './store.js'
 export const UPSTREAM_BASE = process.env.OUR_FREE_MODEL_BASE ?? 'https://opencode.ai'
 
 /**
- * The client User-Agent the v2 gate fingerprints.
+ * The client User-Agent the legacy `/zen/v1` gate fingerprints.
  *
- * ⚠️ 形状是 `opencode/<channel>/<version>/<client>`，且 major 必须 ≥ 2；v1 的
- * `opencode/1.18.x` 自 2026-10-14 起被上游按名字拒掉（403 FreeTierError）。
- * ⚠️ 这个值**必须原样单独发出**：v2 的校验是整串匹配，任何前缀/后缀
- * （包括本插件的归属 UA）都会让它不再是「一个 v2 客户端」。归属因此只保留在
- * 其余车道（channel pack / EAC / Kilo），本车道发官方那一串。
+ * 2026-10-18: `/inference/v1` started answering 403 FreeTierError for every
+ * request even with the v2 fingerprint, while `/zen/v1` still accepted the
+ * pre-2.x OpenCode 1.18.x shape. A live probe on that date returned 429
+ * FreeUsageLimitError (the gate passed; only the per-IP quota was exhausted),
+ * so the lane speaks v1.3.7 again: `opencode/<version> (<os> <arch>; <runtime>)`.
+ *
+ * Keep the string self-contained: attribution text is not appended on this lane.
  */
-export const CLIENT_UA = 'opencode/latest/2.0.26/cli'
+function legacyUserAgent() {
+  const os = process.platform === 'win32' ? 'windows' : process.platform
+  const arch = process.arch === 'x64' ? 'amd64' : process.arch
+  return `opencode/1.18.31 (${os} ${arch}; go1.25.0)`
+}
+
+export const CLIENT_UA = legacyUserAgent()
 const MAX_SESSION_LENGTH = 256
 const MAX_TOOL_NAME_LEN = 128
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 
 /**
- * The two tools the v2 free-tier gate requires, with OpenCode's own definitions.
+ * The tools the legacy free-tier gate requires, as v1.3.7 lightweight stubs.
  *
- * ⚠️ **逐字取自 OpenCode v2.0.26 CLI**（与 9router 移植的那份一致）。上游比对
- * description 与 parameters：改写措辞、精简 schema、`properties: {}`、改名都会
- * 换来 403 FreeTierError（v1 时代「桩工具 + 占位 property」的做法已失效）。
- * 不要为了「更好看」动这些字符串。
+ * The legacy `/zen/v1` gate only checks the *names*: `bash` and `read` are
+ * mandatory and a stub with an empty `properties` object passes. It does not
+ * compare descriptions or schemas, so the v2 byte-for-byte definitions no
+ * longer apply (and keeping them would only add tokens to every request).
  */
-const FINGERPRINT_TOOL_DEFINITIONS = {
-  read: {
-    description: 'Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'File or directory to read' },
-        offset: { type: 'integer', minimum: 0, description: 'The line or directory entry to start reading from (1-based)' },
-        limit: { type: 'integer', minimum: 0, description: 'The maximum number of lines or directory entries to read (defaults to and capped at 2000)' },
-      },
-      required: ['path'],
-      additionalProperties: false,
-    },
-  },
-  shell: {
-    description: 'Execute a shell command and return its output. Commands run on Linux using bash. Quote file paths containing spaces or special characters. Prefer dedicated tools over shell commands when possible. When output is large, the full result is saved to a file and a truncated preview is returned. Rely on automatic truncation unless filtering the output is more useful. Commands accept an optional timeout, background commands have no timeout by default. Background commands return immediately, and you will be notified when they complete.',
-    parameters: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'Shell command string to execute' },
-        workdir: { type: 'string', description: 'Working directory to execute the command in. Defaults to the current working directory. When possible, avoid changing directories in the command and set the working directory here instead.' },
-        timeout: { type: 'integer', minimum: 0, description: 'Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to 120000 for foreground commands. Background commands have no timeout by default.' },
-        background: { type: 'boolean', description: 'Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use \'&\' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.' },
-      },
-      required: ['command'],
-      additionalProperties: false,
-    },
-  },
-}
-
-/** The names the v2 gate requires to be declared (with the definitions above). */
-export const FINGERPRINT_TOOLS = ['read', 'shell']
+export const FINGERPRINT_TOOLS = ['bash', 'edit', 'glob', 'grep', 'read']
 
 /**
  * The note appended when a fingerprint tool had to be injected.
  *
- * ⚠️ v2 的定义是**真工具**（描述与 schema 都来自官方客户端），模型会真的去调它
- * —— 实测把 `read` 用在「/etc 里有什么文件」这种问题上。v1 靠「must not be
- * used」的桩描述压住，v2 只能用提示词压。措辞是实测选出来的：写成「不可用」会让
- * 模型连调用方自己的 `Read`/`Bash` 也一起拒绝；「占位、请用别的工具」才既压住
- * 注入项、又不误伤调用方的工具。
+ * The stubs exist only to satisfy the gate. Tell the model they do nothing so a
+ * turn does not waste a step calling them, while leaving the caller's own tools
+ * usable.
  */
 function placeholderNote(names) {
   const list = names.map(name => `\`${name}\``).join(' or ')
@@ -213,10 +197,11 @@ export function mintSessionId(timestamp = Date.now()) {
 }
 
 /**
- * Mint a `msg_`-shaped id for local bookkeeping (turn/recovery records).
+ * Mint a `msg_`-shaped id for the legacy `x-opencode-request` header.
  *
- * ⚠️ 这个值**不再上线**：`x-opencode-request` 是 v1 专用头，v2 收到即 403（见
- * {@link gatewayHeaders}）。保留铸造器是因为恢复记录与测试仍用它做一次性标识。
+ * The legacy `/zen/v1` gate expects this header again (2026-10-18); the
+ * `/inference` gate used to reject it, which is why the v2 section above says
+ * it must not be sent.
  */
 export function mintRequestId(timestamp = Date.now()) {
   const value = BigInt(timestamp) * 0x1000n + 1n
@@ -305,22 +290,28 @@ export function isMessagesModel(modelId) {
 }
 
 /**
- * Which upstream path serves this model. The free lane lives under
- * `/inference/v1` (measured 2026-10-14, and the shape the console's model table
- * documents); `/zen/v1` chat completions answer 403 FreeTierError for free ids.
+ * Which upstream path serves this model. Since 2026-10-18 the keyless lane is
+ * served again by the legacy `/zen/v1` gate (the `/inference/v1` gate answers
+ * 403 FreeTierError for every free id), matching the v1.3.7 request shape.
  */
 export function endpointFor(modelId) {
-  if (isResponsesModel(modelId)) return '/inference/v1/responses'
-  if (isMessagesModel(modelId)) return '/inference/v1/messages'
-  return '/inference/v1/chat/completions'
+  if (isResponsesModel(modelId)) return '/zen/v1/responses'
+  if (isMessagesModel(modelId)) return '/zen/v1/messages'
+  return '/zen/v1/chat/completions'
 }
 
 /** The wire shape one endpoint speaks; drives request encoding and response parsing. */
 export function wireFor(modelId) {
   const path = endpointFor(modelId)
-  if (path === '/inference/v1/responses') return 'responses'
-  if (path === '/inference/v1/messages') return 'messages'
+  if (path === '/zen/v1/responses') return 'responses'
+  if (path === '/zen/v1/messages') return 'messages'
   return 'chat'
+}
+
+/** A canonical `prj_<24hex>` id, the shape the legacy gate expects. */
+function projectIdFor(session) {
+  const digest = crypto.createHash('sha256').update(`prj\0${session}`).digest('hex')
+  return `prj_${digest.slice(0, 24)}`
 }
 
 /**
@@ -328,26 +319,26 @@ export function wireFor(modelId) {
  * `Authorization: Bearer public` is the pooled免密 credential — there is no
  * per-user secret on this lane.
  *
- * ⚠️ v2 形状（2026-10-14 起），与官方客户端逐项对齐：
- * - `x-opencode-session` 与 `x-opencode-session-id` 必须同时存在（缺一即 403）；
- * - `x-session-affinity` / `x-session-id` 是 v2 新增的同值镜像；
- * - **不带 `x-opencode-request`** —— 那是 v1 专用头，v2 收到就回 403；
- * - `x-opencode-client: cli` 与官方 CLI 一致。
+ * ⚠️ v1.3.7 shape (restored 2026-10-18 for the legacy `/zen/v1` gate):
+ * - `x-opencode-request` is sent again (the v1 request-correlation header);
+ * - `x-opencode-project` carries the canonical `prj_<24hex>` shape;
+ * - `x-opencode-session` + `x-session-affinity` + `x-session-id` mirror the
+ *   same descending-encoded id; `x-opencode-session-id` is not sent on this
+ *   lane (it belongs to the `/inference` gate).
  */
-export function gatewayHeaders({ session, stream, accept }) {
-  const headers = {
+export function gatewayHeaders({ session, stream, accept, request }) {
+  return {
     'content-type': 'application/json',
     'authorization': 'Bearer public',
     'user-agent': CLIENT_UA,
     'x-opencode-client': 'cli',
     'x-opencode-session': session,
-    'x-opencode-session-id': session,
     'x-session-affinity': session,
     'x-session-id': session,
-    'x-opencode-project': 'global',
+    'x-opencode-request': request ?? mintRequestId(),
+    'x-opencode-project': projectIdFor(session),
     'accept': accept ?? (stream ? 'text/event-stream' : '*/*'),
   }
-  return headers
 }
 
 function toolNameOf(tool) {
@@ -358,114 +349,13 @@ function toolNameOf(tool) {
   return ''
 }
 
-/**
- * The gate name when the tool's name is **exactly** one of the two; `''` otherwise.
- *
- * ⚠️ 大小写变体（`Read`/`Shell`）**不算**闸门工具，原样透传：上游接受它们与
- * 注入的 `read`/`shell` 并存（实测），而 v1 那种「按小写归并」会把调用方的
- * `Read` 改名成 `read`，正好撞上 v2 的「定义必须逐字一致」判定。
- */
-function fingerprintKey(name) {
-  const trimmed = String(name ?? '').trim()
-  return FINGERPRINT_TOOLS.includes(trimmed) ? trimmed : ''
-}
-
-/** The Chat-shape `{function:{…}}` wrapper, or null for the flat Responses one. */
-function functionOf(tool) {
-  return tool.function && typeof tool.function === 'object' && !Array.isArray(tool.function) ? tool.function : null
-}
-
-/** Where a tool's description and parameter schema sit for one wire shape. */
-function definitionOf(tool, { claude, flat }) {
-  const wrapper = claude || flat ? tool : functionOf(tool)
-  if (wrapper === null || wrapper === undefined) return null
-  return { description: wrapper.description, schema: claude ? wrapper.input_schema : wrapper.parameters }
-}
-
-/** Does this tool already carry OpenCode's own definition for `name`? */
-function carriesFingerprintDefinition(tool, name, shape) {
-  const own = definitionOf(tool, shape)
-  if (own === null) return false
-  const want = FINGERPRINT_TOOL_DEFINITIONS[name]
-  return own.description === want.description
-    && JSON.stringify(own.schema) === JSON.stringify(want.parameters)
-}
-
-function withToolName(tool, name) {
-  const fn = functionOf(tool)
-  return fn ? { ...tool, function: { ...fn, name } } : { ...tool, name }
-}
-
-/** The gate's own declaration, in the shape the wire expects. */
+/** The gate's stub declaration, in the shape the wire expects. */
 function fingerprintTool(name, { claude, flat }) {
-  const { description, parameters } = FINGERPRINT_TOOL_DEFINITIONS[name]
+  const description = `Agent tool ${name}`
+  const parameters = { type: 'object', properties: {} }
   if (claude) return { name, description, input_schema: parameters }
   if (flat) return { type: 'function', name, description, parameters }
   return { type: 'function', function: { name, description, parameters } }
-}
-
-/** `sent name -> caller's name` for every tool the alias pass renamed. */
-function aliasesByOriginal(map) {
-  return new Map([...map].map(([alias, original]) => [original, alias]))
-}
-
-/**
- * Point an explicit `tool_choice` at the alias of a tool that was renamed.
- *
- * Only an alias is retargeted: a choice naming a tool we left alone must stay
- * byte-identical, and `none` is never emitted (see {@link applyFingerprint}).
- */
-function retargetToolChoice(body, map) {
-  if (!body || typeof body !== 'object' || map.size === 0) return
-  const choice = body.tool_choice
-  if (!choice || typeof choice !== 'object' || Array.isArray(choice)) return
-  const aliases = aliasesByOriginal(map)
-  if (typeof choice.name === 'string') {
-    const alias = aliases.get(choice.name.trim())
-    if (alias !== undefined) body.tool_choice = { ...choice, name: alias }
-    return
-  }
-  const fn = choice.function
-  if (fn && typeof fn === 'object' && !Array.isArray(fn) && typeof fn.name === 'string') {
-    const alias = aliases.get(fn.name.trim())
-    if (alias !== undefined) body.tool_choice = { ...choice, function: { ...fn, name: alias } }
-  }
-}
-
-/**
- * Rename prior-turn calls to a renamed tool in the history we are about to send.
- *
- * Without this the model reads its own earlier `read` calls as calls to
- * OpenCode's injected tool of that name, and the two definitions disagree.
- */
-function aliasHistoryToolCalls(body, map) {
-  if (!body || typeof body !== 'object' || map.size === 0) return
-  const aliases = aliasesByOriginal(map)
-  const rename = name => (typeof name === 'string' && aliases.has(name) ? aliases.get(name) : name)
-
-  if (Array.isArray(body.input)) {
-    body.input = body.input.map(item => item?.type === 'function_call' && aliases.has(item.name)
-      ? { ...item, name: aliases.get(item.name) }
-      : item)
-  }
-  if (Array.isArray(body.messages)) {
-    body.messages = body.messages.map(message => {
-      if (message === null || typeof message !== 'object') return message
-      if (Array.isArray(message.content)) {
-        const content = message.content.map(block => block?.type === 'tool_use' && aliases.has(block.name)
-          ? { ...block, name: aliases.get(block.name) }
-          : block)
-        return { ...message, content }
-      }
-      if (!Array.isArray(message.tool_calls)) return message
-      return {
-        ...message,
-        tool_calls: message.tool_calls.map(call => aliases.has(call?.function?.name)
-          ? { ...call, function: { ...call.function, name: aliases.get(call.function.name) } }
-          : call),
-      }
-    })
-  }
 }
 
 /** Tell the model the injected fingerprint tools are placeholders (see {@link placeholderNote}). */
@@ -491,61 +381,31 @@ function noteInjectedTools(body, { claude, flat }, names) {
 }
 
 /**
- * Satisfy the v2 free-tier fingerprint gate on `body.tools`.
+ * Satisfy the legacy free-tier fingerprint gate on `body.tools`.
  *
- * ## v2 规则（每条都对应一次 403，见模块头）
+ * ## v1.3.7 rules
  *
- * 1. `read` 与 `shell` 必须**声明**，且定义与官方客户端逐字一致；
- * 2. 调用方的工具**原样保留**（含 `Read`/`Bash` 这类大小写变体）；
- * 3. 调用方若**正好**用了 `read`/`shell` 这个名字但定义不同，它被改名成
- *    `<name>_client[N]` 并走 {@link aliasHistoryToolCalls}/{@link retargetToolChoice}
- *    同步历史与 `tool_choice`，响应侧再由重命名表还原成调用方的名字；
- * 4. 同名重复声明只留第一个（上游按重复拒）；
- * 5. **绝不下发 `tool_choice: 'none'`** —— v2 见到它就 403；调用方没给
- *    `tool_choice` 时，只有 Responses 线补 `auto`（官方行为）。
- *
- * ⚠️ v1 的「把调用方的 shell 提升成 `bash` 槽位」已删除：v2 比对定义，提升会让
- * 槽位定义与官方不符（403），而调用方自己的 `pwsh`/`Bash` 本来就能被调用。
+ * 1. `bash` and `read` must be declared; the gate only checks names and accepts
+ *    lightweight stubs (`{type:'object', properties:{}}`).
+ * 2. The caller's tools are preserved untouched, including a `read`/`bash` the
+ *    caller declared with its own schema — the legacy gate does not compare
+ *    definitions, so there is nothing to rename or rewrite.
+ * 3. Missing gate names are appended as stubs and the model is told they do
+ *    nothing.
  *
  * @param {object} body - request body, mutated in place
  * @param {boolean|'claude'} style - true 为 Responses，false 为 Chat，claude 为 Messages
- * @returns {Map<string, string>} sent name -> caller's name (for the response side)
+ * @returns {Map<string, string>} always empty on this lane (kept for callers)
  */
 export function applyFingerprint(body, style) {
   const flat = style === true
   const claude = style === 'claude'
   const shape = { claude, flat }
-  const map = new Map()
   const tools = Array.isArray(body.tools) ? body.tools : []
-  const taken = new Set(tools.map(toolNameOf).filter(name => name !== ''))
-  // 两个集合分工不同：`seen` 只用于「同名重复留第一个」（含被改名的那个名字），
-  // `present` 记录**真正带官方定义留下来**的门禁名 —— 注入判据必须看后者，
-  // 否则「调用方的 read 被改成 read_client」会被误判成「read 已经声明」，
-  // 官方定义反而不会补上（门禁仍然 403）。
-  const seen = new Set()
-  const present = new Set()
-  const out = []
-
-  for (const tool of tools) {
-    const name = toolNameOf(tool)
-    const key = fingerprintKey(name)
-    if (key === '') { out.push(tool); continue }
-    // 同名重复声明：上游按重复拒，留第一个。
-    if (seen.has(key)) continue
-    seen.add(key)
-    if (carriesFingerprintDefinition(tool, key, shape)) {
-      out.push(tool)
-      present.add(key)
-      continue
-    }
-    let alias = `${key}_client`
-    for (let i = 2; taken.has(alias); i += 1) alias = `${key}_client${i}`
-    taken.add(alias)
-    map.set(alias, name)
-    out.push(withToolName(tool, alias))
-  }
-
+  const present = new Set(tools.map(toolNameOf).filter(name => FINGERPRINT_TOOLS.includes(name)))
+  const out = [...tools]
   const injected = []
+
   for (const name of FINGERPRINT_TOOLS) {
     if (present.has(name)) continue
     out.push(fingerprintTool(name, shape))
@@ -553,17 +413,8 @@ export function applyFingerprint(body, style) {
   }
 
   body.tools = out
-  retargetToolChoice(body, map)
-  aliasHistoryToolCalls(body, map)
   if (injected.length > 0) noteInjectedTools(body, shape, injected)
-  // ⚠️ v2 见到 `tool_choice: 'none'` 就回 403（v1 允许，旧代码甚至主动补过它）。
-  // 兜底清除：调用方（续写路径等）留下的 `none` 会让整轮失败。
-  if (body.tool_choice === 'none'
-    || (body.tool_choice !== null && typeof body.tool_choice === 'object' && body.tool_choice.type === 'none')) {
-    delete body.tool_choice
-  }
-  if (flat && !body.tool_choice) body.tool_choice = 'auto'
-  return map
+  return new Map()
 }
 
 /** Restore the caller's tool spelling in a streaming delta or a final payload. */

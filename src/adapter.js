@@ -572,6 +572,16 @@ export class FreeModelAdapter {
             continue
           }
         }
+        if (!recovering && silentStop) {
+          // The single continuation above could not be scheduled (checkpoint
+          // too large for the window). An empty `stop` is not a usable answer,
+          // so report it instead of letting the host end the turn silently.
+          record(false, outcome)
+          finishTurn(false, false, attempt + 1)
+          yield { type: 'usage', usage: totalUsage }
+          yield { type: 'finish', reason: { kind: 'error', failure: { message: 'our free model ended the turn after thinking without an answer', code: CODE.empty } } }
+          return { ok: false, ...advanceVerdict(CODE.empty, 'reasoning-only turn') }
+        }
         const failedEnding = outcome.finish === 'failed' || outcome.finish === 'cancelled'
         const normalEnding = outcome.finish === undefined || ['stop', 'end_turn', 'stop_sequence'].includes(outcome.finish)
         if (outcome.sawFinish !== true || failedEnding || (recovering && (!sawAnswer

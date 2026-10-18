@@ -1118,7 +1118,7 @@
     #fffcf6;
 }
 :root:not([data-theme="dark"]) .model-empty::before {
-  content: "此页尚无记录";
+  content: "Belum ada catatan";
   display: block; margin: 0 auto 16px;
   font-size: 11px; letter-spacing: 0.26em; text-indent: 0.26em;
   color: var(--amber-ink); opacity: 0.75;
