@@ -68,6 +68,7 @@ export const lazy = () => import('./lazy.js')
   // That must be distinguishable from a genuinely broken replacement, because
   // the caller keeps a verified install for a restart in the first case and
   // rolls the disk back in the second.
+  const previousModule = { version: '1.0.0', apply() {} }
   const staleCandidate = { version: '9.9.9', apply() {} }
   for (const [label, loaderFor, expected] of [
     ['a host that can only return the cached module', () => previousModule, true],
