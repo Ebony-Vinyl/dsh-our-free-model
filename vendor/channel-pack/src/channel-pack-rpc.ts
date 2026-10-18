@@ -285,6 +285,61 @@ export function normalizeZcodeLoginProvider(raw: string | undefined): ZcodeLogin
   return ZCODE_LOGIN_PROVIDER
 }
 
+/**
+ * ★★ **同登录去重**（各免费渠道共用的「真实缺陷」修复，2026-10-02 起逐渠道落地）。
+ *
+ * ## 为什么必须做
+ *
+ * 同一账号点两次「添加账号」会得到**两条独立条目** —— 它们各自参与选号、
+ * 各自消耗额度，而 UI 上昵称一样无从分辨。早期 buddy 系只「新增」不「判重」，
+ * 便会累积出一模一样的启用条目。
+ *
+ * ## 判据必须是「服务端下发的稳定标识」，不能用本机随机生成的设备指纹
+ *
+ * 各渠道对应的稳定标识字段不同（buddy/workbuddy → 凭据 `user_id`；
+ * codearts → `user_id`；qoder/trae/cline → 凭据各自解析出的 `user_id`；
+ * loomy/raccoon → 手机号 `phone`；gemini/minimax → OIDC `sub` / `account_id`）。
+ * 这里**统一**走 `pool.findAccountIdByIdentityField(provider, field, identity)`，
+ * 由账号池去凭据里读该字段并比对 —— 调用方只负责算出一个非空 `identity`。
+ *
+ * ## 处置：**不删条目**，而是标成「重复，已停用」
+ *
+ * 理由见 zcode 分支的详细注释：`account.create` 之后前端靠 `login.poll` 看
+ * 「条目还在 + 凭据已写入」判登录成功。直接 `removeAccount` 会让它显成「登录失败」，
+ * 而事实是登录成功、只是已存在。停用则：① 仍在列表（`login.poll` 如实报告成功）；
+ * ② `enabled: false` ⇒ 不参与自动选号（去重的实际效果）；③ 昵称写明「重复」⇒
+ * 用户可自行删除。保留原条目继续可用，不动它（可能已排序/改名/承载限流记录）。
+ *
+ * @param provider  渠道 id（如 `buddy` / `qoder`）。
+ * @param id        本次新登录条目的 id。
+ * @param identity  服务端下发的稳定标识；空串表示无法判断，直接放弃去重。
+ * @param field     凭据里用作判据的字段名（如 `user_id`）—— 见 `findAccountIdByIdentityField`。
+ * @param label     该账号在 UI 上的展示名（用于拼「重复，已停用」）。
+ * @returns 是否命中既有重复并已被停用。
+ */
+async function dedupeOnLogin(
+  ctx: Context,
+  pool: AccountPool,
+  provider: string,
+  id: string,
+  identity: string,
+  field: string,
+  label: string,
+): Promise<boolean> {
+  if (identity.length === 0) return false
+  const existingId = await pool.findAccountIdByIdentityField(provider, field, identity)
+  if (existingId.length === 0 || existingId === id) return false
+  ctx.logger.warn(
+    `[channel-pack] ${provider} 该账号（${field}=${identity}）已存在于 ${existingId}，` +
+    `新条目 ${id} 已自动停用（不参与选号，可自行删除）`,
+  )
+  await pool.updateAccount(id, {
+    nickname: `${label}（重复，已停用）`,
+    enabled: false,
+  })
+  return true
+}
+
 /** 解析 Buddy 凭据 JSON；解析失败返回 undefined。 */
 function parseBuddyCredential(raw: string): BuddyCredential | undefined {
   try {
@@ -1489,10 +1544,22 @@ function registerChannelPackEndpoints(
           })
           started.result.then(async (loginResult) => {
             const credential = parseCodeArtsCredential(loginResult.access)
+            const codeartsLabel = credential?.user_name !== undefined && credential.user_name.length > 0
+              ? credential.user_name
+              : id
+            // ★★ 同登录去重（与 buddy / zcode 一致）：同一 CodeArts 账号点两次会得到两条
+            // 启用条目，本机删除时容易删错。命中既有条目则把新条目标成「重复，已停用」。
+            const dupCodearts = await dedupeOnLogin(
+              ctx,
+              pool,
+              'codearts',
+              id,
+              credential?.user_id ?? '',
+              'user_id',
+              codeartsLabel,
+            )
             await pool.updateAccount(id, {
-              nickname: credential?.user_name !== undefined && credential.user_name.length > 0
-                ? credential.user_name
-                : id,
+              nickname: dupCodearts ? `${codeartsLabel}（重复，已停用）` : codeartsLabel,
               expiresAt: credential?.expires_at !== undefined
                 ? (Number.isNaN(Date.parse(credential.expires_at)) ? undefined : Date.parse(credential.expires_at))
                 : undefined,
@@ -1519,10 +1586,21 @@ function registerChannelPackEndpoints(
           })
           started.result.then(async (loginResult) => {
             const credential = parseLobsteraiCredential(loginResult.access)
+            const lobsterLabel = lobsteraiDisplayNickname(credential, id)
+            // ★★ 同登录去重：手机号脱敏末 2 位，多账号仍可能撞；用凭据 `user_id` 判重。
+            const dupLobster = await dedupeOnLogin(
+              ctx,
+              pool,
+              LOBSTERAI.id,
+              id,
+              credential?.user_id ?? '',
+              'user_id',
+              lobsterLabel,
+            )
             await pool.updateAccount(id, {
               // ⚠️ 用 `lobsteraiDisplayNickname`：服务端把**手机号本身**当昵称
               // 下发且只脱敏到「露末 4 位」，需归一化为末 2 位（用户要求）。
-              nickname: lobsteraiDisplayNickname(credential, id),
+              nickname: dupLobster ? `${lobsterLabel}（重复，已停用）` : lobsterLabel,
               expiresAt: credential !== undefined ? lobsteraiCredentialExpiresAtMs(credential) : undefined,
               refreshable: credential !== undefined && isLobsteraiRefreshable(credential),
             })
@@ -1569,8 +1647,22 @@ function registerChannelPackEndpoints(
                 await ctx.credentials.set(credentialRef(refName), JSON.stringify(updated))
               }
             }
+            // ★★ 同登录去重：设备码轮询响应带 `user_id`，用它判重。
+            // ⚠️ 必须先判重再定稿昵称 —— Qoder 的中国版/国际版是同族不同 provider id，
+            // 这里用 `product.id` 保证只在同一产品内判重，不会误伤跨版账号。
+            const dupQoder = await dedupeOnLogin(
+              ctx,
+              pool,
+              product.id,
+              id,
+              credential?.user_id ?? '',
+              'user_id',
+              nickname !== undefined && nickname.length > 0 ? nickname : id,
+            )
             await pool.updateAccount(id, {
-              nickname: nickname !== undefined && nickname.length > 0 ? nickname : id,
+              nickname: dupQoder
+                ? `${nickname !== undefined && nickname.length > 0 ? nickname : id}（重复，已停用）`
+                : (nickname !== undefined && nickname.length > 0 ? nickname : id),
               expiresAt: credential !== undefined ? qoderCredentialExpiresAtMs(credential) : undefined,
               refreshable: credential !== undefined && isQoderRefreshable(credential),
             })
@@ -1596,11 +1688,23 @@ function registerChannelPackEndpoints(
           })
           started.result.then(async (loginResult) => {
             const credential = parseTraeCredential(loginResult.access)
+            const traeLabel = traeDisplayNickname(credential, id)
+            // ★★ 同登录去重：字节 passport 的 `uid` 是同一账号的稳定标识
+            // （`X-Uid` 头就是它）。ScreenName 是自动生成的默认名，不能用作判据。
+            const dupTrae = await dedupeOnLogin(
+              ctx,
+              pool,
+              TRAE.id,
+              id,
+              credential?.uid ?? '',
+              'uid',
+              traeLabel,
+            )
             await pool.updateAccount(id, {
               // ⚠️ 用 `traeDisplayNickname`（手机号优先）而非直接取 `nickname`：
               // 服务端 ScreenName 是**按 uid 自动生成的默认名**，多账号无法区分
               // （用户报障 2026-09-27）。见该函数的说明。
-              nickname: traeDisplayNickname(credential, id),
+              nickname: dupTrae ? `${traeLabel}（重复，已停用）` : traeLabel,
               expiresAt: credential !== undefined ? traeCredentialExpiresAtMs(credential) : undefined,
               refreshable: credential !== undefined && isTraeRefreshable(credential),
             })
@@ -1633,10 +1737,23 @@ function registerChannelPackEndpoints(
           })
           started.result.then(async (loginResult) => {
             const credential = parseClineCredential(loginResult.access)
+            const clineLabel = credential?.nickname !== undefined && credential.nickname.length > 0
+              ? credential.nickname
+              : id
+            // ★★ 同登录去重：WorkOS 的 `account_id` 是同一账号的稳定标识。
+            // ⚠️ 部分 WorkOS 账号不返回 account_id（私有/无 profile），此时判据为空、
+            // dedupeOnLogin 自动放弃 —— 不会误伤，只是这类账号暂不去重。
+            const dupCline = await dedupeOnLogin(
+              ctx,
+              pool,
+              CLINE.id,
+              id,
+              credential?.account_id ?? '',
+              'account_id',
+              clineLabel,
+            )
             await pool.updateAccount(id, {
-              nickname: credential?.nickname !== undefined && credential.nickname.length > 0
-                ? credential.nickname
-                : id,
+              nickname: dupCline ? `${clineLabel}（重复，已停用）` : clineLabel,
               expiresAt: credential !== undefined ? clineCredentialExpiresAtMs(credential) : undefined,
               refreshable: credential !== undefined && isClineRefreshable(credential),
             })
@@ -1682,14 +1799,26 @@ function registerChannelPackEndpoints(
           started.result.then(async (login) => {
             const result = await loomy.persistWechatLogin(login, { refName })
             const credential = JSON.parse(result.access) as LoomyCredential
+            const loomyLabel = login.nickname !== undefined && login.nickname.length > 0
+              ? login.nickname
+              : credential.phone.length >= 4
+                ? `Loomy ${credential.phone.slice(-4)}`
+                : id
+            // ★★ 同登录去重：微信扫码拿到的 `userid` 是服务端账号 id，`phone` 是兜底判据
+            // （手机号在服务端唯一）。微信昵称不是稳定标识，不能用作判据。
+            const dupLoomy = await dedupeOnLogin(
+              ctx,
+              pool,
+              LOOMY.id,
+              id,
+              credential.userid.length > 0 ? credential.userid : credential.phone,
+              credential.userid.length > 0 ? 'userid' : 'phone',
+              loomyLabel,
+            )
             await pool.updateAccount(id, {
               // 用手机号尾号让多账号可区分（Loomy 无独立昵称接口；
               // 微信昵称可能有，优先用它）。
-              nickname: login.nickname !== undefined && login.nickname.length > 0
-                ? login.nickname
-                : credential.phone.length >= 4
-                  ? `Loomy ${credential.phone.slice(-4)}`
-                  : id,
+              nickname: dupLoomy ? `${loomyLabel}（重复，已停用）` : loomyLabel,
               expiresAt: result.expires > 0 ? result.expires : undefined,
               // ⚠️ 恒 false：Loomy 无续期端点。
               refreshable: false,
@@ -1733,6 +1862,20 @@ function registerChannelPackEndpoints(
           raccoonStarted.result.then(async (credential) => {
             const result = await raccoon.persistLogin(credential, { refName })
             const saved = JSON.parse(result.access) as RaccoonCredential
+            const raccoonLabel = buildRaccoonNickname(saved, id)
+            // ★★ 同登录去重：`user_id` 是服务端账号 id，`phone` 是兜底判据
+            // （手机号在服务端唯一）。自动生成的 `name` 不是稳定标识，不能用作判据。
+            const dupRaccoon = await dedupeOnLogin(
+              ctx,
+              pool,
+              RACCOON.id,
+              id,
+              (saved.user_id !== undefined && saved.user_id.length > 0)
+                ? saved.user_id
+                : (saved.phone ?? ''),
+              (saved.user_id !== undefined && saved.user_id.length > 0) ? 'user_id' : 'phone',
+              raccoonLabel,
+            )
             await pool.updateAccount(id, {
               // ⚠️ 服务端的 `name` 是**自动生成的默认名**（本机账号是
               // `RaccoonAva`，即「Raccoon」+ 随机串），微信扫码**不回传微信昵称**
@@ -1744,7 +1887,7 @@ function registerChannelPackEndpoints(
               // 故追加**手机号尾号**消歧：`RaccoonAva (1100)`。
               // 与 Loomy 的 `Loomy 2222` 同策略（那边没有真实名字可用，
               // 这边有，所以保留原名再挂尾号）。
-              nickname: buildRaccoonNickname(saved, id),
+              nickname: dupRaccoon ? `${raccoonLabel}（重复，已停用）` : raccoonLabel,
               expiresAt: result.expires > 0 ? result.expires : undefined,
               // ⚠️ raccoon **有** refresh 端点，与 Loomy（恒 false）不同。
               refreshable: result.refreshable,
@@ -1789,13 +1932,27 @@ function registerChannelPackEndpoints(
 
           minimaxStarted.result.then(async (credential) => {
             const result = await minimax.persistLogin(credential, { refName })
+            const minimaxLabel = result.accountId === undefined ? id : `MiniMax ${result.accountId.slice(0, 8)}`
+            // ★★ 同登录去重：上 MiniMax `access_token` **不是 JWT**
+            // （`mmoat_` 前缀），故 `account_id` 恒为 `undefined`、此调用**当前恒不触发**
+            // （空 identity ⇒ 自动放弃）。这是**预期**：一旦上游改发 JWT，
+            // 这里会自动用上服务端的 account_id 去重，无需再改代码。
+            const dupMinimax = await dedupeOnLogin(
+              ctx,
+              pool,
+              MINIMAX.id,
+              id,
+              result.accountId ?? '',
+              'account_id',
+              minimaxLabel,
+            )
             await pool.updateAccount(id, {
               // ⚠️ `persistLogin` 的 `accountId` 对真实凭据**恒为 `undefined`** ——
               // MiniMax 的 `access_token` **不是 JWT**（`mmoat_` 前缀、60 字符、
               // 0 个点），故 `decodeJwtSub` 恒不命中、`account_id` 不会被写入。
               // 这是**预期行为**（账号 id 由本层生成），不是缺陷：此时退化为 `id`。
               // 一旦上游改发 JWT，这里会自动用上服务端的 account_id。
-              nickname: result.accountId === undefined ? id : `MiniMax ${result.accountId.slice(0, 8)}`,
+              nickname: dupMinimax ? `${minimaxLabel}（重复，已停用）` : minimaxLabel,
               // ⚠️ **必须用 `minimaxCredentialExpiresAtMs`**（优先 `expires_at`，
               // 它由 OAuth 响应的 `expires_in` 自算）—— 不能指望从 token 解 JWT，
               // 那样会得到 `undefined`，UI 永远显示「未知」。
@@ -1956,13 +2113,26 @@ function registerChannelPackEndpoints(
             // ⚠️ 不接收 `persistLogin` 的返回值：它给的是 OIDC `sub`，只适合当稳定
             // 标识。展示名一律走 `geminiAccountLabel`（见下）。
             await gemini.persistLogin(credential, { refName })
+            const geminiLabel = geminiAccountLabel(credential) ?? id
+            // ★★ 同登录去重：OIDC `sub` 是 Google 账号的稳定标识（21 位数字）。
+            // ⚠️ `sub` **不是显示名** —— 邮箱才是（见下），但判重要的是稳定性，
+            // 两者正好各司其职：`sub` 判重、邮箱展示。
+            const dupGemini = await dedupeOnLogin(
+              ctx,
+              pool,
+              GEMINI.id,
+              id,
+              credential.sub ?? '',
+              'sub',
+              geminiLabel,
+            )
             await pool.updateAccount(id, {
               // ⚠️ 用 `geminiAccountLabel`（邮箱优先）而非 `accountId.slice(0, 8)`：
               // `sub` 是 21 位数字，截前 8 位得到 `Gemini 10500520` 这种**不可辨认**
               // 的展示名（用户报障 2026-10-03）。`sub` 的价值是「稳定标识」，不是
               // 「显示名」—— 展示要的是可辨识，邮箱正好。
               // 取不到邮箱时该函数回退 `sub`，两者都无则退化为池 id。
-              nickname: geminiAccountLabel(credential) ?? id,
+              nickname: dupGemini ? `${geminiLabel}（重复，已停用）` : geminiLabel,
               // ⚠️ **必须用 `geminiCredentialExpiresAtMs`**：它认 `expiry`
               //（RFC3339）与 `expires_in`，取不到就返回 `undefined` ——
               // 传 `undefined` 是「不知道」，不会被写成 0 而让 UI 显示「已过期」。
