@@ -72,6 +72,14 @@ const app = fs.readFileSync(new URL('app.js', web), 'utf8')
 const channel = assets.find(name => name.startsWith('channels-'))
 assert.ok(channel, '渠道必须是独立分包')
 assert.ok(app.includes(channel) && app.includes('import('), '入口必须动态导入渠道')
+const channelBundle = fs.readFileSync(new URL(channel, web), 'utf8')
+// 桌面壳（WKWebView）没有原生对话框：window.confirm 永远返回 false。旧版用它把
+// 删除按钮挡在 RPC 之前，Mac 上「移除」因此毫无反应——账号删除必须走页面内两步
+// 确认。EAC 页面同时必须渲染共享 Roster（含 route 归一化），否则独立端看不到模型。
+assert.ok(!channelBundle.includes('window.confirm'), '渠道包不得依赖原生对话框')
+assert.ok(channelBundle.includes('确认移除'), '移除必须提供页面内确认按钮')
+assert.ok(channelBundle.includes('route:'), 'EAC 页必须把独立端目录归一化为 Roster 期望的 route 字段')
+assert.ok(channelBundle.includes('section.models'), 'EAC 页必须渲染模型清单分区')
 const modelsChunk = assets.find(name => name.startsWith('models-'))
 assert.ok(modelsChunk && app.includes(modelsChunk), '入口必须按需导入模型页面')
 const usageChunk = assets.find(name => name.startsWith('usage-'))

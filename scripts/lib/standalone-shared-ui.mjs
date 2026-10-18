@@ -8,7 +8,7 @@ function replaceOnce(from, to) {
 }
 const anchor = '    exports.apply = apply'
 if (source.split(anchor).length !== 2) throw new Error('共享页面导出位置改变')
-source = source.replace(anchor, "    exports.standalone = { ChannelsPage, ChannelCard, EacAuth, useEacLogin, DICT, CSS, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage }\n" + anchor)
+source = source.replace(anchor, "    exports.standalone = { ChannelsPage, ChannelCard, EacAuth, useEacLogin, DICT, CSS, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage, Section, Roster }\n" + anchor)
 const api = "try { return new URL('api/our-free-model', document.baseURI).pathname } catch { return '/api/our-free-model' }"
 if (source.split(api).length !== 2) throw new Error('共享页面 API 位置改变')
 source = source.replace(api, "return '/api/management'")

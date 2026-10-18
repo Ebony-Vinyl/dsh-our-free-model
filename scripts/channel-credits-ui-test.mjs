@@ -164,4 +164,37 @@ export async function verifyChannelCreditsUi() {
   assert.ok(quota.text().includes('5 小时 80% · 每周 40%'), '不同配额窗口不能相加成积分')
   assert.ok(quota.text().includes('已查询 1 个账号'))
   quota.cleanup()
+
+  // 移除账号的两步确认：桌面壳（WKWebView）没有原生对话框，旧版 window.confirm
+  // 在 Mac 上永远返回 false，删除请求从未发出——账号必须完全靠页面内控件移除。
+  const removal = mount('buddy', async (method, payload) => {
+    if (method === 'account.delete') return { accounts: accountRows.filter(row => row.id !== payload.accountId) }
+    if (method === 'account.list') return { accounts: accountRows }
+    if (method === 'credits.balances') return { accounts: accountRows.map(row => ({ accountId: row.id, balance: { total: 10 } })) }
+    if (method === 'credits.status') return { accounts: [] }
+    throw new Error(`意外的 RPC ${method}`)
+  })
+  await settle()
+  removal.button('账号').props.onClick()
+  await settle()
+  assert.ok(!removal.text().includes('window.confirm'), '删除路径不得依赖原生对话框')
+  assert.ok(removal.button('移除'), '账号行必须提供移除入口')
+  assert.equal(removal.calls.filter(row => row.method === 'account.delete').length, 0, '点击前不得发生删除')
+  removal.button('移除').props.onClick()
+  await settle()
+  assert.equal(removal.calls.filter(row => row.method === 'account.delete').length, 0, '第一次点击只进入确认态')
+  assert.ok(removal.text().includes('该账号的凭据会一并删除'), '确认提示必须来自页面内文案')
+  assert.ok(removal.button('确认移除'), '确认态必须出现确认按钮')
+  removal.button('取消').props.onClick()
+  await settle()
+  assert.equal(removal.button('确认移除'), undefined, '取消后退出确认态')
+  assert.equal(removal.calls.filter(row => row.method === 'account.delete').length, 0, '取消不得删除')
+  removal.button('移除').props.onClick()
+  removal.button('确认移除').props.onClick()
+  await settle()
+  const deleted = removal.calls.filter(row => row.method === 'account.delete')
+  assert.equal(deleted.length, 1, '确认移除必须恰好发出一次删除请求')
+  assert.ok(['one', 'two'].includes(deleted[0].payload.accountId))
+  await settle()
+  removal.cleanup()
 }

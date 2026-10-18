@@ -9,6 +9,9 @@ export function Connection({ summary, host, active }: { summary: Summary; host: 
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState('')
+  // macOS 桌面壳（WKWebView）没有原生对话框：window.confirm 永远返回 false，
+  // 依赖它的操作会静默失败 —— 一律改为页内两步确认。
+  const [confirmRotate, setConfirmRotate] = useState(false)
   if (!active) return null
   const endpoint = `${summary.baseUrl}/v1`
   const model = summary.catalog.find(row => row.routable)?.id ?? 'MODEL_ID'
@@ -32,7 +35,7 @@ export function Connection({ summary, host, active }: { summary: Summary; host: 
     setApiKey(await host.getApiKey())
   })
   const rotate = () => {
-    if (!window.confirm('轮换后旧 API Key 会立即失效，确认继续吗？')) return
+    setConfirmRotate(false)
     void run(async () => setApiKey(await host.rotateKey()), '密钥已轮换，请更新所有客户端配置。')
   }
   return <div className="connection-browser" data-testid="connection-ready">
@@ -56,6 +59,10 @@ export function Connection({ summary, host, active }: { summary: Summary; host: 
       <pre className="connection-example cx-code">{example}</pre>
     </Card>
     <Card className="connection-card connection-danger"><div className="connection-card-heading"><span className="cx-icon cx-icon-danger"><ShieldAlert size={16} /></span><div><h2>轮换 API Key</h2><p>轮换后旧密钥立即失效，需要更新所有客户端。</p></div></div>
-      <Button variant="outline" className="cx-danger-btn" disabled={busy} onClick={rotate}><RotateCcw size={15} />轮换密钥</Button></Card>
+      {confirmRotate
+        ? <><p className="connection-error" role="alert">轮换后旧 API Key 会立即失效，确认继续吗？</p>
+          <Button variant="outline" className="cx-danger-btn" disabled={busy} onClick={rotate}><Check size={15} />确认轮换</Button>
+          <Button variant="outline" disabled={busy} onClick={() => setConfirmRotate(false)}>取消</Button></>
+        : <Button variant="outline" className="cx-danger-btn" disabled={busy} onClick={() => setConfirmRotate(true)}><RotateCcw size={15} />轮换密钥</Button>}</Card>
   </div>
 }

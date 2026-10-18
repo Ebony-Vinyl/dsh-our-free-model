@@ -397,6 +397,8 @@ window.__ModuleLoader__.load({
         'chan.act.refresh': '续期',
         'chan.act.test': '测试',
         'chan.act.delete': '移除',
+        'chan.act.deleteConfirm': '确认移除',
+        'chan.act.cancel': '取消',
         'chan.act.claim': '一键领取',
         'chan.fold.accounts': '账号',
         'chan.fold.models': '模型',
@@ -1082,6 +1084,8 @@ window.__ModuleLoader__.load({
         'chan.act.refresh': 'Refresh',
         'chan.act.test': 'Test',
         'chan.act.delete': 'Remove',
+        'chan.act.deleteConfirm': 'Confirm removal',
+        'chan.act.cancel': 'Cancel',
         'chan.act.claim': 'Claim daily',
         'chan.fold.accounts': 'Accounts',
         'chan.fold.models': 'Models',
@@ -4073,6 +4077,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [notice, setNotice] = useState('')
       const [login, setLogin] = useState(null)
+      const [confirming, setConfirming] = useState('')
       const modelBatchPending = useRef(false)
       const [balanceError, setBalanceError] = useState('')
       const [balanceLoading, setBalanceLoading] = useState(false)
@@ -4312,9 +4317,7 @@ window.__ModuleLoader__.load({
       }
 
       const removeAccount = async accountId => {
-        const entry = (accounts ?? []).find(row => row.id === accountId)
-        if (typeof window !== 'undefined' && typeof window.confirm === 'function'
-          && !window.confirm(t('chan.confirm.delete').replace('{name}', entry?.nickname ?? accountId))) return
+        setConfirming('')
         await accountAction('del:' + accountId, accountId, async () => {
           await rpc('account.delete', { accountId })
           onChanged(); await loadAccounts(); void loadBalances(true)
@@ -4456,10 +4459,22 @@ window.__ModuleLoader__.load({
                         onChanged(); await loadAccounts()
                       }),
                     }, row.enabled === false ? t('chan.act.enable') : t('chan.act.disable')),
-                    h('button', {
-                      type: 'button', className: 'ofm_minibtn danger', disabled: busy !== '' || !rpc,
-                      onClick: () => void removeAccount(row.id),
-                    }, t('chan.act.delete'))))
+                    confirming === row.id
+                      ? h(Fragment, null,
+                        h('button', {
+                          type: 'button', className: 'ofm_minibtn danger', disabled: busy !== '' || !rpc,
+                          onClick: () => void removeAccount(row.id),
+                        }, t('chan.act.deleteConfirm')),
+                        h('button', {
+                          type: 'button', className: 'ofm_minibtn', disabled: busy !== '' || !rpc,
+                          onClick: () => setConfirming(''),
+                        }, t('chan.act.cancel')))
+                      : h('button', {
+                        type: 'button', className: 'ofm_minibtn danger', disabled: busy !== '' || !rpc,
+                        // The desktop shell (WKWebView) has no native dialogs, so the
+                        // warning the old window.confirm carried now shows as a notice.
+                        onClick: () => { setConfirming(row.id); setNotice(t('chan.confirm.delete').replace('{name}', row.nickname ?? row.id)) },
+                      }, t('chan.act.delete'))))
               }))) : null,
         open === 'models' ? h('div', { className: 'ofm_chanfold' },
           models === undefined ? h('div', { className: 'ofm_skel', style: { minHeight: 44 } })

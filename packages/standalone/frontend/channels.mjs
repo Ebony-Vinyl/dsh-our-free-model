@@ -4,7 +4,7 @@ import { shared } from 'ofm-shared-client'
 import { ChannelBrowser } from './components/channel-browser'
 import 'ofm-shared-styles.css'
 
-const { EacAuth, useEacLogin, DICT, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage } = shared
+const { EacAuth, useEacLogin, DICT, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage, Section, Roster } = shared
 const h = React.createElement
 const t = key => DICT.zh[key] ?? key
 t.locale = 'zh'
@@ -41,6 +41,7 @@ function ChannelTools({ summary }) {
   const [accounts, setAccounts] = React.useState([])
   const [account, setAccount] = React.useState('')
   const [nickname, setNickname] = React.useState('')
+  const [pending, setPending] = React.useState(null)
   const file = React.useRef()
   const generation = React.useRef(0)
   const reload = React.useCallback(async () => {
@@ -80,12 +81,19 @@ function ChannelTools({ summary }) {
     link.href = url; link.download = `ofm-channels-${new Date().toISOString().slice(0, 10)}.json`
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000)
   }
+  // macOS 桌面壳（WKWebView）没有原生对话框：window.confirm 永远返回 false，
+  // 依赖它的操作会静默失败 —— 一律改为页内两步确认。
   const importFile = async event => {
     const selected = event.target.files[0]
     event.target.value = ''
     if (!selected) return
     if (selected.size > 8 * 1024 * 1024) { setMessage('备份文件不能超过 8MB。'); return }
-    if (!window.confirm('导入会合并备份中的账号凭据、模型开关和积分锁定设置，确认继续吗？')) return
+    setPending(selected)
+  }
+  const confirmImport = async () => {
+    const selected = pending
+    setPending(null)
+    if (!selected) return
     await run(async () => { await rpc('backup.import', { payload: JSON.parse(await selected.text()) }) })
   }
   return h('section', { className: 'ofm_hero', 'aria-label': '供应商与数据管理' },
@@ -109,6 +117,10 @@ function ChannelTools({ summary }) {
       h('button', { className: 'ofm_btn', disabled: busy, onClick: () => run(backup) }, '导出账号备份'),
       h('button', { className: 'ofm_btn', disabled: busy, onClick: () => file.current.click() }, '导入账号备份'),
       h('input', { ref: file, type: 'file', hidden: true, accept: '.json,application/json', onChange: importFile })),
+    pending ? h('div', { className: 'ofm_row ofm_acts' },
+      h('span', { className: 'ofm_note' }, `导入「${pending.name}」将合并备份中的账号凭据、模型开关和积分锁定设置，确认继续吗？`),
+      h('button', { className: 'ofm_btn', disabled: busy, onClick: () => void confirmImport() }, '确认导入'),
+      h('button', { className: 'ofm_btn', disabled: busy, onClick: () => setPending(null) }, '取消')) : null,
     h('p', { className: 'ofm_note' }, '备份包含登录凭据，请保存在可信的本地位置。插件导出的原格式备份也可以手动导入。'),
     message ? h('p', { role: 'status', className: 'ofm_note' }, message) : null)
 }
@@ -134,6 +146,18 @@ function EacPage({ summary }) {
   const { pool } = usePool()
   const reading = pool == null ? null : poolReading(pool)
   React.useEffect(() => { login.refresh() }, [login.refresh])
+  // The shared Roster groups cards by the gateway `route` field and styles the
+  // availability badge by probe state, neither of which the standalone summary
+  // carries the same way: `routable` is the route fact, and channel rows report
+  // `listed` because the probe only covers anonymous models. Normalize to the
+  // shape the Roster expects. No onApply/onBench: this page stays read-only and
+  // the toggle groups do not render.
+  const eacRows = (summary.catalog ?? []).filter(m => m.channel === 'eac').map(m => ({
+    ...m,
+    route: m.routable ? 'our-free-model' : null,
+    availability: m.availability === 'listed' ? (m.routable ? 'available' : 'unknown') : m.availability,
+    ttftMs: m.ttftMs ?? undefined,
+  }))
   return h(React.Fragment, null,
     h('header', { className: 'dashboard-heading' },
       h('div', null, h('div', { className: 'heading-eyebrow' }, 'WORKSPACE / EAC'),
@@ -145,7 +169,9 @@ function EacPage({ summary }) {
         : h(React.Fragment, null,
           h(Tank, { pct: reading.pct, level: reading.level, size: 'xl' }),
           h('p', null, `当前并发：${pool.inflight} · 24 小时活跃：${reading.active ?? '未知'} · 容量：${pool.pool ?? '未知'}`),
-          h('p', null, capacityText(pool, t)))))
+          h('p', null, capacityText(pool, t)))),
+    h(Section, { title: t('section.models'), hint: t('section.modelsHint') },
+      h(Roster, { summary: { ...summary, catalog: eacRows }, t, auth, eacLogin: login, only: 'eac' })))
 }
 
 let root
