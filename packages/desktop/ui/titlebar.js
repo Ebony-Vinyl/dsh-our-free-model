@@ -4,17 +4,19 @@
   const api = window.__TAURI__?.window;
   if (!api?.getCurrentWindow) return;
   const win = api.getCurrentWindow();
+  const isEn = (localStorage.getItem('ofm-lang') === 'en') || (navigator.language || '').toLowerCase().startsWith('en');
+  const L = (zh, en) => isEn ? en : zh;
   const titlebar = document.createElement('div');
   titlebar.id = 'ofm-titlebar';
   titlebar.innerHTML = `
     <div class="ofm-tb-title">OUR FREE MODEL</div>
     <div class="ofm-tb-actions">
-      <button class="ofm-tb-btn minimize" title="最小化" aria-label="最小化"><svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg></button>
-      <button class="ofm-tb-btn maximize" title="最大化" aria-label="最大化"><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
-      <button class="ofm-tb-btn close" title="隐藏到托盘" aria-label="隐藏到托盘"><svg viewBox="0 0 12 12"><path d="M3,3 L9,9 M9,3 L3,9" stroke="currentColor" stroke-width="1"/></svg></button>
+      <button class="ofm-tb-btn minimize" title="${L('最小化','Minimize')}" aria-label="${L('最小化','Minimize')}"><svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg></button>
+      <button class="ofm-tb-btn maximize" title="${L('最大化','Maximize')}" aria-label="${L('最大化','Maximize')}"><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+      <button class="ofm-tb-btn close" title="${L('隐藏到托盘','Hide to tray')}" aria-label="${L('隐藏到托盘','Hide to tray')}"><svg viewBox="0 0 12 12"><path d="M3,3 L9,9 M9,3 L3,9" stroke="currentColor" stroke-width="1"/></svg></button>
     </div>`;
   document.body.prepend(titlebar);
-  const run = action => { void action().catch(() => { titlebar.title = '窗口操作失败，请使用系统托盘菜单'; }); };
+  const run = action => { void action().catch(() => { titlebar.title = L('窗口操作失败，请使用系统托盘菜单','Window action failed; use the system tray menu'); }); };
   titlebar.querySelector('.minimize').addEventListener('click', () => run(() => win.minimize()));
   titlebar.querySelector('.maximize').addEventListener('click', () => run(async () => {
     if (await win.isMaximized()) await win.unmaximize(); else await win.maximize();

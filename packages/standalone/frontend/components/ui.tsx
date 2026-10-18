@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { t } from '../i18n.mjs'
 
 // 按 shadcn 的源码维护方式组合基础组件，只引入本阶段需要的原语。
 export const cn = (...values: ClassValue[]) => twMerge(clsx(values))
@@ -37,7 +38,7 @@ export function Input({ className, invalid = false, ...props }:
 
 /** 16px 旋转指示器，配合按钮 busy 态或独立使用；只动 transform。 */
 export function Spinner({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
-  return <span className={cn('ui-spinner', className)} role="status" aria-label="加载中" {...props} />
+  return <span className={cn('ui-spinner', className)} role="status" aria-label={t('ui.loading')} {...props} />
 }
 
 /** 纯 CSS 提示：把文字放到 tip，悬停/聚焦可见。不引入定位依赖。 */
