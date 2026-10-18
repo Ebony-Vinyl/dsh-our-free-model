@@ -19,6 +19,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { COMBO_CHANNEL } from './combos.js'
 
 /** Same resolution the harness home-paths helper uses: `$DSH_HOME` else `~/.dsh`. */
 export function resolveDshHome() {
@@ -202,19 +203,8 @@ export const SETTINGS_INITIAL = {
     providers: {},
   },
   /** Named fallback chains. A combo is a virtual model whose answer comes from
-   *  the first link that produces output; see src/combos.js.
-   *  Ships one sensible default so a fresh install shows a single "推荐免费组"
-   *  entry instead of a dozen free models; users can edit/disable it in settings. */
-  combos: [
-    {
-      id: 'combo:recommended-free',
-      name: '推荐免费组',
-      models: ['deepseek-v4.1-flash-free', 'glm-5.3-flash-free', 'space-bunny-free'],
-      strategy: 'fallback',
-      stickyLimit: 1,
-      enabled: true,
-    },
-  ],
+   *  the first link that produces output; see src/combos.js. */
+  combos: [],
   /** The five local answers that avoid a provider call entirely: a quota probe,
    *  a shell command prefix, a session title, a suggestion, a filepath list.
    *  They are pure request-shape matches, so a false positive would answer a real
@@ -254,6 +244,27 @@ export const SETTINGS_INITIAL = {
   installedVersion: '',
 }
 
+/**
+ * The combo a brand-new install receives exactly once.
+ *
+ * It is deliberately NOT part of `SETTINGS_INITIAL`: `JsonStore` shallow-merges
+ * that object over any existing `settings.json`, so seeding it there would push
+ * this chain into installs that already carry their own `combos` (or none) and
+ * silently change their picker. `createRuntimeStores` injects it only when no
+ * `settings.json` exists yet — a genuine fresh install — and once written the
+ * user's file owns it like any other setting. The ids are the strongest free
+ * models; a chain of them is still a free-group chain, so it follows the
+ * free-group visibility policy (see `isModelHidden`).
+ */
+export const DEFAULT_RECOMMENDED_COMBO = {
+  id: 'combo:recommended-free',
+  name: '推荐免费组',
+  models: ['deepseek-v4.1-flash-free', 'glm-5.3-flash-free', 'space-bunny-free'],
+  strategy: 'fallback',
+  stickyLimit: 1,
+  enabled: true,
+}
+
 const validHiddenModelId = value => typeof value === 'string' && value.length > 0
   && value.length <= 300 && value === value.trim() && !/[\u0000-\u001f\u007f]/.test(value)
 
@@ -285,11 +296,23 @@ export function validateModelVisibility(patch) {
   return result
 }
 
-export function isModelHidden(entry, settings) {
-  return (Array.isArray(settings?.hiddenModelIds) && settings.hiddenModelIds.includes(entry.id))
-    || (settings?.hideFreeModels === true && (!entry.channel || entry.channel === 'anonymous' || entry.channel === 'kilo'
-      || (entry.channel === 'combo' && Array.isArray(entry.lanes) && entry.lanes.length > 0 && entry.lanes.every(lane => lane === 'free'))))
-    || (settings?.hideEacModels === true && entry.channel === 'eac')
+export function isModelHidden(entry, settings, { freeLaneRefused = false } = {}) {
+  if (Array.isArray(settings?.hiddenModelIds) && settings.hiddenModelIds.includes(entry.id)) return true
+  const hideFree = settings?.hideFreeModels === true
+  const hideEac = settings?.hideEacModels === true
+  // A model on the free group itself, plus a combo whose every member is a
+  // free-group model, both answer to the free-group visibility policy.
+  const isFreeGroupModel = entry.channel === undefined || entry.channel === 'anonymous' || entry.channel === 'kilo'
+  const isPureFreeCombo = entry.channel === COMBO_CHANNEL
+    && Array.isArray(entry.lanes) && entry.lanes.length > 0
+    && entry.lanes.every(lane => lane === 'free' || lane === 'anonymous' || lane === 'kilo')
+  if (hideFree && (isFreeGroupModel || isPureFreeCombo)) return true
+  if (hideEac && entry.channel === 'eac') return true
+  // When the whole free lane is down (every probeable model refused) a chain
+  // built only from free-group models can answer nothing, so it leaves the
+  // picker with the rest of the group rather than advertising a dead entry.
+  if (freeLaneRefused === true && isPureFreeCombo) return true
+  return false
 }
 
 export const STATS_INITIAL = {

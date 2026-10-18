@@ -4,7 +4,7 @@ import { FreeModelAdapter, ROUTE_MAIN, ROUTE_REGION } from '../adapter.js'
 import { buildCatalog, buildEacCatalog, buildKiloCatalog, isEacEntry, isKiloEntry, parseListing, reviveKiloCatalog } from '../catalog.js'
 import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
-import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
+import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden, DEFAULT_RECOMMENDED_COMBO } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
 import { CODE, getJson } from '../http.js'
 import { fetchSealedListing } from '../eac.js'
@@ -27,16 +27,19 @@ export function createRuntimeStores({ dataDir, logger = console }) {
   const open = (file, initial) => new JsonStore(path.join(dataDir, file), structuredClone(initial), {
     log: message => logger.warn?.(message),
   })
-  // Seed the recommended combo only for a genuinely fresh install. Existing
-  // settings files that predate combos must not gain a new advertised model
-  // merely because a new default was added to SETTINGS_INITIAL; user edits to
-  // an existing `combos` field still win through JsonStore's normal merge.
-  const settingsInitial = structuredClone(SETTINGS_INITIAL)
+  // The recommended free-model combo is a default for first runs only. An
+  // existing settings.json must keep its own `combos` (or its absence): seeding
+  // it into SETTINGS_INITIAL would shallow-merge over the file and pollute the
+  // picker of every install that already has preferences. So we inject it here
+  // precisely when the file is absent — a genuine fresh install — and once
+  // written the user's file owns it like any other setting. A pre-existing file
+  // falls back to SETTINGS_INITIAL (combos: []); JsonStore's normal merge then
+  // lets any `combos` the user already saved keep winning.
   const settingsPath = path.join(dataDir, 'settings.json')
-  if (fs.existsSync(settingsPath)) settingsInitial.combos = []
-  const settings = new JsonStore(settingsPath, settingsInitial, {
-    log: message => logger.warn?.(message),
-  })
+  const freshInstall = !fs.existsSync(settingsPath)
+  const settings = open('settings.json', freshInstall
+    ? { ...SETTINGS_INITIAL, combos: [structuredClone(DEFAULT_RECOMMENDED_COMBO)] }
+    : SETTINGS_INITIAL)
   const stats = open('stats.json', STATS_INITIAL)
   const availability = open('availability.json', { version: 1, at: 0, egress: null, results: {} })
   const catalogStore = open('catalog.json', { version: 1, at: 0, entries: FALLBACK_CATALOG.map(entry => entry.id) })
@@ -379,7 +382,7 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   const main = []
   const region = []
   for (const entry of usable) {
-    if (isModelHidden(entry, settings)) continue
+    if (isModelHidden(entry, settings, { freeLaneRefused: refusedAll })) continue
     const verdict = verdictOf(entry)
     if (verdict !== STATE.regionBlocked) main.push(entry.id)
     else if (expose) region.push(entry.id)
