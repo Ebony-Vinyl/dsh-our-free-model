@@ -481,3 +481,135 @@ byte 19625 | entri 20 | header true | array CRLF 0 | favorite_models utuh
 node scripts/ofm-zed-add-models.mjs   # 20 -> 20, ditambah 0, images 0
 node scripts/ofm-zed-prune-models.mjs # 20 -> 20, dihapus 0
 ```
+
+# SESI 15i — 2026-10-19 — 3 model OpenCode pulih, ditandai sementara
+
+## 24. Ringkasan
+
+Kuota free tier OpenCode sudah reset, sehingga `403 LANE_LOCKED` hilang. Empat id
+diprobe ulang; tiga yang disetujui user dikembalikan ke picker Zed dengan penanda
+`· sementara`, karena free tier OpenCode diperkirakan dibatasi maksimal ±2 jam/hari.
+
+Gateway tetap `http://127.0.0.1:18900` (v2.5.3). UI standalone sudah 100% Bahasa
+Indonesia (lihat §26).
+
+## 25. Hasil probe ulang (2026-10-19)
+
+| Id | Status | Detail |
+|---|---|---|
+| `big-pickle` | HIDUP | 1115 ms, tool_calls=2, done=true |
+| `deepseek-v4.1-flash-free` | HIDUP | 1841 ms, tool_calls=20, done=true |
+| `glm-5.3-flash-free` | HIDUP | 3430 ms, tool_calls=2, done=true |
+| `mimo-v2.6-flash-free` | HIDUP | 3615 ms, tool_calls=10 — **tidak dipakai** (user membatasi ke 3 id) |
+
+Batch lain **tidak dijalankan** karena user membatasi cakupan ke tiga id di atas.
+
+## 26. Catatan front end Bahasa Indonesia (sebelumnya belum tercatat)
+
+- UI standalone **sudah 100% Bahasa Indonesia** (splash, picker, pengaturan, status,
+  dialog, tombol, pesan galat).
+- Sisa aksara Han hanya berada di **komentar kode**, bukan string UI:
+  - `client.js` > baris 1415 (~180 baris komentar);
+  - `web/channels-C0e2HGt0.js` (~103 baris komentar).
+- Tidak ada dampak ke tampilan. Terjemahan komentar bersifat opsional (§30).
+
+## 27. Perubahan yang diterapkan
+
+### `scripts/ofm-zed-add-models.mjs`
+
+- Flag baru `--temporary`: menambahkan sufiks `· sementara` pada `display_name`.
+  Skema Zed tidak punya field `temporary`, jadi nama tampilan adalah penandanya.
+- `EXTRA` diperluas dengan tiga id (nilai dari `src/catalog.js` →
+  `FREE_ID_OVERRIDES`, bukan tebakan):
+
+| Id | vision | contextWindow | maxOutput katalog | output efektif |
+|---|---|---|---|---|
+| `big-pickle` | true | 262144 | 131072 | 32768 |
+| `deepseek-v4.1-flash-free` | true | 1048576 | 384000 | 32768 |
+| `glm-5.3-flash-free` | true | 1048576 | 131072 | 32768 |
+
+Output efektif = `Math.min(maxOutput, defaultMaxTokens)`; `defaultMaxTokens` = 32768
+(`src/adapter.js:133`).
+
+### `scripts/ofm-zed-prune-models.mjs`
+
+- Ketiga id ditambahkan ke `KEEP_EXACT`. Tanpa ini, `--write` akan **menghapus**
+  mereka karena allowlist lama tidak mengenalinya.
+
+### `hiddenModelIds` (via API manajemen, tanpa restart)
+
+- Sebelum: 12 → sesudah: 9.
+- Dilepas: `big-pickle`, `deepseek-v4.1-flash-free`, `glm-5.3-flash-free`.
+
+### `available_models` Zed
+
+- 20 → **23** entri; 3 di antaranya bersufiks `· sementara`.
+- Backup: `settings.json.bak-ofm-5`.
+- Komentar kepala, EOL, dan `favorite_models` tidak disentuh.
+
+Entri yang ditambahkan:
+
+```
+big-pickle                 -> Big Pickle · sementara                          | images=true ctx=262144  out=32768
+deepseek-v4.1-flash-free   -> DeepSeek V4.1 Flash (free) · sementara          | images=true ctx=1048576 out=32768
+glm-5.3-flash-free         -> GLM 5.3 Flash (free) · sementara                | images=true ctx=1048576 out=32768
+```
+
+## 28. Verifikasi sesi ini
+
+```bash
+node scripts/ofm-zed-add-models.mjs --temporary "big-pickle" "deepseek-v4.1-flash-free" "glm-5.3-flash-free"
+# -> "Tidak ada perubahan" (idempoten)
+
+node scripts/ofm-zed-prune-models.mjs
+# -> 23 -> 23, dihapus 0
+
+curl -s -H "authorization: Bearer $KEY" http://127.0.0.1:18900/v1/models
+# -> 23 model teriklankan
+```
+
+- `/v1/models` memuat ketiga id dengan `context_window` 262144 / 1048576 / 1048576.
+- `defaultMaxTokens` = 32768; `standalonePort` = 18900; `hiddenModelIds` = 9.
+
+## 29. Cara mencabut penanda sementara
+
+Bila kuota OpenCode habis lagi dan model kembali `403 LANE_LOCKED`:
+
+1. Probe ulang: `node scripts/ofm-probe-batch.mjs "<id>"`.
+2. Bila mati, sembunyikan lagi lewat API manajemen
+   (`hiddenModelIds` ditambah id tersebut).
+3. Hapus entri dari `available_models` Zed (atau hapus sufiks `· sementara`
+   secara manual bila masih ingin ditampilkan).
+4. Hapus juga id dari `KEEP_EXACT` di `scripts/ofm-zed-prune-models.mjs` agar
+   audit berikutnya konsisten.
+
+Bila model pulih lagi, cukup jalankan ulang:
+
+```bash
+node scripts/ofm-unhide-alive.mjs --write "<id>"
+node scripts/ofm-zed-add-models.mjs --write --temporary "<id>"
+```
+
+## 30. Sisa pekerjaan (diperbarui)
+
+- [ ] **Restart Zed total** agar picker memuat 23 model (settings tidak di-watch).
+- [ ] Pantau kuota OpenCode; cabut penanda bila ketiga model kembali 403.
+- [ ] Ulangi probe `thinkingmachines/inkling-small:free` (429 harian sebelumnya;
+      `vision: true`, 1M ctx, belum masuk Zed).
+- [ ] Rotasi API key OpenRouter — sudah terekspos di chat.
+- [ ] (Opsional) terjemahkan ~180 baris komentar `client.js` dan
+      `web/channels-C0e2HGt0.js` ke Bahasa Indonesia.
+
+## 31. Sisa 9 id yang masih tersembunyi
+
+```
+space-bunny-free
+jev-1.13-free
+longcat-2.5-preview-free
+beam-free
+nemotron-3.5-super-vl-free          (bare id, beda dari nvidia/...:free)
+nemotron-3.5-lightning-free         (bare id)
+thinkingmachines/inkling-small:free (429 harian)
+nvidia/nemotron-3.5-content-safety:free (404 tanpa tool use — final)
+mimo-v2.6-flash-free                (hidup, sengaja tidak dipakai)
+```

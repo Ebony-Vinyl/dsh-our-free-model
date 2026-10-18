@@ -17,6 +17,9 @@
  *   node scripts/ofm-zed-add-models.mjs                 # uji (dry-run)
  *   node scripts/ofm-zed-add-models.mjs --write         # tulis + backup
  *   node scripts/ofm-zed-add-models.mjs --write <id...> # hanya id tertentu
+ *   node scripts/ofm-zed-add-models.mjs --write --temporary <id...>
+ *     # tandai entri dengan sufiks "· sementara" di display_name. Skema Zed
+ *     # tidak punya field `temporary`, jadi penandanya adalah nama tampilan.
  */
 
 import fs from 'node:fs';
@@ -29,6 +32,9 @@ const CATALOG = path.join(os.homedir(), '.our-free-model', 'catalog.json');
 
 const PROVIDER = 'Our-Free-Local';
 const WRITE = process.argv.includes('--write');
+const TEMPORARY = process.argv.includes('--temporary');
+/** Sufiks penanda untuk model yang kuotanya bisa habis (mis. free tier OpenCode). */
+const TEMP_SUFFIX = ' · sementara';
 
 /** Id yang diiklankan gateway pada sesi 15h (semua sudah diprobe hidup). */
 const DEFAULT_IDS = [
@@ -54,9 +60,15 @@ const DEFAULT_IDS = [
   'gemini/gemini-3.8-flash',
 ];
 
-/** Id yang tidak ada di kiloRows: nilainya diambil dari /v1/models gateway. */
+/**
+ * Id yang tidak ada di kiloRows. Nilai diambil dari `src/catalog.js` →
+ * `FREE_ID_OVERRIDES` (vision/contextWindow) agar tidak menebak.
+ */
 const EXTRA = {
   'gemini/gemini-3.8-flash': { name: 'Gemini 3.8 Flash', vision: true, contextWindow: 1000000 },
+  'big-pickle': { name: 'Big Pickle', vision: true, contextWindow: 262144 },
+  'deepseek-v4.1-flash-free': { name: 'DeepSeek V4.1 Flash (free)', vision: true, contextWindow: 1048576 },
+  'glm-5.3-flash-free': { name: 'GLM 5.3 Flash (free)', vision: true, contextWindow: 1048576 },
 };
 
 const BACKSLASH = String.fromCharCode(92);
@@ -200,7 +212,7 @@ for (const id of targetIds) {
   if (!caps) fail(`kapabilitas untuk "${id}" tidak ada di catalog.json maupun EXTRA`);
   desired.push({
     id,
-    name: caps.name,
+    name: TEMPORARY ? caps.name + TEMP_SUFFIX : caps.name,
     vision: caps.vision,
     contextWindow: caps.contextWindow,
     maxOutput: Math.min(caps.maxOutput, gatewayCeiling),

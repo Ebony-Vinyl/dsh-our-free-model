@@ -43,6 +43,11 @@ const KEEP_EXACT = new Set([
   'nvidia/nemotron-3-ultra-550b-a55b:free',
   'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
+  // Model OpenCode yang dipulihkan sementara (kuota free tier bisa habis).
+  // Dicabut dari sini bila probe ulang membuktikan mati.
+  'big-pickle',
+  'deepseek-v4.1-flash-free',
+  'glm-5.3-flash-free',
 ]);
 const WRITE = process.argv.includes('--write');
 
