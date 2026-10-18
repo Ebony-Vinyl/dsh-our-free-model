@@ -266,6 +266,9 @@ export async function startStandalone({
         lan: lanState(),
       }),
       onSettingsChanged: async () => {
+        // combos/aggregate 改动必须立即重建合并清单：否则「路由」页保存后，
+        // 新链要等下一次目录刷新（最长 15 分钟）才出现在 /v1/models。
+        core.syncAggregateCatalog()
         if (!refreshInFlight) scheduleRefresh()
         await reconcileRelay()
       },

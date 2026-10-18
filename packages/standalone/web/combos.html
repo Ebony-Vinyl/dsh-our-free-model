@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Auto 路由 · Our Free Model</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font: 13px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--dsw-alias-bg-layer-0, #f6f6f4); color: var(--dsw-alias-label-primary, #1c1e21); }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 60px; }
+    h1 { font-size: 17px; margin: 0 0 4px; }
+    .sub { color: var(--dsw-alias-label-tertiary, #8a8f98); font-size: 12px; margin-bottom: 22px; }
+    .card { background: var(--dsw-alias-bg-layer-1, #fff); border: 1px solid var(--dsw-alias-border-l1, #e4e4e0); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+    .card h2 { font-size: 13px; margin: 0 0 10px; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .grow { flex: 1 1 auto; }
+    label.inline { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+    input[type=number], input[type=text], input[type=password], select {
+      font: inherit; padding: 5px 8px; border-radius: 8px;
+      border: 1px solid var(--dsw-alias-border-l1, #d9d9d4);
+      background: var(--dsw-alias-bg-layer-1, #fff); color: inherit; width: 130px;
+    }
+    input.chain-name { width: 220px; font-weight: 600; }
+    button { font: inherit; padding: 5px 14px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1, #c9c9c4); background: var(--dsw-alias-bg-layer-1, #fff); color: inherit; cursor: pointer; }
+    button.primary { background: #427061; border-color: #427061; color: #fff; }
+    button.danger { color: #b3403a; border-color: #d8b1ae; }
+    button.iconbtn { padding: 2px 9px; font-size: 12px; }
+    button:disabled { opacity: .45; cursor: default; }
+    .member-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--dsw-alias-border-l1, #ececea); font-size: 12.5px; }
+    .member-row:last-child { border-bottom: 0; }
+    .member-row .ord { color: var(--dsw-alias-label-tertiary, #8a8f98); min-width: 22px; }
+    .member-row .mid { color: var(--dsw-alias-label-tertiary, #8a8f98); font-size: 11.5px; }
+    .muted { color: var(--dsw-alias-label-tertiary, #8a8f98); font-size: 11.5px; }
+    .pill { display: inline-block; font-size: 10.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1, #d9d9d4); color: var(--dsw-alias-label-secondary, #6b7075); }
+    .pill.ok { color: #2f7d5f; border-color: #b5d8c8; }
+    .pill.off { color: #b0681f; border-color: #e5cba4; }
+    .cap { margin-top: 8px; }
+    .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2a2e33; color: #f2f2ee; padding: 9px 18px; border-radius: 10px; font-size: 12.5px; opacity: 0; transition: opacity .18s; pointer-events: none; max-width: 70vw; }
+    .toast.show { opacity: 1; }
+    .loginbox { max-width: 420px; margin: 80px auto; }
+    .loginbox input { width: 100%; box-sizing: border-box; margin: 6px 0 12px; }
+    .hint { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #8a8f98); margin-top: 8px; }
+    .back { font-size: 12px; color: var(--dsw-alias-label-secondary, #6b7075); text-decoration: none; }
+    .back:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app" hidden>
+    <div class="row" style="justify-content: space-between">
+      <div>
+        <h1>Auto 路由（模型链）</h1>
+        <div class="sub">一条链 = 一串按顺序换手的模型。客户端点名链 ID（combo:…），链上模型失败、限流或被限额时自动换下一个候选，对外只暴露一个模型名。</div>
+      </div>
+      <a class="back" href="/">← 返回控制台</a>
+    </div>
+
+    <div id="chains"></div>
+
+    <div class="card">
+      <div class="row">
+        <button id="addchain">＋ 新建链</button>
+        <button class="primary" id="save">保存全部</button>
+        <span id="savestate" class="muted"></span>
+      </div>
+      <div class="hint">保存后链 ID（combo:…）立即出现在 /v1/models 清单里，客户端像选普通模型一样点名它。fallback = 每次都从链头开始试，适合质量梯度；round-robin = 轮换起点分摊负载，适合一串等价模型。</div>
+    </div>
+  </div>
+
+  <div class="wrap loginbox card" id="login" hidden>
+    <h2>登录管理会话</h2>
+    <div class="muted">与控制台同一个会话；在控制台登录过则刷新本页即可。</div>
+    <input type="password" id="key" placeholder="粘贴 API Key（forwardKey）">
+    <div class="row">
+      <button class="primary" id="loginbtn">登录</button>
+      <span id="loginmsg" class="muted"></span>
+    </div>
+    <div class="hint">Key 就是客户端指向 18901 时用的那把；也可以回控制台首页用登录链接。</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/assets/combos.js"></script>
+</body>
+</html>
