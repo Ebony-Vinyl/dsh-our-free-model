@@ -129,6 +129,52 @@ for (const succeeds of [true, false]) {
   })
 }
 
+await check('a deferred activation says restart, not hot-reloaded, and shows the notice (issue #427)', async () => {
+  const originalFetch = globalThis.fetch
+  const states = []
+  let cursor = 0
+  let settle
+  const deferredResult = { version: '1.4.6', previous: '1.4.5', files: 4, bytes: 10, reloaded: false, restartRequired: true }
+  const awaitingRestart = { ...baseline, current: '1.4.5', installedVersion: '1.4.6', available: false, restartRequired: true }
+  const draw = () => {
+    cursor = 0
+    return flatten(UpgradePanel({ t: key => key, settings: {}, onApply() {} }))
+  }
+  stateHook = initial => {
+    const index = cursor++
+    if (!(index in states)) {
+      states[index] = initial?.status === 'loading'
+        ? { status: 'ready', data: baseline, error: '' } : initial
+    }
+    return [states[index], value => {
+      states[index] = typeof value === 'function' ? value(states[index]) : value
+    }]
+  }
+  globalThis.fetch = async url => {
+    if (url.endsWith('/update/apply')) return new Promise(resolve => { settle = resolve })
+    assert.ok(url.endsWith('/update/status'))
+    return { ok: true, text: async () => JSON.stringify(awaitingRestart) }
+  }
+  try {
+    const action = draw().find(node => node?.props?.kind === 'primary').props.onClick()
+    settle({ ok: true, text: async () => JSON.stringify(deferredResult) })
+    await action
+    await until(() => states[0].status === 'ready')
+    const nodes = draw()
+    // Claiming a hot reload here would be a claim the running process cannot
+    // back up: it is still serving the old module.
+    assert.ok(nodes.includes('upgrade.restartRequired'), 'the message must ask for a restart')
+    assert.ok(!nodes.includes('upgrade.doneRefresh'), 'a deferred activation is not a completed hot reload')
+    assert.ok(nodes.includes('upgrade.restartNotice'), 'the panel keeps saying a restart is pending')
+    // A pending restart must not read as "up to date" either — the running code
+    // is still the old version until the user quits.
+    assert.ok(!nodes.includes('upgrade.upToDate'))
+  } finally {
+    stateHook = undefined
+    globalThis.fetch = originalFetch
+  }
+})
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-reload-isolation-'))
 const pkgDir = path.join(root, 'package')
 const home = path.join(root, 'home')

@@ -869,7 +869,18 @@ export class PluginUpdater {
     const active = upgradeLocks.has(this.deps.pkgDir)
     const unfinished = ['installing', 'activating'].includes(state?.phase)
     const recoveryRequired = state?.phase === 'recovery-required' || (unfinished && !active)
-    const available = this.latest !== undefined && compareVersions(this.latest.version, current) > 0
+    // A deferred activation installed `state.to` but kept the old runtime. It
+    // stops being "pending" the moment a process actually runs the installed
+    // bytes — which is the whole point of the restart — so the flag expires by
+    // itself instead of asking for one restart after another.
+    const restartRequired = state?.phase === 'complete' && state.restartRequired === true
+      && installedVersion !== '' && installedVersion === String(state.to ?? '')
+      && current !== installedVersion
+    // While a restart is pending, the code the user would run next is the copy
+    // on disk, not the one still in memory: judging "available" against the old
+    // runtime would keep re-offering the version just installed.
+    const latest = this.latest?.version ?? ''
+    const available = latest !== '' && compareVersions(latest, restartRequired ? installedVersion : current) > 0
     this.history = this.loadHistory()
     return {
       current,
@@ -885,6 +896,9 @@ export class PluginUpdater {
       checkedAt: this.checkedAt,
       applying: active,
       error: state?.error || this.error,
+      /** The files are installed but the running process still serves the old
+       *  module; only a full restart picks the new one up. */
+      restartRequired,
       recoveryBackup: recoveryRequired ? this.backupDir : undefined,
       lastApplied: this.history[this.history.length - 1] ?? undefined,
     }
@@ -942,6 +956,7 @@ export class PluginUpdater {
     let state
     let installed = false
     let activated = false
+    let deferred = false
     try {
       // Re-check immediately before installing: the owner may have pushed a new
       // manifest since the last check, and a stale cached manifest would verify
@@ -984,10 +999,20 @@ export class PluginUpdater {
           if (activation?.ok !== true) {
             throw Object.assign(new Error(activation?.error ?? 'hot reload did not confirm activation'), { runtimeRestored: activation?.restored === true })
           }
-          if (activation.version !== manifest.version) {
+          if (activation.deferred === true) {
+            // The host kept serving the module it had already evaluated, so the
+            // running code cannot report the new version this boot. The files on
+            // disk were verified against the signed manifest and the rollback
+            // copy is intact, so the install is good and only the activation is
+            // postponed: every later boot reads the new version. Restoring the
+            // backup here would discard a verified upgrade to fix a mismatch
+            // that the next restart resolves on its own.
+            deferred = true
+          } else if (activation.version !== manifest.version) {
             throw new Error(`activation version mismatch: expected ${manifest.version}, got ${String(activation.version ?? '(missing)')}`)
+          } else {
+            activated = true
           }
-          activated = true
         }
       } catch (error) {
         // The installed copy is now in an unknown state: put the old one back
@@ -1007,13 +1032,13 @@ export class PluginUpdater {
         }
         throw new Error(`upgrade failed, previous files restored (${error?.message ?? error})`)
       }
-      this.saveUpgradeState({ ...state, phase: 'complete', activated })
+      this.saveUpgradeState({ ...state, phase: 'complete', activated, ...(deferred ? { restartRequired: true } : {}) })
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
       const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated }
       this.recordHistory(record)
       this.checkedAt = Date.now()
-      this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)
-      return result
+      this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)${deferred ? '; restart required to activate' : ''}`)
+      return { ...result, ...(deferred ? { restartRequired: true } : {}) }
     } catch (error) {
       this.error = String(error?.message ?? error)
       if (state !== undefined && installed) {

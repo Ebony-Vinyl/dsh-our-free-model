@@ -317,6 +317,8 @@ window.__ModuleLoader__.load({
         'upgrade.phase.reload': '正在热重载…',
         'upgrade.done': '已升级到 {version}，插件已热重载生效。',
         'upgrade.doneRefresh': '已升级到 {version}。点击刷新页面加载新界面。',
+        'upgrade.restartRequired': '已写入 {version}，需完全退出并重新打开 DSH 才会生效。',
+        'upgrade.restartNotice': '新版本文件已写入，但当前进程仍在运行旧版本代码。请完全退出并重新打开 DSH 以完成升级。',
         'upgrade.failed': '升级失败：{message}',
         'upgrade.history': '最近一次升级',
         'upgrade.from': '由 {from} 升级',
@@ -1002,6 +1004,8 @@ window.__ModuleLoader__.load({
         'upgrade.phase.reload': 'Hot-reloading…',
         'upgrade.done': 'Upgraded to {version}; the plugin hot-reloaded into place.',
         'upgrade.doneRefresh': 'Upgraded to {version}. Reload the page to load the new UI.',
+        'upgrade.restartRequired': 'Wrote {version}; fully quit and reopen DSH for it to take effect.',
+        'upgrade.restartNotice': 'The new version is on disk, but this process still runs the old code. Fully quit and reopen DSH to finish the upgrade.',
         'upgrade.failed': 'Upgrade failed: {message}',
         'upgrade.history': 'Last upgrade',
         'upgrade.from': 'from {from}',
@@ -3721,7 +3725,14 @@ window.__ModuleLoader__.load({
           // our local phase even if `upgraded` arrives before reconnection.
           setPhase('')
           setMessage(t('upgrade.phase.install'))
-          if (result?.version !== undefined) setMessage(t('upgrade.doneRefresh').replace('{version}', result.version))
+          if (result?.version !== undefined) {
+            // A deferred activation installed the files but could not swap the
+            // running code; saying "hot-reloaded into place" there would be a
+            // claim the process cannot back up.
+            setMessage(result.restartRequired === true
+              ? t('upgrade.restartRequired').replace('{version}', result.version)
+              : t('upgrade.doneRefresh').replace('{version}', result.version))
+          }
           status.reload()
         } catch (err) {
           setPhase(''); setMessage('')
@@ -3732,6 +3743,10 @@ window.__ModuleLoader__.load({
       const notes = useMemo(() => parseSafeHtml(data?.notes ?? ''), [data?.notes])
       const upToDate = data !== undefined && data.latest !== '' && data.available === false
         && data.applying !== true && data.recoveryRequired !== true && data.versionMismatch !== true
+        // An install whose activation is still pending is not settled: the
+        // running code is the old version until the restart happens, so saying
+        // "up to date" beside the restart notice would contradict it.
+        && data.restartRequired !== true
       return h(Panel, null,
         h('div', { className: 'ofm_upgradecards' },
           h('span', { className: 'ofm_pill strong' }, `${t('upgrade.current')}: ${data?.current || '…'}`),
@@ -3754,6 +3769,7 @@ window.__ModuleLoader__.load({
           h('div', null, t('upgrade.recovery'),
             data.recoveryBackup ? h('p', { className: 'ofm_note' }, `${t('upgrade.backup')}: ${data.recoveryBackup}`) : null)) : null,
         data?.versionMismatch === true ? h('div', { className: 'ofm_callout' }, t('upgrade.mismatch')) : null,
+        data?.restartRequired === true ? h('div', { className: 'ofm_callout' }, t('upgrade.restartNotice')) : null,
         message !== '' ? h('p', { className: 'ofm_note' }, message) : null,
         (error || data?.error) ? h('div', { className: 'ofm_callout ofm_error' }, t('upgrade.failed').replace('{message}', error || data.error)) : null,
         notes.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } },
