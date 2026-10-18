@@ -52,3 +52,35 @@ WorkBuddy 国内版（`buddy` 渠道）的账号 `buddy-137da831` 在 `modelRate
 - 未验证停用账号在真实界面上的表现（当前账号池里所有账号都是启用状态，`enabled` 字段齐全）。停用路径由断言覆盖。
 - 未验证 percent 类渠道（Gemini）的并列展示在真实账号上的效果。
 - 限流检测只覆盖 host 确实写入了 `modelRateLimits` 的渠道；某些渠道的限流或风控冷却走别的机制，不在本 PR 声称范围内。
+
+## 已知限制：provider id 被其他插件重名占用
+
+徽章按 `modelSelection.provider` 这个字符串判断渠道（`CHANNEL_CREDITS[provider]`），它只能看到 id，看不到这个 provider 是谁注册的。若另一个插件用同一个 id 注册了另一种产品，徽章会把它认成本插件的渠道，显示本插件该 id 的渠道名与账号池额度——界面看上去正常，数据却是错的。
+
+真实案例：WorkBuddy 国际版在两个插件里都叫 `workbuddy`，语义却相反。
+
+| provider id | 本插件的 channel-pack | `dsh-connect-workbuddy` |
+| --- | --- | --- |
+| `workbuddy` | 国际版（workbuddy.ai） | 国内版 |
+| `buddy` | 国内版（CodeBuddy / 腾讯） | — |
+| `workbuddy-global` | — | 国际版 |
+
+两者同时启用时，先注册者占用该 id（channel-pack 的 `registerAdapterIdempotent` 遇到重复注册会保留现有路由、跳过本次注册），后注册者的同 id 渠道直接消失，且不会重试。即使之后停用占用方，被跳过的一方也不会自行补注册，需要重启宿主。
+
+DSH 的 provider 命名空间不区分注册者，插件侧拿不到来源信息，因此本 PR 不做防护。实际使用中应避免让两个插件注册同一 id。
+
+---
+
+Known limitation — a provider id shared with another plugin. The chip matches a
+channel by `modelSelection.provider` alone; DSH's provider namespace does not
+record who registered an id, so the plugin cannot tell two implementations
+apart. When another plugin registers the same id for a different product, the
+chip renders this plugin's channel name and account-pool balance for that id:
+the interface looks normal while the number is wrong. Real case: WorkBuddy
+international is called `workbuddy` by both plugins but means opposite things
+(`workbuddy` = international for this plugin's channel-pack, and = domestic for
+`dsh-connect-workbuddy`, which uses `workbuddy-global` for international).
+Registration is first-come: `registerAdapterIdempotent` keeps the existing route
+and silently skips a duplicate, and a skipped registration is never retried —
+even after the occupant is disabled, the host must be restarted. This PR does
+not try to defend against it.
