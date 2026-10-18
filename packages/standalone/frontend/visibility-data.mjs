@@ -1,5 +1,6 @@
 export function visibilityCopy(locale) {
-  return String(locale).toLowerCase().startsWith('en') ? {
+  const language = String(locale).toLowerCase()
+  if (language.startsWith('en')) return {
     hideFree: 'Hide anonymous and Kilo free models',
     hideEac: 'Hide EAC models',
     hide: 'Hide model',
@@ -7,13 +8,23 @@ export function visibilityCopy(locale) {
     hidden: 'Hidden by preference',
     groupHidden: 'Turn off group hiding first',
     saved: 'Model visibility saved',
-  } : {
-    hideFree: '隐藏匿名与 Kilo 免费模型',
-    hideEac: '隐藏 EAC 模型',
-    hide: '隐藏模型',
-    show: '显示模型',
-    hidden: '已按偏好隐藏',
-    groupHidden: '请先关闭整组隐藏',
-    saved: '模型显示设置已保存',
+  }
+  if (language.startsWith('id')) return {
+    hideFree: 'Sembunyikan model gratis anonim dan Kilo',
+    hideEac: 'Sembunyikan model EAC',
+    hide: 'Sembunyikan model',
+    show: 'Tampilkan model',
+    hidden: 'Disembunyikan sesuai preferensi',
+    groupHidden: 'Matikan penyembunyian seluruh grup terlebih dahulu',
+    saved: 'Pengaturan visibilitas model tersimpan',
+  }
+  return {
+    hideFree: 'Sembunyikan model gratis anonim dan Kilo',
+    hideEac: 'Sembunyikan model EAC',
+    hide: 'Sembunyikan model',
+    show: 'Tampilkan model',
+    hidden: 'Disembunyikan sesuai preferensi',
+    groupHidden: 'Matikan penyembunyian seluruh grup terlebih dahulu',
+    saved: 'Pengaturan visibilitas model tersimpan',
   }
 }

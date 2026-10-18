@@ -2,17 +2,17 @@
 import path from 'node:path'
 import { startStandalone } from './service.mjs'
 
-const usage = `Our Free Model 独立本地服务
-用法：node packages/standalone/cli.mjs [选项]
+const usage = `Our Free Model — layanan lokal mandiri
+Penggunaan: node packages/standalone/cli.mjs [opsi]
 
-  --port <端口>       监听端口，默认 18900（冲突时自动选择可用端口）
-  --data-dir <目录>   数据目录，默认 OFM_HOME 或 ~/.our-free-model
-  --no-refresh        跳过启动与周期刷新；仍可手动刷新和推理
-  --probe             启用并保存自动探测设置，会产生上游请求
-  --lan               启用并保存 LAN 推理中继（独立密钥，管理页仍仅限本机）
-  --no-lan            关闭并保存 LAN 推理中继
-  --lan-port <端口>   保存 LAN 期望端口，默认 0；不会单独开启中继
-  --help              显示帮助
+  --port <port>       Port listen, bawaan 18900 (memilih port tersedia bila bentrok)
+  --data-dir <dir>    Direktori data, bawaan OFM_HOME atau ~/.our-free-model
+  --no-refresh        Lewati penyegaran saat mulai dan berkala; penyegaran manual dan inferensi tetap tersedia
+  --probe             Aktifkan dan simpan deteksi otomatis; akan menghasilkan permintaan upstream
+  --lan               Aktifkan dan simpan relai inferensi LAN (kunci terpisah; halaman manajemen tetap hanya perangkat ini)
+  --no-lan            Matikan dan simpan relai inferensi LAN
+  --lan-port <port>   Simpan port LAN yang diinginkan, bawaan 0; tidak mengaktifkan relai sendiri
+  --help              Tampilkan bantuan
 `
 
 async function main() {
@@ -24,11 +24,11 @@ async function main() {
     if (flag === '--probe') { options.probe = true; continue }
     if (flag === '--lan' || flag === '--no-lan') { options.lanEnabled = flag === '--lan'; continue }
     if (!['--port', '--data-dir', '--lan-port'].includes(flag) || !process.argv[index + 1] || process.argv[index + 1].startsWith('--')) {
-      throw new Error(`未知选项或缺少参数：${flag}`)
+      throw new Error(`Opsi tidak dikenal atau parameter hilang: ${flag}`)
     }
     const value = process.argv[++index]
     if (flag === '--port' || flag === '--lan-port') {
-      if (!/^\d+$/.test(value) || Number(value) > 65535) throw new Error('端口必须为 0 到 65535 的整数')
+      if (!/^\d+$/.test(value) || Number(value) > 65535) throw new Error('Port harus berupa bilangan bulat 0 sampai 65535')
       options[flag === '--port' ? 'port' : 'lanPort'] = Number(value)
     } else options.dataDir = path.resolve(value)
   }
@@ -38,19 +38,19 @@ async function main() {
     if (stopping) return
     stopping = true
     void service.close().catch(error => {
-      process.stderr.write(`停止失败：${error.message}\n`)
+      process.stderr.write(`Gagal berhenti: ${error.message}\n`)
       process.exitCode = 1
     })
   }
   process.once('SIGINT', shutdown)
   process.once('SIGTERM', shutdown)
-  process.stdout.write(`${service.product} ${service.version}\n管理页面（10 分钟内一次性登录）：${service.managementUrl}\nAPI：${service.url}/v1\nAPI Key 保存在：${service.keyFile}\n`)
+  process.stdout.write(`${service.product} ${service.version}\nHalaman manajemen (login sekali dalam 10 menit): ${service.managementUrl}\nAPI: ${service.url}/v1\nAPI Key disimpan di: ${service.keyFile}\n`)
   if (service.lan.running) {
-    process.stdout.write(`LAN API：${service.lan.baseUrls.join(', ') || `端口 ${service.lan.port}`}\nLAN Key：请在本机管理接口中查看（独立于本机 API Key）\n`)
+    process.stdout.write(`LAN API: ${service.lan.baseUrls.join(', ') || `port ${service.lan.port}`}\nLAN Key: lihat di antarmuka manajemen perangkat ini (terpisah dari API Key lokal)\n`)
   } else if (service.lan.error) process.stderr.write(`${service.lan.error}\n`)
 }
 
 main().catch(error => {
-  process.stderr.write(`启动失败：${error.code === 'EEXIST' ? '数据目录已有服务运行，或 service.lock 的归属无法确认；请先退出已有服务。Windows 和 Linux 会自动回收已确认进程退出的陈旧锁。' : error.message}\n`)
+  process.stderr.write(`Gagal memulai: ${error.code === 'EEXIST' ? 'Direktori data sudah dipakai layanan lain, atau kepemilikan service.lock tidak dapat dipastikan; keluar dari layanan yang sudah berjalan terlebih dahulu. Windows dan Linux akan otomatis membersihkan kunci usang yang prosesnya sudah dipastikan berhenti.' : error.message}\n`)
   process.exitCode = 1
 })

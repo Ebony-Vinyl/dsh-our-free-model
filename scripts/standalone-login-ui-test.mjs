@@ -63,7 +63,7 @@ try {
   await page.locator('#login-screen').waitFor({ state: 'visible' })
   const platform = process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'unsupported'
   assert.equal(await page.locator('#login-terminal').getAttribute('data-login-platform'), platform)
-  const terminalName = platform === 'windows' ? 'PowerShell' : '终端'
+  const terminalName = platform === 'windows' ? 'PowerShell' : 'Terminal'
   const manual = page.locator('.login-help details')
   await manual.locator('summary').click()
   const command = await page.locator('#login-command').inputValue()
@@ -84,21 +84,21 @@ try {
     if (imageDir) await page.screenshot({ path: path.join(imageDir, `macos-login-${name}.png`), fullPage: true })
   }
   await page.locator('#copy-login-command').click()
-  await page.getByText('命令已复制。', { exact: false }).waitFor()
+  await page.getByText('Perintah tersalin.', { exact: false }).waitFor()
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), command)
   // 后续验证还原剪贴板，不把隔离令牌留给用户的实际客户端。
   if (platform !== 'unsupported') {
     const responsePromise = page.waitForResponse(response => response.url().endsWith('/login/terminal'))
-    await page.getByRole('button', { name: `打开${platform === 'windows' ? ' PowerShell ' : '终端'}获取令牌 ↗` }).click()
+    await page.getByRole('button', { name: `Buka ${platform === 'windows' ? 'PowerShell' : 'Terminal'} untuk mengambil token ↗` }).click()
     const response = await responsePromise
     assert.equal(response.status(), 200)
     assert.deepEqual(await response.json(), { ok: true })
-    await page.getByText(`已请求打开${terminalName}。`, { exact: false }).waitFor()
+    await page.getByText(`Permintaan membuka ${terminalName} terkirim.`, { exact: false }).waitFor()
     assert.equal(launches, 1)
     assert.equal(await page.evaluate(() => document.activeElement.id), 'login-key')
     assert.equal((await context.request.get(`${baseUrl}/api/management/key`)).status(), 401)
     await page.locator('#login-terminal').click()
-    await page.getByText('30 秒后可重试', { exact: false }).waitFor()
+    await page.getByText('coba lagi setelah 30 detik', { exact: false }).waitFor()
     assert.equal(launches, 1)
     if (nativeTerminal) {
       let copied = false
@@ -113,7 +113,7 @@ try {
       const contents = (await runFile('/usr/bin/osascript', ['-e',
         `tell application "Terminal" to get contents of selected tab of window id ${windows[0]}`,
       ])).stdout
-      assert.ok(contents.includes('登录令牌已复制'))
+      assert.ok(contents.includes('Token login sudah disalin'))
       assert.ok(!contents.includes(key))
     }
   } else assert.equal(await page.locator('#login-terminal').isDisabled(), true)
@@ -129,7 +129,7 @@ try {
       const contents = (await runFile('/usr/bin/osascript', ['-e',
         `tell application "Terminal" to get contents of selected tab of window id ${id}`,
       ])).stdout
-      if (contents.includes(dataDir) || contents.includes('登录令牌已复制')) {
+      if (contents.includes(dataDir) || contents.includes('Token login sudah disalin')) {
         await runFile('/usr/bin/osascript', ['-e',
           `tell application "Terminal" to close window id ${id} saving no`,
         ]).catch(() => {})

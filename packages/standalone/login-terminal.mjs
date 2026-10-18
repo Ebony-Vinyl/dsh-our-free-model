@@ -24,10 +24,10 @@ export async function openLoginTerminal(dataDir, {
     // 命令行只包含固定脚本和配置路径；令牌只经 stdin 传给 pbcopy。
     const command = [
       `if ${shellQuote(execPath)} -e ${shellQuote(copy)} ${shellQuote(keyFile)} 2>/dev/null; then`,
-      `  printf '%s\\n' ${shellQuote('登录令牌已复制。回到网页，粘贴到登录令牌输入框即可。')}`,
-      `  printf '%s\\n' ${shellQuote('完成后可以关闭此窗口，请勿向他人分享令牌。')}`,
+      `  printf '%s\\n' ${shellQuote('Token login sudah disalin. Kembali ke halaman web dan tempelkan ke kolom token login.')}`,
+      `  printf '%s\\n' ${shellQuote('Setelah selesai, jendela ini boleh ditutup; jangan bagikan token kepada siapa pun.')}`,
       'else',
-      `  printf '%s\\n' ${shellQuote('获取令牌失败，请检查本地 settings.json 或使用页面的手动入口。')}`,
+      `  printf '%s\\n' ${shellQuote('Gagal mengambil token; periksa settings.json lokal atau gunakan jalur manual di halaman.')}`,
       'fi',
     ].join('\n')
     const script = [
@@ -42,20 +42,20 @@ export async function openLoginTerminal(dataDir, {
     return
   }
   if (platform !== 'win32') {
-    throw Object.assign(new Error('自动打开终端仅支持 Windows 和 macOS，请按页面说明手动获取令牌。'), { statusCode: 400 })
+    throw Object.assign(new Error('Pembukaan terminal otomatis hanya didukung di Windows dan macOS; ikuti petunjuk halaman untuk mengambil token secara manual.'), { statusCode: 400 })
   }
   const powershell = path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
   const command = [
-    "$Host.UI.RawUI.WindowTitle = 'Our Free Model - 获取登录令牌'",
+    "$Host.UI.RawUI.WindowTitle = 'Our Free Model - Ambil token login'",
     "$ErrorActionPreference = 'Stop'",
     'try {',
     `  $ofmLoginKey = (Get-Content -LiteralPath ${quote(keyFile)} -Raw -Encoding UTF8 | ConvertFrom-Json).forwardKey`,
-    "  if ([string]::IsNullOrWhiteSpace($ofmLoginKey)) { throw '配置文件没有登录令牌' }",
+    "  if ([string]::IsNullOrWhiteSpace($ofmLoginKey)) { throw 'Berkas konfigurasi tidak berisi token login' }",
     '  Set-Clipboard -Value $ofmLoginKey',
     '  $ofmLoginKey = $null',
-    "  Write-Host '登录令牌已复制。回到网页，粘贴到登录令牌输入框即可。' -ForegroundColor Green",
-    "  Write-Host '完成后可以关闭此窗口，请勿向他人分享令牌。'",
-    "} catch { Write-Host '获取令牌失败，请检查本地 settings.json 或使用页面的手动入口。' -ForegroundColor Red }",
+    "  Write-Host 'Token login sudah disalin. Kembali ke halaman web dan tempelkan ke kolom token login.' -ForegroundColor Green",
+    "  Write-Host 'Setelah selesai, jendela ini boleh ditutup; jangan bagikan token kepada siapa pun.'",
+    "} catch { Write-Host 'Gagal mengambil token; periksa settings.json lokal atau gunakan jalur manual di halaman.' -ForegroundColor Red }",
   ].join('\n')
   const launch = `Start-Process -FilePath ${quote(powershell)} -WindowStyle Normal -ArgumentList '-NoProfile -STA -NoExit -EncodedCommand ${encode(command)}' -ErrorAction Stop`
   await exec(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encode(launch)], {

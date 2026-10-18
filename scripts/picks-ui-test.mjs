@@ -98,7 +98,7 @@ check('live numbers render with separators and their labels', () => {
   assert.equal(facts.length, 3, 'stars, forks, last push')
   assert.equal(text(facts[0]).includes('2,034'), true)
   assert.equal(text(facts[1]).includes('74'), true)
-  assert.equal(text(facts[2]).includes('3 天前'), true)
+  assert.equal(text(facts[2]).includes('3 hari lalu'), true)
 })
 
 check('no numbers at all leaves no placeholder behind', () => {
@@ -153,11 +153,11 @@ check('translated totals count only projects with real star readings', () => {
     for (const repos of [[], [{ id: 'eac-desktop' }], [{ id: 'eac-desktop', stars: 0 }]]) {
       picksFixture = repos
       const page = text(PicksPage({ t }))
-      assert.ok(!page.includes(locale === 'zh' ? '个推荐项目共' : 'stars across'))
+      assert.ok(!page.includes(locale === 'zh' ? 'proyek rekomendasi dengan total' : 'stars across'))
       assert.equal(withClass(PicksPage({ t }), 'ofm_recocard').length, 3)
     }
     for (const key of ['picks.sub', 'picks.foot', 'picks.totalStars']) {
-      assert.ok(!/两个|两张|\bboth\b|\btwo\b/i.test(DICT[locale][key]))
+      assert.ok(!/两个|两张|\bboth\b|\btwo\b|\bdua\b|kedua/i.test(DICT[locale][key]))
     }
   }
   picksFixture = undefined
