@@ -51,7 +51,7 @@ const raw = fs.readFileSync(path.join(repo, 'src/providers/registry.json'), 'utf
 // row here (see README's aggregate section) — the free lane serves it instead.
 const EXPECTED_PROVIDERS = 75
 const EXPECTED_BY_CATEGORY = { apikey: 60, 'free-tier': 10, local: 3, oauth: 2 }
-const EXPECTED_MODELS = 500
+const EXPECTED_MODELS = 504
 
 const byCategory = {}
 for (const provider of PROVIDERS) byCategory[provider.category] = (byCategory[provider.category] ?? 0) + 1

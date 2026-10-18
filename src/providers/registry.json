@@ -4102,9 +4102,37 @@
         "contextWindow": null,
         "vision": null,
         "reasoning": null
+      },
+      {
+        "id": "cohere/north-mini-code:free",
+        "name": "North Mini Code (free)",
+        "contextWindow": 256000,
+        "vision": null,
+        "reasoning": null
+      },
+      {
+        "id": "dots-studio/dots-3-note-preview:free",
+        "name": "Dots 3 Note Preview (free)",
+        "contextWindow": 512000,
+        "vision": null,
+        "reasoning": null
+      },
+      {
+        "id": "nvidia/nemotron-3.5-lightning:free",
+        "name": "Nemotron 3.5 Lightning (free)",
+        "contextWindow": 1000000,
+        "vision": null,
+        "reasoning": null
+      },
+      {
+        "id": "xingchen-agi/xing4.0-29b-a4b:free",
+        "name": "Xing 4.0 29B A4B (free)",
+        "contextWindow": 262144,
+        "vision": null,
+        "reasoning": null
       }
     ],
-    "notes": "Free tier: 27+ free models, no credit card, ~200 requests/day (9router registry).",
+    "notes": "Free tier: 27+ free models, no credit card, ~200 requests/day (9router registry). The four rows above were verified on 2026-10-18 to stream tool_calls through the aggregate lane; other free ids are added per user, not here.",
     "website": "https://openrouter.ai/",
     "local": false,
     "source": "fcc",
