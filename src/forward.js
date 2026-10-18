@@ -872,19 +872,26 @@ async function chatCompletions(req, res, complete, options = {}) {
       if (chunk.type === 'tool-call-delta') {
         const action = tools.admit(chunk)
         if (action.kind === 'drop') return
-        sendSse(res, {
-          id, object: 'chat.completion.chunk', created, model,
-          choices: [{
-            index: 0,
-            delta: {
-              tool_calls: [{
-                index: action.openAiIndex,
-                ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
-              }],
-            },
-            finish_reason: null,
-          }],
-        })
+        // Do NOT emit a bare `{ index }` tool_calls delta: strict OpenAI
+        // clients (e.g. Vercel AI SDK used by opencode) validate `function`
+        // as required and reject the chunk with "expected object, received
+        // undefined". Only emit a chunk when it carries data: the first chunk
+        // (id + name) or an args chunk.
+        if (action.first) {
+          sendSse(res, {
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{
+              index: 0,
+              delta: {
+                tool_calls: [{
+                  index: action.openAiIndex,
+                  id: action.id, function: { name: action.name ?? '', arguments: '' },
+                }],
+              },
+              finish_reason: null,
+            }],
+          })
+        }
         if (action.args) {
           sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
         }
