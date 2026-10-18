@@ -269,15 +269,15 @@
 <!-- 主内容 -->
 <div class="content">
   <div class="logo">OUR FREE MODEL</div>
-  <div class="subtitle">Local Console</div>
+  <div class="subtitle">Konsol Lokal</div>
   <div class="progress-track">
     <div class="progress-bar"></div>
   </div>
-  <div class="status" id="status">正在初始化...</div>
+  <div class="status" id="status">Menginisialisasi...</div>
 </div>
 
 <script>
-// 主题检测：读 localStorage 或系统偏好
+// Deteksi tema: baca localStorage atau preferensi sistem
 function detectTheme() {
   try {
     const saved = localStorage.getItem('ofm-theme');
@@ -289,18 +289,18 @@ function detectTheme() {
 const theme = detectTheme();
 document.documentElement.setAttribute('data-theme', theme);
 
-// 隐藏不适用主题的装饰
+// Sembunyikan dekorasi tema yang tidak aktif
 if (theme === 'dark') {
   document.getElementById('beam').style.display = 'none';
 } else {
   document.getElementById('scanline').style.display = 'none';
 }
 
-// 模拟进度状态
+// Simulasikan status progres
 const statusEl = document.getElementById('status');
 const messages = theme === 'dark'
-  ? ['正在初始化...', '校准信号...', '连接本地服务...', '就绪']
-  : ['正在初始化...', '加载模块...', '连接本地服务...', '就绪'];
+  ? ['Menginisialisasi...', 'Menyelaraskan sinyal...', 'Menghubungkan layanan lokal...', 'Siap']
+  : ['Menginisialisasi...', 'Memuat modul...', 'Menghubungkan layanan lokal...', 'Siap'];
 
 let step = 0;
 const interval = setInterval(() => {
@@ -309,11 +309,11 @@ const interval = setInterval(() => {
     statusEl.textContent = messages[step];
   } else {
     clearInterval(interval);
-    // 完成后淡出
+    // Pudarkan setelah selesai
     setTimeout(() => {
       document.body.classList.add('fade-out');
       setTimeout(() => {
-        // 窗口由 Rust 在真实服务握手结束后关闭。
+        // Jendela ditutup oleh Rust setelah handshake layanan nyata selesai.
       }, 300);
     }, 200);
   }
