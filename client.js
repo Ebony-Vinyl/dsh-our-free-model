@@ -542,6 +542,7 @@ window.__ModuleLoader__.load({
         'quota.panel.following': '跟随当前模型：{channel}',
         'quota.panel.colAccount': '账号',
         'quota.panel.stale': '刷新失败，显示的是上一次读数',
+        'quota.panel.total': '合计',
         'quota.chip.partial': '部分渠道未返回',
         'quota.chip.noData': '无余额数据，点击重试',
         'quota.chip.rateLimited': '限流 {wait} 后恢复',
@@ -1245,6 +1246,7 @@ window.__ModuleLoader__.load({
         'quota.panel.following': 'Following the current model: {channel}',
         'quota.panel.colAccount': 'Account',
         'quota.panel.stale': 'Refresh failed; showing the last reading',
+        'quota.panel.total': 'Total',
         'quota.chip.partial': 'Some channels returned nothing',
         'quota.chip.noData': 'No balance data, click to retry',
         'quota.chip.rateLimited': 'Rate limited, back in {wait}',
@@ -1928,7 +1930,7 @@ window.__ModuleLoader__.load({
   background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#f04438) 10%,transparent);
 }
 .ofm_quotaRowLimited th{color:var(--dsw-alias-state-error-primary,#f04438)}
-.ofm_quotaRowLimitTag{font-size:10.5px;font-weight:500;opacity:.9;white-space:nowrap}
+.ofm_quotaTotalRow th,.ofm_quotaTotalRow td{border-top:1px solid var(--dsw-alias-border-l1);font-weight:600}.ofm_quotaTotalRow th{color:var(--dsw-alias-label-secondary)}.ofm_quotaRowLimitTag{font-size:10.5px;font-weight:500;opacity:.9;white-space:nowrap}
 /* ══ 账号池状态 ════════════════════════════════════════════════════════ */
 .ofm_pooltop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .ofm_poolbadge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 72%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 4%);font-size:12.5px;font-weight:650;white-space:nowrap}
@@ -6616,20 +6618,38 @@ window.__ModuleLoader__.load({
      * 不自己解析 balance。同渠道多账号取余额最高的那一个（徽章只显示一条）。
      * 读不到时返回 null，由调用方决定呈现方式。
      */
+    /**
+     * 一个渠道的**总额度**读数。
+     *
+     * 多账号渠道要把所有可用账号的额度算进来：插件本身支持自动切号，账号池
+     * 就是可累加使用的容量——只显示其中最高的一个会少报，用户会以为额度只剩
+     * 一份。数值类（剩余积分 / Token / 余额）直接求和；配额类（capability.quota，
+     * 如 Gemini 的剩余百分比）的百分比不能相加，按账号并列展示。
+     * 禁用账号不参与服务，既不计入额度，也不参与限流判定。
+     */
     function readingOfChannel(channelId, accounts, t) {
       const capability = CHANNEL_CREDITS[channelId]
       if (!capability || !Array.isArray(accounts) || accounts.length === 0) return null
       const label = creditUnitLabel(capability, t)
-      let best = null
-      for (const account of accounts) {
-        const text = creditReadingOf(capability, account?.balance)
-        if (text === null) continue
-        const total = Number(account?.balance?.total)
-        const score = Number.isFinite(total) ? total : 0
-        if (best === null || score > best.score) best = { text, score }
+      const usable = accounts.filter(account => account?.enabled !== false)
+      if (usable.length === 0) return null
+      if (capability.quota) {
+        const texts = []
+        for (const account of usable) {
+          const text = creditReadingOf(capability, account?.balance)
+          if (text !== null && !texts.includes(text)) texts.push(text)
+        }
+        return texts.length === 0 ? null : { text: texts.join(' · '), label, channelId }
       }
-      if (best === null) return null
-      return { text: best.text, label, channelId }
+      let sum = 0
+      let counted = 0
+      for (const account of usable) {
+        const total = Number(account?.balance?.total)
+        if (!Number.isFinite(total)) continue
+        sum += total
+        counted += 1
+      }
+      return counted === 0 ? null : { text: kilo(sum), label, channelId }
     }
 
     /**
@@ -6753,9 +6773,11 @@ window.__ModuleLoader__.load({
           } catch { /* 限流字段拿不到就当没有，读数照常显示 */ }
           // 把限流字段并进 balances 的同名账号行，读数与限流判定共用一份数据。
           const byId = new Map(accounts.map(account => [String(account?.accountId ?? account?.id ?? ''), account]))
+          // enabled 必须一起带过来：balances 行没有这个字段，而限流判定要
+          // 排除禁用账号（禁用账号不参与服务，不能算进「全部受限」）。
           const merged = (balancesResult?.accounts ?? []).map(row => {
             const extra = byId.get(String(row?.accountId ?? ''))
-            return extra === undefined ? row : { ...row, modelRateLimits: extra.modelRateLimits }
+            return extra === undefined ? row : { ...row, enabled: extra.enabled, modelRateLimits: extra.modelRateLimits }
           })
           setRows({ [channel]: { accounts: merged } })
           setUpdatedAt(Date.now())
@@ -6799,7 +6821,8 @@ window.__ModuleLoader__.load({
       const entry = channel === null ? undefined : rows?.[channel]
       const reading = channel === null ? null : readingOfChannel(channel, entry?.accounts, t)
       const meta = channel === null ? null : CHANNEL_PROVIDERS.find(item => item.id === channel) ?? null
-      // 限流状态：当前模型的 modelRateLimits 精确匹配；无模型 id 时降级为任一账号受限。
+      // 限流状态：只认当前模型，且「全部启用账号都受限」才算受限（对齐 host 的
+      // allAccountsRateLimitedForModel）——别的模型被限流与当前会话无关。
       const rate = channel === null ? null : rateLimitOf(entry?.accounts, model)
 
 if (channel === null || meta === null) return null
@@ -6876,7 +6899,15 @@ if (channel === null || meta === null) return null
                         ' · ' + t('quota.chip.rateLimited').replace('{wait}', rateLimitWaitText(rowRate.resetAtMs))) : null),
                     h('td', { className: 'ofm_quotaPanelNum' },
                       text === null ? '—' : text))
-                }))),
+                }),
+                // 多账号的数值类渠道给一行合计：触发器上的数字就是所有可用账号
+                // 之和，这里明示出来，免得明细里只见单账号数字而看不懂。
+                entry !== undefined && CHANNEL_CREDITS[channel]?.quota !== true
+                  && entry.accounts !== undefined && entry.accounts.length > 1
+                  ? h('tr', { className: 'ofm_quotaTotalRow' },
+                    h('th', null, t('quota.panel.total')),
+                    h('td', { className: 'ofm_quotaPanelNum' }, reading.text))
+                  : null)),
             failed ? h('p', { className: 'ofm_quotaPanelError' }, t('quota.panel.stale')) : null,
             h('div', { className: 'ofm_quotaPanelFoot' },
               h('span', { className: 'ofm_quotaPanelStamp' },
