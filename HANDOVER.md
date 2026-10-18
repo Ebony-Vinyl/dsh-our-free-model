@@ -263,3 +263,136 @@ node scripts/build-standalone-ui.mjs --check
 - `frontend/` = sumber, `web/` = output yang di-commit. **Rebuild wajib.**
 - `vite.config.mjs` memakai plugin `standaloneSharedUi()` yang membaca `client.js`,
   jadi perubahan `DICT` ikut masuk ke `web/`.
+
+---
+
+# SESI 15g — 2026-10-18 — Audit model hidup & pembersihan daftar sembunyi
+
+Bagian ini **melengkapi** handover di atas. Fokus sesi ini bukan terjemahan (sudah selesai),
+melainkan memastikan **model yang masih hidup tidak ikut disembunyikan**.
+
+## 11. Temuan kunci
+
+### 11.1 Id berprefiks vendor = baris channel **Kilo**, bukan lane gratis
+
+`/v1/models` menampilkan id seperti `nvidia/nemotron-3.5-super-vl:free`, tetapi id itu
+**bukan** entri lane gratis. Ia berasal dari `catalogStore.kiloRows` (`channel: "kilo"`),
+yang disimpan di `~/.our-free-model/catalog.json`.
+
+Konsekuensinya:
+
+- `isFreeLane()` **tidak** mengenali `:free` (regex hanya menerima `-free`/`_free`).
+  Jadi `buildCatalog()` melewatinya — benar, karena mereka masuk lewat `reviveKiloCatalog()`.
+- Nama tampilan & `contextWindow` sudah benar dari `kiloRows` (mis.
+  `Kilo Nemotron 3.5 Super VL`, 1.000.000). **Tidak perlu** menambah `DISPLAY_NAMES`
+  untuk id berprefiks. Catatan lama di §Next sesi sebelumnya keliru.
+- `computeMembership()` mengecualikan entri ber-`channel` dari probe
+  (`probeable = catalog.filter(entry => !entry.channel)`), sehingga baris Kilo
+  **tidak pernah** ditandai `unavailable`. Satu-satunya penghalang iklan adalah
+  `hiddenModelIds`.
+
+### 11.2 `availability.json` bukan ground truth
+
+Entri `unavailable` bisa basi dan **ikut** memfilter iklan (`runtime.js:377`).
+Selalu probe langsung sebelum menyimpulkan model mati.
+
+### 11.3 Sisa aksara Han = komentar kode, bukan teks UI
+
+`grep -nP '[\x{4e00}-\x{9fff}]' client.js` → 180 baris, **semuanya** di `>1415`
+(komentar CSS di dalam template `CSS` dan komentar JS). Tidak ada satu pun di
+`DICT.zh`/`DICT.en` (baris 34–1405). Nilai `DICT.zh` sudah berisi Bahasa Indonesia.
+
+Jadi `packages/standalone/web/channels-C0e2HGt0.js` (103 baris Han) juga **hanya
+komentar CSS**. Tidak ada teks Han yang dilihat user. Menerjemahkannya murni
+kosmetik dan tidak dilakukan di sesi ini.
+
+Satu-satunya sisa yang benar-benar terlihat: fragmen URL `#git-安装` / `#安装`
+di `client.js:3792-3793`. Jangan diubah tanpa memastikan anchor README GitHub-nya,
+karena mengganti fragmen akan mematahkan tautan.
+
+## 12. Hasil audit model (2026-10-18)
+
+`hiddenModelIds`: **26 → 12**. `/v1/models`: **8 → 20** model.
+
+### Model yang dilepas (terbukti 200 + `tool_calls ≥ 1` + `[DONE]`)
+
+| Id | tool_calls |
+|---|---|
+| `nvidia/nemotron-3.5-super-vl:free` | 1 |
+| `nvidia/nemotron-3.5-lightning:free` | 2 |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 2 |
+| `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | 2 |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 2 |
+| `poolside/laguna-s-2.1:free` | 8 |
+| `poolside/laguna-xs-2.1:free` | 8 |
+| `liquid/lfm-2.5-2.6b:free` | 8 |
+| `stealth/glyph-cluster` | 2 |
+| `reflection/beam-free` | 4 |
+| `xingchen-agi/xing4.0-29b-a4b:free` | 2 |
+| `dots-studio/dots-3-note-preview:free` | 4 |
+| `cohere/north-mini-code:free` | 14 |
+| `kilo-auto/free` | 2 |
+
+Semua id `nvidia/` yang tersedia **sudah dilepas**. Hanya
+`nvidia/nemotron-3.5-content-safety:free` tetap disembunyikan karena
+**404 `No endpoints found that support tool use`** — model itu bukan model agent.
+
+### Tetap disembunyikan (12) — semuanya terbukti mati/belum pasti
+
+| Id | Alasan |
+|---|---|
+| `big-pickle` | 403 `LANE_LOCKED` |
+| `beam-free` | 403 `LANE_LOCKED` |
+| `mimo-v2.6-flash-free` | 403 `LANE_LOCKED` |
+| `nemotron-3.5-super-vl-free` | 403 `LANE_LOCKED` (bare id) |
+| `nemotron-3.5-lightning-free` | 403 `LANE_LOCKED` (bare id) |
+| `jev-1.13-free` | 403 `LANE_LOCKED` |
+| `longcat-2.5-preview-free` | 403 `LANE_LOCKED` |
+| `deepseek-v4.1-flash-free` | 403 `LANE_LOCKED` |
+| `glm-5.3-flash-free` | 403 `LANE_LOCKED` |
+| `space-bunny-free` | 403 `LANE_LOCKED` |
+| `thinkingmachines/inkling-small:free` | 429 limit harian per model — ulangi besok |
+| `nvidia/nemotron-3.5-content-safety:free` | 404 tanpa dukungan tool use (final) |
+
+**Pelajaran:** 502 (`ResourceExhausted 16/16`) dan 429 hanyalah kondisi sesaat.
+Model yang sebelumnya dianggap mati karena 502/hang ternyata hidup saat diulang.
+
+## 13. Perubahan berkas
+
+| Berkas | Perubahan |
+|---|---|
+| `scripts/ofm-hide-dead-models.mjs` | **Diperbaiki.** Dulu membaca `/v1/models` (sudah tersaring) sebagai satu-satunya sumber, sehingga `--write` menghapus seluruh `hiddenModelIds`. Sekarang menggabungkan listing + `hiddenModelIds` yang ada, punya pengaman "hasil kosong → batal", dan mencetak diff `+`/`-`. |
+| `scripts/ofm-probe-batch.mjs` | Menambah jeda antar-probe (`PROBE_DELAY_MS`, default 20 dtk) agar tidak memicu 429. |
+| `scripts/ofm-unhide-alive.mjs` | Baru (dari sesi sebelumnya) — pelepasan id secara bedah. |
+| `scripts/ofm-probe-model.mjs` | Baru (dari sesi sebelumnya) — probe satu model. |
+
+## 14. Cara pakai (aman)
+
+```bash
+# probe (jeda 20 dtk otomatis)
+node scripts/ofm-probe-batch.mjs "<id>"
+
+# lepas dari daftar sembunyi (dry-run dulu)
+node scripts/ofm-unhide-alive.mjs "<id>"
+node scripts/ofm-unhide-alive.mjs --write "<id>"
+
+# audit ulang seluruh daftar (dry-run; TIDAK merusak)
+node scripts/ofm-hide-dead-models.mjs
+```
+
+## 15. Sisa pekerjaan
+
+- [ ] Ulangi probe `thinkingmachines/inkling-small:free` besok (429 harian).
+- [ ] Sinkronkan daftar model di settings Zed bila perlu
+      (`scripts/ofm-zed-prune-models.mjs --write`, **bukan** `ofm-sync-zed.mjs`).
+- [ ] Rotasi API key OpenRouter — sudah terekspos di chat.
+- [ ] (Opsional) terjemahkan 180 baris komentar kode di `client.js`; tidak berdampak ke UI.
+
+## 16. Pitfalls tambahan
+
+- **Jangan pakai `/v1/models` sebagai daftar lengkap.** Endpoint itu hanya memuat
+  model yang lolos filter; id tersembunyi tidak muncul di sana.
+- **Jangan samakan bare id dengan id berprefiks.** `nemotron-3.5-super-vl-free`
+  (403) ≠ `nvidia/nemotron-3.5-super-vl:free` (200, baris Kilo).
+- **`ofm-hide-dead-models.mjs --write`** kini aman, tetapi tetap jalankan dry-run
+  lebih dulu dan periksa baris `+`/`-`.
