@@ -28,7 +28,8 @@ window.__ModuleLoader__.load({
     const { createElement: h, Fragment, useState, useEffect, useMemo, useRef, useCallback } = React
 
     const NS = 'settings.ourFreeModel'
-    const inject = ['slots', 'locale']
+    // connection: 额度徽章要调 credits.balances（与设置页渠道卡片同一套 RPC）。
+    const inject = ['slots', 'locale', 'connection']
 
     // ── copy ──────────────────────────────────────────────────────────────────
     const DICT = {
@@ -532,7 +533,25 @@ window.__ModuleLoader__.load({
         'chan.credits.failed': '余额查询失败：{reason}',
         'chan.credits.partial': '{count} 个账号未能查询余额，请展开账号查看原因并重试。',
         'chan.credits.unavailable': '未返回余额数据',
-        'chan.claim.failed': '领取失败：{reason}',
+        'quota.chip.label': '额度',
+        'quota.chip.title': '点击查看各渠道剩余额度',
+        'quota.chip.loading': '查询中',
+        'quota.chip.empty': '暂无额度数据',
+        'quota.chip.following': '当前模型所属渠道',
+        'quota.chip.notFollowing': '当前模型不属于本插件的账号渠道',
+        'quota.panel.following': '跟随当前模型：{channel}',
+        'quota.panel.colAccount': '账号',
+        'quota.panel.stale': '刷新失败，显示的是上一次读数',
+        'quota.chip.partial': '部分渠道未返回',
+        'quota.chip.noData': '无余额数据，点击重试',
+        'quota.chip.rateLimited': '限流 {wait} 后恢复',
+        'quota.panel.title': '各渠道剩余额度',
+        'quota.panel.close': '关闭',
+        'quota.panel.refresh': '刷新',
+        'quota.panel.error': '查询失败：{reason}',
+        'quota.panel.noChannel': '尚未登录任何渠道',
+        'quota.panel.needLogin': '在「渠道」页登录后即可查询额度。',
+        'quota.panel.updated': '更新于 {time}',        'chan.claim.failed': '领取失败：{reason}',
         'chan.auto.title': '每日自动签到',
         'chan.auto.running': '签到进行中…',
         'chan.auto.ran': '今日已自动签到',
@@ -1217,7 +1236,25 @@ window.__ModuleLoader__.load({
         'chan.credits.failed': 'Balance query failed: {reason}',
         'chan.credits.partial': 'Could not query {count} accounts. Expand accounts to see the reasons and retry.',
         'chan.credits.unavailable': 'No balance data returned',
-        'chan.claim.failed': 'Claim failed: {reason}',
+        'quota.chip.label': 'Quota',
+        'quota.chip.title': 'Show remaining quota per channel',
+        'quota.chip.loading': 'Querying',
+        'quota.chip.empty': 'No quota data',
+        'quota.chip.following': 'channel of the current model',
+        'quota.chip.notFollowing': 'the current model is not on one of this plugin\'s account channels',
+        'quota.panel.following': 'Following the current model: {channel}',
+        'quota.panel.colAccount': 'Account',
+        'quota.panel.stale': 'Refresh failed; showing the last reading',
+        'quota.chip.partial': 'Some channels returned nothing',
+        'quota.chip.noData': 'No balance data, click to retry',
+        'quota.chip.rateLimited': 'Rate limited, back in {wait}',
+        'quota.panel.title': 'Remaining quota by channel',
+        'quota.panel.close': 'Close',
+        'quota.panel.refresh': 'Refresh',
+        'quota.panel.error': 'Query failed: {reason}',
+        'quota.panel.noChannel': 'No channel signed in',
+        'quota.panel.needLogin': 'Sign in on the Channels page to query quota.',
+        'quota.panel.updated': 'Updated {time}',        'chan.claim.failed': 'Claim failed: {reason}',
         'chan.auto.title': 'Daily auto check-in',
         'chan.auto.running': 'Check-in running…',
         'chan.auto.ran': 'Checked in today',
@@ -1798,6 +1835,100 @@ window.__ModuleLoader__.load({
 .ofm_credittotal b{color:var(--dsw-alias-state-success-primary);font-variant-numeric:tabular-nums}
 .ofm_creditbadge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 9%,transparent);color:var(--dsw-alias-state-warning-primary,#f0a441);white-space:nowrap}
 .ofm_creditbadge.strong{max-width:100%;white-space:normal;overflow-wrap:anywhere;color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 9%,transparent)}
+/* ── composer 额度读数 ──────────────────────────────────────────────────────
+   读数本身是纯文字（无边框、无填充），只有 hover 才露出点击区——与
+   dsh-connect-workbuddy 的读数同一形态，因为它已经证明在这条共享工具行里
+   不抢空间、不与权限/模型控件打架。
+   面板 portal 到 body + position:fixed，用料全部取自 shell 的弹出层令牌
+   （--dsw-specific-menu / --dsw-elevation-prominent），深浅主题都能读清。 */
+.ofm_quotaChip{
+  appearance:none;display:inline-flex;align-items:center;gap:5px;
+  align-self:stretch;padding:2px 6px;
+  border:0;border-radius:6px;background:transparent;
+  font-size:12px;line-height:18px;
+  color:var(--dsw-alias-label-tertiary,#999);
+  white-space:nowrap;cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+.ofm_quotaChip:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.14))}
+.ofm_quotaChip:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#5686fe);outline-offset:1px}
+.ofm_quotaChipDot{width:5px;height:5px;border-radius:50%;background:currentColor;flex:0 0 auto;opacity:.85}
+.ofm_quotaChipText{max-width:190px;overflow:hidden;text-overflow:ellipsis}
+.ofm_quotaPanel{
+  position:fixed;z-index:1100;box-sizing:border-box;
+  width:min(260px,calc(100vw - 24px));padding:12px;
+  border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.28));
+  border-radius:var(--dsw-radius-lg,14px);
+  background:var(--dsw-specific-menu,Canvas);
+  box-shadow:var(--dsw-elevation-prominent,0 8px 32px rgba(0,0,0,.22));
+  backdrop-filter:var(--dsw-menu-backdrop-filter,none);
+  font-size:12px;line-height:18px;
+  color:var(--dsw-alias-label-secondary,#444);
+  text-align:left;
+}
+.ofm_quotaPanelHead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.ofm_quotaPanelTitle{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary,CanvasText)}
+.ofm_quotaPanelRefresh{
+  appearance:none;flex:none;margin-left:auto;padding:3px 10px;
+  border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.34));
+  border-radius:7px;background:transparent;
+  color:var(--dsw-alias-label-secondary,#444);
+  font:inherit;font-size:11px;line-height:16px;cursor:pointer;
+}
+.ofm_quotaPanelRefresh:hover:not(:disabled){
+  border-color:var(--dsw-alias-label-dimmed,rgba(127,127,127,.6));
+  color:var(--dsw-alias-label-primary,CanvasText);
+}
+.ofm_quotaPanelRefresh:disabled{opacity:.5;cursor:default}
+.ofm_quotaPanelFor{
+  margin:0 0 8px;font-size:11px;line-height:16px;
+  color:var(--dsw-alias-label-tertiary,GrayText);
+}
+.ofm_quotaPanelTable{width:100%;border-collapse:collapse;font-size:12px;line-height:18px}
+.ofm_quotaPanelTable thead th{
+  padding:0 0 7px;font-weight:500;text-align:left;font-size:11px;
+  color:var(--dsw-alias-label-tertiary,GrayText);
+  border-bottom:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.24));
+}
+.ofm_quotaPanelTable tbody th{
+  padding:4px 0;font-weight:400;text-align:left;vertical-align:middle;
+  color:var(--dsw-alias-label-secondary,#444);
+  max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ofm_quotaPanelTable tbody td{
+  padding:4px 0;vertical-align:middle;
+  color:var(--dsw-alias-label-primary,CanvasText);
+}
+.ofm_quotaPanelNum{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ofm_quotaPanelError{
+  margin:8px 0 0;font-size:11px;line-height:16px;
+  color:var(--dsw-alias-state-error-primary,#f04438);
+}
+.ofm_quotaPanelFoot{
+  display:flex;align-items:center;justify-content:flex-end;gap:10px;
+  margin-top:10px;padding-top:8px;
+  border-top:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.24));
+}
+.ofm_quotaPanelStamp{font-size:10.5px;color:var(--dsw-alias-label-tertiary,GrayText)}
+
+/* 限流提醒：读数旁的等宽数字小标签（黄=部分账号，红=当前模型全受限），
+   面板里被限流的账号行整行淡红、名字后跟恢复倒计时。 */
+.ofm_quotaChipLimit{
+  flex:none;padding:1px 6px;border-radius:999px;font-size:10.5px;line-height:14px;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.ofm_quotaChipLimit[data-level="partial"]{
+  color:var(--dsw-alias-state-warning-primary,#f0a441);
+  border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 45%,transparent);
+  background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 10%,transparent);
+}
+.ofm_quotaChipLimit[data-level="limited"]{
+  color:var(--dsw-alias-state-error-primary,#f04438);
+  border:1px solid color-mix(in srgb,var(--dsw-alias-state-error-primary,#f04438) 45%,transparent);
+  background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#f04438) 10%,transparent);
+}
+.ofm_quotaRowLimited th{color:var(--dsw-alias-state-error-primary,#f04438)}
+.ofm_quotaRowLimitTag{font-size:10.5px;font-weight:500;opacity:.9;white-space:nowrap}
 /* ══ 账号池状态 ════════════════════════════════════════════════════════ */
 .ofm_pooltop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .ofm_poolbadge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 72%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 4%);font-size:12.5px;font-weight:650;white-space:nowrap}
@@ -2391,6 +2522,32 @@ window.__ModuleLoader__.load({
       if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
       if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K`
       return String(n)
+    }
+    // ── 渠道额度读数（设置页与 composer 徽章共用同一份）────────────────────
+    // 这两个函数是“渠道额度怎么读、怎么显示”的唯一实现：
+    //   creditUnitLabel —— 单位标签（剩余积分 / 剩余 Token / 剩余余额 …）
+    //   creditReadingOf —— 一个账号余额的展示文本（配额包按 % 拼接，其余走 kilo）
+    // 设置页的账号行与 composer 的额度徽章都调用它们，
+    // 避免两套格式化逻辑对同一份数据给出不同结果。
+    function creditUnitLabel(capability, t) {
+      if (capability?.unit === 'tokens') return t('chan.credits.tokens')
+      if (capability?.unit === 'dollars') return t('chan.credits.dollars')
+      if (capability?.quota) return t('chan.credits.quota')
+      return t('chan.credits.left')
+    }
+
+    /**
+     * 一个账号余额的展示文本；读不到有效余额时返回 null（由调用方决定如何呈现）。
+     * `quota` 类渠道的余额在 `packages[]` 里，其余在 `total` 上——这是渠道页
+     * 原本就有的判断，这里只是把它提出来复用。
+     */
+    function creditReadingOf(capability, balance) {
+      if (!capability || balance === null || balance === undefined) return null
+      if (capability.quota) {
+        const text = (balance.packages ?? []).map(pkg => `${pkg.name} ${pkg.remaining}%`).join(' · ')
+        return text === '' ? null : text
+      }
+      return Number.isFinite(balance.total) ? kilo(balance.total) : null
     }
 
     function ago(ts, locale) {
@@ -4089,9 +4246,7 @@ window.__ModuleLoader__.load({
         setZcodeProvider(value)
         try { window.localStorage?.setItem(ZCODE_PROVIDER_KEY, value) } catch { /* preference still applies this session */ }
       }
-      const balanceLabel = creditCapability?.unit === 'tokens' ? t('chan.credits.tokens')
-        : creditCapability?.unit === 'dollars' ? t('chan.credits.dollars')
-          : creditCapability?.quota ? t('chan.credits.quota') : t('chan.credits.left')
+      const balanceLabel = creditUnitLabel(creditCapability, t)
 
       const accountsCount = status?.accounts?.total ?? 0
       const enabledCount = status?.accounts?.enabled ?? 0
@@ -4426,9 +4581,10 @@ window.__ModuleLoader__.load({
                     if (balance === null || !Number.isFinite(balance.total)) return h('span', { className: 'ofm_balanceerror' },
                       balanceError ? t('chan.credits.failed').replace('{reason}', balanceError)
                         : result?.error || t('chan.credits.unavailable'))
-                    const reading = creditCapability.quota
-                      ? (balance.packages ?? []).map(pkg => `${pkg.name} ${pkg.remaining}%`).join(' · ') || '—'
-                      : kilo(balance.total)
+                    const reading = creditReadingOf(creditCapability, balance)
+                    if (reading === null) return h('span', { className: 'ofm_balanceerror' },
+                      balanceError ? t('chan.credits.failed').replace('{reason}', balanceError)
+                        : result?.error || t('chan.credits.unavailable'))
                     return h('span', { className: 'ofm_creditbadge strong', title: balanceLabel },
                       `${balanceLabel} ${reading}`)
                   })(),
@@ -6385,6 +6541,352 @@ window.__ModuleLoader__.load({
         h('ul', null, list(t, ['ann.u1', 'ann.u2', 'ann.u3', 'ann.u4'])))
     }
 
+    // ── 聊天框额度徽章（Phase 4 需求）────────────────────────────────────────────
+    // 设置页的「渠道」卡片已经能查每个渠道的剩余额度，但要点进设置才看得见。
+    // 这里把同一份 credits.balances 读数搬到 composer 的权限选择器旁边：
+    //   - 挂 conversation.input.left（kind: "list"，可与既有条目并存），
+    //     不占用 conversation.input.permission（kind: "single"，属权限选择器）。
+    //   - 只读展示，点击展开明细；刷新沿用渠道页同一套 RPC 与超时。
+    //   - 未登录的任何渠道都不显示；查询失败显示原因而不是假装有额度。
+    const QUOTA_CHIP_NS = NS
+
+    /** 一个渠道的额度读数是否值得展示（有数字或明确说明）。 */
+    /**
+     * 读取当前会话选中的模型（provider + model id）。
+     *
+     * DSH 把当前模型放在会话投影 `modelSelection` 里：`next` 是待发送的选择，
+     * `lastUsed` 是上一次实际用过的。两者都没有时返回 null（不猜）。
+     * 任何一环拿不到都返回 null，绝不编造一个“当前模型”。
+     */
+    function currentSelectionOf(sessions, sessionId) {
+      try {
+        if (sessions === undefined || sessions === null) return null
+        const live = sessionId === undefined
+          ? undefined
+          : sessions.binding(sessionId)?.session
+        if (live === undefined || live === null) return null
+        const snapshot = live.projections?.faceOf?.('modelSelection')?.getSnapshot?.()
+        const selection = snapshot?.next ?? snapshot?.lastUsed
+        if (selection === undefined || selection === null) return null
+        const provider = typeof selection.provider === 'string' ? selection.provider : ''
+        const model = typeof selection.model === 'string' ? selection.model : ''
+        if (provider === '' && model === '') return null
+        return { provider, model }
+      } catch {
+        return null
+      }
+    }
+
+    /** 该模型是否属于本插件（两条路由都算）。 */
+    function isOurRoute(provider) {
+      return provider === 'our-free-model' || provider === 'our-free-model-region'
+    }
+
+    const QUOTA_READOUT_REFRESH_MS = 3e5
+    const QUOTA_ACCOUNT_REFRESH_MS = 6e4
+
+    /**
+     * 本插件接入的每个渠道在 DSH 里就是一个独立 provider（provider id = 渠道 id，
+     * 如 buddy / workbuddy / qoder / codearts…），模型选择器也按渠道分组。
+     * 所以 modelSelection 的 provider 字段直接就是渠道 id —— 用 CHANNEL_CREDITS
+     * 查得到能力就是本插件的渠道，查不到就不是。不需要再经 model.list 反查
+     * （早前那层反查建立在「provider 是统一路由名」的错误理解上，实际会漏掉
+     * 所有真实渠道）。
+     */
+    function channelOfSelection(selection) {
+      if (selection === null) return null
+      return CHANNEL_CREDITS[selection.provider] ? selection.provider : null
+    }
+
+    /**
+     * 从 modelSelection 投影取当前选择。next 是已选未发，lastUsed 是上次实际用的；
+     * 选择器显示的是 next，所以 next 优先——这与 shell 自身的取值顺序一致。
+     * 字段缺失或 provider 为空即视为无归属，不猜。
+     */
+    function selectionOfProjection(projection) {
+      const selection = projection?.next ?? projection?.lastUsed
+      const provider = typeof selection?.provider === 'string' ? selection.provider : ''
+      const model = typeof selection?.model === 'string' ? selection.model : ''
+      if (provider === '') return null
+      return { provider, model }
+    }
+
+    /**
+     * 一个渠道当前可展示的读数：完全复用设置页的 creditReadingOf / creditUnitLabel，
+     * 不自己解析 balance。同渠道多账号取余额最高的那一个（徽章只显示一条）。
+     * 读不到时返回 null，由调用方决定呈现方式。
+     */
+    function readingOfChannel(channelId, accounts, t) {
+      const capability = CHANNEL_CREDITS[channelId]
+      if (!capability || !Array.isArray(accounts) || accounts.length === 0) return null
+      const label = creditUnitLabel(capability, t)
+      let best = null
+      for (const account of accounts) {
+        const text = creditReadingOf(capability, account?.balance)
+        if (text === null) continue
+        const total = Number(account?.balance?.total)
+        const score = Number.isFinite(total) ? total : 0
+        if (best === null || score > best.score) best = { text, score }
+      }
+      if (best === null) return null
+      return { text: best.text, label, channelId }
+    }
+
+    /**
+     * 当前模型在该渠道是否被限流。
+     *
+     * 语义对齐 host 侧 allAccountsRateLimitedForModel：**所有可用账号都被
+     * 限流才算受限**——只要有任一账号可用，请求就能被服务。禁用账号不参与
+     * 服务，同样排除。只做当前模型 id 的精确匹配：别的模型被限流与当前
+     * 会话无关，显示出来只会让人误以为当前模型不能用。
+     * 返回 { level:'limited', resetAtMs }（resetAtMs = 最早解禁时刻）或 null。
+     */
+    function rateLimitOf(accounts, modelId) {
+      if (typeof modelId !== 'string' || modelId === '') return null
+      if (!Array.isArray(accounts) || accounts.length === 0) return null
+      const now = Date.now()
+      let earliest = undefined
+      let checked = 0
+      for (const account of accounts) {
+        if (account?.enabled === false) continue
+        checked += 1
+        const at = Number(account?.modelRateLimits?.[modelId])
+        if (!Number.isFinite(at) || at <= now) return null
+        earliest = earliest === undefined ? at : Math.min(earliest, at)
+      }
+      if (checked === 0 || earliest === undefined) return null
+      return { level: 'limited', resetAtMs: earliest }
+    }
+
+    /** 解禁剩余时间的可读文本（<1 分钟按秒，<1 小时按分钟，否则按小时）。 */
+    function rateLimitWaitText(resetAtMs) {
+      const ms = Math.max(0, resetAtMs - Date.now())
+      const seconds = Math.ceil(ms / 1000)
+      if (seconds < 60) return seconds + 's'
+      const minutes = Math.ceil(seconds / 60)
+      if (minutes < 60) return minutes + 'min'
+      return (Math.ceil(minutes / 60)) + 'h'
+    }
+
+    /**
+     * 归属 gate：provider 是本插件渠道才渲染；否则 return null，不启动查询。
+     * （参照 dsh-connect-workbuddy 的 ComposerCreditsGate。）
+     */
+    function QuotaChipGate(props) {
+      const { ctx, t, useProjection } = props
+      const projection = useProjection === undefined ? undefined : useProjection('modelSelection')
+      const selection = selectionOfProjection(projection)
+      const channel = channelOfSelection(selection)
+      if (channel === null || selection === null) return null
+      return h(QuotaChip, { ctx, t, channel, model: selection.model })
+    }
+
+    /** 面板锚定：按触发器位置算 fixed 坐标。 */
+    function useQuotaAnchor(open, anchorRef, panelRef) {
+      const [position, setPosition] = useState(undefined)
+      useEffect(() => {
+        if (!open) { setPosition(undefined); return undefined }
+        const place = () => {
+          const anchor = anchorRef.current
+          if (anchor === null) return
+          const rect = anchor.getBoundingClientRect()
+          const width = panelRef.current?.offsetWidth ?? 248
+          const margin = 12
+          const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - width - margin))
+          const estimated = panelRef.current?.offsetHeight ?? 200
+          const above = rect.top - estimated - 8
+          const below = rect.bottom + 8
+          const top = above >= margin ? above : Math.min(below, window.innerHeight - estimated - margin)
+          setPosition({ left, top })
+        }
+        place()
+        window.addEventListener('resize', place)
+        window.addEventListener('scroll', place, true)
+        return () => {
+          window.removeEventListener('resize', place)
+          window.removeEventListener('scroll', place, true)
+        }
+      }, [open, anchorRef, panelRef])
+      return position
+    }
+
+    /**
+     * composer 工具行的额度读数：只显示当前模型所属渠道的余额。
+     * 渠道由 model.list 反查 —— 13 个渠道共用两条 provider 路由，光看 provider 分不出来。
+     */
+    function QuotaChip(props) {
+      // channel 由 gate 直接给出（provider 即渠道），组件内部不再反查。
+      // model 用于模型级限流判定（modelRateLimits 按 modelId 精确匹配）。
+      const { ctx, t, channel, model } = props
+      const { available, rpc } = useChannelRpc(ctx)
+      const [rows, setRows] = useState(undefined)
+      const [loading, setLoading] = useState(false)
+      const [open, setOpen] = useState(false)
+      const [updatedAt, setUpdatedAt] = useState(0)
+      const [failed, setFailed] = useState(false)
+      const rootRef = useRef(null)
+      const panelRef = useRef(null)
+      const generation = useRef(0)
+      const inFlight = useRef(false)
+      const alive = useRef(true)
+
+      useEffect(() => {
+        alive.current = true
+        return () => { alive.current = false }
+      }, [])
+
+      const fetchReadout = useCallback(async (model) => {
+        if (!available || !rpc || channel === null) return
+        if (!CHANNEL_CREDITS[channel] || inFlight.current) return
+        inFlight.current = true
+        const ticket = ++generation.current
+        setLoading(true)
+        try {
+          // balances 给余额，account.list 给限流字段（modelRateLimits）。
+          // 各自 catch：任一失败不影响另一个；限流提醒尽力而为。
+          const balancesResult = await rpc('credits.balances', { provider: channel }, 90_000)
+          if (ticket !== generation.current || !alive.current) return
+          let accounts = []
+          try {
+            const listed = await rpc('account.list', { provider: channel }, 30_000)
+            accounts = listed?.accounts ?? []
+          } catch { /* 限流字段拿不到就当没有，读数照常显示 */ }
+          // 把限流字段并进 balances 的同名账号行，读数与限流判定共用一份数据。
+          const byId = new Map(accounts.map(account => [String(account?.accountId ?? account?.id ?? ''), account]))
+          const merged = (balancesResult?.accounts ?? []).map(row => {
+            const extra = byId.get(String(row?.accountId ?? ''))
+            return extra === undefined ? row : { ...row, modelRateLimits: extra.modelRateLimits }
+          })
+          setRows({ [channel]: { accounts: merged } })
+          setUpdatedAt(Date.now())
+          setFailed(false)
+        } catch {
+          if (ticket === generation.current && alive.current) setFailed(true)
+        } finally {
+          if (ticket === generation.current && alive.current) setLoading(false)
+          inFlight.current = false
+        }
+      }, [available, rpc, channel])
+
+      useEffect(() => {
+        if (channel === null) return undefined
+        void fetchReadout(model)
+        const timer = setInterval(() => { void fetchReadout(model) }, QUOTA_READOUT_REFRESH_MS)
+        return () => clearInterval(timer)
+      }, [channel, fetchReadout])
+
+      useEffect(() => {
+        if (!open || channel === null) return undefined
+        const timer = setInterval(() => { void fetchReadout(model) }, QUOTA_ACCOUNT_REFRESH_MS)
+        return () => clearInterval(timer)
+      }, [open, channel, fetchReadout])
+
+      useEffect(() => {
+        if (!open) return undefined
+        const onPointerDown = event => {
+          const target = event.target
+          if (!(target instanceof Node)) return
+          if (rootRef.current?.contains(target) === true) return
+          if (panelRef.current?.contains(target) === true) return
+          setOpen(false)
+        }
+        document.addEventListener('pointerdown', onPointerDown)
+        return () => document.removeEventListener('pointerdown', onPointerDown)
+      }, [open])
+
+      const position = useQuotaAnchor(open, rootRef, panelRef)
+
+      const entry = channel === null ? undefined : rows?.[channel]
+      const reading = channel === null ? null : readingOfChannel(channel, entry?.accounts, t)
+      const meta = channel === null ? null : CHANNEL_PROVIDERS.find(item => item.id === channel) ?? null
+      // 限流状态：当前模型的 modelRateLimits 精确匹配；无模型 id 时降级为任一账号受限。
+      const rate = channel === null ? null : rateLimitOf(entry?.accounts, model)
+
+if (channel === null || meta === null) return null
+      if (reading === null) {
+        // 渠道确定但读不到余额：显示明确的空态，不悄悄消失——
+        // 否则用户分不清"没这个功能"和"没数据"。
+        return h('button', {
+          type: 'button',
+          className: 'ofm_quotaChip',
+          title: t('quota.chip.noData'),
+          onClick: () => { void fetchReadout(model) },
+        },
+          h('span', { className: 'ofm_quotaChipDot', style: meta.accent ? { background: meta.accent } : undefined, 'aria-hidden': 'true' }),
+          h('span', { className: 'ofm_quotaChipText' }, meta.name + ' · ' + t('quota.chip.noData')))
+      }
+
+      const trigger = h('button', {
+        type: 'button',
+        className: 'ofm_quotaChip',
+        ref: rootRef,
+        title: t('quota.chip.title'),
+        'aria-haspopup': 'dialog',
+        'aria-expanded': open ? 'true' : 'false',
+        onClick: event => {
+          event.preventDefault()
+          event.stopPropagation()
+          setOpen(current => !current)
+        },
+      },
+        h('span', {
+          className: 'ofm_quotaChipDot',
+          style: meta.accent ? { background: meta.accent } : undefined,
+          'aria-hidden': 'true',
+        }),
+        h('span', { className: 'ofm_quotaChipText' }, meta.name + ' · ' + reading.text),
+        rate !== null ? h('span', {
+          className: 'ofm_quotaChipLimit',
+          'data-level': 'limited',
+          title: t('quota.chip.rateLimited').replace('{wait}', rateLimitWaitText(rate.resetAtMs)),
+        }, t('quota.chip.rateLimited').replace('{wait}', rateLimitWaitText(rate.resetAtMs))) : null)
+
+      const panel = open && position !== undefined
+        ? ReactDOM.createPortal(
+          h('div', {
+            className: 'ofm_quotaPanel',
+            ref: panelRef,
+            role: 'dialog',
+            'aria-label': t('quota.panel.title'),
+            style: { left: position.left + 'px', top: position.top + 'px' },
+          },
+            h('div', { className: 'ofm_quotaPanelHead' },
+              h('span', { className: 'ofm_quotaPanelTitle' }, t('quota.panel.title')),
+              h('button', {
+                type: 'button',
+                className: 'ofm_quotaPanelRefresh',
+                disabled: loading,
+                onClick: () => { void fetchReadout(model) },
+              }, loading ? t('chan.credits.loading') : t('quota.panel.refresh'))),
+            h('p', { className: 'ofm_quotaPanelFor' },
+              t('quota.panel.following').replace('{channel}', meta.name)),
+            h('table', { className: 'ofm_quotaPanelTable' },
+              h('thead', null,
+                h('tr', null,
+                  h('th', null, t('quota.panel.colAccount')),
+                  h('th', { className: 'ofm_quotaPanelNum' }, reading.label))),
+              h('tbody', null,
+                (entry?.accounts ?? []).map((account, index) => {
+                  const text = creditReadingOf(CHANNEL_CREDITS[channel], account?.balance)
+                  const rowRate = rateLimitOf([account], model)
+                  return h('tr', { key: String(account?.accountId ?? index) },
+                    h('th', { className: rowRate !== null ? 'ofm_quotaRowLimited' : undefined },
+                      String(account?.accountId ?? ('#' + (index + 1))),
+                      rowRate !== null ? h('span', { className: 'ofm_quotaRowLimitTag' },
+                        ' · ' + t('quota.chip.rateLimited').replace('{wait}', rateLimitWaitText(rowRate.resetAtMs))) : null),
+                    h('td', { className: 'ofm_quotaPanelNum' },
+                      text === null ? '—' : text))
+                }))),
+            failed ? h('p', { className: 'ofm_quotaPanelError' }, t('quota.panel.stale')) : null,
+            h('div', { className: 'ofm_quotaPanelFoot' },
+              h('span', { className: 'ofm_quotaPanelStamp' },
+                updatedAt ? t('quota.panel.updated').replace('{time}', new Date(updatedAt).toLocaleTimeString()) : ''))),
+          document.body)
+        : null
+
+      return h(Fragment, null, trigger, panel)
+    }
+
     // ── registration ──────────────────────────────────────────────────────────
     // The shell mirrors the active language onto <html lang>, so a render-time
     // read survives a language switch without owning a subscription.
@@ -6532,6 +7034,19 @@ window.__ModuleLoader__.load({
         order: -50,
         locale: NS,
       }, props => h(AnnouncementGate, { ...props, t: Object.assign(x => t(x), { locale: localeTag(ctx) }) })))
+      // Phase 4：把各渠道剩余额度显示在 composer 的权限（完全权限）选择器旁边。
+      // conversation.input.left 是 list 型 slot，可与既有条目并存；
+      // 刻意不占用 conversation.input.permission（single 型，属权限选择器）。
+      // 注册到 composer 工具行（list 型 slot，与权限选择器同一行）。
+      // 归属判断放在 QuotaChipGate 里：它经 slot 注入的 useProjection('modelSelection')
+      // 读当前模型，provider 不属于本插件时返回 null —— 不渲染也不启动查询。
+      // 这条做法取自同位置已跑通的 dsh-connect-workbuddy。
+      ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+        name: 'conversation.input.left',
+        id: 'our-free-model-quota',
+        order: 10,
+        locale: NS,
+      }, props => h(QuotaChipGate, { ...props, ctx, t })))
     }
     /**
      * Owns the announcement's readiness.
