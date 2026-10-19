@@ -112,20 +112,38 @@ await check('a cleared field is written as absent', async () => {
   assert.equal('maxOutput' in saves[0], false)
 })
 
+// 审查意见 #341: "0.5 容量截断成 0"。0.5 个 token 不是容量:输入框里的
+// 小数必须与留空等价(不写字段、回落到成员交集),不能写下一个 0。
+await check('a fractional capacity below one is not written as zero', async () => {
+  const saves = []
+  const app = mount('ChainEditor', {
+    t: key => app.dict.zh[key],
+    chain: { id: 'combo:caps', name: 'caps', models: ['a'], strategy: 'fallback', enabled: true },
+    models: MODELS, onSave: row => saves.push(row), onCancel: () => {},
+  })
+  const inputs = numberInputs(app.nodes())
+  inputs[0].props.onChange({ target: { value: '0.5' } })
+  inputs[1].props.onChange({ target: { value: '0.5' } })
+  await buttonWith(app.nodes(), app.dict.zh['routing.save']).props.onClick()
+  assert.equal('contextWindow' in saves[0], false, '0.5 must not be stored as 0')
+  assert.equal('maxOutput' in saves[0], false, '0.5 must not be stored as 0')
+})
+
 await check('the chain card names the effective numbers', async () => {
   const app = mount('ChainCard', {
     t: key => app.dict.zh[key],
     index: 0,
-    chain: { id: 'combo:caps', name: 'caps', models: ['a', 'b'], strategy: 'fallback', contextWindow: 1000000, maxOutput: 200000 },
+    chain: { id: 'combo:caps', name: 'caps', models: ['a', 'b'], strategy: 'fallback' },
     resolved: ['a', 'b'],
     missing: [],
     lookup: new Map(MODELS.map(row => [row.id, row])),
+    capacity: { contextWindow: 1000000, maxOutput: 200000, vision: false },
     onEdit: () => {},
     onDelete: () => {},
   })
   const text = JSON.stringify(app.nodes())
-  assert.ok(text.includes(`${app.dict.zh['routing.capacityContext']} 1.0M`), 'the window rides on the card')
-  assert.ok(text.includes(`${app.dict.zh['routing.capacityOutput']} 200K`), 'the ceiling rides on the card')
+  assert.ok(text.includes(`${app.dict.zh['tag.context']} 1.0M`), `the window rides on the card: ${text}`)
+  assert.ok(text.includes(`${app.dict.zh['tag.output']} 200K`), `the ceiling rides on the card: ${text}`)
 })
 
 /**
@@ -138,16 +156,17 @@ await check('the chain card folds capacities like every other capacity label', a
   const app = mount('ChainCard', {
     t: key => app.dict.zh[key],
     index: 0,
-    chain: { id: 'combo:free', name: 'free', models: ['a'], strategy: 'fallback', contextWindow: 500000, maxOutput: 100000 },
+    chain: { id: 'combo:free', name: 'free', models: ['a'], strategy: 'fallback' },
     resolved: ['a'],
     missing: [],
     lookup: new Map(MODELS.map(row => [row.id, row])),
+    capacity: { contextWindow: 500000, maxOutput: 100000, vision: false },
     onEdit: () => {},
     onDelete: () => {},
   })
   const text = JSON.stringify(app.nodes())
-  assert.ok(text.includes(`${app.dict.zh['routing.capacityContext']} 500K`), `typed 500000 must read 500K, got: ${text.match(/上下文 [^"]*/)?.[0]}`)
-  assert.ok(text.includes(`${app.dict.zh['routing.capacityOutput']} 100K`), `typed 100000 must read 100K, got: ${text.match(/输出 [^"]*/)?.[0]}`)
+  assert.ok(text.includes(`${app.dict.zh['tag.context']} 500K`), `typed 500000 must read 500K, got: ${text.match(/上下文 [^"]*/)?.[0]}`)
+  assert.ok(text.includes(`${app.dict.zh['tag.output']} 100K`), `typed 100000 must read 100K, got: ${text.match(/(最长输出|输出) [^"]*/)?.[0]}`)
 })
 
 if (failures > 0) console.error(`routing-caps-ui-test: ${failures} failure(s)`)

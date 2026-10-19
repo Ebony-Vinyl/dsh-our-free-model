@@ -103,11 +103,17 @@ export function normalizeCombos(raw) {
   return out
 }
 
-/** A positive whole number from untrusted JSON, or undefined when unset. */
+/** A positive whole number from untrusted JSON, or undefined when unset.
+ *
+ * Fractions are truncated like every other capacity in the plugin (a stored
+ * `65536.9` reads 65536), but a fraction below one must not become zero: zero
+ * is not a capacity, and letting it through would overwrite the members'
+ * intersection with an unusable window and a zero request budget. */
 function positiveInt(value) {
   if (typeof value !== 'number' && typeof value !== 'string') return undefined
   const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined
+  const whole = Math.trunc(parsed)
+  return Number.isFinite(parsed) && whole > 0 ? whole : undefined
 }
 
 /**

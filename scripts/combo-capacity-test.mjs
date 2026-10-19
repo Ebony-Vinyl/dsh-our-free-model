@@ -145,6 +145,36 @@ await check('normalize drops non-positive overrides and keeps whole numbers', as
   assert.equal(dirty[1]?.maxOutput, 65536)
 })
 
+// 0.5 个 token 不是容量。截断成 0 会覆盖成员交集、给请求一个 0 预算,所以小于 1
+// 的小数必须和「没填」一样回落到交集(审查意见 #341: "0.5 容量截断成 0")。
+await check('a fractional capacity below one falls back instead of truncating to zero', async () => {
+  const rows = normalizeCombos([{ name: 'fractional', models: MODELS, contextWindow: 0.5, maxOutput: 0.5 }])
+  assert.equal('contextWindow' in rows[0], false, '0.5 must not be stored as 0')
+  assert.equal('maxOutput' in rows[0], false, '0.5 must not be stored as 0')
+  const built = buildComboCatalog(rows, FREE_CATALOG)[0]
+  assert.equal(built.contextWindow, 128000, 'the intersection window is back in charge')
+  assert.equal(built.maxOutput, 64000, 'the intersection ceiling is back in charge')
+  assert.equal(built.maxOutputOverride, undefined, 'no override may be reported')
+  const resolved = await adapterWith([...FREE_CATALOG, built], { defaultMaxTokens: 32768 })
+    .resolveModel(ROUTE_MAIN, 'combo:fractional')
+  assert.equal(resolved.context.contextWindow, 128000)
+  assert.equal(resolved.defaultMaxTokens, 32768)
+  const scenario = { responses: [healthy], requests: [] }
+  activeCase = scenario
+  const controller = new AbortController()
+  const stream = adapterWith([...FREE_CATALOG, built], { defaultMaxTokens: 32768 }).stream({
+    provider: ROUTE_MAIN,
+    model: 'combo:fractional',
+    maxTokens: 200000,
+    reasoningEffort: 'deep',
+    sessionId: 'combo-capacity-fractional',
+    messages: [{ role: 'user', content: [{ type: 'text', text: TASK }] }],
+    signal: controller.signal,
+  })
+  try { for await (const chunk of stream) void chunk } finally { controller.abort() }
+  assert.equal(scenario.requests[0].body.max_tokens, 32768, 'a stale zero must not shrink the budget')
+})
+
 await check('resolveModel reports the chain window and the chain ceiling', async () => {
   const resolved = await adapterWith(CATALOG, { defaultMaxTokens: 32768 }).resolveModel(ROUTE_MAIN, COMBO_ID)
   assert.equal(resolved.context.contextWindow, 1000000)

@@ -1269,7 +1269,6 @@ export function apply(ctx, config) {
         const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models, ...overrides }]), state().catalog)
         return { capacity: entries.length ? publicCombo(entries[0]) : null }
       },
-      },
       save: async patch => {
         if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
         const rows = normalizeCombos(patch.combos)

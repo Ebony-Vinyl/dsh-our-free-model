@@ -692,8 +692,6 @@ window.__ModuleLoader__.load({
         'routing.maxOutput': '最大输出（token）',
         'routing.capacityAuto': '自动',
         'routing.capacityHint': '留空时按整条链上全部成员的最小值自动计算；填写后，链上每个模型都使用这个值。',
-        'routing.capacityContext': '上下文',
-        'routing.capacityOutput': '输出',
         'routing.memberCapacity': '这个成员提供的上下文窗口与最大输出',
         'routing.members': '成员（按顺序）',
         'routing.addMember': '添加成员',
@@ -1389,8 +1387,6 @@ window.__ModuleLoader__.load({
         'routing.maxOutput': 'Max output (tokens)',
         'routing.capacityAuto': 'Auto',
         'routing.capacityHint': 'Empty means the smallest value across the chain members; a number here applies to every model in the chain.',
-        'routing.capacityContext': 'Context',
-        'routing.capacityOutput': 'Output',
         'routing.memberCapacity': 'The context window and the max output this member brings',
         'routing.members': 'Members (in order)',
         'routing.addMember': 'Add member',
@@ -5831,14 +5827,6 @@ window.__ModuleLoader__.load({
      * a text field is a link that silently never resolves, and the host has no way
      * to tell "you meant this model" from "this model is gone".
      */
-    /**
-     * The chain editor's capacity label. `kilo()`'s decimal fold is the one the
-     * rest of the plugin already uses for the same numbers (the model cards'
-     * context tag), so a user who types 500000 reads 500K here too — a /1024
-     * KiB fold would show 488K beside a model that advertises 500K. Zero (an
-     * unresolved chain's placeholder from `/combos`) keeps the em dash.
-     */
-    const tokenLabel = value => (Number(value) > 0 ? kilo(value) : '—')
     /** A positive whole token count from a form field, or undefined when cleared
      *  or too small to survive the truncation (0.5 is not a capacity). */
     const tokenValue = value => {
