@@ -39,6 +39,7 @@ import { anthropicFrames, anthropicMessage, countTokens, foldAnthropicOutcome, f
 import { toMessagesResponse, tryOptimizations } from './local-optimize.js'
 import { carryFailure, forwardFailure } from './failure.js'
 import { deferStreamResponse } from './deferred-response.js'
+import { dumpIncoming } from './debug-dump.js'
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024
 const REQUEST_ID_HEADER = 'x-ofm-request-id'
@@ -142,6 +143,10 @@ async function readBody(req) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw httpError(400, 'request body must be a JSON object')
   }
+  // Keep the caller's exact body for the last request. A refusal from the free
+  // lane can arrive with an empty body, and this is the only copy of what Zed
+  // actually sent.
+  dumpIncoming(req, value)
   return value
 }
 
