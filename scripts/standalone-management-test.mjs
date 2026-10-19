@@ -106,7 +106,7 @@ try {
     assert.match(page.headers.get('content-security-policy'), /frame-ancestors 'none'/)
     assert.equal(page.headers.get('referrer-policy'), 'no-referrer')
     const body = await page.text()
-    assert.match(body, /本地控制台/)
+    assert.match(body, /Konsol lokal/)
     assert.match(page.headers.get('content-security-policy'), /script-src 'self';/)
     const scripts = [...body.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
     assert.ok(scripts.length > 0)

@@ -6,17 +6,17 @@ import { Badge, Button } from './ui'
 import type { Host, Page, Summary } from '../types'
 
 const navigation = [
-  { label: '工作空间', items: [
-    { id: 'overview', name: '概览', icon: LayoutDashboard },
-    { id: 'models', name: '模型清单', icon: Boxes },
-    { id: 'usage', name: '用量统计', icon: Activity },
+  { label: 'Ruang kerja', items: [
+    { id: 'overview', name: 'Ringkasan', icon: LayoutDashboard },
+    { id: 'models', name: 'Daftar model', icon: Boxes },
+    { id: 'usage', name: 'Statistik pemakaian', icon: Activity },
   ] },
-  { label: '渠道与连接', items: [
-    { id: 'channels', name: '免费账号渠道', icon: Network },
-    { id: 'eac', name: 'EAC 协付渠道', icon: Handshake },
-    { id: 'connection', name: 'API 接入', icon: Cable },
+  { label: 'Kanal & koneksi', items: [
+    { id: 'channels', name: 'Kanal akun gratis', icon: Network },
+    { id: 'eac', name: 'Kanal patungan EAC', icon: Handshake },
+    { id: 'connection', name: 'Akses API', icon: Cable },
   ] },
-  { label: '管理', items: [{ id: 'settings', name: '服务设置', icon: Settings2 }] },
+  { label: 'Manajemen', items: [{ id: 'settings', name: 'Pengaturan layanan', icon: Settings2 }] },
 ] as const
 
 type Origin = { x: number; y: number }
@@ -25,21 +25,21 @@ function useTheme() {
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
   const apply = (next: 'light' | 'dark') => {
     document.documentElement.dataset.theme = next
-    try { localStorage.setItem('ofm-theme', next) } catch { /* 存储不可用时仅本次会话生效 */ }
+    try { localStorage.setItem('ofm-theme', next) } catch { /* bila penyimpanan tidak tersedia, berlaku untuk sesi ini saja */ }
     setTheme(next)
   }
   const toggle = (origin?: Origin) => {
     const next = theme === 'dark' ? 'light' : 'dark'
-    // 没有 View Transition、或用户要求减少动效时直接切换，不做扩散。
+    // Tanpa View Transition, atau bila pengguna meminta animasi dikurangi, ganti langsung tanpa efek sebar.
     if (!origin || typeof document.startViewTransition !== 'function'
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { apply(next); return }
     const root = document.documentElement
-    // 半径取按钮中心到视口最远角的距离，保证圆盘一定盖满整屏。
+    // Radius diambil dari pusat tombol ke sudut terjauh viewport agar lingkaran menutup seluruh layar.
     const radius = Math.hypot(Math.max(origin.x, window.innerWidth - origin.x), Math.max(origin.y, window.innerHeight - origin.y))
     root.style.setProperty('--theme-reveal-x', `${origin.x}px`)
     root.style.setProperty('--theme-reveal-y', `${origin.y}px`)
     root.style.setProperty('--theme-reveal-r', `${radius}px`)
-    // 扩散期间关掉 300ms 的底色过渡，否则"新主题"快照会抓到过渡中间色。
+    // Selama transisi, matikan transisi warna latar 300ms; jika tidak, snapshot "tema baru" menangkap warna tengah transisi.
     root.classList.add('theme-transitioning')
     const transition = document.startViewTransition(() => { flushSync(() => apply(next)) })
     const finish = () => {
@@ -55,8 +55,8 @@ function useTheme() {
 
 export function ThemeToggle() {
   const { theme, toggle } = useTheme()
-  const label = theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'
-  return <Button variant="ghost" className="theme-toggle" aria-label={label} title={theme === 'dark' ? '浅色' : '深色'}
+  const label = theme === 'dark' ? 'Beralih ke tema terang' : 'Beralih ke tema gelap'
+  return <Button variant="ghost" className="theme-toggle" aria-label={label} title={theme === 'dark' ? 'Terang' : 'Gelap'}
     onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); toggle({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) }}>
     <span className="theme-toggle-track" data-theme={theme}>
       <span className="theme-toggle-icon theme-toggle-sun" aria-hidden="true"><Sun size={16} /></span>
@@ -66,20 +66,20 @@ export function ThemeToggle() {
 }
 
 export const pageNames: Record<Page, string> = {
-  overview: '概览', models: '模型清单', usage: '用量统计', channels: '免费账号渠道',
-  eac: 'EAC 协付渠道', settings: '服务设置', connection: 'API 接入',
+  overview: 'Ringkasan', models: 'Daftar model', usage: 'Statistik pemakaian', channels: 'Kanal akun gratis',
+  eac: 'Kanal patungan EAC', settings: 'Pengaturan layanan', connection: 'Akses API',
 }
 
 export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary; host: Host }) {
   return <>
-    <a className="console-brand" href="/" aria-label="Our Free Model 首页">
+    <a className="console-brand" href="/" aria-label="Beranda Our Free Model">
       <img className="console-mark" src={brandMark} alt="" width={34} height={36} />
-      <span>Our Free Model<small>本地模型工作台</small></span>
+      <span>Our Free Model<small>Meja kerja model lokal</small></span>
     </a>
     <div className="workspace-switch"><span className="workspace-avatar"><ShieldCheck size={17} /></span>
-      <span>个人工作空间<small>独立本地服务</small></span><Badge>本机</Badge>
+      <span>Ruang kerja pribadi<small>Layanan lokal mandiri</small></span><Badge>Lokal</Badge>
     </div>
-    <nav className="console-nav" aria-label="管理导航">{navigation.map(group => <div className="nav-group" key={group.label}>
+    <nav className="console-nav" aria-label="Navigasi manajemen">{navigation.map(group => <div className="nav-group" key={group.label}>
       <span className="nav-group-label">{group.label}</span>
       {group.items.map(item => <button key={item.id} className={`console-nav-item ${page === item.id ? 'selected' : ''}`}
         aria-current={page === item.id ? 'page' : undefined} onClick={() => host.navigate(item.id)}>
@@ -88,12 +88,12 @@ export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary
         {item.id === 'models' && <span className="count-badge">{summary?.catalog.length ?? '—'}</span>}
       </button>)}
     </div>)}</nav>
-    <div className="sidebar-support"><ShieldCheck size={17} /><div><strong>独立本地存储</strong><p>本机运行 / 仅监听回环地址</p></div></div>
-    <div className="console-sidebar-footer"><div><span className="status-dot" />本地服务在线<small>v{summary?.version ?? '—'}</small></div>
-      <ThemeToggle /><Button variant="ghost" aria-label="退出管理" title="退出管理" onClick={() => { void host.logout().catch(host.error) }}><LogOut size={16} /></Button></div>
+    <div className="sidebar-support"><ShieldCheck size={17} /><div><strong>Penyimpanan lokal mandiri</strong><p>Berjalan lokal / hanya mendengarkan loopback</p></div></div>
+    <div className="console-sidebar-footer"><div><span className="status-dot" />Layanan lokal daring<small>v{summary?.version ?? '—'}</small></div>
+      <ThemeToggle /><Button variant="ghost" aria-label="Keluar dari manajemen" title="Keluar dari manajemen" onClick={() => { void host.logout().catch(host.error) }}><LogOut size={16} /></Button></div>
   </>
 }
 export function Topbar({ page, summary }: { page: Page; summary?: Summary }) {
-  return <><div className="console-breadcrumb"><span>工作空间</span><ChevronRight size={14} /><strong key={page} className="console-breadcrumb-current">{pageNames[page]}</strong></div>
-    <div className="console-topbar-status"><span className="status-dot" /><span>{summary?.settings.enabled === false ? '推理已暂停' : '本地服务'}</span><span className="topbar-divider" /><span>LOCAL</span></div></>
+  return <><div className="console-breadcrumb"><span>Ruang kerja</span><ChevronRight size={14} /><strong key={page} className="console-breadcrumb-current">{pageNames[page]}</strong></div>
+    <div className="console-topbar-status"><span className="status-dot" /><span>{summary?.settings.enabled === false ? 'Inferensi dijeda' : 'Layanan lokal'}</span><span className="topbar-divider" /><span>LOCAL</span></div></>
 }

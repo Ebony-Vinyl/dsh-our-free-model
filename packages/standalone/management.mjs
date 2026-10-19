@@ -33,18 +33,18 @@ function matches(actual, expected) {
 
 async function readBody(req, limit = MAX_BODY_BYTES) {
   if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) {
-    throw fail(415, '请求必须使用 application/json')
+    throw fail(415, 'Permintaan harus menggunakan application/json')
   }
   let bytes = 0
   const chunks = []
   for await (const chunk of req) {
     bytes += chunk.length
-    if (bytes > limit) throw fail(413, '请求内容过大')
+    if (bytes > limit) throw fail(413, 'Isi permintaan terlalu besar')
     chunks.push(chunk)
   }
   let value
-  try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { throw fail(400, '请求不是有效 JSON') }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw fail(400, '请求必须是 JSON 对象')
+  try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { throw fail(400, 'Permintaan bukan JSON yang valid') }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw fail(400, 'Permintaan harus berupa objek JSON')
   return value
 }
 
@@ -56,11 +56,11 @@ function validateSettings(patch) {
   for (const [key, value] of Object.entries(patch)) {
     if (Object.hasOwn(visibility, key)) { result[key] = visibility[key]; continue }
     if (booleans.has(key)) {
-      if (typeof value !== 'boolean') throw fail(400, `${key} 必须是布尔值`)
+      if (typeof value !== 'boolean') throw fail(400, `${key} harus berupa boolean`)
     } else if (Object.hasOwn(numbers, key)) {
       const [min, max] = numbers[key]
-      if (!Number.isInteger(value) || value < min || value > max) throw fail(400, `${key} 必须是 ${min} 到 ${max} 的整数`)
-    } else throw fail(400, `不支持的设置字段：${key}`)
+      if (!Number.isInteger(value) || value < min || value > max) throw fail(400, `${key} harus berupa bilangan bulat ${min} sampai ${max}`)
+    } else throw fail(400, `Field pengaturan tidak didukung: ${key}`)
     result[key] = value
   }
   return result
@@ -98,7 +98,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
   // 只公开构建清单中经过路径校验的 JS/CSS，绝不按请求路径读取磁盘。
   const manifest = JSON.parse(fs.readFileSync(new URL('./web/assets.json', import.meta.url), 'utf8'))
   if (!Array.isArray(manifest) || manifest.some(name => typeof name !== 'string' || !/^[\w-]+\.(js|css)$/.test(name))) {
-    throw new Error('独立端资源清单无效')
+    throw new Error('Manifes aset layanan mandiri tidak valid')
   }
   for (const name of manifest) assets.set(`/assets/${name}`, {
     type: name.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8',
@@ -129,7 +129,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
     if (stores.settings.writeFailed) {
       // 不向页面谎报保存成功；保留原运行配置并由后续写入重试落盘。
       stores.settings.value = previous
-      throw fail(500, '无法保存设置，请检查数据目录权限和磁盘空间')
+      throw fail(500, 'Tidak dapat menyimpan pengaturan; periksa izin direktori data dan ruang disk')
     }
   }
   const summary = () => {
@@ -162,12 +162,12 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       // 此入口发生在登录前，必须有浏览器的同源 Origin，拒绝跨站和无来源调用。
       if (req.headers.origin !== new URL(`http://${req.headers.host}`).origin ||
           req.headers['sec-fetch-site'] !== 'same-origin') {
-        throw fail(403, '请从本机登录页面点击获取令牌')
+        throw fail(403, 'Ambil token dengan mengklik dari halaman login di perangkat ini')
       }
       const body = await readBody(req)
-      if (Object.keys(body).length !== 0) throw fail(400, '获取令牌不接受路径或命令参数')
+      if (Object.keys(body).length !== 0) throw fail(400, 'Pengambilan token tidak menerima parameter jalur atau perintah')
       if (terminalOpening || (terminalOpenedAt !== null && Date.now() - terminalOpenedAt < 30_000)) {
-        throw fail(429, '已请求打开终端，请检查弹出的窗口，30 秒后可重试')
+        throw fail(429, 'Permintaan membuka terminal sudah dikirim; periksa jendela yang muncul dan coba lagi setelah 30 detik')
       }
       terminalOpening = true
       try {
@@ -180,9 +180,9 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
     if (method === 'POST' && pathname === `${PREFIX}/session`) {
       const body = await readBody(req)
       const validBootstrap = bootstrap !== null && bootstrap.until > Date.now() && matches(body.bootstrapToken, bootstrap.token)
-      if (!validBootstrap && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, '登录链接已失效或 API Key 不正确')
+      if (!validBootstrap && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, 'Tautan login sudah tidak berlaku atau API Key salah')
       pruneSessions()
-      if (sessions.size >= 64) throw fail(429, '管理会话过多，请稍后重试')
+      if (sessions.size >= 64) throw fail(429, 'Terlalu banyak sesi manajemen; coba lagi nanti')
       if (validBootstrap) bootstrap = null
       const id = crypto.randomBytes(32).toString('base64url')
       sessions.set(id, Date.now() + SESSION_MS)
@@ -191,7 +191,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       })
       return
     }
-    if (!authenticated(req)) throw fail(401, '请先登录管理页面')
+    if (!authenticated(req)) throw fail(401, 'Silakan login ke halaman manajemen terlebih dahulu')
     if (method === 'POST' && pathname === `${PREFIX}/logout`) {
       await readBody(req)
       sessions.delete(cookie(req))
@@ -205,7 +205,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       const body = await readBody(req, 8 * 1024 * 1024)
       if (body.method === 'gateway.getEnabled' || body.method === 'gateway.setEnabled') {
         if (body.method === 'gateway.setEnabled') {
-          if (typeof body.payload?.enabled !== 'boolean') throw fail(400, 'enabled 必须是布尔值')
+          if (typeof body.payload?.enabled !== 'boolean') throw fail(400, 'enabled harus berupa boolean')
           persist({ enabled: body.payload.enabled })
           await onSettingsChanged()
         }
@@ -236,9 +236,9 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
         else if (route === '/eac/login/cancel') result = eac.cancel(params.get('link') ?? '')
         else if (route === '/eac/logout') result = await eac.logout()
       }
-      if (result === undefined) throw fail(404, 'EAC 接口不存在')
+      if (result === undefined) throw fail(404, 'Endpoint EAC tidak ditemukan')
       if (result.error) throw fail(502, result.error)
-      if (result.ok === false) throw fail(500, '无法移除本地授权')
+      if (result.ok === false) throw fail(500, 'Tidak dapat menghapus otorisasi lokal')
       json(res, 200, result)
     } else if (method === 'POST' && pathname === `${PREFIX}/settings`) {
       const patch = validateSettings(await readBody(req))
@@ -256,7 +256,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       json(res, 200, { key: stores.settings.get().forwardKey })
     } else if (method === 'POST' && pathname === `${PREFIX}/key/rotate`) {
       const body = await readBody(req)
-      if (body.confirm !== true) throw fail(400, '请确认轮换 API Key')
+      if (body.confirm !== true) throw fail(400, 'Konfirmasikan rotasi API Key')
       const id = cookie(req)
       persist({ forwardKey: generateKey() })
       // 仅当前管理会话保留；旧密钥与其他会话立即失效。
@@ -267,13 +267,13 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       json(res, 200, { key: stores.settings.get().forwardKey })
     } else if (method === 'POST' && pathname === `${PREFIX}/models/refresh`) {
       const body = await readBody(req)
-      if (body.probe !== undefined && typeof body.probe !== 'boolean') throw fail(400, 'probe 必须是布尔值')
+      if (body.probe !== undefined && typeof body.probe !== 'boolean') throw fail(400, 'probe harus berupa boolean')
       await runtime.refreshCatalog({ probe: body.probe === true, force: body.probe === true })
       json(res, 200, summary())
     } else if (method === 'POST' && pathname === `${PREFIX}/models/test`) {
       const body = await readBody(req)
-      if (stores.settings.get().enabled === false) throw fail(503, '推理服务已暂停，请先在服务设置中启用')
-      if (typeof body.model !== 'string' || body.model.length > 300) throw fail(400, '请选择有效模型')
+      if (stores.settings.get().enabled === false) throw fail(503, 'Layanan inferensi dijeda; aktifkan terlebih dahulu di pengaturan layanan')
+      if (typeof body.model !== 'string' || body.model.length > 300) throw fail(400, 'Pilih model yang valid')
       const controller = new AbortController()
       const abort = () => controller.abort()
       res.once('close', abort)
@@ -291,7 +291,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
         clearTimeout(deadline)
         res.removeListener('close', abort)
       }
-    } else throw fail(404, '管理接口不存在')
+    } else throw fail(404, 'Endpoint manajemen tidak ditemukan')
   }
 
   return {
@@ -308,10 +308,10 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       const malformedSource = [referer, origin].some(value => value !== undefined && (
         typeof value !== 'string' || !value.startsWith('http://')
       ))
-      if (closed || !cookieName) json(res, 503, { error: '服务正在停止或启动' })
-      else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: '管理接口仅允许本机同源访问' })
+      if (closed || !cookieName) json(res, 503, { error: 'Layanan sedang berhenti atau dimulai' })
+      else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: 'Endpoint manajemen hanya mengizinkan akses same-origin dari perangkat ini' })
       else if (asset) {
-        if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: '资源仅支持 GET 或 HEAD' })
+        if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: 'Aset hanya mendukung GET atau HEAD' })
         else {
           res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': asset.type })
           res.end(req.method === 'HEAD' ? undefined : asset.body)
@@ -319,7 +319,7 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       } else {
         try { await route(req, res, pathname) } catch (error) {
           if (!res.destroyed && !res.headersSent) json(res, error.statusCode ?? 500, {
-            error: error.statusCode ? error.message : '管理操作失败，请查看服务日志',
+            error: error.statusCode ? error.message : 'Operasi manajemen gagal; periksa log layanan',
           })
         }
       }

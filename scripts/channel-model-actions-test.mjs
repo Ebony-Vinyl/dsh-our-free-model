@@ -27,6 +27,7 @@ export async function verifyChannelModelActions() {
     useCallback: callback => callback,
   }
   const { ChannelCard, DICT } = bundle.factory(() => react).__test
+  const t = key => DICT.zh[key]
   let rows = [{ id: 'one', disabled: false }, { id: 'two', disabled: true }]
   let changed = 0
   const calls = [], errors = []
@@ -67,39 +68,39 @@ export async function verifyChannelModelActions() {
   }
   const button = (label, tree = render()) => buttons(tree).find(node => node.children.includes(label))
   const settle = () => new Promise(resolve => setImmediate(resolve))
-  assert.equal(button('全部开启').props.disabled, false)
-  assert.equal(button('全部关闭').props.disabled, false)
-  assert.ok(button('开启') && button('关闭'), '单模型按钮应说明将执行的动作，不能将动作伪装成当前状态')
+  assert.equal(button(t('chan.model.enableAll')).props.disabled, false)
+  assert.equal(button(t('chan.model.disableAll')).props.disabled, false)
+  assert.ok(button(t('chan.model.on')) && button(t('chan.model.off')), '单模型按钮应说明将执行的动作，不能将动作伪装成当前状态')
   hold = true
-  button('全部关闭').props.onClick()
-  button('全部开启').props.onClick()
+  button(t('chan.model.disableAll')).props.onClick()
+  button(t('chan.model.enableAll')).props.onClick()
   assert.equal(calls.length, 1, '同一批操作完成前重复点击只能发送一次请求')
   assert.deepEqual(calls[0], { method: 'model.setAllDisabled', payload: { provider: 'codearts', disabled: true } })
   const busy = render()
   assert.ok(buttons(busy).every(node => node.props.className === 'ofm_foldtoggle' || node.props.disabled),
     '批量请求期间禁用单模型和其他写入按钮')
-  assert.equal(button('全部关闭', busy).props['aria-busy'], 'true')
+  assert.equal(button(t('chan.model.disableAll'), busy).props['aria-busy'], 'true')
   release()
   await settle()
   assert.ok(cells[2].every(row => row.disabled === true))
   assert.equal(changed, 1)
   assert.equal(calls.filter(call => call.method === 'model.list').length, 1)
-  assert.equal(button('全部关闭').props.disabled, false)
+  assert.equal(button(t('chan.model.disableAll')).props.disabled, false)
   hold = false
-  button('全部开启').props.onClick()
+  button(t('chan.model.enableAll')).props.onClick()
   await settle()
   assert.ok(cells[2].every(row => row.disabled === false))
   assert.equal(changed, 2)
   assert.equal(calls.filter(call => call.method === 'model.setDisabled').length, 0, '禁止逐模型循环写入')
   fail = true
-  button('全部关闭').props.onClick()
+  button(t('chan.model.disableAll')).props.onClick()
   await settle()
   assert.deepEqual(errors, ['批量更新失败'])
   assert.ok(cells[2].every(row => row.disabled === false), '失败后不能虚构新的开关状态')
   assert.equal(changed, 2)
-  assert.equal(button('全部开启').props.disabled, false, '失败后恢复操作能力')
+  assert.equal(button(t('chan.model.enableAll')).props.disabled, false, '失败后恢复操作能力')
   cells[2] = undefined
-  assert.equal(button('全部开启'), undefined, '加载中不能批量修改')
+  assert.equal(button(t('chan.model.enableAll')), undefined, '加载中不能批量修改')
   cells[2] = []
-  assert.equal(button('全部关闭'), undefined, '空目录不能批量修改')
+  assert.equal(button(t('chan.model.disableAll')), undefined, '空目录不能批量修改')
 }
