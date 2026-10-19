@@ -438,6 +438,8 @@ export class FreeModelAdapter {
             : postStreamed({
           path: endpointFor(entry.id), body: payload, session,
           attributionUserAgent: snapshot.attributionUserAgent,
+          bodyBudgetBytes: settings.requestBodyBudgetBytes,
+          warn: this.deps.warn,
           signal: controller.signal,
           onData: value => channel.push(value),
         }))

@@ -24,6 +24,8 @@
 
 import { CLIENT_UA, UPSTREAM_BASE, gatewayHeaders, truncateSession } from './upstream.js'
 import { egressFetch } from './egress.js'
+import { dumpUpstream } from './debug-dump.js'
+import { applyRequestBudget } from './request-budget.js'
 
 /** Harness-neutral failure codes (packages/llm/llm/src/error.ts vocabulary; CLIENT_ERROR extends it like CONFIG_DISABLED does). */
 export const CODE = {
@@ -387,7 +389,14 @@ function userAgentWith(_attribution) {
   return CLIENT_UA
 }
 
-export async function postStreamed({ path, body, session, attributionUserAgent, signal, onData, timeoutMs = 300000 }) {
+export async function postStreamed({ path, body, session, attributionUserAgent, signal, onData, timeoutMs = 300000, bodyBudgetBytes, warn }) {
+  // The upstream answers 400 ModelProtocolUnsupported above ~700 KB, and a Zed
+  // session declaring every MCP tool ships ~950 KB before the chat grows. Trim
+  // the exact body that is about to be serialized, and say so when it happens.
+  const budget = applyRequestBudget(body, { budgetBytes: bodyBudgetBytes })
+  if (budget.trimmed) {
+    warn?.(`our-free-model: request body ${budget.before} B exceeds the ${budget.budgetBytes} B budget — sent ${budget.after} B (${budget.toolsShrunk} schemas depth-limited${budget.toolsDropped > 0 ? `, ${budget.toolsDropped} tools dropped` : ''})`)
+  }
   const headers = gatewayHeaders({ session: truncateSession(session), stream: true })
   headers['user-agent'] = userAgentWith(attributionUserAgent)
   let response
@@ -404,6 +413,9 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
   const setRetry = retryAfter(response.headers.get('retry-after'))
   if (!response.ok) {
     const text = await response.text().catch(() => '')
+    // The free lane sometimes refuses with an empty body, so keep the exact
+    // request/response pair on disk before classifying it.
+    dumpUpstream(path, body, response.status, text, Object.fromEntries(response.headers))
     let payload
     try { payload = JSON.parse(text) } catch { payload = { error: { message: text.slice(0, 300) || `HTTP ${response.status}` } } }
     throw classifyFailure(response.status, payload, setRetry)

@@ -183,6 +183,12 @@ export const SETTINGS_INITIAL = {
   },
   /** Cap a turn's output so a slow lane cannot run away. */
   defaultMaxTokens: 32768,
+  /** Byte ceiling for one upstream request body. The free lane answers
+   *  400 ModelProtocolUnsupported above roughly 700 KB (measured 2026-10-19:
+   *  699,974 B passed, 765,000 B failed), and a Zed session declaring every
+   *  MCP tool ships ~950 KB. `src/request-budget.js` trims the tool schemas to
+   *  fit; this is the default it aims for, with headroom for growth. */
+  requestBodyBudgetBytes: 655360,
   /** 所有模型默认允许一次纯推理检查点续写，false 可关闭。 */
   streamRecovery: true,
   /** Token savers. Tool-output compaction is on by default — it is invisible to

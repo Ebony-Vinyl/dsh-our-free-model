@@ -799,3 +799,178 @@ Commit: `7e388d6` — `Tulis ulang nama tool agar lolos gate upstream`.
   3. Tes di Zed memakai `DeepSeek V4.1 Flash (free) · sementara` dengan tool MCP aktif.
   4. Catat hasilnya di sesi berikutnya.
 - Backlog lama: rotasi API key OpenRouter `sk-or-v1-fdf6…f6b` (sudah terekspos).
+
+## 41. Verifikasi live setelah ganti jaringan — LULUS
+
+IP publik saat verifikasi: **`182.8.249.50`** (bukan IP lama yang diblokir).
+
+Gateway direstart bersih:
+
+- PID lama `22824` dihentikan, port `18900` bebas.
+- Dijalankan ulang lewat `wscript.exe ofm-standalone-hidden.vbs`.
+- PID baru: **`34488`**; `/health` → `ok:true`, `version 2.5.3`.
+
+Probe konfirmasi (satu request, tanpa pengulangan):
+
+```bash
+node scripts/ofm-probe-colon-check.mjs "deepseek-v4.1-flash-free"
+```
+
+Hasil: **HTTP 200 (1985ms)**, stream SSE berjalan dan memuat `delta.reasoning`.
+Artinya deklarasi tool `mcp:rea:*` sekarang diterima upstream setelah ditulis
+ulang oleh `sanitizeToolName`/`planToolNames` di `src/upstream.js`.
+
+Status per penutupan sesi ini:
+
+1. Akar masalah 400 **tertutup** dan terbukti di live, bukan hanya di stub.
+2. Sisa langkah: tes dari Zed memakai `DeepSeek V4.1 Flash (free) · sementara`
+   dengan tool MCP aktif, lalu catat hasilnya.
+3. Jangan probe upstream beruntun — satu-dua request per sesi sudah cukup.
+
+## 42. Sesi lanjutan — probe 200 di IP baru, tes Zed belum dikonfirmasi
+
+Waktu verifikasi: 2026-10-19 15.19 WIB.
+
+### Kondisi live
+
+| Item | Nilai |
+|---|---|
+| IP keluar | **`182.2.70.248`**, VPN **OFF** |
+| Gateway | PID **`49160`**, start **15.15.11 WIB**, v2.5.3, `/health` → `ok:true` |
+| Service token | `b20f252f-d7d6-4b23-a3e1-451f8d2fcd06` |
+| `egress.enabled` | `false` (ikut jalur sistem) |
+
+### Probe live
+
+```bash
+node scripts/ofm-probe-colon-check.mjs
+```
+
+Hasil: **HTTP 200 (3300ms)**, stream SSE berjalan dan memuat `delta.reasoning`.
+Payload probe memakai nama tool `mcp:rea:read_file`, `mcp:rea:inspect_artifact`,
+`mcp:rea:analyze_function` — jadi jalur rewrite `sanitizeToolName` /
+`planToolNames` memang aktif di proses yang sekarang.
+
+`last-upstream.json` masih berisi **403** dari `08:16:04Z` (15.16 WIB), yaitu
+blokir *abusive traffic* sementara yang sudah lewat — bukan berasal dari request
+Zed. `last-incoming.json` ter-update `08:19:24Z` oleh probe di atas, jadi hook
+diagnostik terbukti menulis pada proses yang hidup.
+
+### Bukti dari log Zed
+
+Semua `upstream HTTP 400` terakhir terjadi **sebelum** perbaikan di-commit dan
+sebelum gateway direstart:
+
+| Waktu (WIB) | Model | Keterangan |
+|---|---|---|
+| 13:54:42, 13:55:00, 13:55:33 | `DeepSeek V4.1 Flash (free) · sementara` | 400 |
+| 14:42:54 | — | commit `7e388d6` rewrite nama tool |
+| 14:44:20 | — | commit `f57126a` catat akar 400 |
+| 15:15:11 | — | gateway PID `49160` start |
+| 15:19:24 | — | probe **200** |
+
+Tidak ada catatan 400 setelah gateway restart. Jadi 400 di Zed yang lama
+konsisten dengan kode pra-perbaikan, bukan dengan kondisi sekarang.
+
+Settings Zed juga diperiksa utuh: provider `Our-Free-Local` →
+`http://127.0.0.1:18900/v1`, dan tiga model sementara masih berlabel:
+`Big Pickle · sementara`, `DeepSeek V4.1 Flash (free) · sementara`,
+`GLM 5.3 Flash (free) · sementara`.
+
+### Diagnostik yang BELUM di-commit
+
+| Berkas | Isi |
+|---|---|
+| `src/debug-dump.js` (baru) | Tulis JSON atomik ke `~/.our-free-model/debug/`; override `OFM_DEBUG_DIR`; tidak pernah throw |
+| `src/http.js` | `dumpUpstream(path, body, status, text, headers)` dipanggil di cabang `if (!response.ok)` **sebelum** `classifyFailure` |
+| `src/forward.js` | `dumpIncoming(req, value)` dipanggil di `readBody` setelah validasi objek |
+
+Artefak: `last-incoming.json` (body mentah pemanggil, sebelum rewrite) dan
+`last-upstream.json` (`path`, `status`, `response`, `headers`, body final).
+Keduanya *last-write-wins*, bukan log append.
+
+### Sisa langkah
+
+1. Satu tes dari Zed memakai `DeepSeek V4.1 Flash (free) · sementara` dengan
+tool MCP aktif.
+2. Bila 400 muncul lagi, baca `~/.our-free-model/debug/last-incoming.json` dan
+`last-upstream.json`, lalu bandingkan body-nya dengan payload probe yang 200.
+Jangan menebak tanpa dua berkas itu.
+3. Commit perubahan diagnostik setelah izin user (`git add` per berkas, jangan
+`git add .`).
+
+---
+
+## 43. Akar masalah 400 ditemukan dan DIPERBAIKI — batas ukuran body
+
+**Waktu:** 2026-10-19 sekitar 15.30–15.45 WIB. **Status: selesai, terverifikasi live.**
+
+### 43.1 Cara membuktikan
+
+Body yang tertangkap di `debug/last-upstream.json` (953.462 byte, 227 tool,
+44 pesan) diputar ulang **lewat gateway lokal** memakai
+`scripts/ofm-probe-replay-size.mjs`. Variabel diubah satu per satu:
+
+| Uji | Byte body | Tool | Hasil |
+|---|---:|---:|---|
+| `exact` (body Zed apa adanya) | 953.462 | 227 | **400** |
+| `fewtools 10` (pesan sama) | 172.902 | 10 | **200** |
+| `thin` (227 tool, skema minimal) | 197.519 | 227 | **200** |
+| `thinone compare_web_captures` | 787.289 | 227 | **400** |
+| `budget 300000` | 291.959 | 27 | **200** |
+| `budget 500000` | 391.465 | 33 | **200** |
+| `budget 600000` | 599.923 | 58 | **200** |
+| `budget 700000` | 699.974 | 92 | **200** |
+| `budget 765000` | 764.956 | 154 | **400** |
+| `budget 780000` | 779.977 | 166 | **400** |
+
+Kesimpulan: **bukan jumlah tool** (227 tool tetap 200 saat skema diringkas),
+**bukan isi pesan** (44 pesan sama tetap 200), dan **bukan satu schema raksasa**
+(`thinone` tetap 400). Pemicunya **ukuran total body**: ambang ada di antara
+699.974 (lolos) dan 764.956 (ditolak).
+
+Komposisi body 953 KB: `tools` 793 KB (parameter schema 667 KB, deskripsi 105 KB,
+nama 4 KB) dan `messages` 160 KB. Jadi tool-lah yang mendominasi.
+
+### 43.2 Perbaikan
+
+| Berkas | Perubahan |
+|---|---|
+| **`src/request-budget.js`** (baru) | `applyRequestBudget(body, {budgetBytes})` — pangkas deskripsi tool (200 char), lalu batasi kedalaman hanya pada skema yang masih kebesaran (tangga batas 20→16→12→8→5→3→2 KB, kedalaman 6→2). Membuang tool hanya upaya terakhir. Mengembalikan laporan `{trimmed,before,after,toolsShrunk,toolsDropped,fits}`. |
+| `src/http.js` | `postStreamed()` memanggil `applyRequestBudget` **sebelum** `JSON.stringify`, dan menulis peringatan lewat `warn` bila dipangkas. |
+| `src/adapter.js` | Meneruskan `bodyBudgetBytes` (dari settings) dan `warn` ke `postStreamed`. |
+| `src/store.js` | Default baru `requestBodyBudgetBytes: 655360` (640 KiB). Bisa diubah manual di `~/.our-free-model/settings.json`. |
+| **`scripts/request-budget-test.mjs`** (baru) | 25 pemeriksaan: body kecil tidak disentuh, 227 tool bertahan, deskripsi dibatasi, kedalaman dibatasi, bentuk flat/Claude ditangani, upaya terakhir membuang tool, dan pengukuran memakai byte UTF-8. |
+| `scripts/ofm-probe-replay-size.mjs` (baru) | Probe replay: `exact`, `fewtools N`, `thin`, `thinone NAMA`, `budget N`, `lastmsgs N`, `notools`. |
+
+Pada body Zed asli: **954.050 → 633.701 byte, 227 tool tetap ada, 16 skema
+diringkas, 0 tool dibuang.** Setelah gateway di-restart (PID 65596), replay body
+yang sama menghasilkan **HTTP 200** dan stream SSE berjalan.
+
+### 43.3 Jawaban untuk pertanyaan `· sementara`
+
+Menghapus label `· sementara` **tidak berpengaruh** pada error. Label itu hanya
+`display_name` di settings Zed dan tidak pernah dikirim ke wire; header respons
+`x-zen-model: deepseek-v4.1-flash-free` membuktikan id model sudah benar. Label
+boleh dihapus murni untuk kerapian, bukan sebagai perbaikan.
+
+### 43.4 Catatan operasional baru
+
+- `debug/last-upstream.json` **single-slot** dan bisa ditimpa probe latar
+gateway. Saat sesi ini, berkas 953 KB tertimpa probe `jev-1.13-free` (404)
+karena gateway punya probe periodik. **Salin dulu** sebelum replay.
+- `scripts/ofm-probe-replay-size.mjs` menerima `OFM_DEBUG_FILE` untuk membaca
+salinan aman, bukan slot live.
+- Jangan probe beruntun: jeda ≥3 detik. Sesi ini memakai 10 request dengan jeda
+3–5 detik tanpa blokir.
+- Tes: `node scripts/request-budget-test.mjs` → semua lolos;
+`node scripts/forward-test.mjs`, `freetier-gate-test.mjs`, `sanitize-test.mjs`
+juga lolos.
+- Token layanan berubah setiap restart (sekarang `1bcbdbb2-b678-4737-970a-6cddb920241b`,
+PID 65596). **`forwardKey` untuk inferensi tidak berubah**, jadi provider Zed
+tetap jalan.
+- Pengaturan `requestBodyBudgetBytes` dibaca dari
+`~/.our-free-model/settings.json` (default 655360). Menyimpan pengaturan dari
+UI tidak menghapusnya karena `stores.settings.update(patch)` hanya menggabung.
+- Belum di-commit. HEAD masih `f57126a`.
+4. Catatan front end Bahasa Indonesia sudah tercatat di §26 — tidak berubah.
