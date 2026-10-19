@@ -63,6 +63,7 @@ import { isSubscriptionEntry } from './src/subscription-adapter.js'
 import { createMagpieEngine } from './src/magpie-engine.js'
 import { createMagpieModels, combineSubscriptionRuntimes } from './src/magpie-models.js'
 import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from './src/disclaimer.js'
+import { createSubagentRouteSync } from './src/subagent-routes.js'
 
 export { fromOpenAiMessages } from './src/core/completion.js'
 import { buildStats } from './src/core/stats.js'
@@ -461,6 +462,7 @@ export function apply(ctx, config) {
       .filter(entry => advertised.has(entry.id))
       .map(entry => ({
         id: entry.id,
+
         name: entry.name,
         contextWindow: entry.contextWindow,
         maxTokens: entry.maxOutput,
@@ -470,6 +472,36 @@ export function apply(ctx, config) {
 
   ctx.on?.('loader/volatile-update', () => {
     registration.replace(routes())
+  })
+
+  // ── subagent route synchronisation ──────────────────────────────────────────
+  /**
+   * The delegation allowlist, kept in step with what this plugin registers.
+   *
+   * `@deepseek-ai/dsh-tool-subagent` refuses every explicit child route that
+   * is not listed in the `subagent-model-selection-settings` row of the
+   * profile patch, so "registered on `ctx.llm`" and "usable by a subagent" are
+   * two different facts. Every provider the free lanes register — the two
+   * routes above plus the thirteen absorbed channel routes — is invisible to
+   * a child until somebody edits that YAML by hand, which is why the plugin
+   * ships a settings-page button that derives the list from the live runtime
+   * and writes it back through the kernel's configuration editor.
+   *
+   * `configEditor` is reached through its own fiber rather than `inject`ed
+   * here: it publishes `loader`, which is not a dependency this plugin may
+   * name, and a composition without it (headless, SDK) must degrade to a
+   * button that reports "unavailable" rather than fail the plugin.
+   */
+  const subagentRoutes = createSubagentRouteSync({
+    llm: ctx.llm,
+    configEditor: undefined,
+    logger,
+  })
+  ctx.inject(['configEditor'], scoped => {
+    const editor = scoped.configEditor
+    if (editor === undefined) return
+    subagentRoutes.bind(editor)
+    logger.info?.('our-free-model: subagent route sync is available (the settings page can refresh the delegation allowlist)')
   })
 
   /**
@@ -1099,6 +1131,7 @@ export function apply(ctx, config) {
     },
     subscriptions,
     onSubscriptionsChanged: syncAggregateCatalog,
+    subagentRoutes,
     // ── the aggregate lane's settings surface ────────────────────────────────
     // The registry is static data; the configured half is the settings file with
     // every key masked. Writing one provider rebuilds the catalog and re-emits
@@ -2077,6 +2110,21 @@ export function createApiRoutes(deps) {
       }
       if (method === 'POST' && routePath === '/chan-gateway/rotate') {
         return send(200, { key: deps.chanRelay.rotate() })
+      }
+      // ── subagent route sync ─────────────────────────────────────────────────
+      // What the sync would do, without doing it: the settings page shows this
+      // beside the button so the user sees "19 providers, 754 routes, +664 to
+      // add" before committing to a profile edit.
+      if (method === 'GET' && routePath === '/subagent-routes') {
+        const plan = await deps.subagentRoutes.inspect().catch(error => ({ error: String(error?.message ?? error) }))
+        return send(plan.error === undefined ? 200 : 500, plan)
+      }
+      // Derive the delegation allowlist from the live runtime and persist it
+      // through the kernel's config editor. A failure is reported, never
+      // thrown: the settings page needs the sentence, not a stack trace.
+      if (method === 'POST' && routePath === '/subagent-routes/sync') {
+        const result = await deps.subagentRoutes.sync().catch(error => ({ ok: false, reason: String(error?.message ?? error) }))
+        return send(result.ok === true ? 200 : 500, result)
       }
       if (method === 'GET' && routePath === '/forward/lan/key') {
         return send(200, { key: deps.settings.get().forwardLanKey ?? '' })

@@ -542,6 +542,17 @@ window.__ModuleLoader__.load({
         'gw.keyNoneHint': '启用一次网关即会自动生成密钥。',
         'gw.models': '可转发模型',
         'gw.portNote': '端口可用环境变量 DSH_OPENAI_GATEWAY_PORT 调整。',
+        'sr.title': '子智能体白名单',
+        'sr.hint': '上面的端点给外部工具用；这一栏给 DSH 自家的子智能体用，两者互不相干。',
+        'sr.providers': '已注册 provider {n} 个',
+        'sr.routes': '可转发路由 {n} 条',
+        'sr.listed': '白名单已登记 {n} 条',
+        'sr.toAdd': '待同步 +{n}',
+        'sr.upToDate': '已是最新',
+        'sr.absent': '白名单里还没有：',
+        'sr.sync': '同步白名单',
+        'sr.busy': '同步中…',
+        'sr.done': '已写入白名单：新增 {n} 条，共 {m} 条路由。新开一个会话后子智能体即可调用。',
         'gw.relayTitle': '局域网转发（本插件中继）',
         'gw.relayHint': '把网关再暴露到一个可选的地址与端口：调用方用下面的中继密钥，网关自身只监听本机。',
         'gw.relaySwitch': '启用局域网转发',
@@ -1319,6 +1330,17 @@ window.__ModuleLoader__.load({
         'gw.keyNoneHint': 'Enabling the gateway once mints a key automatically.',
         'gw.models': 'Servable models',
         'gw.portNote': 'The port can be moved with the DSH_OPENAI_GATEWAY_PORT environment variable.',
+        'sr.title': 'Subagent allowlist',
+        'sr.hint': 'The endpoint above serves external tools; this section serves DSH\'s own subagents. The two are unrelated.',
+        'sr.providers': '{n} providers registered',
+        'sr.routes': '{n} routes forwardable',
+        'sr.listed': '{n} routes on the allowlist',
+        'sr.toAdd': 'To sync +{n}',
+        'sr.upToDate': 'Up to date',
+        'sr.absent': 'Missing from the allowlist:',
+        'sr.sync': 'Sync allowlist',
+        'sr.busy': 'Syncing…',
+        'sr.done': 'Allowlist written: +{n} routes, {m} total. Subagents can call them from a new session onward.',
         'gw.relayTitle': 'LAN relay (this plugin\'s)',
         'gw.relayHint': 'Re-expose the gateway on an address and port you choose: callers use the relay key below, and the gateway itself stays on the loopback.',
         'gw.relaySwitch': 'Enable LAN relay',
@@ -5472,6 +5494,21 @@ window.__ModuleLoader__.load({
       // 配方（未启用时 /clients 回的是占位端口与占位 Key）。
       const clients = usePanel(() => api('/clients'), [])
 
+      // 子智能体白名单的现状与同步结果。`status` 是 GET /subagent-routes 的
+      // 计划视图（只读，不写任何东西），`busy`/`error`/`done` 是同步按钮的三态。
+      // 它不参与页面的统一 reload：一次同步会改掉 profile patch，触发 Loader
+      // 热重载，整个 fiber 会重建，本地状态留着反而是过期的。
+      const srPlan = usePanel(() => api('/subagent-routes'), [])
+      const [srBusy, setSrBusy] = useState(false)
+      const [srError, setSrError] = useState('')
+      const [srDone, setSrDone] = useState('')
+      const sr = {
+        status: srPlan.data, reload: srPlan.reload,
+        busy: srBusy, setBusy: setSrBusy,
+        error: srError, setError: setSrError,
+        done: srDone, setDone: setSrDone,
+      }
+
       const loadGateway = useCallback(async () => {
         if (!available) return
         try { setStatus(await rpc('gateway.getEnabled', {}, 30_000)) } catch (error) { setNotice(String(error?.message ?? error)) }
@@ -5599,7 +5636,48 @@ window.__ModuleLoader__.load({
                     h('span', { className: 'ofm_cardname' }, snippet.name),
                     h('span', { className: 'ofm_tag' }, snippet.language)),
                   h('pre', { className: 'ofm_snippet' }, snippet.body),
-                  h('div', { className: 'ofm_row' }, h(CopyButton, { t, text: snippet.body }))))))))
+                  h('div', { className: 'ofm_row' }, h(CopyButton, { t, text: snippet.body }))))))),
+        // ── 子智能体白名单 ────────────────────────────────────────────────
+        // 上面这些端点是给「外部工具」用的；这一块是给 DSH 自己的子智能体用的，
+        // 而且是两套互不相干的闸门——provider 在 ctx.llm 上注册过，不等于子
+        // 智能体调得动它。tool-subagent 只认 profile patch 里
+        // `subagent-model-selection-settings.allowedModels` 这份白名单，所以每
+        // 新增一个渠道，都得有人把它的路由补进去，否则子智能体一律以
+        // "route ... is not allowed for this Session" 拒之门外。
+        // 按钮做的事：从当前运行时把已注册路由读出来，经内核的 configEditor
+        // 写回那份白名单——不是覆写，是并集，你手写的条目一律保留。
+        h(Section, { title: t('sr.title'), hint: t('sr.hint') },
+          sr.status === undefined ? h('div', { className: 'ofm_skel', style: { minHeight: 72 } })
+            : h('div', { className: 'ofm_panel' },
+              sr.status.error !== undefined ? h('div', { className: 'ofm_callout ofm_error' }, h('div', null, sr.status.error))
+                : h('div', { className: 'ofm_row' },
+                  h('span', { className: 'ofm_note' }, t('sr.providers').replace('{n}', String(sr.status.providers ?? 0))),
+                  h('span', { className: 'ofm_note' }, t('sr.routes').replace('{n}', String(sr.status.registered ?? 0))),
+                  h('span', { className: 'ofm_note' }, t('sr.listed').replace('{n}', String(sr.status.current ?? 0))),
+                  (sr.status.additions ?? 0) > 0
+                    ? h(Pill, { tone: 'warn' }, t('sr.toAdd').replace('{n}', String(sr.status.additions)))
+                    : h(Pill, { tone: 'ok' }, t('sr.upToDate'))),
+              sr.status.providers === 0 ? null
+                : h('div', { className: 'ofm_row' },
+                  h('span', { className: 'ofm_note' }, t('sr.absent')),
+                  h('span', { className: 'ofm_note' }, (sr.status.absentProviders ?? []).join('，'))),
+              h('div', { className: 'ofm_row' },
+                h(Button, {
+                  kind: 'primary', disabled: sr.busy,
+                  onClick: () => {
+                    sr.setBusy(true); sr.setError(''); sr.setDone('')
+                    post('/subagent-routes/sync', {})
+                      .then(answer => {
+                        sr.setDone(t('sr.done').replace('{n}', String(answer?.added ?? 0)).replace('{m}', String(answer?.total ?? 0)))
+                        void sr.reload()
+                      })
+                      .catch(error => sr.setError(String(error?.message ?? error)))
+                      .finally(() => sr.setBusy(false))
+                  },
+                }, sr.busy ? t('sr.busy') : t('sr.sync')),
+                h(Button, { kind: 'ghost', onClick: () => void sr.reload(), disabled: sr.busy }, t('dash.refresh'))),
+              sr.error === '' ? null : h('div', { className: 'ofm_callout ofm_error' }, h('div', null, sr.error)),
+              sr.done === '' ? null : h('div', { className: 'ofm_callout' }, h('div', null, sr.done)))))
     }
 
     /** Shared page hero for the three gateway-console pages. The caller
