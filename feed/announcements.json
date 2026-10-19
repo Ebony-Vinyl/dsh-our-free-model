@@ -2,6 +2,18 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-19-v2.5.5-plugin-release",
+      "title": "v2.5.5：插件端移除交流群区块与开屏赞助广告",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-19T16:00:00Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.5",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.5 只更新 DSH 插件端。</b>已删除赞助说明中的交流群、群号和复制按钮，并关闭 desktop 插件启动时自动弹出的赞助开屏广告。赞助页面入口和邀请码功能保留；独立服务与桌面壳不随本版本更新。</p>"
+    },
+    {
       "id": "2026-10-19-v2.5.4-release",
       "title": "v2.5.4：优化新桌面端，优化插件端 UI 和广告",
       "level": "update",

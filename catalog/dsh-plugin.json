@@ -3,7 +3,7 @@
   "manifestVersion": "0.15",
   "id": "dev.ebony-vinyl.dsh-our-free-model",
   "name": "dsh-our-free-model",
-  "version": "2.5.4",
+  "version": "2.5.5",
   "facets": {
     "host": {
       "entry": "index.js",
