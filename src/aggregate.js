@@ -612,8 +612,15 @@ function synthesisedFrames(wire, payload, model) {
   return chatFrames(payload, model)
 }
 
-/** One `chat.completion.chunk` per field the chat decoder reads. */
-function chatFrames(payload, model) {
+/** One `chat.completion.chunk` per field the chat decoder reads.
+ *
+ * Exported because the chan lane's loopback gateway speaks the same chat wire
+ * and can answer a `stream:true` request with one JSON document just as a
+ * third-party provider can; both posters must therefore fold a
+ * `choices[0].message` answer into the delta frames `readStream` decodes —
+ * otherwise the caller receives a finished turn with no text in it.
+ */
+export function chatFrames(payload, model) {
   const choice = payload?.choices?.[0] ?? {}
   const message = choice.message ?? {}
   const frames = []

@@ -21,6 +21,7 @@
 
 import { CODE, UpstreamError, classifyFailure, classifyStreamFailure, readHead, readSse, replayStream, sniffBody, transportCause } from './http.js'
 import { directFetch } from './eac.js'
+import { chatFrames } from './aggregate.js'
 
 /** The channel tag every row from this lane carries, like EAC/Kilo/aggregate rows. */
 export const CHANNEL_LANE = 'chan'
@@ -83,9 +84,13 @@ function text(value) {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : ''
 }
 
-/** A positive finite number, or undefined — the catalog's own reading of one. */
+/** A positive finite number, or undefined — the catalog's own reading of one.
+ *  A fraction below one truncates to zero, which is not a capacity: leave it
+ *  undefined so the lane's fallback capacity applies instead of a zero one. */
 function number(value) {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const whole = Math.trunc(value)
+  return whole > 0 ? whole : undefined
 }
 
 function isRecord(value) {
@@ -244,7 +249,10 @@ export async function postChannelStreamed({ port, key, providerId, modelId, body
   }
 
   // A gateway that answered a stream request with one JSON document: fold the
-  // whole answer into a single payload for the reader, as the other lanes do.
+  // whole answer in and emit the frames a chat-wire decoder reads. Handing the
+  // document itself to the reader would leave `choices[0].message` unread —
+  // the decoder only consumes `choices[0].delta` — and the turn would finish
+  // with zero visible text.
   let rawText = head.text
   if (!head.done) {
     try {
@@ -264,6 +272,6 @@ export async function postChannelStreamed({ port, key, providerId, modelId, body
     throw new UpstreamError(`unexpected non-stream response: ${text(rawText).slice(0, 200)}`, CODE.server, { status: response.status })
   }
   if (payload?.error !== undefined || payload?.type === 'error') throw classifyFailure(response.status, payload, setRetry)
-  onData(JSON.stringify(payload))
+  for (const frame of chatFrames(payload, request.model)) onData(frame)
   return { status: response.status }
 }

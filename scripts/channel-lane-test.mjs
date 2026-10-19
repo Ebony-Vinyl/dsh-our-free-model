@@ -53,6 +53,7 @@ const PROVIDER = 'trae'
 const MODEL = 'chan-answer-model'
 const CHAN_ID = `chan:${PROVIDER}/${MODEL}`
 const CHAN_ANSWER = 'ANSWERED_BY_THE_CHANNEL_LANE'
+const CHAN_JSON_ANSWER = 'ANSWERED_BY_THE_CHANNEL_LANE_AS_ONE_JSON_DOCUMENT'
 const CHAN_KEY = 'chan-gateway-test-key'
 /** Rows the fake gateway lists that must never become catalog entries. */
 const FOREIGN_ID = 'deepseek-official/leaked-foreign-model'
@@ -74,6 +75,10 @@ process.env.OUR_FREE_MODEL_BASE = freeLane.base
 const gatewayRequests = []
 let gatewayListCalls = 0
 let gatewayAuthFailures = 0
+// The gateway answers `stream:true` with one JSON document while this is set:
+// a provider that ignores the flag, which the poster must still fold into the
+// delta frames the chat decoder consumes.
+let gatewayJsonAnswer = false
 const chanGateway = http.createServer((req, res) => {
   const url = String(req.url ?? '')
   const authorized = req.headers.authorization === `Bearer ${CHAN_KEY}`
@@ -109,6 +114,18 @@ const chanGateway = http.createServer((req, res) => {
         gatewayAuthFailures += 1
         res.writeHead(401, { 'content-type': 'application/json' })
         res.end('{"error":{"message":"missing or invalid gateway key"}}')
+        return
+      }
+      if (gatewayJsonAnswer) {
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({
+          id: 'chatcmpl-chan-json',
+          object: 'chat.completion',
+          created: 0,
+          model: `${PROVIDER}/${MODEL}`,
+          choices: [{ index: 0, message: { role: 'assistant', content: CHAN_JSON_ANSWER }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 3, completion_tokens: 5, total_tokens: 8 },
+        }))
         return
       }
       res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
@@ -253,6 +270,30 @@ const comboStats = stats.models.find(row => row.model === COMBO_ID)
 checkThat('the logical turn is attributed to the chain', comboStats !== undefined, JSON.stringify(stats.models.map(row => row.model)))
 check('recorded as one turn', comboStats?.turns, 1)
 check('not a failed turn', comboStats?.failedTurns, 0)
+
+// ── 4b. a non-stream JSON answer still reaches the caller ───────────────────
+// The poster forces `stream:true`, but a gateway that ignores it answers with
+// one `chat.completion` document. Handing that document to the chat decoder
+// yields no text (`choices[0].message` is not `choices[0].delta`), so the
+// poster must synthesise the delta frames itself.
+gatewayJsonAnswer = true
+const jsonChunks = []
+try {
+  for await (const chunk of adapter.stream({
+    provider: 'our-free-model',
+    model: COMBO_ID,
+    maxTokens: 4096,
+    sessionId: 'channel-lane-json-test',
+    messages: [{ role: 'user', content: [{ type: 'text', text: TASK }] }],
+    signal: new AbortController().signal,
+  })) jsonChunks.push(chunk)
+} finally {
+  gatewayJsonAnswer = false
+}
+const jsonAnswer = jsonChunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')
+const jsonFinish = jsonChunks.find(chunk => chunk.type === 'finish')?.reason
+checkThat('the non-stream gateway answer is folded into deltas', jsonAnswer.includes(CHAN_JSON_ANSWER), jsonAnswer)
+check('the non-stream turn finishes cleanly', jsonFinish?.kind, 'stop')
 
 // ── 5. the refresh round re-syncs the lane and never probes it ───────────────
 const listCallsBefore = gatewayListCalls
