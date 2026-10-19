@@ -43,3 +43,8 @@ packages/desktop/src-tauri/.node-license-cache/
 packages/desktop/node_modules/
 
 _audit/
+
+# Windows junk / accidental redirect output at repo root.
+/nul
+/hapus
+/commit-msg.tmp
