@@ -75,6 +75,9 @@ import { primeOpencodeCapabilities, refreshOpencodeCapabilities } from './openco
 import { closeAllProxyDispatchers } from './opencode-proxy.js'
 import { createChannelFetch, type ChannelOutlet } from './channel-fetch.js'
 export { createChannelFetch, parseWindowsProxy, channelProxyBypassed } from './channel-fetch.js'
+// 签名的 CodeArts 出网不走 `globalThis.fetch`（见 direct-fetch.ts）。导出这条
+// 车道的测试缝，好让离线套件对签名流量也能行使「禁止外网」的守门。
+export { directFetch, directLane } from './direct-fetch.js'
 import { execFile } from 'node:child_process'
 
 /**

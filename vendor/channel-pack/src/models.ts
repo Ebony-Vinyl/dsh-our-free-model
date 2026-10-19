@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { directFetch } from './direct-fetch.js'
 import { signRequestHuawei } from './sign.js'
 import type { CodeArtsCredential } from './types.js'
 
@@ -158,7 +159,8 @@ async function fetchSignedGet(
  */
 export async function fetchCodeArtsRemoteModels(
   credential: CodeArtsCredential,
-  fetcher: typeof fetch = fetch,
+  // 签名 GET，默认不经全局 fetch（见 direct-fetch.ts）。
+  fetcher: typeof fetch = directFetch,
 ): Promise<RemoteModel[]> {
   const { access_key_id: ak, secret_access_key: sk, security_token: st } = credential
   if (!ak || !sk) return []

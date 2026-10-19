@@ -26,6 +26,7 @@ export async function verifyChannelPrFixes() {
   await verifySystemPrompts()
   await verifyBuddyRequests()
   await verifyGatewayTeardown()
+  await verifyCodeArtsSignedEgress()
 }
 
 async function verifySystemPrompts() {
@@ -267,4 +268,78 @@ async function verifyGatewayTeardown() {
     }
   }
   console.log('ok  source PR #405: idle/active/incomplete HTTP connections close within 1s, upstream stream aborted, repeated close safe')
+}
+
+/**
+ * issue #344：CodeArts 的 SDK-HMAC-SHA256 签名覆盖请求体字节，任何替换
+ * `globalThis.fetch` 的本地代理插件只要重序列化一次 body，上游就必然验签失败
+ * （表现为 401/403，再被适配器读成「API 密钥无效」）。CodeArts 因此走
+ * `direct-fetch.ts` 的直发通道，与全局 `fetch` 解耦。
+ *
+ * 三条断言缺一不可：默认实现不经过 `globalThis.fetch`、注入值仍然优先、
+ * 测试缝在直发通道上真的生效（否则离线套件的「禁止外网」守门对签名的流量失效）。
+ */
+async function verifyCodeArtsSignedEgress() {
+  const { CodeArtsAdapter } = await import('../vendor/channel-pack/src/llm-adapter.ts')
+  const { directFetch, directLane } = await import('../vendor/channel-pack/src/direct-fetch.ts')
+  const credential = {
+    access_key_id: 'FIXTUREAK', secret_access_key: 'FIXTURESECRET', security_token: 'FIXTURETOKEN',
+    expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+  }
+  const options = { model: 'deepseek-v4.1-flash', messages: [textMessage('user', 'hello')] }
+
+  // ① 默认实现（未注入 fetchImpl）不得落到 globalThis.fetch。
+  const savedFetch = globalThis.fetch
+  // 挂载套件已在直发车道上装了「禁止外网」守门，这里必须原样还回去。
+  const laneOriginal = directLane.fetch
+  let globalCalls = 0
+  globalThis.fetch = async () => { globalCalls++; throw new Error('globalThis.fetch must not be used') }
+  const seen = []
+  try {
+    directLane.fetch = async (url, init) => {
+      seen.push({ url: String(url), init })
+      return answer('ok')
+    }
+    const adapter = new CodeArtsAdapter({
+      credentialRef: 'FIXTURE', resolveCredential: async () => credential, refresh: async () => {},
+    })
+    await collect(adapter.stream(options))
+  } finally {
+    directLane.fetch = laneOriginal
+    globalThis.fetch = savedFetch
+  }
+  assert.equal(globalCalls, 0, 'CodeArts signs its own egress: globalThis.fetch is never consulted')
+  assert.equal(seen.length, 1)
+  assert.match(seen[0].url, /^https:\/\/snap-access\.cn-north-4\.myhuaweicloud\.com\/api\/v2\/chat\/completions$/)
+  // 签名头必须真的生成且覆盖本次 body —— 只断言「有 Authorization」不够，
+  // 重签/改写会同时改变这两个头里的哈希。
+  const signed = new Headers(seen[0].init.headers)
+  assert.match(signed.get('authorization') ?? '', /^SDK-HMAC-SHA256 Access=FIXTUREAK,SignedHeaders=/)
+  assert.match(signed.get('x-sdk-content-sha256') ?? '', /^[0-9a-f]{64}$/)
+  assert.equal(signed.get('x-security-token'), 'FIXTURETOKEN')
+  console.log('ok  source issue #344: CodeArts chat egress bypasses globalThis.fetch and carries a fresh HMAC signature')
+
+  // ② 显式注入的 fetchImpl 仍然优先（离线测试与既有调用方依赖这一点）。
+  const injected = []
+  const injectedAdapter = new CodeArtsAdapter({
+    credentialRef: 'FIXTURE', resolveCredential: async () => credential, refresh: async () => {},
+    fetchImpl: async (url, init) => { injected.push(String(url)); return answer('ok') },
+  })
+  await collect(injectedAdapter.stream(options))
+  assert.equal(injected.length, 1, 'an injected fetchImpl still wins over the direct lane')
+  assert.equal(directLane.fetch, laneOriginal, 'an injected fetchImpl leaves the shared direct lane untouched')
+
+  // ③ directFetch 本身遵守测试缝，未设缝时用打包内联的 undici（此处只验优先级，
+  //    不发起真实网络请求）。
+  const original = globalThis.fetch
+  globalThis.fetch = async () => { throw new Error('directFetch must not read globalThis.fetch') }
+  try {
+    directLane.fetch = async () => new Response('seam', { status: 200 })
+    const response = await directFetch('https://example.invalid/')
+    assert.equal(await response.text(), 'seam')
+  } finally {
+    directLane.fetch = laneOriginal
+    globalThis.fetch = original
+  }
+  console.log('ok  source issue #344: direct lane honours the offline test seam and never falls back to globalThis.fetch')
 }

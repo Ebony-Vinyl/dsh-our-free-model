@@ -68,6 +68,11 @@ const offlineFetch = async (url, init) => {
   throw new Error('external network is disabled in the channel mount test')
 }
 globalThis.fetch = offlineFetch
+// CodeArts 的签名出网刻意绕开 `globalThis.fetch`（issue #344：任何替换全局 fetch
+// 的本地代理插件都会重序列化 body，破坏 HMAC）。因此「禁止外网」必须同样守在这条
+// 直发车道上，否则离线套件对签名流量失去守门能力。
+let directLane
+const savedDirectLane = []
 const dispose = []
 const routes = []
 const adapters = new Map()
@@ -106,7 +111,17 @@ const state = {
 fs.mkdirSync(path.join(scratch, 'channel-pack'))
 fs.writeFileSync(path.join(scratch, 'channel-pack/state.json'), JSON.stringify(state))
 try {
-  const { apply } = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
+  const packModule = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
+  const { apply } = packModule
+  // 签名车道与全局 fetch 是两条独立的出网路径，守门必须都覆盖。
+  directLane = packModule.directLane
+  assert.ok(directLane, 'the signed egress lane is reachable from the mounted module')
+  savedDirectLane.push(directLane.fetch)
+  directLane.fetch = async (url, init) => {
+    if (auditFetch) return auditFetch(url, init)
+    fetched.push(String(url))
+    throw new Error('external network is disabled in the channel mount test (signed lane)')
+  }
   apply(ctx, { disableOpencode: true })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
@@ -260,6 +275,7 @@ try {
 } finally {
   for (const cleanup of dispose.reverse()) await cleanup()
   globalThis.fetch = savedFetch
+  if (directLane !== undefined && savedDirectLane.length > 0) directLane.fetch = savedDirectLane[0]
   hooks.deregister()
   fs.rmSync(scratch, { recursive: true, force: true })
 }

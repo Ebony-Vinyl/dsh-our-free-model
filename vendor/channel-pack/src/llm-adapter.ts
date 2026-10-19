@@ -7,6 +7,7 @@ import {
 import type { GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { AccountPool, providerCatalogVisible } from './account-pool.js'
+import { directFetch } from './direct-fetch.js'
 import { RemoteCatalogGate } from './remote-catalog-gate.js'
 import { settingsNamespaceFor } from './settings-compat.js'
 import { nextUtc8DayStartMs } from './model-queue.js'
@@ -897,7 +898,10 @@ export class CodeArtsAdapter extends LlmAdapter {
 
   constructor(private readonly options: CodeArtsAdapterOptions) {
     super()
-    this.fetchImpl = options.fetchImpl ?? fetch
+    // 默认走 `directFetch`（打包内联的 undici），不走全局 `fetch`：签名覆盖
+    // body 字节，被本地代理插件改写过就必然验签失败（issue #344 / #444，
+    // 详见 `direct-fetch.ts` 模块头）。显式注入的 `fetchImpl` 仍然优先。
+    this.fetchImpl = options.fetchImpl ?? directFetch
     this.chatId = options.chatId ?? crypto.randomUUID().replace(/-/g, '')
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, '')
   }
