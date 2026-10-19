@@ -724,3 +724,78 @@ Jangan hapus entri tanpa persetujuan user.
 - `scripts/ofm-probe-zed-shape.mjs` (dulu `tmp-probe-zed-payload.mjs`) adalah
   satu-satunya alat reproduksi payload ala Zed; pertahankan (bukan sampah
   sementara). Jalankan: `node scripts/ofm-probe-zed-shape.mjs "<id>"`.
+
+# SESI 15n — 2026-10-19 — Akar 400: nama tool bertitik dua
+
+## 37. Penyebab `upstream HTTP 400` pada model `· sementara`
+
+**Bukan** blokir IP, **bukan** `reasoning_effort`, `parallel_tool_calls`,
+`stream_options`, atau panjang nama tool. Penyebabnya adalah **titik dua pada
+nama tool**.
+
+Zed mendeklarasikan tool MCP sebagai `mcp:rea:open_binary`,
+`mcp:rea:inspect_artifact`, dst. Upstream `/zen/v1` menolak deklarasi tool dengan
+nama di luar alfabet `[A-Za-z0-9_-]` memakai **HTTP 400 dengan body kosong**.
+Karena body kosong, `classifyFailure` jatuh ke `upstream HTTP ${status}` — itulah
+pesan yang tampil di Zed.
+
+Bukti terukur (request langsung ke upstream, bypass gateway):
+
+| Varian payload | Hasil |
+|---|---|
+| minimal (tanpa tools) | 200 |
+| 19 tool Zed tanpa titik dua | 200 |
+| tanpa `parallel_tool_calls` / `tool_choice` | 200 |
+| stubs-only | 200 |
+| nama tool 64/65/128 karakter | 200 |
+| **`mcp:rea:*` (bertitik dua)** | **400, body kosong** |
+
+## 38. Perbaikan
+
+`src/upstream.js`:
+
+- `sanitizeToolName()` mengganti karakter di luar `[A-Za-z0-9_-]` menjadi `_`,
+  membatasi 128 karakter, dengan fallback `tool`.
+- `planToolNames()` mereservasi nama yang sudah valid lebih dulu, sehingga nama
+  hasil rewrite tidak bisa mencuri nama asli. Tabrakan diberi sufiks digest 6
+  hex dari nama asli, jadi pemetaan **stabil antar request**.
+- `applyFingerprint()` menulis ulang deklarasi tool, riwayat tool call (Chat,
+  Claude, Responses), dan `tool_choice` yang mem-pin tool.
+- `applyFingerprint()` mengembalikan `Map` wire → nama asli; `restoreToolName`
+  memulihkan `mcp:rea:*` pada respons, sehingga klien tidak melihat nama
+  tersanitasi.
+
+Contoh: `mcp:rea:read_file` → `mcp_rea_read_file` (upstream) → dipulihkan menjadi
+`mcp:rea:read_file` (Zed).
+
+## 39. Verifikasi
+
+```
+node scripts/fingerprint-test.mjs     → all fingerprint checks passed (§8–§10)
+node scripts/tool-name-gate-test.mjs  → 11/11 check, end-to-end dengan stub gate
+node scripts/test-all.mjs             → entri tool-name-gate ditambahkan
+```
+
+`tool-name-gate-test.mjs` menyalin data gateway ke temp, menjalankan gateway
+kedua dengan stub upstream yang menolak nama non-alfabet memakai **400 body
+kosong** (meniru lane asli), lalu memeriksa dua arah: hanya nama sah yang dikirim,
+dan tool call kembali dengan nama asli.
+
+Commit: `7e388d6` — `Tulis ulang nama tool agar lolos gate upstream`.
+
+## 40. Status live dan langkah berikutnya
+
+- Gateway sudah direstart, `/health` → `ok:true`, v2.5.3.
+- IP publik saat sesi ini ditutup: **`103.143.196.250`** — masih diblokir
+  OpenCode (`403 LANE_LOCKED`, “abusive traffic from this IP address”).
+  **Jangan probe beruntun**; ini yang memperpanjang blokir.
+- Karena IP masih diblokir, verifikasi live belum bisa menghasilkan 200.
+  Perbaikan 400 sudah dibuktikan lewat tes end-to-end dengan stub gate.
+- Langkah berikutnya:
+  1. Tunggu blokir mereda atau pindah jaringan (tethering).
+  2. Jalankan **satu** request: `node scripts/ofm-probe-colon-check.mjs "deepseek-v4.1-flash-free"`.
+     Hasil yang diharapkan: **200** (atau 403 berisi body bila IP masih diblokir),
+     **bukan** 400 body kosong.
+  3. Tes di Zed memakai `DeepSeek V4.1 Flash (free) · sementara` dengan tool MCP aktif.
+  4. Catat hasilnya di sesi berikutnya.
+- Backlog lama: rotasi API key OpenRouter `sk-or-v1-fdf6…f6b` (sudah terekspos).
