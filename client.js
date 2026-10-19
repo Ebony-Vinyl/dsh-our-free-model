@@ -37,7 +37,6 @@ const SPONSOR = Object.freeze({
   name: '北辰 API',
   url: 'https://beichenapi.com/register?aff=DL49WAC2DQNG',
   invite: 'DL49WAC2DQNG',
-  group: '908370050',
   greeting: '非常抱歉，亲爱的朋友：',
   paragraphs: [
     '为了租上服务器(超级贵，我们几个穷学生...)，让我们的插件正常使用，我们不得不找甲方接一点广告和挣一点佣金。非常抱歉，这都是为了提高服务器并发量和号池(100%是为了提升体验和维护运营)(突然爆火了，我们的小服务器直接炸，只好花钱换)，属实是无奈之举。若广告带来了不好的体验，还望体谅。',
@@ -112,9 +111,6 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
           h('a', { className: 'ofm-sponsor-url', href: SPONSOR.url, target: '_blank', rel: 'noopener noreferrer' }, SPONSOR.url, icon('arrow', 16)),
           h('div', { className: 'ofm-sponsor-copyrow' }, h('span', null, '邀请码 ', h('strong', null, SPONSOR.invite)),
             h('button', { type: 'button', onClick: () => copy(SPONSOR.invite, '邀请码') }, '复制邀请码')),
-          h('p', null, '当然也有交流群和售后：'),
-          h('div', { className: 'ofm-sponsor-copyrow' }, h('span', null, h('strong', null, SPONSOR.group), '(发现问题直接电！)'),
-            h('button', { type: 'button', onClick: () => copy(SPONSOR.group, '群号') }, '复制群号')),
           h('span', { className: 'ofm-sponsor-copy-status', role: 'status' }, copied)),
         paragraph(3), paragraph(4), paragraph(5),
         h('div', { className: 'ofm-sponsor-signoff' }, h('span', null, '感谢你的理解与陪伴'), h('strong', null, 'OFM 团队'))),
@@ -6405,8 +6401,7 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
       return h('div', { className: 'ofm_root ofm_shell' },
         h('div', { className: 'ofm_aurora', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
         nav,
-        page,
-        h(SponsorNotice, { targetId: 'ofm-sponsor-menu-plugin' }))
+        page)
     }
 
     function FreePage(props) {
