@@ -24,5 +24,6 @@ RUN node scripts/build-standalone-ui.mjs
 VOLUME ["/data"]
 EXPOSE 18900
 
-# --port 18900 与桌面端默认一致；--data-dir 持久化账号/配置
-CMD ["node", "packages/standalone/cli.mjs", "--port", "18900", "--data-dir", "/data"]
+# 默认仅本机(127.0.0.1)。NAS / 局域网部署：设环境变量 OFM_ALLOW_NONLOOPBACK=1 且 OFM_BIND=0.0.0.0
+# （代码默认仍只绑 loopback，需显式开启，避免误暴露到不可信网络）。
+CMD ["sh", "-c", "node packages/standalone/cli.mjs --port 18900 --bind ${OFM_BIND:-127.0.0.1} --data-dir /data"]
