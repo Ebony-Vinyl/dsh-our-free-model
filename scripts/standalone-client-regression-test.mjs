@@ -26,9 +26,28 @@ const react = {
   },
   useRef(initial) { const at = cursor++; return cells[at] ??= { current: initial } },
   useEffect(effect) { if (captureEffects) effects.push(effect) },
-  useMemo: callback => callback(),
-  useCallback: callback => callback,
+  // 这里必须像 React 一样**吃掉一个 cell**：组件里 useCallback 与 useState 交错，
+  // 假实现若不占位，一个 `const load = useCallback(...)` 就会把后面所有 useState 的
+  // 槽位整体错开——加一行回调能让无关的「已隐藏」断言翻红，而真实 DOM 没变。
+  // deps 逐个比较是为了让身份随依赖变化，与 React 一致。
+  useMemo(callback, deps) {
+    const at = cursor++
+    const prev = cells[at]
+    if (prev !== undefined && sameDeps(prev.deps, deps)) return prev.value
+    const value = callback()
+    cells[at] = { deps, value }
+    return value
+  },
+  useCallback(callback, deps) {
+    const at = cursor++
+    const prev = cells[at]
+    if (prev !== undefined && sameDeps(prev.deps, deps)) return prev.value
+    cells[at] = { deps, value: callback }
+    return callback
+  },
 }
+const sameDeps = (a, b) => Array.isArray(a) && Array.isArray(b)
+  && a.length === b.length && a.every((value, index) => Object.is(value, b[index]))
 let release, reject
 const calls = []
 const fetch = async (url, options) => {
@@ -86,8 +105,17 @@ const channelProps = {
   t, channel: { id: 'codearts', name: 'CodeArts' }, status: {},
   onError: (_provider, error) => { throw error },
   onChanged: () => { changed++ },
+  // 卡片现在会拿到 ctx（老 pack 的促销标注要经 session.modelCatalog 读长标注）。
+  // 这个固定装置不给宿主：ctx 缺省时兼容分支必须安静跳过而不是抛错——这正是
+  // 下面 model.list 一行仍要能渲染出来的原因，别把 ctx 当必填项处理。
+  ctx: {},
   rpc: async (method, payload) => {
     rpcCalls.push({ method, payload })
+    // 当前 pack 的 `model.list` 声明了能力位 `promoTransport: true`
+    // （见 vendor/channel-pack/src/channel-pack-rpc.ts）。固定装置若照实不带，
+    // 卡片就会走「老 pack 兼容分支」，去宿主目录多读一次——那不是这个用例要
+    // 测的东西，却能让下面的断言行因为一次 await 而看不到模型行。照契约给上。
+    if (method === 'model.list') return { models, promoTransport: true }
     if (method === 'model.clearDead') models = models.map(model => ({ ...model, dead: false }))
     if (method === 'model.setDisabled') models = models.map(model => ({ ...model, disabled: payload.disabled }))
     if (method === 'account.update') accounts = accounts.map(row => ({ ...row, ...payload.patch }))

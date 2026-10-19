@@ -72,6 +72,7 @@
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "jose": "6.1.3",
     "undici": "8.11.2",
     "typescript": "^5.9.2"

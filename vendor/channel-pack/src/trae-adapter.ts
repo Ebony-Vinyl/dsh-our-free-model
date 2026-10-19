@@ -47,6 +47,7 @@ import {
   type TraeRemoteModel,
 } from './trae.js'
 import { TRAE, type TraeFallbackModel, type TraeProduct } from './trae-product.js'
+import type { PromotionBadge } from './buddy.js'
 import { classifyTraeError, recordsTraeRateLimit, shouldRotateTraeAccount } from './trae-errors.js'
 import { normalizeHarnessMessages } from './message-shape.js'
 import { createBlankReasoningSuppressor, createReasoningLoopDetector, hasUsableToolName, isProseTruncatedByStopString, isReasoningLoopGuardEnabled, isTruncatedArguments, normalizeToolArguments, readWithIdleTimeout, reasoningLoopFailure, resolveEmptyResponseReason, resolveToolPairing, splitThinkTaggedContent, stripBareThinkCloseTagIfEnabled, stripCourseLeakFromHistoryContent, stripCourseLeakIfEnabled } from './sse.js'
@@ -588,17 +589,269 @@ function isTransportError(error: unknown): boolean {
  * - 活动期 `Doubao-Seed-2.1-Pro · x0.80→x0.08`（箭头比「（促销 …）」短，适合窄菜单）
  * - 无倍率信息时只显示模型名（**不编造** `x1`）
  */
-export function traeDisplayName(model: TraeRemoteModel): string {
+export function traeDisplayName(model: TraeRemoteModel, now: Date = new Date()): string {
   const rate = model.creditsRate
   if (rate === undefined) return model.name
   // `0` 是**合法**倍率（免费），必须与「没有倍率」区分开。
   const current = rate === 0 ? '免费' : `x${rate}`
-  // 活动折扣：只在解析层已判定「当前生效」时才有 originalCreditsRate。
+  // 活动折扣：`originalCreditsRate` 存在=有活动。但**是否显示箭头**按此刻判：
+  // 闲时窗口外折扣不适用（`traeDiscountActiveNow`），此时写 `x0.80→x0.08`
+  // 会让用户以为现在就是这个价。窗口外只报当前实付价。
   const original = model.originalCreditsRate
-  if (original !== undefined && original > rate) {
+  if (original !== undefined && original > rate && traeDiscountActiveNow(model, now)) {
     return `${model.name} · x${original}→${current}`
   }
   return `${model.name} · ${current}`
+}
+
+/**
+ * 把 TRAE 的折扣块装配成**独立字段** `promo`（与 buddy / qoder 同一契约）。
+ *
+ * ## 上游结构（抓包实测，`display_contact_config` 内的两个块）
+ *
+ * ```json
+ * { "activity_discount": { "enable": true, "subKey": "off_peak_discount",
+ *     "data": { "current": { "discount_type": "none", … },
+ *               "off_peak": { "before": 0.72, "after": 0.36,
+ *                             "time_windows": [ { "start_minute": 0, "end_minute": 480 }, … ] } } },
+ *   "discount": { "enable": true, "subKey": "member_discount",
+ *     "data": { "original_consumption_rate": 0.78, "consumption_rate": 0.39,
+ *               "member_discount": 50, "is_discount_matched": false } } }
+ * ```
+ *
+ * 结构细节（与 qoder / buddy 的差异）见 `readActivityDiscount` 的注释与
+ * `docs/workbuddy-promo-reference.md` 的 TRAE 一节。
+ *
+ * ⚠️ **`subKey` 是权威活动类型**，不是 `data.current.discount_type`——后者
+ * 十有八九是 `none`（闲时段外、非会员本就无折扣），拿它当判据会把真实活动
+ * 全部判成"没有"（这正是上一版全读不到的根因）。
+ *
+ * ⚠️ **`is_discount_matched: false` 不阻止展示**：它只表示"你当前不是会员"，
+ * 官方对免费用户照样挂标（本机日志实测），故照显。
+ *
+ * 与 qoder 的差异：`off_peak` 型**有时段窗口**（`time_windows` 分钟制，这里转成
+ * `HH:MM-HH:MM` 下发）；`limited` 型带 `end_at`（转 `validUntil`）。两者都会
+ * 出现在 `windows` / `validUntil`，不编造。
+ */
+export function traePromoBadge(model: TraeRemoteModel, now: Date = new Date()): PromotionBadge | undefined {
+  const original = model.originalCreditsRate
+  const subKey = model.discountSubKey
+  // 没有折扣块就无徽标（解析层已排除 enable:false / 过期 / 无有效价格）。
+  if (original === undefined || subKey === undefined) return undefined
+  const after = model.discountRate ?? original
+  const effective = after === 0 ? 'x0' : `x${after}`
+  const before = `x${original}`
+  // 折扣档位（`X折`）由倍率反推：官方文案里的 `{fold}` 是运营配的值，响应里没有。
+  const fold = { before: original, after }
+  const label = traeDiscountLabel(subKey, fold)
+  const title = traeDiscountTitle(subKey, fold)
+  // 时段窗口（分钟制 → `HH:MM-HH:MM`）。跨零点由 start>end 表达，转成字符串
+  // 交给客户端按契约渲染（它认 `windows: {start,end}[]`）。
+  const windows = traeWindowsToClock(model.discountWindows)
+  const active = traeDiscountActiveNow(model, now)
+  return {
+    kind: 'discount',
+    // 双段价：`x0.80→x0.08`（与 traeDisplayName 同源，两处口径一致）。
+    price: { effective, original: before },
+    ...label === undefined ? {} : { badgeLabel: label },
+    ...title === undefined ? {} : { hoverText: title },
+    ...windows === undefined || windows.length === 0 ? {} : { windows },
+    // `limited` 型带 `end_at` 截止时间。
+    ...model.discountEndsAtSec === undefined
+      ? {}
+      : { validUntil: new Date(model.discountEndsAtSec * 1000).toISOString() },
+    // ⚠️ **`active` 取"此刻是否真在打折"**，不是一律 true：闲时段外上游把
+    // `data.current` 写成 `none`（before===after），非会员也拿不到会员价
+    // （`is_discount_matched: false`）。这两种情况下折扣**存在但此刻不适用**，
+    // 徽标照挂（官方也挂）但必须灰显 —— 否则 `x0.78→x0.39` 会被读成"我现在
+    // 付 0.39"，正是本仓反复修的「按折扣价预期、实际按原价计费」事故。
+    //
+    // ⚠️ 判据是**按 `now` 重算**（`traeDiscountActiveNow`），不是采集时刻的快照
+    // `model.discountAppliedNow`：后者在 22:00 采集就永远写着"生效"，白天拉取
+    // 的目录留到夜里又永远写着"不生效"。有窗口且能判定时一律以时钟为准，
+    // 缺数据（老 pack / 无窗口）才退回快照；两者皆无按"生效"处理 ——
+    // 宁可少灰一次，也不把在跑的折扣说成没跑。
+    active,
+    status: active ? '错峰' : '常时',
+  }
+}
+
+/**
+ * 推算 TRAE 折扣**此刻是否真的作用在价格上**（`now` 为准）。
+ *
+ * ## 为什么要重算
+ *
+ * 解析层给的 `model.discountAppliedNow` 是**采集那一刻**的快照。目录缓存几小时
+ * 不刷新很常见，于是闲时段采到的"生效"会一路挂到白天，白天采到的会挂整夜。
+ * 这正是 #155 复审指出的 time-decay 缺陷；qoder 侧同款问题用
+ * `qoderEffectivePriceFactor` 修，这里用窗口 + 时钟推。
+ *
+ * ## 保守判定（只在能确定时才推翻快照）
+ *
+ * - `limited` 型：只看 `end_at` 是否已过（过了就不生效）。
+ * - 有窗口：当前墙上时间落在任一槽的 `startMinute..endMinute` 内即为生效；
+ *   `weekdays` 存在时还要今天在名单里。跨零点由 `start > end` 表达。
+ * - 无窗口（`member_discount` 这类本来就与时段无关）：**保留快照**，
+ *   因为"非会员拿不到会员价"这件事时钟推算不出来。
+ *
+ * @returns 生效与否；无任何可判断信息时返回「快照 ?? true」。
+ */
+export function traeDiscountActiveNow(model: TraeRemoteModel, now: Date = new Date()): boolean {
+  const snapshot = model.discountAppliedNow
+  // 活动已结束 → 一定不生效（与解析层"过期不展示"同口径，这里兜底）。
+  if (model.discountEndsAtSec !== undefined && now.getTime() >= model.discountEndsAtSec * 1000) return false
+  const windows = model.discountWindows
+  if (windows === undefined || windows.length === 0) return snapshot ?? true
+  // 分钟制窗口按 **UTC+8** 的墙上时间判定，与 Qoder（`promotionActiveNow`）同口径。
+  // ⚠️ 不能用 `now.getHours()`：那是宿主机本地时区，海外服务器上跑窗口会整体漂移，
+  // 而徽标契约写的 `timezone` 只有一个值，展示端与判定端必须对齐。
+  const utc8 = new Date(now.getTime() + 8 * 3_600_000)
+  const minutesNow = utc8.getUTCHours() * 60 + utc8.getUTCMinutes()
+  // 上游 `weekdays` 为 1..7（1=周一）；`getUTCDay()` 是 0..6（0=周日）。
+  const isoWeekday = ((utc8.getUTCDay() + 6) % 7) + 1
+  // 跨零点窗口的**前半段**（`minutes >= start`）落在开窗日，**后半段**
+  // （`minutes < end`，即次日凌晨）落在次日。weekdays 记的是「开窗那天」，
+  // 所以凌晨那半段必须按**前一天**的星期判定。
+  //
+  // ⚠️ 曾经这里只判 `isoWeekday`：窗口 `[1320, 480]` + `weekdays: [5]`（周五
+  // 22:00 开窗到周六 08:00）在周六 00:30 会被判成「周六不在名单里」而跳过，
+  // 凌晨那一半白丢。分钟翻转处理了、星期翻转没有，是同一个 bug 的两半。
+  const isoWeekdayPrev = isoWeekday === 1 ? 7 : isoWeekday - 1
+  for (const slot of windows) {
+    if (typeof slot.startMinute !== 'number' || typeof slot.endMinute !== 'number') continue
+    const { startMinute: start, endMinute: end } = slot
+    const crossesMidnight = start > end
+    // 命中窗口的哪一半，决定了该拿哪一天的星期去核对。
+    const inSecondHalf = crossesMidnight && minutesNow < end
+    const inFirstHalf = start <= end
+      ? minutesNow >= start && minutesNow < end
+      : minutesNow >= start
+    const hit = inFirstHalf || inSecondHalf
+    if (!hit) continue
+    if (Array.isArray(slot.weekdays) && slot.weekdays.length > 0) {
+      const day = inSecondHalf ? isoWeekdayPrev : isoWeekday
+      if (!slot.weekdays.includes(day)) continue
+    }
+    return true
+  }
+  return false
+}
+
+/**
+ * 分钟制窗口 → 契约的 `HH:MM-HH:MM` 字符串数组。
+ *
+ * 分钟制（`start_minute`/`end_minute`）转 `HH:MM`；`weekdays` 只用于判断
+ * "今天是否适用"，这里不落到展示串（客户端按"现在"实时判定，不需要 weekday
+ * 信息就能显示窗口区间）。
+ *
+ * ⚠️ `end_minute: 1440` 是"到午夜"，必须保留为 `24:00` 而不是折回 `00:00`：
+ * 实测上游的闲时窗口就是 `[0,480] + [1320,1440]`，写成 `22:00-00:00` 会被
+ * 读成"22 点到 0 点已过完"，与 `22:00-24:00` 的观感完全不同。
+ */
+function traeWindowsToClock(
+  windows: readonly { weekdays?: number[]; startMinute: number; endMinute: number }[] | undefined,
+): { start: string; end: string }[] | undefined {
+  if (windows === undefined || windows.length === 0) return undefined
+  const out: { start: string; end: string }[] = []
+  for (const slot of windows) {
+    if (typeof slot.startMinute !== 'number' || typeof slot.endMinute !== 'number') continue
+    const toClock = (minutes: number, isEnd: boolean): string => {
+      // 终点允许 1440 = `24:00`（到午夜）；起点折回当天范围内。
+      if (isEnd && minutes === 1440) return '24:00'
+      const clamped = ((minutes % 1440) + 1440) % 1440
+      const hh = String(Math.floor(clamped / 60)).padStart(2, '0')
+      const mm = String(clamped % 60).padStart(2, '0')
+      return `${hh}:${mm}`
+    }
+    out.push({ start: toClock(slot.startMinute, false), end: toClock(slot.endMinute, true) })
+  }
+  return out.length === 0 ? undefined : out
+}
+
+/**
+ * 活动类型 → TRAE 客户端的**官方短标签**。
+ *
+ * ## 为什么映射只能做在本地
+ *
+ * 这些字串不在上游响应里：它们硬编码在 TRAE 客户端的 i18n 表中
+ * （`@byted-icube/ai-modules-chat/dist/273.*.mjs` 的
+ * `trae-chat-core.model.activity_discount.*`，中/英/日三语并存）。响应只给
+ * `subKey` 这个**类型标识**，故只有本地映射一途。
+ * 实测位置与完整词表见 `docs/workbuddy-promo-reference.md` 的 TRAE 一节。
+ *
+ * ## 五种 subKey（抓包实测 + 本机日志双向核对）
+ *
+ * | `subKey` | 官方标签 | 客户端完整文案 |
+ * |---|---|---|
+ * | `off_peak_discount` | `闲时折扣` | 空闲时段{fold}折，积分消耗从{before}降至{after}。 |
+ * | `off_peak_member_discount` | `闲时折扣` | **非会员用户**仅空闲时段{fold}折：{windows}。 |
+ * | `subsidy_discount` / `subsidy_member_discount` | `专属补贴` | 当前补贴{subsidyFold}折，开通会员享{memberFold}折… |
+ * | `member_discount` | `会员{fold}折` | 会员专享{fold}折，积分消耗从{before}降至{after}。 |
+ * | `limited_discount` | `限时{fold}折` | 限时{fold}折，{endDate}前有效… |
+ *
+ * ⚠️ **`*_member` 与 `member` 不是一回事，这是本表最要紧的区分**：
+ * - `off_peak_member` / `subsidy_member` 的文案是「**你（非会员）现在**能享什么」
+ *   ——这是**给免费用户看**的，故照显；
+ * - `member_discount` 是「会员专享」——但官方对免费用户也照样挂标（本机日志
+ *   实测：`userPayIdentity: 0` 下 GLM-5.2/5.3 仍挂 `member_discount`），且用户
+ *   明确要求对齐官方 UI，故同样照显，文案用官方的「会员X折」。
+ *
+ * 带 `{fold}` 的类型（`member*`）需要一个数字而响应里没有：用 `before/after`
+ * 反推出折扣档位（`after/before = 5/10 → 5折`），推不出就不给标签 —— 不编造。
+ * `limited` 同样给标签（官方是 `限时{fold}折`），数字同上从倍率反推。
+ */
+function traeDiscountLabel(subKey: string | undefined, price?: { before: number; after: number }): string | undefined {
+  switch (subKey) {
+    case 'off_peak_discount':
+    case 'off_peak_member_discount':
+      return '闲时折扣'
+    case 'subsidy_discount':
+    case 'subsidy_member_discount':
+      return '专属补贴'
+    case 'member_discount':
+      return traeFoldLabel('会员', price)
+    case 'limited_discount':
+      return traeFoldLabel('限时', price)
+    // 未知/新增类型：不猜（宁可不带标签，也不编一个官方没说的说法）。
+    default:
+      return undefined
+  }
+}
+
+/**
+ * 从倍率反推「X折」文案：`after/before = 0.5 → 「5折」`。
+ *
+ * ⚠️ **只在能整除出整数折时给数字**：0.15/0.8 = 0.1875 这种推不出干净的档位，
+ * 与其写「1.875折」不如不带标签（官方文案里的 `{fold}` 是运营配的整数）。
+ * 折扣档位的定义是"折后/折前"，与 `discount` 的中文口径一致（5折 = 付一半）。
+ */
+function traeFoldLabel(prefix: string, price: { before: number; after: number } | undefined): string | undefined {
+  if (price === undefined || price.before <= 0) return undefined
+  if (price.after === 0) return `${prefix}免费`
+  const fold = (price.after / price.before) * 10
+  const rounded = Math.round(fold * 10) / 10
+  // 只在接近整数折（含 .5）时采用，避免编出 1.875 折这种没人这么说的数字。
+  if (Math.abs(fold - rounded) > 0.001) return undefined
+  if (rounded <= 0 || rounded >= 10) return undefined
+  return `${prefix}${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}折`
+}
+
+/** 官方悬停标题（`activity_discount.*.title`），用于 tooltip 副标题。 */
+function traeDiscountTitle(
+  subKey: string | undefined,
+  price?: { before: number; after: number },
+): string | undefined {
+  switch (subKey) {
+    case 'off_peak_discount':
+    case 'off_peak_member_discount':
+      return '闲时折扣'
+    case 'limited_discount':
+      return '限时特惠'
+    case 'member_discount':
+      return traeFoldLabel('会员专享', price) ?? '会员专享'
+    default:
+      return undefined
+  }
 }
 
 /**
@@ -818,14 +1071,40 @@ export class TraeAdapter extends LlmAdapter {
    * 每个 id 的**真实展示名（含倍率）**，再自行回填 `disabled` 状态。
    * 对话框模型选择器读的仍是 `listModels`（已过滤），可见性行为不变。
    */
-  listAllModels(): readonly { id: string; name: string }[] {
+  listAllModels(): readonly { id: string; name: string; promo?: PromotionBadge }[] {
     // 过滤逻辑与 `listModels` 的第一、二层一致（usage / config_switch /
     // is_invisible_to_user 已在解析器里剔除；这里再挡 isHidden 与 is_custom_model），
     // **唯一区别是不套用户黑名单**。
     const source = this.remoteModels === undefined
       ? this.staticFallbackModels()
       : this.remoteModels.filter((model) => isTraeModelCallable(model) && model.isHidden !== true)
-    return source.map((model) => ({ id: model.id, name: traeDisplayName(model) }))
+    return source.map((model) => {
+      // 促销走独立字段（与 `listModels` 同源），供设置页画胶囊。
+      // ⚠️ 两处**共用一个 `now`**：`active` 与展示名里的箭头都由它推算，
+      // 各取一次 `new Date()` 在整点/窗口边界上可能得出不一致的组合
+      // （名字带箭头、胶囊却是灰的）。
+      const now = new Date()
+      const promo = traePromoBadge(model, now)
+      return { id: model.id, name: traeDisplayName(model, now), ...promo === undefined ? {} : { promo } }
+    })
+  }
+
+  /**
+   * 确保远端目录已加载（`model.list` 在读行前 await 的这个钩子）。
+   *
+   * ⚠️ **TRAE 特别需要它**：本适配器的静态兜底表（`product.fallbackModels`）只有
+   * `id` / `name` / `contextWindow`，**没有倍率、也没有活动折扣** —— 促销数据
+   * 100% 来自远端 `batch_get_detail_param`。而 `listAllModels()` 按契约是同步的，
+   * 只能读已加载目录；冷启动时它返回静态行，于是设置页既没有倍率箭头、也没有
+   * 促销徽标（实测复现：冷读 0 个 promo，拉取后 5 个）。
+   *
+   * buddy / qoder 不受影响，是因为它们的**产品静态表自带**促销数据。
+   *
+   * 幂等（`ensureRemoteModels` 内部去重）且不抛（失败留给 `listAllModels` 退回
+   * 静态表；设置页不能因为一次目录拉取失败而打不开）。
+   */
+  async ensureCatalog(): Promise<void> {
+    await this.ensureRemoteModels()
   }
 
   async listModels(_provider: string): Promise<readonly LlmModelInfo[]> {
@@ -861,6 +1140,12 @@ export class TraeAdapter extends LlmAdapter {
       provider: this.product.id,
       id: model.id,
       name: model.name,
+      // ⚠️ `promo` 由 `listAllModels()` 算好，这里**必须原样搬**，不能再算一次：
+      // `model` 到这里已经是 `{id, name, promo}` 的**行**（不是 `TraeRemoteModel`），
+      // 没有 `creditsRate`，再调一次 `traePromoBadge(model)` 只会恒得 undefined，
+      // 把上游辛苦解析出来的促销**静默丢掉**（实测：listModels 返回 0 个 promo，
+      // 而 listAllModels 有 5 个）。
+      ...model.promo === undefined ? {} : { promo: model.promo },
       // ⚠️ 逐模型判定（远端 `display_config.multimodal`）—— 早期这里硬编码
       // `['text']`，导致 DSH 在附件准入阶段就拒掉图片（Issue #IKHDKC）。
       inputModalities: this.inputModalitiesFor(model.id),

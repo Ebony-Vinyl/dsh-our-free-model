@@ -697,20 +697,59 @@ export interface TraeRemoteModel {
    */
   creditsRate?: number
   /**
-   * 活动折扣的原价（`activity_discount.data.current.before_consumption_rate`）。
+   * 活动折扣的**原价**（`before_consumption_rate`，见 {@link readActivityDiscount}）。
    *
-   * 只有**当前确实生效**时才填充（见 {@link readActivityDiscount} 的三条判据）。
-   * 与 {@link creditsRate} 配对展示为 `x原价→x折后价`。
+   * 有折扣块就填充（闲时段外也填——官方那时照挂标），不只是"当前生效"时。
+   * 与 {@link discountRate} 配对展示为 `x原价→x折后价`。
    */
   originalCreditsRate?: number
   /**
+   * 活动折扣的**折后价**（`after_consumption_rate` / `consumption_rate`）。
+   *
+   * 与 {@link originalCreditsRate} 同源：可能来自"当前生效"档，也可能来自
+   * 窗口定义块（闲时段外取窗口价，供展示"到点能便宜到多少"）。
+   */
+  discountRate?: number
+  /**
+   * 活动类型（`activity_discount.subKey` / `discount.subKey`，小写）。
+   *
+   * 实测五种：`off_peak_discount`（闲时折扣）、`off_peak_member_discount`
+   * （非会员闲时）、`subsidy_discount` / `subsidy_member_discount`（专属补贴）、
+   * `limited_discount`（限时活动，带 `end_at`）、`member_discount`（会员档位折扣，
+   * 独立块）。**不是** `data.current.discount_type` —— 那个十有八九是 `none`。
+   *
+   * ⚠️ 该字段决定徽标显示哪个**官方中文标签**（文案在 TRAE 客户端 i18n 表里，
+   * 响应中没有，只能本地映射）——详见 `docs/workbuddy-promo-reference.md` 的
+   * TRAE 一节。
+   */
+  discountSubKey?: string
+  /**
+   * 时段窗口（分钟制，`time_windows` 原样），无窗口块时缺省。
+   *
+   * 跨零点由 `startMinute > endMinute` 表达；`weekdays` 为 1..7（1=周一）。
+   */
+  discountWindows?: readonly { weekdays?: number[]; startMinute: number; endMinute: number }[]
+  /**
    * 活动结束时间（Unix **秒**）。
    *
-   * 仅 `limited` 型折扣带该字段（实测 `end_at: 1790265540`）；`subsidy` /
-   * `off_peak` 型没有截止时间。已过期的活动**不展示**折扣价 —— 与 Qoder 的
-   * `promotion.active === false` 同类语义：显示会误导用户按折扣价预期。
+   * 仅 `limited` 型折扣带该字段（实测 `end_at: 1790265540`）；已过期的活动
+   * **不展示**折扣价 —— 与 Qoder 的 `promotion.active === false` 同类语义。
    */
   discountEndsAtSec?: number
+  /**
+   * 会员类折扣：账号是否已匹配（`is_discount_matched`）。
+   *
+   * `false` 表示"你当前不是会员"——**不阻止展示**（官方对免费用户照样挂标），
+   * 但可据此在 tooltip 说明这是会员价。
+   */
+  discountMatched?: boolean
+  /**
+   * 折扣**此刻**是否已作用在实付价上（`readActivityDiscount` 的 `appliedNow`）。
+   *
+   * `false` = 活动存在但此刻不打折（闲时段外 / 非会员拿不到会员价）：徽标照挂
+   * 但灰显，避免用户按折后价预期、实际按原价计费。
+   */
+  discountAppliedNow?: boolean
   /**
    * 用途（`usage`），如 `"chat_completion"`、`"multimodal"` 等。
    *
@@ -981,64 +1020,257 @@ export function readConsumptionRate(entry: Record<string, unknown>): number | un
 }
 
 /**
- * 解析 `activity_discount` —— 只在**当前确实生效**时返回原价与截止时间。
+ * 解析 `display_contact_config` 里的折扣块 —— 对齐**真实响应结构**。
  *
- * ## 为什么不能只看 `enable: true`
+ * ## 真身结构（2026-10-09 抓包实测，`batch_get_detail_param` 全量 605 条）
  *
- * 实测陷阱：`enable` 为 `true` 但**当前并没有折扣**。`off_peak` 型条目形如
- * `{type:"none", before:0.13, after:0.13, discount:100}` —— `discount: 100`
- * 表示「无折扣」（百分比制），`before === after`。若照显会显示
- * `x0.13→x0.13`，让用户以为有活动。这与 Qoder 的 `promotion.active === false`
- * 是同类语义，处理方式也必须一致：**不展示**。
+ * 折扣有**两个**顶层块，都在 `display_contact_config`（一个 JSON **字符串**）里：
  *
- * 三条判据：
- * 1. `activity_discount.enable !== false`；
- * 2. `data.current` 存在，且 `discount_type` **不是 `"none"`**；
- * 3. `before_consumption_rate` 是有限正数，且**严格大于** `after`（真正的降价）。
+ * ```json
+ * // ① activity_discount：活动折扣（闲时 / 补贴 / 限时 / 会员闲时）
+ * { "enable": true, "subKey": "off_peak_member_discount",
+ *   "data": {
+ *     "current": { "discount_type": "none", "before_consumption_rate": 0.15, "consumption_rate": 0.15 },
+ *     "member":  { "before_consumption_rate": 0.15, "after_consumption_rate": 0.08, "discount": 50 },
+ *     "off_peak":{ "before_consumption_rate": 0.15, "after_consumption_rate": 0.08, "discount": 50,
+ *                  "time_windows": [ { "weekdays":[1..7], "start_minute": 0, "end_minute": 480 }, … ] } } }
  *
- * `end_at`（Unix 秒）仅 `limited` 型带；**已过期**时整个折扣视为不存在 ——
- * 否则用户会按折扣价预期、实际被按原价计费。
+ * // ② discount：会员档位折扣（与活动折扣分开的另一块）
+ * { "enable": true, "subKey": "member_discount",
+ *   "data": { "original_consumption_rate": 0.78, "consumption_rate": 0.39,
+ *             "member_discount": 50, "is_discount_matched": false } }
+ * ```
+ *
+ * ## 上一版为什么全读不到（根因）
+ *
+ * 旧实现只读 `data.current`，且要求 `current.discount_type !== "none"`。**实测里
+ * `current` 十有八九就是 `"none"`**（闲时段外、非会员时段外本就无折扣），于是
+ * `before === after`、直接 return undefined —— 真正的折扣信息在 `data.off_peak` /
+ * `data.member` / `data.subsidy` / `data.limited` 这些**窗口定义块**里，旧代码
+ * 一个都没看。`subKey` 才是权威的活动类型，旧代码也完全没用。
+ *
+ * ## 现在怎么判
+ *
+ * 1. **类型取 `subKey`**（`off_peak_discount` / `off_peak_member_discount` /
+ *    `subsidy_member_discount` / `limited_discount` / `member_discount`）——
+ *    它才是客户端 `feature_sub_key` 的同一份值（日志已核对）。
+ * 2. **价格取"当前生效"那一档**：`data.current` 真降价时用它；否则取
+ *    `data.<类型主键>`（`off_peak`/`member`/`subsidy`/`limited`）里的
+ *    `before_consumption_rate → after_consumption_rate`。
+ * 3. **`time_windows` 与 `end_at` 照搬**：前者是分钟制窗口（`weekdays` +
+ *    `start_minute`/`end_minute`），后者是 Unix 秒截止（仅 `limited`）。
+ * 4. **`is_discount_matched: false` 不阻止展示**：那只是"你当前不是会员"，
+ *    而官方对免费用户**照样挂标**（本机日志 `userPayIdentity: 0` 下 GLM 仍有
+ *    member_discount）——我们照显，文案按官方「会员X折」口径。
+ *
+ * ⚠️ **没有 `enable: false` 之外的一刀切**：`discount_type: "none"` 只代表
+ * **当前不生效**，不代表活动不存在。若把它当"没有活动"，闲时段外就永远看不到
+ * 「闲时折扣」的标——而官方客户端恰恰在此时也挂着它。
  */
 export function readActivityDiscount(
   entry: Record<string, unknown>,
   nowSec: number = Math.floor(Date.now() / 1000),
-): { originalRate: number; endsAtSec?: number } | undefined {
+): TraeActivityDiscount | undefined {
   const raw = entry.display_contact_config ?? entry.DisplayContactConfig
   if (typeof raw !== 'string' || raw.length === 0) return undefined
   const config = parseJsonObject(raw)
   if (config === undefined) return undefined
-  const discount = config.activity_discount ?? config.ActivityDiscount
-  if (typeof discount !== 'object' || discount === null) return undefined
-  const discountRecord = discount as Record<string, unknown>
-  if (readBooleanField(discountRecord, 'enable') === false) return undefined
-  const data = discountRecord.data ?? discountRecord.Data
+
+  // ① 活动折扣（闲时/补贴/限时）
+  const activity = config.activity_discount ?? config.ActivityDiscount
+  const fromActivity = readDiscountBlock(activity, ACTIVITY_KIND_KEYS, nowSec)
+  if (fromActivity !== undefined) return fromActivity
+
+  // ② 会员档位折扣（独立块）
+  const member = config.discount ?? config.Discount
+  const fromMember = readDiscountBlock(member, MEMBER_KIND_KEYS, nowSec)
+  if (fromMember !== undefined) return fromMember
+
+  return undefined
+}
+
+/**
+ * 一个折扣块的读取结果（`activity_discount` 与 `discount` 共用）。
+ *
+ * `subKey` 是权威活动类型；`before`/`after` 是**展示用的两段价格**（当前生效价
+ * 优先，其次窗口定义价）；`matched` 表示"当前账号身份是否已匹配"（`member` 系）。
+ */
+export interface TraeActivityDiscount {
+  originalRate: number
+  discountRate: number
+  /** `off_peak` / `off_peak_member` / `subsidy` / `subsidy_member` / `limited` / `member`。 */
+  subKey: string
+  /**
+   * 折扣**此刻**是否已作用在价格上：`data.current` 给出了一次真降价。
+   *
+   * ⚠️ 这是"该不该灰显"的权威判据。闲时段外上游把 `current` 写成 `none`
+   * （before === after），此时折扣只存在于窗口定义块里、**此刻并不生效**；
+   * 徽标仍要显示（官方也显示），但必须灰显，否则用户会按折后价预期、
+   * 实际被按原价计费（与 buddy 的「白天显示免费」同款事故）。
+   */
+  appliedNow: boolean
+  /** 分钟制时段窗口（`[{weekdays, startMinute, endMinute}]`），无窗口块时缺省。 */
+  windows?: readonly { weekdays?: number[]; startMinute: number; endMinute: number }[]
+  /** `limited` 型的截止（Unix 秒）。 */
+  endsAtSec?: number
+  /** 会员类折扣：账号是否已匹配（`is_discount_matched`）。 */
+  matched?: boolean
+}
+
+/**
+ * `subKey` → `data` 里的窗口定义块键名。
+ *
+ * 实测五种的块名：`off_peak_discount` → `off_peak`、`off_peak_member_discount`
+ * → `off_peak`（外加 `member`）、`subsidy_member_discount` → `subsidy`（外加
+ * `member`）、`limited_discount` → `limited`、`member_discount` → `member`。
+ */
+const ACTIVITY_KIND_KEYS: Readonly<Record<string, string>> = {
+  off_peak_discount: 'off_peak',
+  off_peak_member_discount: 'off_peak',
+  subsidy_discount: 'subsidy',
+  subsidy_member_discount: 'subsidy',
+  limited_discount: 'limited',
+}
+/** `discount`（会员）块的窗口键名（`member`），字段名也不同（`original_consumption_rate`）。 */
+const MEMBER_KIND_KEYS: Readonly<Record<string, string>> = {
+  member_discount: 'member',
+}
+
+/** 读一个折扣块（`activity_discount` 或 `discount`），产出统一结构。 */
+function readDiscountBlock(
+  block: unknown,
+  kindKeys: Readonly<Record<string, string>>,
+  nowSec: number,
+): TraeActivityDiscount | undefined {
+  if (typeof block !== 'object' || block === null) return undefined
+  const record = block as Record<string, unknown>
+  if (readBooleanField(record, 'enable') === false) return undefined
+  const subKey = readStringField(record, 'subKey') || readStringField(record, 'sub_key')
+  if (subKey === '') return undefined
+  const data = record.data ?? record.Data
   if (typeof data !== 'object' || data === null) return undefined
   const dataRecord = data as Record<string, unknown>
+
+  // 窗口定义块（`data.<subKey 主键>`）—— 真正的折扣信息在这。
+  const windowKey = kindKeys[subKey]
+  const windowBlock = windowKey === undefined ? undefined : dataRecord[windowKey]
   const current = dataRecord.current ?? dataRecord.Current
-  if (typeof current !== 'object' || current === null) return undefined
-  const currentRecord = current as Record<string, unknown>
-  // `discount_type: "none"` = 当前无活动（实测 off_peak 型即为此）。
-  const type = (readStringField(currentRecord, 'discount_type')
-    || readStringField(currentRecord, 'discountType')).trim().toLowerCase()
-  if (type.length === 0 || type === 'none') return undefined
-  const before = readNumberField(currentRecord, 'before_consumption_rate')
-    ?? readNumberField(currentRecord, 'beforeConsumptionRate')
-  const after = readNumberField(currentRecord, 'consumption_rate')
-    ?? readNumberField(currentRecord, 'consumptionRate')
-  // 必须是真的降价：before 有值、为正、且严格大于 after。
-  if (before === undefined || before <= 0) return undefined
-  if (after !== undefined && before <= after) return undefined
-  // 截止时间：取 data 下任意带 end_at 的子对象（limited / 未来的新活动类型）。
-  let endsAtSec: number | undefined
-  for (const value of Object.values(dataRecord)) {
-    if (typeof value !== 'object' || value === null) continue
-    const end = readNumberField(value as Record<string, unknown>, 'end_at')
-      ?? readNumberField(value as Record<string, unknown>, 'endAt')
-    if (end !== undefined && end > 0) { endsAtSec = end; break }
+  const currentRecord = typeof current === 'object' && current !== null
+    ? current as Record<string, unknown>
+    : undefined
+
+  // 两段价：优先 `current`（当前真降价时），否则窗口块里的 before/after。
+  let before: number | undefined
+  let after: number | undefined
+  // ⚠️ 价格**从哪来**决定它此刻是否生效：来自 `current` 的是"现在就在打折"，
+  // 来自窗口定义块的只是"到点会打成这个价"。徽标据此灰显（见 appliedNow）。
+  let appliedNow = false
+  if (currentRecord !== undefined) {
+    const curBefore = readNumberField(currentRecord, 'before_consumption_rate')
+      ?? readNumberField(currentRecord, 'beforeConsumptionRate')
+    const curAfter = readNumberField(currentRecord, 'consumption_rate')
+      ?? readNumberField(currentRecord, 'consumptionRate')
+    if (curBefore !== undefined && curAfter !== undefined && curBefore > curAfter) {
+      before = curBefore
+      after = curAfter
+      appliedNow = true
+    }
   }
-  // 已过期的活动不再是「当前生效」。
-  if (endsAtSec !== undefined && endsAtSec <= nowSec) return undefined
-  return endsAtSec === undefined ? { originalRate: before } : { originalRate: before, endsAtSec }
+  if (before === undefined && windowBlock !== undefined && typeof windowBlock === 'object') {
+    before = readNumberField(windowBlock as Record<string, unknown>, 'before_consumption_rate')
+      ?? readNumberField(windowBlock as Record<string, unknown>, 'beforeConsumptionRate')
+    after = readNumberField(windowBlock as Record<string, unknown>, 'after_consumption_rate')
+      ?? readNumberField(windowBlock as Record<string, unknown>, 'afterConsumptionRate')
+  }
+  // 会员块（`discount`）字段名不同：`original_consumption_rate` / `consumption_rate`。
+  if (before === undefined) {
+    before = readNumberField(dataRecord, 'original_consumption_rate')
+      ?? readNumberField(dataRecord, 'originalConsumptionRate')
+    after = readNumberField(dataRecord, 'consumption_rate')
+      ?? readNumberField(dataRecord, 'consumptionRate')
+  }
+  // ⚠️ **未知 subKey 的兜底**：类型不认识时，它的窗口块名同样不在映射表里，
+  // 上面三条都取不到价。与其整个活动丢掉，不如扫一遍 `data` 找**任意**一个
+  // 带 before/after 的块 —— 拿得到价格就照常渲染（只是没有标签，见
+  // `traeDiscountLabel` 的 default 分支：不编官方没说的说法）。
+  // 兜底块同时供 `time_windows` 与 `end_at` 读取（未来的时段型活动不该丢窗口）。
+  let fallbackBlock: Record<string, unknown> | undefined
+  if (before === undefined) {
+    for (const [name, value] of Object.entries(dataRecord)) {
+      // `current` 在上面按"真降价"判据处理过；走到这里说明它不构成降价，
+      // 不能再拿它的 `consumption_rate`（那是未打折价）当折后价。
+      if (name === 'current' || name === 'Current') continue
+      if (value === null || typeof value !== 'object') continue
+      const record = value as Record<string, unknown>
+      const candidateBefore = readNumberField(record, 'before_consumption_rate')
+        ?? readNumberField(record, 'beforeConsumptionRate')
+      if (candidateBefore === undefined) continue
+      before = candidateBefore
+      after = readNumberField(record, 'after_consumption_rate')
+        ?? readNumberField(record, 'consumptionRate')
+      fallbackBlock = record
+      break
+    }
+  }
+  if (before === undefined || before <= 0) return undefined
+  // `after` 缺失时视作与 before 相同（没有可展示的降价）。
+  const discountRate = after === undefined ? before : after
+
+  // 兜底块也算"窗口块"：未知类型扫到的那个块，它的 time_windows / end_at 一并认。
+  const effectiveWindowBlock = windowBlock ?? fallbackBlock
+
+  // 时段窗口（分钟制）。跨零点由 `startMinute > endMinute` 表达，消费端处理。
+  const windows = readTimeWindows(effectiveWindowBlock)
+
+  // 截止时间：`limited` 块带 `end_at`；已过期视作活动不存在。
+  let endsAtSec: number | undefined
+  const endAtSource = typeof effectiveWindowBlock === 'object' && effectiveWindowBlock !== null
+    ? effectiveWindowBlock as Record<string, unknown>
+    : dataRecord
+  const end = readNumberField(endAtSource, 'end_at') ?? readNumberField(endAtSource, 'endAt')
+  if (end !== undefined && end > 0) {
+    if (end <= nowSec) return undefined
+    endsAtSec = end
+  }
+  const matched = readBooleanField(dataRecord, 'is_discount_matched')
+  // ⚠️ 会员块的"此刻是否生效"由 `is_discount_matched` 说了算：false 表示
+  // **当前账号拿不到这个价**（实付仍是 `consumption_rate.data.rate`）。此时
+  // 徽标照挂（官方也挂，且文案本就是"升级会员享…"），但必须灰显 ——
+  // 否则 `x0.78→x0.39` 会被读成"我现在付 0.39"，正是本仓反复修的
+  // 「按折扣价预期、实际按原价计费」事故。
+  const applied = appliedNow || (matched === undefined ? false : matched)
+  return {
+    originalRate: before,
+    discountRate,
+    subKey,
+    appliedNow: applied,
+    ...windows === undefined ? {} : { windows },
+    ...endsAtSec === undefined ? {} : { endsAtSec },
+    ...matched === undefined ? {} : { matched },
+  }
+}
+
+/** 读 `time_windows`（分钟制），无有效窗口时 undefined。 */
+function readTimeWindows(
+  block: unknown,
+): { weekdays?: number[]; startMinute: number; endMinute: number }[] | undefined {
+  if (block === null || typeof block !== 'object') return undefined
+  const windows = (block as Record<string, unknown>).time_windows
+    ?? (block as Record<string, unknown>).timeWindows
+  if (!Array.isArray(windows)) return undefined
+  const out: { weekdays?: number[]; startMinute: number; endMinute: number }[] = []
+  for (const slot of windows) {
+    if (slot === null || typeof slot !== 'object') continue
+    const record = slot as Record<string, unknown>
+    const start = readNumberField(record, 'start_minute') ?? readNumberField(record, 'startMinute')
+    const end = readNumberField(record, 'end_minute') ?? readNumberField(record, 'endMinute')
+    if (start === undefined || end === undefined) continue
+    const weekdays = Array.isArray(record.weekdays)
+      ? record.weekdays.filter((day): day is number => typeof day === 'number')
+      : undefined
+    out.push({ startMinute: start, endMinute: end, ...weekdays === undefined || weekdays.length === 0 ? {} : { weekdays } })
+  }
+  return out.length === 0 ? undefined : out
 }
 
 /** 宽松解析 JSON 对象字符串；非对象（数组/标量/非法 JSON）返回 undefined。 */
@@ -1117,7 +1349,12 @@ function parseTraeConfigEntry(
     ...maxOutputTokens === undefined ? {} : { maxOutputTokens },
     ...creditsRate === undefined ? {} : { creditsRate },
     ...discount === undefined ? {} : { originalCreditsRate: discount.originalRate },
+    ...discount === undefined ? {} : { discountRate: discount.discountRate },
+    ...discount === undefined ? {} : { discountSubKey: discount.subKey },
+    ...discount?.windows === undefined ? {} : { discountWindows: discount.windows },
     ...discount?.endsAtSec === undefined ? {} : { discountEndsAtSec: discount.endsAtSec },
+    ...discount?.matched === undefined ? {} : { discountMatched: discount.matched },
+    ...discount === undefined ? {} : { discountAppliedNow: discount.appliedNow },
   }
 }
 
