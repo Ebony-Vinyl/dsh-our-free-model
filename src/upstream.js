@@ -118,6 +118,143 @@ const RESPONSES_MODELS = new Set(['muse-spark-1.2-contributor-free', 'muse-spark
 /** Models served by the Anthropic-shaped /messages endpoint. */
 const MESSAGES_MODELS = new Set(['union-alpha'])
 
+/**
+ * The tool-name alphabet the legacy gate accepts.
+ *
+ * Measured 2026-10-19 against `/zen/v1/chat/completions`: declaring a tool named
+ * `mcp:rea:read_file` is answered with **HTTP 400 and an empty body**, while the
+ * same request with the colon spelled `_` streams normally (and a 128-character
+ * name is accepted). The gate publishes no schema, so the allow-list stays the
+ * conservative [OI] function-name alphabet. Anything outside it is rewritten
+ * before the request leaves and restored on the way out, so a caller's own
+ * spelling — Zed's `mcp:rea:*` tools are the common case — keeps working.
+ */
+const TOOL_NAME_SAFE = /^[A-Za-z0-9_-]+$/
+
+/** Rewrite one tool name into the gate's alphabet, keeping it recognisable. */
+export function sanitizeToolName(name) {
+  const raw = String(name ?? '').trim()
+  if (raw === '') return 'tool'
+  const flattened = raw.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '')
+  const bounded = (flattened === '' ? 'tool' : flattened).slice(0, MAX_TOOL_NAME_LEN)
+  return bounded === '' ? 'tool' : bounded
+}
+
+function nameHash(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 6)
+}
+
+/**
+ * Assign every name that will travel upstream a spelling the gate accepts.
+ *
+ * Valid names keep their spelling and are reserved **first**, so a rewritten name
+ * can never steal one that the caller really declared. Two rewritten names that
+ * flatten to the same base are separated by a digest suffix: the suffix is
+ * derived from the original, so the same tool maps to the same wire name on every
+ * request — history that refers to a call must keep resolving to it.
+ *
+ * @returns {Map<string, string>} original spelling -> wire spelling (identity
+ *   names included, so callers can look every name up)
+ */
+function planToolNames(names) {
+  const claimed = new Map()
+  const planned = new Map()
+  for (const name of names) {
+    if (name.length <= MAX_TOOL_NAME_LEN && TOOL_NAME_SAFE.test(name)) claimed.set(name, name)
+  }
+  for (const name of names) {
+    if (planned.has(name)) continue
+    if (name.length <= MAX_TOOL_NAME_LEN && TOOL_NAME_SAFE.test(name)) {
+      planned.set(name, name)
+      continue
+    }
+    const base = sanitizeToolName(name)
+    let candidate = base
+    let owner = claimed.get(candidate)
+    if (owner !== undefined && owner !== name) {
+      let suffix = `_${nameHash(name)}`
+      candidate = `${base.slice(0, Math.max(1, MAX_TOOL_NAME_LEN - suffix.length))}${suffix}`
+      let n = 2
+      while (claimed.has(candidate) && claimed.get(candidate) !== name) {
+        suffix = `_${nameHash(name)}${n}`
+        candidate = `${base.slice(0, Math.max(1, MAX_TOOL_NAME_LEN - suffix.length))}${suffix}`
+        n += 1
+      }
+    }
+    claimed.set(candidate, name)
+    planned.set(name, candidate)
+  }
+  return planned
+}
+
+/** Every tool name a history already refers to, in wire order. */
+function historyToolNames(body, { claude, flat }) {
+  const names = []
+  if (claude) {
+    for (const message of Array.isArray(body.messages) ? body.messages : []) {
+      for (const block of Array.isArray(message?.content) ? message.content : []) {
+        if (block?.type === 'tool_use' && typeof block.name === 'string') names.push(block.name)
+      }
+    }
+    return names
+  }
+  if (flat) {
+    for (const item of Array.isArray(body.input) ? body.input : []) {
+      if (item?.type === 'function_call' && typeof item.name === 'string') names.push(item.name)
+    }
+    return names
+  }
+  for (const message of Array.isArray(body.messages) ? body.messages : []) {
+    for (const call of Array.isArray(message?.tool_calls) ? message.tool_calls : []) {
+      if (typeof call?.function?.name === 'string') names.push(call.function.name)
+    }
+  }
+  return names
+}
+
+/** Rewrite the names a history refers to, so a call and its declaration agree. */
+function rewriteHistoryToolNames(body, { claude, flat }, forward) {
+  const rename = value => forward.get(value) ?? value
+  if (claude) {
+    for (const message of Array.isArray(body.messages) ? body.messages : []) {
+      for (const block of Array.isArray(message?.content) ? message.content : []) {
+        if (block?.type === 'tool_use' && typeof block.name === 'string') block.name = rename(block.name)
+      }
+    }
+    return
+  }
+  if (flat) {
+    for (const item of Array.isArray(body.input) ? body.input : []) {
+      if (item?.type === 'function_call' && typeof item.name === 'string') item.name = rename(item.name)
+    }
+    return
+  }
+  for (const message of Array.isArray(body.messages) ? body.messages : []) {
+    for (const call of Array.isArray(message?.tool_calls) ? message.tool_calls : []) {
+      if (typeof call?.function?.name === 'string') call.function.name = rename(call.function.name)
+    }
+  }
+}
+
+/** The tool name a `tool_choice` pins, when it pins one. */
+function choiceToolName(body, { claude, flat }) {
+  const choice = body.tool_choice
+  if (choice === null || typeof choice !== 'object') return ''
+  if (claude || flat) return typeof choice.name === 'string' ? choice.name : ''
+  return typeof choice.function?.name === 'string' ? choice.function.name : ''
+}
+
+/** Keep a pinned `tool_choice` pointing at the tool it named. */
+function rewriteChoiceToolName(body, { claude, flat }, forward) {
+  const choice = body.tool_choice
+  if (choice === null || typeof choice !== 'object') return
+  if (claude || flat) {
+    if (typeof choice.name === 'string') choice.name = forward.get(choice.name) ?? choice.name
+    return
+  }
+  if (typeof choice.function?.name === 'string') choice.function.name = forward.get(choice.function.name) ?? choice.function.name
+}
+
 export const SESSION_RE = /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/
 
 /**
@@ -381,27 +518,62 @@ function noteInjectedTools(body, { claude, flat }, names) {
 }
 
 /**
- * Satisfy the legacy free-tier fingerprint gate on `body.tools`.
+ * Satisfy the legacy free-tier fingerprint gate on `body.tools`, and give every
+ * name that travels upstream a spelling the gate accepts.
  *
  * ## v1.3.7 rules
  *
- * 1. `bash` and `read` must be declared; the gate only checks names and accepts
- *    lightweight stubs (`{type:'object', properties:{}}`).
- * 2. The caller's tools are preserved untouched, including a `read`/`bash` the
- *    caller declared with its own schema — the legacy gate does not compare
- *    definitions, so there is nothing to rename or rewrite.
+ * 1. `bash`, `edit`, `glob`, `grep` and `read` must be declared; the gate only
+ *    checks names and accepts lightweight stubs (`{type:'object', properties:{}}`).
+ * 2. The caller's tools keep their definitions. A tool the caller really declared
+ *    under a gate name is not duplicated.
  * 3. Missing gate names are appended as stubs and the model is told they do
  *    nothing.
+ * 4. A name outside the gate's alphabet is rewritten, not dropped: `mcp:rea:*`
+ *    is a 400 with an empty body, so the declaration, the history that refers to
+ *    it and any pinned `tool_choice` are rewritten together, and the returned map
+ *    restores the caller's spelling on the response.
  *
  * @param {object} body - request body, mutated in place
  * @param {boolean|'claude'} style - true 为 Responses，false 为 Chat，claude 为 Messages
- * @returns {Map<string, string>} always empty on this lane (kept for callers)
+ * @returns {Map<string, string>} wire spelling -> caller spelling, for
+ *   {@link restoreToolName}; empty when no name had to be rewritten
  */
 export function applyFingerprint(body, style) {
   const flat = style === true
   const claude = style === 'claude'
   const shape = { claude, flat }
   const tools = Array.isArray(body.tools) ? body.tools : []
+
+  // Every spelling the request will mention, in a deterministic order: declared
+  // tools first, then what the history already refers to, then a pinned choice.
+  const order = []
+  const seen = new Set()
+  const add = name => {
+    const value = String(name ?? '').trim()
+    if (value === '' || seen.has(value)) return
+    seen.add(value)
+    order.push(value)
+  }
+  for (const tool of tools) add(toolNameOf(tool))
+  for (const name of historyToolNames(body, shape)) add(name)
+  add(choiceToolName(body, shape))
+
+  const forward = planToolNames(order)
+  const renameMap = new Map()
+  for (const [original, wire] of forward) if (wire !== original) renameMap.set(wire, original)
+
+  for (const tool of tools) {
+    const name = toolNameOf(tool)
+    if (name === '') continue
+    const wire = forward.get(name) ?? name
+    if (wire === name) continue
+    if (claude || flat || tool.function === undefined) tool.name = wire
+    else tool.function.name = wire
+  }
+  rewriteHistoryToolNames(body, shape, forward)
+  rewriteChoiceToolName(body, shape, forward)
+
   const present = new Set(tools.map(toolNameOf).filter(name => FINGERPRINT_TOOLS.includes(name)))
   const out = [...tools]
   const injected = []
@@ -414,7 +586,7 @@ export function applyFingerprint(body, style) {
 
   body.tools = out
   if (injected.length > 0) noteInjectedTools(body, shape, injected)
-  return new Map()
+  return renameMap
 }
 
 /** Restore the caller's tool spelling in a streaming delta or a final payload. */

@@ -100,5 +100,66 @@ console.log('\n=== 7. the injected definitions are the v1.3.7 stubs ===')
   check('restoring with an empty map is a no-op', restoreToolName('read', new Map()), 'read')
 }
 
+console.log('\n=== 8. names outside the gate alphabet are rewritten, not dropped ===')
+{
+  const body = {
+    tools: [chatTool('mcp:rea:read_file'), chatTool('read_file')],
+    messages: [
+      { role: 'user', content: 'baca' },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'mcp:rea:read_file', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'call_1', content: 'isi' },
+    ],
+    tool_choice: { type: 'function', function: { name: 'mcp:rea:read_file' } },
+  }
+  const map = applyFingerprint(body, false)
+  check('the colon name becomes an accepted spelling', declared(body).slice(0, 2), ['mcp_rea_read_file', 'read_file'])
+  check('the caller name that was already valid is untouched', declared(body)[1], 'read_file')
+  check('the history refers to the same wire name', body.messages.find(message => message.role === 'assistant').tool_calls[0].function.name, 'mcp_rea_read_file')
+  check('a pinned tool_choice is retargeted', body.tool_choice.function.name, 'mcp_rea_read_file')
+  check('the map restores the caller spelling', restoreToolName('mcp_rea_read_file', map), 'mcp:rea:read_file')
+  check('a valid name is not aliased', map.has('read_file'), false)
+  check('every declaration is accepted by the gate', declared(body).every(name => /^[A-Za-z0-9_-]{1,128}$/.test(name)), true)
+}
+
+console.log('\n=== 9. two names that flatten alike stay distinct ===')
+{
+  const body = { tools: [chatTool('a:b'), chatTool('a_b'), chatTool('a b')] }
+  const map = applyFingerprint(body, false)
+  const names = declared(body).slice(0, 3)
+  check('three declarations, three distinct wire names', new Set(names).size, 3)
+  check('the caller-declared a_b keeps its spelling', names.includes('a_b'), true)
+  check('each rewritten name restores to its own original', [restoreToolName(names[0], map), restoreToolName(names[2], map)].sort(), ['a b', 'a:b'])
+  check('the mapping is stable across calls', (() => {
+    const again = { tools: [chatTool('a:b'), chatTool('a_b'), chatTool('a b')] }
+    applyFingerprint(again, false)
+    return JSON.stringify(declared(again).slice(0, 3)) === JSON.stringify(names)
+  })(), true)
+}
+
+console.log('\n=== 10. the Claude and Responses wires rewrite their own shapes ===')
+{
+  const claude = {
+    tools: [claudeTool('mcp:rea:grep')],
+    messages: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp:rea:grep', input: {} }] }],
+    tool_choice: { type: 'tool', name: 'mcp:rea:grep' },
+  }
+  const claudeMap = applyFingerprint(claude, 'claude')
+  check('claude declarations are rewritten', declared(claude)[0], 'mcp_rea_grep')
+  check('claude history blocks are rewritten', claude.messages[0].content[0].name, 'mcp_rea_grep')
+  check('claude tool_choice is rewritten', claude.tool_choice.name, 'mcp_rea_grep')
+  check('claude restores the caller spelling', restoreToolName('mcp_rea_grep', claudeMap), 'mcp:rea:grep')
+
+  const flat = {
+    tools: [flatTool('mcp:rea:skill')],
+    input: [{ type: 'function_call', call_id: 'c1', name: 'mcp:rea:skill', arguments: '{}' }],
+    tool_choice: { type: 'function', name: 'mcp:rea:skill' },
+  }
+  const flatMap = applyFingerprint(flat, true)
+  check('responses declarations are rewritten', declared(flat)[0], 'mcp_rea_skill')
+  check('responses input items are rewritten', flat.input[0].name, 'mcp_rea_skill')
+  check('responses tool_choice is rewritten', flat.tool_choice.name, 'mcp_rea_skill')
+  check('responses restores the caller spelling', restoreToolName('mcp_rea_skill', flatMap), 'mcp:rea:skill')
+}
+
 console.log(failures === 0 ? '\nall fingerprint checks passed' : `\n${failures} fingerprint check(s) failed`)
 process.exitCode = failures === 0 ? 0 : 1
