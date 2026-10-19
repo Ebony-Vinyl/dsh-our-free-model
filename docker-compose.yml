@@ -1,0 +1,15 @@
+services:
+  ofm-standalone:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/poboll/dsh-our-free-model:standalone
+    # standalone 服务仅绑定 127.0.0.1（代码限制），用 host 网络在宿主机 127.0.0.1:18900 访问。
+    # 注意：network_mode: host 仅 Linux 生效；macOS/Windows 桌面端请用官方桌面安装包。
+    network_mode: host
+    volumes:
+      - ofm-data:/data
+    restart: unless-stopped
+
+volumes:
+  ofm-data:
