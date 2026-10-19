@@ -974,3 +974,56 @@ tetap jalan.
 UI tidak menghapusnya karena `stores.settings.update(patch)` hanya menggabung.
 - Belum di-commit. HEAD masih `f57126a`.
 4. Catatan front end Bahasa Indonesia sudah tercatat di §26 — tidak berubah.
+
+---
+
+## 44. Pembersihan working tree (2026-10-19)
+
+Working tree dibersihkan dari **19 artefak untracked** (15 di root + 4 di `scripts/`).
+Tidak ada perubahan pada `src/`, sehingga **gateway tidak perlu di-restart**.
+
+### 44.1 Dihapus (sampah)
+
+| Berkas | Alasan |
+|---|---|
+| `hapus` | 0 byte, nama tidak bermakna |
+| `nul` | 127 byte, sisa redirect `dir` yang gagal (`cannot access ...`) |
+
+### 44.2 Dipindahkan ke `tools/` (helper operasional)
+
+`backup-data.bat`, `backup-data.mjs`, `ofm-bench.mjs`, `ofm-bench-results.json`,
+`ofm-check-cred.ps1`, `ofm-dump-zed-creds.ps1`, `ofm-register-zed-provider.mjs`,
+`ofm-repair.ps1`, `ofm-sync-zed.mjs`.
+
+- `tools/ofm-bench.mjs` menulis hasil ke `tools/ofm-bench-results.json` karena
+  memakai `new URL('./ofm-bench-results.json', import.meta.url)` — pasangan ini
+  harus tetap satu folder.
+- `tools/ofm-sync-zed.mjs` **hanya referensi, jangan dijalankan**: ia menimpa
+  blok provider dan menghapus `images:true` / `reasoning_effort`.
+
+### 44.3 Tetap di root (launcher operasional)
+
+`ofm-standalone.cmd`, `ofm-standalone-run.cmd`, `ofm-standalone-hidden.vbs`.
+
+`ofm-standalone-hidden.vbs` memakai path absolut `D:\Aset\dsh-ofm\ofm-standalone-run.cmd`,
+sehingga ketiganya **harus tetap di root** agar prosedur restart (§7 / §43.4) valid.
+
+### 44.4 Diarsipkan
+
+`HANDOVER-2026-10-18-AGENT-STOP.md` → `docs/handover/2026-10-18-agent-stop.md`.
+
+### 44.5 Probe diagnostik di-commit
+
+`scripts/ofm-probe-colon-history.mjs`, `scripts/ofm-probe-model-id.mjs`,
+`scripts/ofm-probe-zed-messages.mjs`, `scripts/ofm-probe-zed-schema.mjs`.
+
+### 44.6 `.gitignore`
+
+Ditambahkan entri root-only: `/nul`, `/hapus`, `/commit-msg.tmp`.
+
+### 44.7 Status
+
+- Label `· sementara` pada `deepseek-v4.1-flash-free`, `big-pickle`,
+  `glm-5.3-flash-free` **tidak diubah**.
+- Front end Bahasa Indonesia **tidak diubah**.
+- Gateway tetap PID 65596, `forwardKey` tidak berubah.
