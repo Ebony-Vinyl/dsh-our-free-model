@@ -1,5 +1,5 @@
 {
-  "version": "2.5.3",
+  "version": "2.5.4",
   "algorithm": "sha256",
   "files": [
     {
@@ -14,8 +14,8 @@
     },
     {
       "path": "client.js",
-      "size": 496736,
-      "sha256": "7a4377571cbdd707704a08b92ea2b0b64bf6a3cb4aa00ee89eb73b9d211f6353"
+      "size": 602272,
+      "sha256": "e161a2dfb1f5bf30f741104dc986217ef34ea2fe2312944ea5a30ddc9713585c"
     },
     {
       "path": "cordis.patch.yml",
@@ -50,7 +50,7 @@
     {
       "path": "package.json",
       "size": 2986,
-      "sha256": "a0a1b5d5f8b51533535d4e67e677098fc80694b5f544a99d6e12a13ca5103cb2"
+      "sha256": "130d55802fad1fb0ee6a1c7a3edfc79567c87cf33cccd89bff8bebdfb3caf6cc"
     },
     {
       "path": "src/adapter.js",
@@ -221,6 +221,16 @@
       "path": "src/route/classify.js",
       "size": 28738,
       "sha256": "9123be50f8284a9a8735abac7c0e541e726fdfdce1de9aab841e4e5bbe348e17"
+    },
+    {
+      "path": "src/sponsor.css",
+      "size": 10528,
+      "sha256": "ce751e456ff4b0ddad7979fa0fc9c6e27f19244c0d9e3912611a8f493d923293"
+    },
+    {
+      "path": "src/sponsor.js",
+      "size": 15009,
+      "sha256": "c986e270842448dc798015f717aee73aff7bf580bdbab9ad49feb44a1ec4312f"
     },
     {
       "path": "src/store.js",

@@ -2,6 +2,18 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-19-v2.5.4-release",
+      "title": "v2.5.4：优化新桌面端，优化插件端 UI 和广告",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-19T04:30:00Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.4",
+        "label": "查看更新说明与下载"
+      },
+      "html": "<p><b>2.5.4 优化新桌面端和插件端 UI，并完善广告展示。</b></p><ul><li>桌面端完善赞助入口、浅色与深色主题及窄窗口显示。</li><li>插件端增加「来自赞助商的广告」菜单，完整说明和附图可随时查看。</li><li>每日公告按本地日期展示一次，可随时收起；修复宿主设置弹窗中无法展示公告的问题，Esc 只收起公告并将焦点返回菜单。</li></ul><p>插件、独立服务和 Windows 桌面端统一更新至 <b>2.5.4</b>。托管安装请更新可信 tarball；Windows 用户请先退出托盘中的旧程序，再安装新版。</p>"
+    },
+    {
       "id": "2026-10-18-v2.5.3-eac-wait",
       "title": "v2.5.3 紧急修复：移除 EAC 60 秒无输出截止",
       "level": "update",

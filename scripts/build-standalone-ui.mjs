@@ -1,4 +1,5 @@
 /** 从独立端源码生成全部本地资源；检查模式不写文件。 */
+import './build-sponsor.mjs'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import { pathToFileURL, fileURLToPath } from 'node:url'

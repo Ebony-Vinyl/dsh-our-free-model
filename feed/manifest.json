@@ -1,8 +1,8 @@
 {
-  "version": "2.5.3",
+  "version": "2.5.4",
   "base": "../",
-  "publishedAt": "2026-10-18T01:56:45.910Z",
-  "notes": "",
+  "publishedAt": "2026-10-19T04:24:47.520Z",
+  "notes": "优化新桌面端，优化插件端 UI 和广告：完善浅色、深色及窄窗口显示，新增赞助广告入口与每日公告，修复宿主设置弹窗中的公告展示和 Esc 收起行为。",
   "files": [
     {
       "path": "adapter/dsh-llm.d.ts",
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 496736,
-      "sha256": "7a4377571cbdd707704a08b92ea2b0b64bf6a3cb4aa00ee89eb73b9d211f6353"
+      "size": 602272,
+      "sha256": "e161a2dfb1f5bf30f741104dc986217ef34ea2fe2312944ea5a30ddc9713585c"
     },
     {
       "path": "cordis.patch.yml",
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 2986,
-      "sha256": "a0a1b5d5f8b51533535d4e67e677098fc80694b5f544a99d6e12a13ca5103cb2"
+      "sha256": "130d55802fad1fb0ee6a1c7a3edfc79567c87cf33cccd89bff8bebdfb3caf6cc"
     },
     {
       "path": "src/adapter.js",
@@ -225,6 +225,16 @@
       "sha256": "9123be50f8284a9a8735abac7c0e541e726fdfdce1de9aab841e4e5bbe348e17"
     },
     {
+      "path": "src/sponsor.css",
+      "size": 10528,
+      "sha256": "ce751e456ff4b0ddad7979fa0fc9c6e27f19244c0d9e3912611a8f493d923293"
+    },
+    {
+      "path": "src/sponsor.js",
+      "size": 15009,
+      "sha256": "c986e270842448dc798015f717aee73aff7bf580bdbab9ad49feb44a1ec4312f"
+    },
+    {
       "path": "src/store.js",
       "size": 24277,
       "sha256": "87cf8f808019f94e021a52b3e06d402b22ccb57e39c1e6a932aea2b0d7be9cfa"
@@ -390,5 +400,5 @@
       "sha256": "6419471effa631519def7797d76d7ede38b9fcfa9a83c2148c8ef5d43355b43d"
     }
   ],
-  "signature": "raSnVg73oHTVff+0eLCPH8e6M7DsULCltGnII0/3rLp2YmcJS60uNCoG7RNnvss9pud4vNiq+MjnhbP6oGN9Bg=="
+  "signature": "JneQ6xhA9fTb4qCEnSzArVrCX8aCJJVQzYRIZp45ZBaN3tiUmzd3XSWj/qB5ruz05TSxfcjMSP/srXsWq63WBQ=="
 }

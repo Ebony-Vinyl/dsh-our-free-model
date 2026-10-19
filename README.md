@@ -36,14 +36,14 @@
 
 ---
 
-## 交流群
+## 交流频道
 
 <div align="center">
-  <img src="docs/images/qq-group-qr.png" alt="AI 技术交流学习群二维码" width="300">
+  <img src="docs/images/qq-group-qr.png" alt="AI 技术交流学习频道二维码" width="300">
   <br>
-  <b>QQ 群：386179533（AI 技术交流学习群）</b>
+  <b>QQ 频道：pd90484671（ai技术交流学习）</b>
   <br>
-  扫码加入群聊，一起交流插件使用心得、反馈问题与分享玩法。
+  扫码加入频道，一起交流插件使用心得、反馈问题与分享玩法。
 </div>
 
 ---
@@ -147,7 +147,7 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 以真实目录手工安装时，使用可信源码打出的本地 tarball：
 
 1. 创建 `<DSH_HOME>/profiles/<profile>/vendor/`，在审核过的本仓库目录运行 `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`，或将本仓库正式发布的同版本 tarball 放入该目录。本地打包不执行 npm 发布。
-2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.3.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
+2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.4.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
 3. 在 dsh.profile.bundles 末尾追加 `"dsh-our-free-model"`。
 
 包管理器拥有这份安装的字节时，同时将 bundle config 或插件 `settings.json` 的 `distribution` 设为 `managed`，由包管理器统一更新；应用内升级、公告 feed 与热重载会停用，模型功能保留。以后更新时替换可信 tarball 并同步依赖路径，避免包管理器按旧锁文件恢复旧版本。

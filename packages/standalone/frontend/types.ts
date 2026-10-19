@@ -1,4 +1,4 @@
-export type Page = 'overview' | 'models' | 'usage' | 'channels' | 'eac' | 'settings' | 'connection'
+export type Page = 'overview' | 'models' | 'usage' | 'channels' | 'eac' | 'settings' | 'connection' | 'sponsor'
 export interface Model {
   id: string
   name: string

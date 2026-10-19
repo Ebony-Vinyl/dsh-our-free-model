@@ -3,7 +3,7 @@
   "manifestVersion": "0.15",
   "id": "dev.ebony-vinyl.dsh-our-free-model",
   "name": "dsh-our-free-model",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "facets": {
     "host": {
       "entry": "index.js",
@@ -13,7 +13,7 @@
   "license": "MIT",
   "source": {
     "repository": "https://github.com/Ebony-Vinyl/dsh-our-free-model",
-    "revision": "3fc678a345a391b5fab5cb90be1c162be0c2052e"
+    "revision": "58bd5ca2dc6b179a206d71c8345f737aa015dfe8"
   },
   "x-ecosystem-packaging": {
     "adapterIsolation": "adapter/kernel.js is the only module that may import @deepseek-ai/*; enforced by scripts/catalog-test.mjs",
