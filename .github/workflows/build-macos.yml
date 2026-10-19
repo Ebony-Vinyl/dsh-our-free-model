@@ -49,9 +49,9 @@ jobs:
           arch=$(uname -m)
           release_tag="${GITHUB_REF_NAME}-macos-unofficial"
           cat > release-notes.md <<NOTES
-          ## 非官方社区构建 / Unofficial community build
+          ## 仓库 CI 自动构建（未签名）/ Official-repo CI build (unsigned)
 
-          这不是仓库作者发布的官方安装包。作者自 2.4.0 起将桌面安装包限制为 Windows-only，Mac 用户停留在 2.3.0。本 dmg 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现。
+          本 dmg 由本仓库的 GitHub Actions 从公开源码自动构建，可审计、可复现；未经过 Apple 签名与公证（仓库无 Apple Developer 账号），故 Gatekeeper 会拦截首次启动，并非文件损坏。
 
           This is NOT an official release by the repository author. The author restricted desktop installers to Windows-only since 2.4.0, leaving Mac users on 2.3.0. This dmg is built by GitHub Actions from public, auditable source.
 
@@ -96,6 +96,6 @@ jobs:
             echo "- SHA256: $sha"
           } >> release-notes.md
           gh release create "$release_tag" "$dmg" \
-            --title "${version} macOS (${arch}) — 非官方社区构建 / unofficial community build" \
+            --title "${version} macOS (${arch}) — 仓库 CI 自动构建（未签名）/ official-repo CI build (unsigned)" \
             --notes-file release-notes.md \
             --target "$GITHUB_SHA" || gh release upload "$release_tag" "$dmg" --clobber
