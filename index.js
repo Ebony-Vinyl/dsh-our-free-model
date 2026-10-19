@@ -30,7 +30,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { externalUrl, openExternal } from './src/open-external.js'
 import { ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
-import { DATA_DIR_NAME, decodeWindow, resolveDshHome, publicModelVisibility, validateModelVisibility, isModelHidden } from './src/store.js'
+import { DATA_DIR_NAME, resolveDshHome, publicModelVisibility, validateModelVisibility, isModelHidden } from './src/store.js'
 import { isEacEntry, isKiloEntry } from './src/catalog.js'
 import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
@@ -42,7 +42,7 @@ import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
 import { unlockSealedLane } from './src/vault.js'
 import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort.js'
-import { windowTokens } from './src/stream.js'
+import { measureModelTest } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
 import { PluginUpdater } from './src/updater.js'
@@ -1296,41 +1296,14 @@ export function apply(ctx, config) {
     testModel: async (id, effort) => {
       const entry = modelRuntime.catalog.find(candidate => candidate.id === id)
       if (entry === undefined) throw new UpstreamError(`unknown model "${id}"`, CODE.server)
-      const started = Date.now()
-      let firstFrame
-      let sawReasoning = false
-      let text = ''
-      let usage
-      for await (const chunk of adapter.stream({
+      const measured = await measureModelTest(adapter.stream({
         provider: ROUTE_MAIN,
         model: entry.id,
         messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
         reasoningEffort: effort === undefined || effort === '' ? DEFAULT_LEVEL : effort,
         sessionId: `bench:${entry.id}:${effort ?? DEFAULT_LEVEL}`,
-      }, entry, state())) {
-        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-call-delta') {
-          if (firstFrame === undefined) firstFrame = Date.now()
-          if (chunk.type === 'reasoning-delta') sawReasoning = true
-          if (chunk.type === 'text-delta') text += chunk.text
-        }
-        if (chunk.type === 'usage') usage = chunk.usage
-        if (chunk.type === 'finish' && chunk.reason.kind !== 'stop' && chunk.reason.kind !== 'tool-calls') {
-          throw new UpstreamError(chunk.reason.failure?.message ?? chunk.reason.kind, chunk.reason.failure?.code ?? CODE.server)
-        }
-      }
-      const ms = Date.now() - started
-      // Same rule as the recorded calls: the rate divides only by a window that
-      // actually covers the tokens in its numerator.
-      const measured = decodeWindow(firstFrame === undefined ? 0 : ms - firstFrame, windowTokens(usage, sawReasoning), true)
-      return {
-        model: entry.id, effort: effort ?? DEFAULT_LEVEL, ok: true,
-        totalMs: ms,
-        ttftMs: firstFrame === undefined ? ms : firstFrame - started,
-        outputTokens: usage?.outputTokens ?? 0,
-        reasoningTokens: usage?.reasoningTokens ?? 0,
-        tokensPerSecond: measured.tps,
-        sample: text.slice(0, 60),
-      }
+      }, entry, state()))
+      return { model: entry.id, effort: effort ?? DEFAULT_LEVEL, ok: true, ...measured }
     },
     meta: () => ({
       version: packageVersion,
@@ -2319,14 +2292,15 @@ function buildSummary(deps) {
   // Lanes that carry no availability verdict of their own. The absorbed channels
   // and the aggregate lane are named by a listing round that already succeeded,
   // and a combo is a view over rows that were themselves named — none of them is
-  // pinged, so "no verdict" must not render as "unknown".
+  // pinged. Directory membership is not an inference success verdict.
   const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
       hiddenByUser: isModelHidden(entry, state.settings),
       hiddenByGroup: isModelHidden(entry, { ...state.settings, hiddenModelIds: [] }),
-      availability: unprobed(entry) ? STATE.available : (snapshot.results?.[entry.id]?.state ?? STATE.unknown),
+      availabilitySource: unprobed(entry) ? 'listing' : 'probe',
+      availability: unprobed(entry) ? STATE.unknown : (snapshot.results?.[entry.id]?.state ?? STATE.unknown),
       detail: unprobed(entry) ? '' : (snapshot.results?.[entry.id]?.detail ?? ''),
       probedAt: unprobed(entry) ? 0 : (snapshot.results?.[entry.id]?.at ?? 0),
       ttftMs: unprobed(entry) ? undefined : snapshot.results?.[entry.id]?.ttftMs,

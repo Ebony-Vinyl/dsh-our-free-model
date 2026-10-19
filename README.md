@@ -769,3 +769,7 @@ MIT，见 LICENSE。
     <img alt="dsh-our-free-model 的 GitHub Star 增长趋势" src="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date" />
   </picture>
 </a>
+
+### 模型测试的判定范围
+
+EAC、Kilo、自定义聚合渠道与组合模型的目录条目标为“已列出 · 未实测”，目录出现不代表推理成功，也不会因此改变模型选择器准入。手动测试只验证一次无工具文本响应：必须有非空正文与正常结束标记；空回答、只有思考、截断或工具请求均失败。该测试不证明外部 Harness、网页搜索或多步工具可用。输出速度使用首个内容帧至结束的同一时间轴；没有可测窗口时不显示速率。

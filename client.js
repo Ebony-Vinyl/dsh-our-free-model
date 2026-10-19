@@ -265,6 +265,9 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
         'state.unavailable': '暂不可用',
         'state.throttled': '暂不可用',
         'state.unknown': '未探测',
+        'state.listed': '已列出 · 未实测',
+        'roster.selectable': '可选模型',
+        'hint.listed': '来自渠道目录，未做逐模型推理测试；不代表对话或工具调用成功。',
         'hint.region': '该模型按出口地区放行。开启网络代理后，插件会在下一次探测自动把它移入可用分组。',
         'hint.unknown': '尚未探测，默认保持可达。',
         'hint.hidden': '探测显示网关点名了它却不路由它，因此已从模型选择器中移除；某一次探测重新通过，它会自己回来。',
@@ -458,7 +461,7 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
         'pref.probedAt': '最近探测',
         'bench.run': '测一次',
         'bench.running': '测量中…',
-        'bench.result': '首帧 {ttft}ms · 输出 {tps} tok/s · 推理 {reasoning} tok',
+        'bench.result': '文本响应通过 · 首帧 {ttft}ms · 输出 {tps} tok/s · 推理 {reasoning} tok',
         'ann.preamble': '前言',
         'ann.models': '模型清单',
         'ann.newlane': '新模型上线',
@@ -950,6 +953,9 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
         'state.unavailable': 'Unavailable',
         'state.throttled': 'Temporarily unavailable',
         'state.unknown': 'Not probed',
+        'state.listed': 'Listed · not tested',
+        'roster.selectable': 'Selectable models',
+        'hint.listed': 'Listed by the channel; inference has not been tested. This does not confirm chat or tool use.',
         'hint.region': 'This model is gated by egress country. Once a proxy changes your egress, the next probe moves it into the available group by itself.',
         'hint.unknown': 'Not probed yet, so it stays reachable.',
         'hint.hidden': 'The gateway names it but refuses to route it, so it is out of the model picker. It returns by itself as soon as a probe gets through.',
@@ -1143,7 +1149,7 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
         'pref.probedAt': 'Last probe',
         'bench.run': 'Run once',
         'bench.running': 'Measuring…',
-        'bench.result': 'first frame {ttft}ms · {tps} tok/s · {reasoning} reasoning tokens',
+        'bench.result': 'Text response passed · first frame {ttft}ms · {tps} tok/s · {reasoning} reasoning tokens',
         'ann.preamble': 'Preamble',
         'ann.models': 'Model roster',
         'ann.newlane': 'New models',
@@ -3042,8 +3048,9 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
     // ── model roster ──────────────────────────────────────────────────────────
     function ModelCard(props) {
       const { model: m, t, onBench, bench, locked, eacLogin, onVisibility, busy } = props
+      const listed = m.availabilitySource === 'listing'
       const stateKey = `state.${m.availability}`
-      const dim = m.availability !== 'available'
+      const dim = !listed && m.availability !== 'available'
       const rung = (m.budgets ?? []).find(row => row.isDefault === true)
       // A model that declares its own thinking levels shows them beside the
       // ceiling tag, so the card names what the composer's Effort menu offers.
@@ -3067,7 +3074,7 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
           h('span', { className: 'ofm_cardname', title: m.name }, m.name),
           m.isNew === true ? h('span', { className: 'ofm_newtag', title: t('tag.newTitle') }, t('tag.new')) : null,
           m.hot === true ? h('span', { className: 'ofm_hottag', title: t('tag.hotTitle') }, t('tag.hot')) : null,
-          h('span', { className: 'ofm_badge ' + m.availability }, t(stateKey))),
+          h('span', { className: 'ofm_badge ' + (listed ? 'unknown' : m.availability), title: listed ? t('hint.listed') : undefined }, listed ? t('state.listed') : t(stateKey))),
         h('div', { className: 'ofm_id', title: m.id }, m.label ?? m.id),
         h('div', { className: 'ofm_tags' },
           m.hiddenByUser === true ? h('span', { className: 'ofm_tag' }, t('visibility.hidden')) : null,
@@ -3089,7 +3096,7 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
                 eacLogin.busy ? t('eac.starting') : t('eac.login'))))
           : null,
         m.availability === 'region-blocked' ? h('p', { className: 'ofm_note' }, t('hint.region'))
-          : m.availability === 'unknown' ? h('p', { className: 'ofm_note' }, t('hint.unknown'))
+          : m.availability === 'unknown' ? (listed ? null : h('p', { className: 'ofm_note' }, t('hint.unknown')))
             : m.availability === 'unavailable' ? h('p', { className: 'ofm_note', title: m.detail ?? '' }, t('hint.hidden'))
               : h('div', { className: 'ofm_metrics' },
                 m.ttftMs === undefined || m.ttftMs === 0 ? null : h('span', null, t('tag.latency'), ' ', h('b', null, Math.round(m.ttftMs)), ' ms'),
@@ -3149,7 +3156,7 @@ function createSponsorUI(React, image, createPortal, variant = 'plugin') {
             label: t('pref.hideFreeModels'), onChange: () => onApply({ hideFreeModels: summary.settings.hideFreeModels !== true }) }),
           h(Switch, { checked: summary.settings.hideEacModels === true, disabled: busy,
             label: t('pref.hideEacModels'), onChange: () => onApply({ hideEacModels: summary.settings.hideEacModels !== true }) })),
-        group(t('state.available'), available),
+        group(t('roster.selectable'), available),
         group(t('state.region-blocked'), limited, t('hint.region')),
         group(t('visibility.unlisted'), unlisted))
     }
