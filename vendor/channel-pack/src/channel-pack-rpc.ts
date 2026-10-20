@@ -17,6 +17,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { directFetch } from './direct-fetch.js'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { AccountPool } from './account-pool.js'
 import { isGatewayEnabled } from './openai-gateway/config.js'
@@ -840,6 +841,13 @@ function providerIdsOf(
   return keys.length > 0 ? keys.map((id) => ({ id })) : undefined
 }
 
+/** RPC 的可选配置；追加字段以兼容现有 provider / modelAdapters 的位置参数调用。 */
+export interface ChannelPackRpcConfig {
+  disableOpencode?: boolean
+  /** 本插件实例的 CodeArts 签名传输；旧调用省略时沿用 directFetch。 */
+  codeartsFetcher?: typeof fetch
+}
+
 /**
  * 注册 Channel Pack 管理 API 端点。
  *
@@ -881,7 +889,7 @@ export function registerChannelPackRpc(
    * 省略时退化为只用 `ctx.llm.listModels()` 的历史行为。
    */
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
-  config: { disableOpencode?: boolean } = {},
+  config: ChannelPackRpcConfig = {},
 ): void {
   ctx.inject(['connection'], (connectionCtx) => {
     registerChannelPackEndpoints(
@@ -981,7 +989,7 @@ function registerChannelPackEndpoints(
   zcode: ZcodeAuth,
   gemini: GeminiAuth,
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
-  config: { disableOpencode?: boolean } = {},
+  config: ChannelPackRpcConfig = {},
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const connection = (ctx as any).connection ?? ctx.get('connection')
@@ -1085,8 +1093,7 @@ function registerChannelPackEndpoints(
    * ⚠️ **取数直接复用内部 `handleMethod`**，不另写 provider 分派：
    * `credits.balances` 的 12 条分支（含 codearts 的「Token 计费账户」文案、
    * zcode 的逐桶折算等）是唯一口径，复制一份必然漂移。
-   * 第三个参数是 `AbortSignal` 且在当前实现里未被使用，故这里传 `undefined`
-   *（该形参是下划线命名 = 有意未用）。
+   * 后台读取没有客户端请求信号；CodeArts 仍使用所属插件的传输与上游超时。
    *
    * ⚠️ 订阅窗口**只对 Cline** 存在（能力矩阵里的 `subscriptionQuota`）—— 这个
    * 「哪个渠道有窗口」的判断留在装配层，`usage-badge.ts` 因此不认识任何具体渠道。
@@ -1366,7 +1373,18 @@ function registerChannelPackEndpoints(
    * 的方法返回 `undefined` —— 否则 opencode 的方法名永远落不到这里，
    * 反过来（switch 先匹配）又会被别的 provider 的 case 误吞。
    */
-  async function handleMethod(method: string, payload: unknown, _signal?: AbortSignal): Promise<unknown> {
+  async function handleMethod(method: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
+    // 每个 RPC 独立绑定传输与取消信号，避免使用最后挂载上下文的默认出口。
+    // 合并上游自行设置的超时，既保留超时也响应客户端断开；后台调用可省略 signal。
+    const codeartsFetcher: typeof fetch = (input, init) => {
+      const fetcher = config.codeartsFetcher ?? directFetch
+      if (!signal) return fetcher(input, init)
+      const upstreamSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined)
+      return fetcher(input, {
+        ...init,
+        signal: upstreamSignal ? AbortSignal.any([signal, upstreamSignal]) : signal,
+      })
+    }
     if (method.startsWith('opencode.')) {
       if (config.disableOpencode === true) {
         return { ok: false, error: { code: 'provider-disabled', message: 'OpenCode account integration is disabled in this host' } }
@@ -2674,7 +2692,7 @@ function registerChannelPackEndpoints(
           // 用 fetchCheckinStatus 打华为端点既发错请求又必然失败。
           const value = await collectClaimResults<CodeArtsCredential, undefined>(accounts, undefined, {
             resolve: (ref) => ctx.credentials.resolve(ref),
-            claim: (credential) => claimCodeArtsDailyCheckin(credential),
+            claim: (credential) => claimCodeArtsDailyCheckin(credential, codeartsFetcher),
             precheckStatus: false,
             warn: (msg) => ctx.logger?.warn?.(msg),
           })
@@ -2914,7 +2932,7 @@ function registerChannelPackEndpoints(
               // 「AK 限流」「签名失败」「凭据过期」压成同一句笼统文案，
               // 用户与排查者都拿不到线索（本端点就因此把一次 401 显示成了
               // 无信息量的「账户信息查询失败」）。
-              const result = await fetchCodeArtsAccountInfoDetailed(credential)
+              const result = await fetchCodeArtsAccountInfoDetailed(credential, codeartsFetcher)
               if (!result.ok) return { balance: null, error: `账户信息查询失败：${result.message}` }
               const info = result.info
               if (!info.isCreditPackage) {

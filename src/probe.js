@@ -226,7 +226,9 @@ export async function probeCatalog(models, options = {}, onResult = () => {}, co
     while (cursor < models.length) {
       const index = cursor++
       const model = models[index]
-      const result = await probeModel(model, options)
+      // A late reply is still the sample that began before a newer manual test.
+      const startedAt = Date.now()
+      const result = { ...await probeModel(model, options), startedAt }
       results[model.id] = result
       onResult(model.id, result)
     }

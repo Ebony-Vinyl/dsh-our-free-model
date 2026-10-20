@@ -61,6 +61,8 @@ process.env.QODER_RUNTIME_INFO = path.join(scratch, 'missing-runtime-info.exe')
 const savedFetch = globalThis.fetch
 const fetched = []
 let auditFetch
+let signedLane
+let savedSignedFetch
 const offlineFetch = async (url, init) => {
   if (auditFetch) return auditFetch(url, init)
   if (sourceMode && globalThis.fetch !== offlineFetch) return globalThis.fetch(url, init)
@@ -106,7 +108,10 @@ const state = {
 fs.mkdirSync(path.join(scratch, 'channel-pack'))
 fs.writeFileSync(path.join(scratch, 'channel-pack/state.json'), JSON.stringify(state))
 try {
-  const { apply } = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
+  const pack = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
+  const { apply } = pack
+  signedLane = pack.directLane
+  if (signedLane) { savedSignedFetch = signedLane.fetch; signedLane.fetch = offlineFetch }
   apply(ctx, { disableOpencode: true })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
@@ -260,6 +265,7 @@ try {
 } finally {
   for (const cleanup of dispose.reverse()) await cleanup()
   globalThis.fetch = savedFetch
+  if (signedLane) signedLane.fetch = savedSignedFetch
   hooks.deregister()
   fs.rmSync(scratch, { recursive: true, force: true })
 }

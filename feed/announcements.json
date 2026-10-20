@@ -2,6 +2,18 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-20-v2.5.7-plugin-release",
+      "title": "v2.5.7：修复 CodeArts 签名、托管更新提示与模型测速",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-20T13:59:07Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.7",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.7 更新 DSH 插件端。</b>CodeArts 使用独立签名传输，保留代理、超时与取消，并修复积分/签到跨插件实例出口串线；托管安装明确提示通过原安装方式更新。模型测速要求非空正文和正常结束，保存成功与失败结果，防止旧探测覆盖新实测。本版保留正常动画和现有赞助卡片，不包含低性能模式。</p>"
+    },
+    {
       "id": "2026-10-20-v2.5.6-plugin-release",
       "title": "v2.5.6：插件赞助卡片精简，免费模型与 EAC 页面统一展示",
       "level": "update",

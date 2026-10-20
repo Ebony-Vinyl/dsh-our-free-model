@@ -1,3 +1,4 @@
+import { directFetch } from './direct-fetch.js'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { runLoginFlow, runOAuthFlow, startOAuthFlow, type StartedOAuthFlow } from './login.js'
@@ -120,8 +121,8 @@ function parseCredential(value: string): CodeArtsCredential | undefined {
 export class CodeArtsAuth extends Service {
   /** 登录会话是否仍处于活跃状态；stop() 置 false，防止在途刷新回写已登出凭据。 */
   private active = true
-  /** 用于测试的可注入 fetch；默认为全局 fetch。 */
-  private fetchImpl: typeof fetch = fetch
+  /** 可注入 fetch；默认使用保留代理路由的独立签名传输。 */
+  private fetchImpl: typeof fetch = directFetch
   /**
    * 按凭据 ref 分的**续期互斥队列**（进程内）。
    *

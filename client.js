@@ -53,6 +53,9 @@ window.__ModuleLoader__.load({
         'state.unavailable': '暂不可用',
         'state.throttled': '暂不可用',
         'state.unknown': '未探测',
+        'state.listed': '已列出 · 未实测',
+        'roster.selectable': '可选模型',
+        'hint.listed': '来自渠道目录，未做逐模型推理测试；不代表对话或工具调用成功。',
         'hint.region': '该模型按出口地区放行。开启网络代理后，插件会在下一次探测自动把它移入可用分组。',
         'hint.unknown': '尚未探测，默认保持可达。',
         'hint.hidden': '探测显示网关点名了它却不路由它，因此已从模型选择器中移除；某一次探测重新通过，它会自己回来。',
@@ -244,9 +247,11 @@ window.__ModuleLoader__.load({
         'pref.maxTokens': '单次输出上限（token）',
         'pref.egress': '当前出口',
         'pref.probedAt': '最近探测',
+        'pref.measuredAt': '最近测量',
         'bench.run': '测一次',
         'bench.running': '测量中…',
-        'bench.result': '首帧 {ttft}ms · 输出 {tps} tok/s · 推理 {reasoning} tok',
+        'bench.notSaved': '结果未能保存，请检查数据目录；刷新后可能丢失。',
+        'bench.result': '文本响应通过 · 首帧 {ttft}ms · 输出 {tps} tok/s · 推理 {reasoning} tok',
         'ann.preamble': '前言',
         'ann.models': '模型清单',
         'ann.newlane': '新模型上线',
@@ -273,12 +278,13 @@ window.__ModuleLoader__.load({
         'ann.updates': '公告与升级',
         'ann.u1': '公告中心：仓库主人推送的新公告会实时到达，支持图文排版（HTML）。',
         'ann.u2': '系统通知：开启后，新公告与插件更新会弹出系统级通知。',
-        'ann.u3': '应用内升级：新版本发布后可直接在设置页升级，无需重新安装。',
-        'ann.u4': '热重载：升级与本插件的代码更新即时生效，不需要重启应用。',
+        'ann.u3': '应用内升级：自主管理的安装可在设置页升级；宿主管理的安装请通过原安装方式更新。',
+        'ann.u4': '自主管理的安装可尝试应用内升级与热重载；宿主管理的安装请通过原安装方式更新，按宿主提示重新加载。',
         'section.news': '公告中心',
         'section.newsHint': '公告由仓库主人推送，本页实时接收。',
         'section.upgrade': '插件升级',
-        'section.upgradeHint': '在应用内直接升级插件，无需重新安装或重启。',
+        'section.upgradeHint': '更新方式取决于安装来源；由宿主管理的安装请通过原安装方式更新。',
+        'upgrade.managed': '此安装由安装它的宿主管理，请通过原安装方式更新；插件内检查、升级和热重载不可用。',
         'news.unread': '{n} 条未读',
         'news.allRead': '全部已读',
         'news.markRead': '标记已读',
@@ -756,6 +762,9 @@ window.__ModuleLoader__.load({
         'state.unavailable': 'Unavailable',
         'state.throttled': 'Temporarily unavailable',
         'state.unknown': 'Not probed',
+        'state.listed': 'Listed · not tested',
+        'roster.selectable': 'Selectable models',
+        'hint.listed': 'Listed by the channel; inference has not been tested. This does not confirm chat or tool use.',
         'hint.region': 'This model is gated by egress country. Once a proxy changes your egress, the next probe moves it into the available group by itself.',
         'hint.unknown': 'Not probed yet, so it stays reachable.',
         'hint.hidden': 'The gateway names it but refuses to route it, so it is out of the model picker. It returns by itself as soon as a probe gets through.',
@@ -947,9 +956,11 @@ window.__ModuleLoader__.load({
         'pref.maxTokens': 'Output ceiling per call (tokens)',
         'pref.egress': 'Current egress',
         'pref.probedAt': 'Last probe',
+        'pref.measuredAt': 'Last measurement',
         'bench.run': 'Run once',
         'bench.running': 'Measuring…',
-        'bench.result': 'first frame {ttft}ms · {tps} tok/s · {reasoning} reasoning tokens',
+        'bench.notSaved': 'The result could not be saved. Check the data directory; it may be lost after refresh.',
+        'bench.result': 'Text response passed · first frame {ttft}ms · {tps} tok/s · {reasoning} reasoning tokens',
         'ann.preamble': 'Preamble',
         'ann.models': 'Model roster',
         'ann.newlane': 'New models',
@@ -976,12 +987,13 @@ window.__ModuleLoader__.load({
         'ann.updates': 'News & upgrades',
         'ann.u1': 'Announcement center: pushes from the repository owner arrive live, with rich (HTML) layout.',
         'ann.u2': 'OS notifications: once enabled, new announcements and plugin updates raise system-level toasts.',
-        'ann.u3': 'In-app upgrades: install new releases straight from the settings page, no reinstall needed.',
-        'ann.u4': 'Hot reload: upgrades and code changes take effect immediately, without restarting the app.',
+        'ann.u3': 'In-app upgrades: self-managed installs can update from settings; host-managed installs use their original installation method.',
+        'ann.u4': 'Self-managed installs can use in-app upgrades and hot reload. For host-managed installs, update through the original installation method and reload as instructed by the host.',
         'section.news': 'Announcement center',
         'section.newsHint': 'Published by the repository owner; this page receives them live.',
         'section.upgrade': 'Plugin upgrade',
-        'section.upgradeHint': 'Upgrade in-app — no reinstall, no restart.',
+        'section.upgradeHint': 'Update according to the installation source; host-managed installs use their original installation method.',
+        'upgrade.managed': 'This installation is managed by the host that installed it. Update through the original installation method; in-plugin checks, upgrades and hot reload are unavailable.',
         'news.unread': '{n} unread',
         'news.allRead': 'Mark all read',
         'news.markRead': 'Mark read',
@@ -2881,8 +2893,10 @@ window.__ModuleLoader__.load({
     // ── model roster ──────────────────────────────────────────────────────────
     function ModelCard(props) {
       const { model: m, t, onBench, bench, locked, eacLogin, onVisibility, busy } = props
+      const listed = m.availabilitySource === 'listing'
+      const manual = m.availabilitySource === 'manual'
       const stateKey = `state.${m.availability}`
-      const dim = m.availability !== 'available'
+      const dim = !listed && m.availability !== 'available'
       const rung = (m.budgets ?? []).find(row => row.isDefault === true)
       // A model that declares its own thinking levels shows them beside the
       // ceiling tag, so the card names what the composer's Effort menu offers.
@@ -2906,7 +2920,7 @@ window.__ModuleLoader__.load({
           h('span', { className: 'ofm_cardname', title: m.name }, m.name),
           m.isNew === true ? h('span', { className: 'ofm_newtag', title: t('tag.newTitle') }, t('tag.new')) : null,
           m.hot === true ? h('span', { className: 'ofm_hottag', title: t('tag.hotTitle') }, t('tag.hot')) : null,
-          h('span', { className: 'ofm_badge ' + m.availability }, t(stateKey))),
+          h('span', { className: 'ofm_badge ' + (listed ? 'unknown' : m.availability), title: listed ? t('hint.listed') : undefined }, listed ? t('state.listed') : t(stateKey))),
         h('div', { className: 'ofm_id', title: m.id }, m.label ?? m.id),
         h('div', { className: 'ofm_tags' },
           m.hiddenByUser === true ? h('span', { className: 'ofm_tag' }, t('visibility.hidden')) : null,
@@ -2927,12 +2941,14 @@ window.__ModuleLoader__.load({
               h(Button, { kind: 'primary', disabled: eacLogin.busy || eacLogin.pending !== null, onClick: eacLogin.login },
                 eacLogin.busy ? t('eac.starting') : t('eac.login'))))
           : null,
-        m.availability === 'region-blocked' ? h('p', { className: 'ofm_note' }, t('hint.region'))
+        listed ? h('p', { className: 'ofm_note' }, t('hint.listed'))
+          : manual && m.availability !== 'available' ? h('p', { className: 'ofm_note' }, m.detail || t(stateKey))
+          : m.availability === 'region-blocked' ? h('p', { className: 'ofm_note' }, t('hint.region'))
           : m.availability === 'unknown' ? h('p', { className: 'ofm_note' }, t('hint.unknown'))
             : m.availability === 'unavailable' ? h('p', { className: 'ofm_note', title: m.detail ?? '' }, t('hint.hidden'))
               : h('div', { className: 'ofm_metrics' },
                 m.ttftMs === undefined || m.ttftMs === 0 ? null : h('span', null, t('tag.latency'), ' ', h('b', null, Math.round(m.ttftMs)), ' ms'),
-                h('span', null, t('pref.probedAt'), ' ', h('b', null, ago(m.probedAt, t.locale)))),
+                h('span', null, manual ? t('pref.measuredAt') : t('pref.probedAt'), ' ', h('b', null, ago(m.probedAt, t.locale)))),
         m.canDisableThinking === false ? h('p', { className: 'ofm_note' }, t('hint.sharedBudget')) : null,
         onVisibility === undefined ? null : h('div', { className: 'ofm_sec' },
           h(Switch, { checked: m.hiddenByUser !== true, label: t('visibility.showModel'),
@@ -2988,7 +3004,7 @@ window.__ModuleLoader__.load({
             label: t('pref.hideFreeModels'), onChange: () => onApply({ hideFreeModels: summary.settings.hideFreeModels !== true }) }),
           h(Switch, { checked: summary.settings.hideEacModels === true, disabled: busy,
             label: t('pref.hideEacModels'), onChange: () => onApply({ hideEacModels: summary.settings.hideEacModels !== true }) })),
-        group(t('state.available'), available),
+        group(t('roster.selectable'), available),
         group(t('state.region-blocked'), limited, t('hint.region')),
         group(t('visibility.unlisted'), unlisted))
     }
@@ -3746,71 +3762,156 @@ window.__ModuleLoader__.load({
     }
 
     // ── in-app upgrade ───────────────────────────────────────────────────────
+    function syncUpgradeOwner(control, data) {
+      const managed = data?.managed === true
+      if (control.current.managed !== managed) {
+        control.current.managed = managed
+        control.current.generation += 1
+        control.current.phase = ''
+      }
+    }
+    // Status requests may overlap (SSE, an action, or a remount). Only the newest
+    // mounted request may publish an installation owner or an error.
+    function useUpgradeStatus(control) {
+      const [state, setState] = useState({ status: 'loading', data: undefined, error: '' })
+      const sequence = useRef(0)
+      const mounted = useRef(true)
+      const reload = useCallback(async () => {
+        const request = ++sequence.current
+        control.current.ready = false
+        setState(current => ({ ...current, status: 'loading', error: '' }))
+        try {
+          const data = await api('/update/status')
+          if (!mounted.current || request !== sequence.current) return
+          syncUpgradeOwner(control, data)
+          control.current.data = data
+          control.current.ready = true
+          setState({ status: 'ready', data, error: '' })
+          return data
+        } catch (error) {
+          if (!mounted.current || request !== sequence.current) return
+          setState(current => ({ ...current, status: 'error', error: String(error?.message ?? error) }))
+        }
+      }, [])
+      useEffect(() => {
+        mounted.current = true
+        void reload()
+        return () => { mounted.current = false; sequence.current += 1; control.current.generation += 1 }
+      }, [reload])
+      return { ...state, reload }
+    }
     function UpgradePanel(props) {
       const { t, settings, onApply, busy } = props
-      const status = useAsync(() => api('/update/status'), [])
+      const control = useRef({ managed: false, generation: 0, phase: '', ready: false })
+      const status = useUpgradeStatus(control)
       const [phase, setPhase] = useState('')
       const [message, setMessage] = useState('')
       const [error, setError] = useState('')
+      const data = status.data
+      const managed = data?.managed === true
+      syncUpgradeOwner(control, data)
+      control.current.data = data
+      control.current.ready = status.status === 'ready'
+      useEffect(() => {
+        setPhase(''); setMessage(''); setError('')
+      }, [managed])
       useEffect(() => {
         const handler = event => {
+          control.current.generation += 1
+          control.current.phase = ''
           const version = event.detail?.version ?? ''
-          setPhase('')
-          setError('')
-          setMessage(version === '' ? '' : t('upgrade.done').replace('{version}', version))
-          status.reload()
+          setPhase(''); setError('')
+          setMessage(control.current.managed || version === '' ? '' : t('upgrade.done').replace('{version}', version))
+          void status.reload()
         }
         window.addEventListener('ofm:upgraded', handler)
         return () => window.removeEventListener('ofm:upgraded', handler)
-      }, [status.reload])
-      const data = status.data
-      const check = async () => {
-        setPhase('checking'); setError('')
-        try { await post('/update/check', undefined, 60_000); status.reload() } catch (err) { setError(String(err?.message ?? err)) } finally { setPhase('') }
+      }, [status.reload, t])
+      const begin = next => {
+        const snapshot = control.current.data
+        if (control.current.managed || !control.current.ready || control.current.phase !== '' || snapshot?.applying === true) return null
+        if (next !== 'checking' && snapshot?.recoveryRequired === true) return null
+        if (next === 'applying' && snapshot?.available !== true) return null
+        control.current.phase = next
+        const token = ++control.current.generation
+        setPhase(next); setError(''); setMessage('')
+        return token
       }
-      const applyUpgrade = async () => {
-        setPhase('applying'); setError(''); setMessage(t('upgrade.phase.download'))
+      const current = token => token === control.current.generation && !control.current.managed
+      const finish = token => {
+        if (!current(token)) return false
+        control.current.phase = ''; setPhase('')
+        return true
+      }
+      const check = async () => {
+        const token = begin('checking')
+        if (token === null) return
         try {
-          const result = await post('/update/apply', {}, 600_000)
-          // Hot reload closes the old SSE connection. The response must finish
-          // our local phase even if `upgraded` arrives before reconnection.
-          setPhase('')
-          setMessage(t('upgrade.phase.install'))
-          if (result?.version !== undefined) setMessage(t('upgrade.doneRefresh').replace('{version}', result.version))
-          status.reload()
+          await post('/update/check', undefined, 60_000)
+          if (finish(token)) void status.reload()
         } catch (err) {
-          setPhase(''); setMessage('')
-          setError(String(err?.message ?? err))
-          status.reload()
+          if (!finish(token)) return
+          await status.reload()
+          if (current(token)) setError(String(err?.message ?? err))
         }
       }
+      const applyUpgrade = async () => {
+        const token = begin('applying')
+        if (token === null) return
+        setMessage(t('upgrade.phase.download'))
+        try {
+          const result = await post('/update/apply', {}, 600_000)
+          // The response releases controls even when hot reload closes SSE.
+          if (!finish(token)) return
+          setMessage(result?.version === undefined ? t('upgrade.phase.install') : t('upgrade.doneRefresh').replace('{version}', result.version))
+          void status.reload()
+        } catch (err) {
+          if (!finish(token)) return
+          setMessage('')
+          await status.reload()
+          if (current(token)) setError(String(err?.message ?? err))
+        }
+      }
+      const reload = async () => {
+        const token = begin('reloading')
+        if (token === null) return
+        setMessage(t('upgrade.phase.reload'))
+        try { await post('/reload') } catch (err) {
+          if (!current(token)) return
+          setMessage('')
+          await status.reload()
+          if (current(token)) setError(String(err?.message ?? err))
+        } finally { finish(token) }
+      }
       const notes = useMemo(() => parseSafeHtml(data?.notes ?? ''), [data?.notes])
-      const upToDate = data !== undefined && data.latest !== '' && data.available === false
+      const upToDate = !managed && status.status === 'ready' && data !== undefined && data.latest !== '' && data.available === false
         && data.applying !== true && data.recoveryRequired !== true && data.versionMismatch !== true
       return h(Panel, null,
         h('div', { className: 'ofm_upgradecards' },
           h('span', { className: 'ofm_pill strong' }, `${t('upgrade.current')}: ${data?.current || '…'}`),
           data?.installedVersion !== undefined ? h('span', { className: 'ofm_pill' }, `${t('upgrade.installed')}: ${data.installedVersion || '…'}`) : null,
           data?.latest !== undefined && data.latest !== '' ? h('span', { className: 'ofm_pill' }, `${t('upgrade.latest')}: ${data.latest}`) : null,
-          data?.available === true ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot warn' }), t('upgrade.available').replace('{version}', data.latest)) : null,
+          !managed && data?.available === true ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot warn' }), t('upgrade.available').replace('{version}', data.latest)) : null,
           upToDate ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot ok' }), t('upgrade.upToDate')) : null,
           h('span', { className: 'ofm_pill' }, `${t('upgrade.checkedAt')}: ${data?.checkedAt ? ago(data.checkedAt, t.locale) : t('upgrade.never')}`)),
         h('div', { className: 'ofm_row' },
-          h(Button, { disabled: phase !== '' || status.status !== 'ready', onClick: check }, phase === 'checking' ? t('upgrade.checking') : t('upgrade.check')),
-          data?.available === true ? h(Button, { kind: 'primary', disabled: phase !== '' || data.applying === true || data.recoveryRequired === true, onClick: applyUpgrade }, phase === 'applying' ? t('upgrade.applying') : t('upgrade.apply')) : null,
+          h(Button, { disabled: managed || phase !== '' || status.status !== 'ready' || data?.applying === true, onClick: check }, !managed && phase === 'checking' ? t('upgrade.checking') : t('upgrade.check')),
+          data?.available === true ? h(Button, { kind: 'primary', disabled: managed || status.status !== 'ready' || phase !== '' || data.applying === true || data.recoveryRequired === true, onClick: applyUpgrade }, !managed && phase === 'applying' ? t('upgrade.applying') : t('upgrade.apply')) : null,
           h('a', {
             className: 'ofm_btn ofm_starlink',
             href: 'https://github.com/Ebony-Vinyl/dsh-our-free-model',
             target: '_blank',
             rel: 'noopener noreferrer',
           }, h('span', { 'aria-hidden': 'true' }, '\u2606'), t('upgrade.star'))),
-        phase === 'applying' ? h('div', { className: 'ofm_prog' }, h('i')) : null,
-        data?.recoveryRequired === true ? h('div', { className: 'ofm_callout ofm_error' },
+        managed ? h('div', { className: 'ofm_callout', role: 'status' }, t('upgrade.managed')) : null,
+        status.status === 'error' ? h('div', { className: 'ofm_callout ofm_error' }, t('loadFailed'), ' ', status.error) : null,
+        !managed && phase === 'applying' ? h('div', { className: 'ofm_prog', role: 'progressbar', 'aria-label': t('upgrade.applying') }, h('i')) : null,
+        !managed && data?.recoveryRequired === true ? h('div', { className: 'ofm_callout ofm_error' },
           h('div', null, t('upgrade.recovery'),
             data.recoveryBackup ? h('p', { className: 'ofm_note' }, `${t('upgrade.backup')}: ${data.recoveryBackup}`) : null)) : null,
-        data?.versionMismatch === true ? h('div', { className: 'ofm_callout' }, t('upgrade.mismatch')) : null,
-        message !== '' ? h('p', { className: 'ofm_note' }, message) : null,
-        (error || data?.error) ? h('div', { className: 'ofm_callout ofm_error' }, t('upgrade.failed').replace('{message}', error || data.error)) : null,
+        !managed && data?.versionMismatch === true ? h('div', { className: 'ofm_callout' }, t('upgrade.mismatch')) : null,
+        !managed && message !== '' ? h('p', { className: 'ofm_note' }, message) : null,
+        !managed && (error || data?.error) ? h('div', { className: 'ofm_callout ofm_error' }, t('upgrade.failed').replace('{message}', error || data.error)) : null,
         notes.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } },
           h('span', { className: 'ofm_note' }, t('upgrade.notes')),
           h('div', { className: 'ofm_upnotes ofm_newsbody' }, ...htmlToReact(notes))) : null,
@@ -3819,14 +3920,11 @@ window.__ModuleLoader__.load({
           t('upgrade.from').replace('{from}', data.lastApplied.from ?? '?'),
           ` → ${data.lastApplied.to ?? '?'} · ${ago(data.lastApplied.at, t.locale)}`,
           data.lastApplied.ok === false && data.lastApplied.error ? ` — ${data.lastApplied.error}` : '') : null,
-        h('p', { className: 'ofm_note' }, (settings.updateCheckHours ?? 0) > 0 ? t('upgrade.auto').replace('{n}', String(settings.updateCheckHours)) : t('upgrade.autoOff')),
+        !managed ? h('p', { className: 'ofm_note' }, (settings.updateCheckHours ?? 0) > 0 ? t('upgrade.auto').replace('{n}', String(settings.updateCheckHours)) : t('upgrade.autoOff')) : null,
         h('div', { className: 'ofm_row' },
-          h(Button, { disabled: phase !== '' || data?.applying === true || data?.recoveryRequired === true, onClick: () => {
-            setPhase('reloading'); setError(''); setMessage(t('upgrade.phase.reload'))
-            post('/reload').catch(err => { setMessage(''); setError(String(err?.message ?? err)) }).finally(() => { setPhase('') })
-          } }, phase === 'reloading' ? t('reload.reloading') : t('reload.now')),
-          h(Switch, { checked: settings.autoReloadWatch === true, label: t('reload.auto'), onChange: () => onApply({ autoReloadWatch: !(settings.autoReloadWatch === true) }) }),
-          h('span', { className: 'ofm_note' }, t('reload.done').replace('{n}', String(settings.reloadCount ?? 0)))))
+          h(Button, { disabled: managed || status.status !== 'ready' || phase !== '' || data?.applying === true || data?.recoveryRequired === true, onClick: reload }, phase === 'reloading' && !managed ? t('reload.reloading') : t('reload.now')),
+          h(Switch, { checked: !managed && settings.autoReloadWatch === true, disabled: managed || status.status !== 'ready' || phase !== '' || busy, label: t('reload.auto'), onChange: () => { if (!control.current.managed && control.current.ready && control.current.phase === '' && !busy) onApply({ autoReloadWatch: !(settings.autoReloadWatch === true) }) } }),
+          managed ? null : h('span', { className: 'ofm_note' }, t('reload.done').replace('{n}', String(settings.reloadCount ?? 0)))))
     }
 
     function UpgradePage(props) {
@@ -6180,10 +6278,13 @@ window.__ModuleLoader__.load({
           // 默认档（balanced）而不是 deep：测速要回答的是“这个模型日常多快”，
           // 默认档就是日常档；deep 每次最多烧 32K 输出 token，且经常把固定
           // bench 会话自己打到 429。
-          const result = await post('/bench', { model: model.id }, 240_000)
-          setBenches(current => ({ ...current, [model.id]: { running: false, result: t('bench.result').replace('{ttft}', result.ttftMs).replace('{tps}', result.tokensPerSecond ?? '—').replace('{reasoning}', result.reasoningTokens) } }))
+          // The backend owns the 300s total budget; leave 30s for its final response.
+          const result = await post('/bench', { model: model.id }, 330_000)
+          setBenches(current => ({ ...current, [model.id]: { running: false, result: t('bench.result').replace('{ttft}', result.ttftMs).replace('{tps}', result.tokensPerSecond ?? '—').replace('{reasoning}', result.reasoningTokens ?? '—') + (result.persisted === false ? ' · ' + t('bench.notSaved') : '') } }))
+          summary.reload()
         } catch (error) {
           setBenches(current => ({ ...current, [model.id]: { running: false, result: String(error?.message ?? error) } }))
+          summary.reload()
         }
       }
 
@@ -6198,7 +6299,7 @@ window.__ModuleLoader__.load({
       // absorbed channels stay out of the tally — their cards carry their own
       // availability badge, and a lane that is never probed would otherwise
       // read as a permanently green slice of this gauge.
-      const counts = data.catalog.filter(m => !m.channel).reduce((acc, m) => ({ ...acc, [m.availability]: (acc[m.availability] ?? 0) + 1 }), {})
+      const counts = data.catalog.filter(m => !m.channel).reduce((acc, m) => ({ ...acc, [m.availabilitySource === 'listing' ? 'unknown' : m.availability]: (acc[m.availabilitySource === 'listing' ? 'unknown' : m.availability] ?? 0) + 1 }), {})
       return h(Shell, {
         t: tagged, data, counts, summary, stats, eacAuth, setEacAuth, eacLogin,
         busy, setBusy, apply, bench, benches, ctx: props.ctx,

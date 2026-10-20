@@ -196,7 +196,7 @@ console.log('ok  combo picker capacities, saved card and live server intersectio
 // Compile the actual standalone page in memory, without rebuilding web output.
 const require = createRequire(import.meta.url)
 let transformSync
-try { ({ transformSync } = require('esbuild')) } catch {}
+try { ({ transformSync } = createRequire(new URL('../packages/standalone/package.json', import.meta.url))('esbuild')) } catch {}
 if (transformSync) {
 const modelsSource = fs.readFileSync(new URL('../packages/standalone/frontend/models.tsx', import.meta.url), 'utf8')
 const modelsBody = modelsSource.slice(modelsSource.indexOf('const availabilityNames')).replace('export function Models', 'function Models')

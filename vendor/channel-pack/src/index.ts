@@ -73,7 +73,9 @@ import { OPENCODE } from './opencode-product.js'
 import { deriveProjectId, opencodeUserAgent, opencodeUserAgentForVersion } from './opencode.js'
 import { primeOpencodeCapabilities, refreshOpencodeCapabilities } from './opencode-capability.js'
 import { closeAllProxyDispatchers } from './opencode-proxy.js'
-import { createChannelFetch, type ChannelOutlet } from './channel-fetch.js'
+import { createChannelFetch } from './channel-fetch.js'
+import { attachDirectFetch, createDirectFetch, type SignedChannelOutlet } from './direct-fetch.js'
+export { directFetch, directLane, createDirectFetch, closeDirectFetch } from './direct-fetch.js'
 export { createChannelFetch, parseWindowsProxy, channelProxyBypassed } from './channel-fetch.js'
 import { execFile } from 'node:child_process'
 
@@ -271,8 +273,11 @@ export function makeReadImageRequest(ctx: Context) {
 }
 
 /** 注册 codeartsAuth 服务与 codearts LLM 路由（不注册斜杠命令）。 */
-export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?: ChannelOutlet } = {}): void {
+export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?: SignedChannelOutlet } = {}): void {
   const network = createChannelFetch({ outlet: config.outlet })
+  const signedNetwork = createDirectFetch({ outlet: config.outlet })
+  const detachSignedNetwork = attachDirectFetch(signedNetwork.fetch)
+  ctx.effect(() => () => { detachSignedNetwork(); void signedNetwork.close() })
   ctx.effect(() => () => { void network.close() })
   // 本插件自带 Channel Pack 设置页，关闭 0.1.7 起由 Config schema 反渲染的自动表单
   // （老契约没有 configure()，静默跳过）。
@@ -294,7 +299,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
     'llm-qoder', 'llm-qodercn', 'llm-trae', 'llm-cline', 'llm-loomy', 'llm-raccoon',
     'llm-minimax', 'llm-zcode', 'llm-gemini',
   )
-  const service = new CodeArtsAuth(ctx)
+  const service = new CodeArtsAuth(ctx, { fetcher: signedNetwork.fetch })
   const pool = new AccountPool(ctx)
 
   // 「已失效模型」剔除：注入 ctx 只为把日志接进 DSH logger 并复用同一份 home
@@ -344,6 +349,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   // `codearts-refresh` 三个已删除）：登录、状态与续期统一在 Channel Pack 设置页完成，
   // 与 buddy / workbuddy / lobsterai / qoder / trae 的既有做法一致。
   const codearts = registerCodeArtsLlm(ctx, {
+    fetchImpl: signedNetwork.fetch,
     credentialRef: credentialRef(CODEARTS_CREDENTIAL_REF),
     resolveCredential: async () => {
       // CodeArts **只认账号池**，与其余五个 provider 一致。
@@ -1972,7 +1978,10 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
   // 丢的却是「下一轮工具调用能不能带上签名」。
   ctx.effect(() => () => { void geminiSigStore.flush().catch(() => {}) })
 
-  registerChannelPackRpc(ctx, pool, service, buddy, workbuddy, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config)
+  registerChannelPackRpc(ctx, pool, service, buddy, workbuddy, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, {
+    ...config,
+    codeartsFetcher: signedNetwork.fetch,
+  })
   // 网关是旁路功能：这里传 `pool` 只为读设置页里的开关，其内部任何失败都已
   // 自行降级为日志，绝不会让插件 apply() 失败。
   mountOpenAiGateway(ctx, pool)
