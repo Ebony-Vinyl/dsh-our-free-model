@@ -6,6 +6,7 @@ import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
+import { laneView, refusedState, roundRefused } from '../verdict.js'
 import { CODE, getJson } from '../http.js'
 import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
@@ -38,7 +39,12 @@ export function createRuntimeStores({ dataDir, logger = console }) {
     log: message => logger.warn?.(message),
   })
   const stats = open('stats.json', STATS_INITIAL)
-  const availability = open('availability.json', { version: 1, at: 0, egress: null, results: {} })
+  // `refusedStreak` counts consecutive rounds in which the lane refused every
+  // model. One refused round is weather — a busy exit, a gateway hiccup — and
+  // the picker stays populated through it. Two in a row is a state the user is
+  // in, and continuing to advertise models that cannot answer turns the picker
+  // into a list of guaranteed failures.
+  const availability = open('availability.json', { version: 1, at: 0, egress: null, results: {}, refusedStreak: 0 })
   const catalogStore = open('catalog.json', { version: 1, at: 0, entries: FALLBACK_CATALOG.map(entry => entry.id) })
   if (stats.get().version !== STATS_VERSION) stats.edit(migrateStats)
   return {
@@ -117,6 +123,9 @@ export function createModelRuntime({
     catalog,
     membership: computeMembership(catalog, availability.get(), settings.get()),
     settings: settings.get(),
+    // The verdicts travel with the snapshot so a turn can refuse itself before
+    // it spends a round trip (see src/verdict.js `refusalFor`).
+    availability: availability.get(),
     attributionUserAgent,
   })
   const emitTopology = () => { if (!disposed) onTopology() }
@@ -189,6 +198,7 @@ export function createModelRuntime({
     await refreshKiloRoster()
     if (disposed) return catalog
     mergeCatalogs()
+    pruneAvailability()
     if (probe) await refreshAvailability(force)
     emitTopology()
     return catalog
@@ -259,6 +269,33 @@ export function createModelRuntime({
   let probeRound = null
   let probeThrottleStreak = 0
   let probeBackoffUntil = 0
+
+  /**
+   * Drop verdicts for ids the roster no longer carries.
+   *
+   * Measured 2026-10-20: `space-bunny-free` left the upstream listing, and its
+   * verdict stayed in `availability.json` for thirteen hours — a probe of a row
+   * that no longer exists, kept alive because a round only ever writes the ids
+   * it just probed. Left alone it is invisible (the lane counts rows, not
+   * entries) but not harmless: the file grows with history nobody can act on,
+   * and any future reader that trusts the key set reports a model the user
+   * cannot see. Pruning happens after a *successful* listing round only, so a
+   * failed refresh cannot delete live verdicts.
+   */
+  function pruneAvailability() {
+    const live = new Set(catalog.map(entry => entry.id))
+    const results = availability.get().results ?? {}
+    const dead = Object.keys(results).filter(id => !live.has(id))
+    if (dead.length === 0) return
+    availability.edit(value => {
+      const kept = {}
+      for (const [id, verdict] of Object.entries(value.results ?? {})) if (live.has(id)) kept[id] = verdict
+      return { ...value, results: kept }
+    })
+    availability.flush()
+    logger.info?.(`our-free-model: dropped ${dead.length} verdict(s) for models no longer on the roster (${dead.join(', ')})`)
+  }
+
   async function runProbeRound() {
     // The absorbed channels get no per-model probes: their verdicts would be
     // spent against a different gateway than the one that serves them, and a
@@ -286,11 +323,16 @@ export function createModelRuntime({
       }))
     }, 2)
     if (disposed) return {}
-    availability.update({ at: Date.now(), egress })
-    availability.flush()
     const verdicts = Object.values(results)
-    if (verdicts.length > 0 && verdicts.every(row => row.state === STATE.unavailable)) {
-      logger.warn?.(`our-free-model: the gateway refused all ${verdicts.length} models this round (${verdicts[0].detail ?? 'no detail'}); keeping them advertised`)
+    // Nothing answered and something was refused: a mixed round of refusals and
+    // unreachable rows still means this exit serves nothing (see roundRefused).
+    const refusedRound = roundRefused(verdicts.map(row => row.state))
+    const refusedStreak = refusedRound ? (Number(availability.get().refusedStreak) || 0) + 1 : 0
+    availability.update({ at: Date.now(), egress, refusedStreak })
+    availability.flush()
+    if (refusedRound) {
+      logger.warn?.(`our-free-model: the gateway served none of ${verdicts.length} models this round (${verdicts[0].detail ?? 'no detail'}) — round ${refusedStreak} of consecutive refusals`
+        + (refusedStreak >= 2 ? '; the picker stops advertising them until an exit answers (settings.keepRefusedModels overrides)' : '; still advertising them'))
     }
     const allThrottled = verdicts.length > 0 && verdicts.every(row => row.state === STATE.throttled)
     probeThrottleStreak = allThrottled ? probeThrottleStreak + 1 : 0
@@ -330,6 +372,20 @@ export function createModelRuntime({
 
   return {
     state, adapter, refreshCatalog, refreshSealedLane, refreshAvailability, watchEgress, fetchListing,
+    /**
+     * The free lane's verdicts as one object, for `/summary` and the settings
+     * page's diagnosis block. Counted over the lane's own rows, never over the
+     * stored result keys, so a pruned or not-yet-probed id cannot skew it.
+     */
+    laneView: () => {
+      const snapshot = availability.get()
+      return laneView(freeCatalog, snapshot.results ?? {}, {
+        egress: snapshot.egress ?? egress,
+        at: snapshot.at ?? 0,
+        refusedStreak: snapshot.refusedStreak ?? 0,
+        probeIntervalMinutes: settings.get().probeIntervalMinutes,
+      })
+    },
     complete: createForwardCompletion({
       adapter, signal: lifetime.signal,
       state: () => {
@@ -373,9 +429,37 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   const expose = settings?.exposeRegionModels !== false
   const verdictOf = entry => results[entry.id]?.state
   const probeable = catalog.filter(entry => !entry.channel)
-  const refusedAll = probeable.length > 0 && probeable.every(entry => verdictOf(entry) === STATE.unavailable)
+  // A country block is the same verdict about the same network, so it counts
+  // with the unfair-egress refusal here. On 2026-10-20 the real round was nine
+  // "abusive traffic from this IP" rows plus one "not available in your
+  // country" — testing only for `unavailable` would have read that as a healthy
+  // round and quietly emptied the picker nine rows at a time.
+  const countsAsRefused = entry => refusedState(verdictOf(entry))
+  const refusedAll = probeable.length > 0 && probeable.every(countsAsRefused)
+  // Fail-open is right for *one* refused round: a busy exit or a gateway hiccup
+  // must not empty the picker, and the user's own longer request often succeeds
+  // where a 16-token probe was told to wait. It is wrong as a steady state. On
+  // 2026-10-20 every model had answered the same refusal for hours while the
+  // picker still offered all ten, so the fastest way to a dead turn was to pick
+  // a free model — which is what "the plugin is broken" means from the user's
+  // side. Two consecutive refused rounds therefore stop advertising, and the
+  // page says why (src/verdict.js `laneView`) instead of leaving a list of
+  // guaranteed failures. `keepRefusedModels` is the escape hatch for a user who
+  // wants the rows regardless.
+  const streak = Number(availabilitySnapshot?.refusedStreak) || 0
+  const keepAdvertised = settings?.keepRefusedModels === true || streak < 2
   let usable = catalog.filter(entry => verdictOf(entry) !== STATE.unavailable)
-  if (refusedAll) usable = catalog
+  if (refusedAll && keepAdvertised) usable = catalog
+  // A chain is only as dialable as its links. A combo is never probed itself
+  // (`runProbeRound` skips it), so its row survives the filter above while every
+  // member of it is refused — leaving the picker's only remaining entry as the
+  // one that cannot answer.
+  const refusedIds = new Set(Object.entries(results)
+    .filter(([, verdict]) => verdict?.state === STATE.unavailable)
+    .map(([id]) => id))
+  usable = usable.filter(entry => !isComboEntry(entry)
+    || keepAdvertised
+    || (Array.isArray(entry.combo) ? entry.combo : []).some(id => !refusedIds.has(id)))
   const main = []
   const region = []
   for (const entry of usable) {

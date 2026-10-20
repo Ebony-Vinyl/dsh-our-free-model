@@ -13,7 +13,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
   compareVersions, parseManifest, parseVersion, signManifest,
-  verifyManifestSignature, PINNED_MANIFEST_PUBLIC_KEY,
+  verifyManifestSignature, PINNED_MANIFEST_PUBLIC_KEYS,
 } from '../src/updater.js'
 import { publishedBytes } from './lib/published-bytes.mjs'
 
@@ -30,7 +30,7 @@ const safePath = rel => typeof rel === 'string' && rel !== '' && rel === rel.tri
  * verificationKey is injectable only through this testable API. The CLI always
  * uses the trusted checkout's pinned public key; it has no public-key override.
  */
-export function prepareRelease({ repo, base, candidate, signingKey, output, verificationKey = PINNED_MANIFEST_PUBLIC_KEY }) {
+export function prepareRelease({ repo, base, candidate, signingKey, output, verificationKey = PINNED_MANIFEST_PUBLIC_KEYS }) {
   if (!SHA.test(base) || !SHA.test(candidate)) throw new Error('base and candidate must be full lowercase commit SHAs')
   if (!signingKey) throw new Error('the existing release signing key is required')
   const git = args => execFileSync('git', args, { cwd: repo, maxBuffer: 8 * 1024 * 1024 })

@@ -1044,6 +1044,7 @@ export function apply(ctx, config) {
   }
   const api = createApiRoutes({
     settings, stats, availability, catalog: () => modelRuntime.catalog, state,
+    lane: () => modelRuntime.laneView(),
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress,
     onVisibilityChanged: emitTopology,
     pool: fetchPoolSnapshot,
@@ -1878,7 +1879,7 @@ export function createApiRoutes(deps) {
         const patch = await readJson(req)
         const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch', 'keepRefusedModels']), ...visibility }, current)
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
           // The listener spends this machine's lane, and a routable bind address
@@ -2250,6 +2251,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
     ...publicModelVisibility(settings),
     enabled: settings.enabled !== false,
     exposeRegionModels: settings.exposeRegionModels !== false,
+    keepRefusedModels: settings.keepRefusedModels === true,
     probeIntervalMinutes: settings.probeIntervalMinutes ?? 15,
     defaultMaxTokens: settings.defaultMaxTokens ?? 32768,
     announcementAck: settings.announcementAck ?? '',
@@ -2343,6 +2345,10 @@ function buildSummary(deps) {
         : (state.membership[ROUTE_REGION] ?? []).includes(entry.id) ? ROUTE_REGION : null,
     })),
     settings: publicSettings(deps.settings.get(), forwardInfo, deps.egressInfo()),
+    // The free lane in one object: why nothing answers, and what to do about it.
+    // The page renders the rows either way; this is the sentence above them, and
+    // without it "0 可用" is all a user can see (see src/verdict.js `laneView`).
+    lane: deps.lane?.() ?? null,
     egress: forwardInfo.egress ?? snapshot.egress ?? null,
     outlet: deps.egressInfo(),
     probedAt: snapshot.at ?? 0,

@@ -108,6 +108,10 @@ const suites = [
   ['registry', 'registry-test.mjs', []],
   ['route', 'route-test.mjs', []],
   ['combo-advance', 'combo-advance-test.mjs', []],
+  // The free lane's refusal vocabulary: what the probe's sentence means, when it
+  // may be acted on, and what the picker does with it once it is steady.
+  ['verdict', 'verdict-test.mjs', []],
+  ['refusal-fast-fail', 'refusal-fast-fail-test.mjs', []],
   ['prompt-saver', 'prompt-saver-test.mjs', []],
   ['anthropic', 'anthropic-test.mjs', []],
   ['aggregate', 'aggregate-test.mjs', []],

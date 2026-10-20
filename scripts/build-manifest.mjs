@@ -38,7 +38,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { parseManifest, signManifest, verifyManifestSignature, PINNED_MANIFEST_PUBLIC_KEY } from '../src/updater.js'
+import { parseManifest, signManifest, verifyManifestSignature, PINNED_MANIFEST_PUBLIC_KEYS } from '../src/updater.js'
 import { publishedBytes } from './lib/published-bytes.mjs'
 
 const root = path.join(fileURLToPath(new URL('..', import.meta.url)))
@@ -59,7 +59,7 @@ if (keyPath !== '') {
   // Refuse to operate with a key that does not answer to the pinned public one:
   // a release signed by any other key bricks the upgrade path for every user.
   const probe = { version: pkg.version, files: [] }
-  if (!verifyManifestSignature({ ...probe, signature: signManifest(probe, signingKey) }, PINNED_MANIFEST_PUBLIC_KEY)) {
+  if (!verifyManifestSignature({ ...probe, signature: signManifest(probe, signingKey) }, PINNED_MANIFEST_PUBLIC_KEYS)) {
     console.error(`${keyPath} does not match the public key pinned in src/updater.js — refusing to sign`)
     process.exit(1)
   }
@@ -152,7 +152,7 @@ if (process.argv.includes('--check')) {
   // fails every user's upgrade exactly as surely as a stale hash does.
   if (previous !== undefined) {
     try {
-      if (!verifyManifestSignature(parseManifest(previous), PINNED_MANIFEST_PUBLIC_KEY)) {
+      if (!verifyManifestSignature(parseManifest(previous), PINNED_MANIFEST_PUBLIC_KEYS)) {
         problems.push('the committed manifest is not signed with the pinned release key')
       }
     } catch (error) {

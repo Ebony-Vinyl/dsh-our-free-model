@@ -203,7 +203,7 @@ stub.api.refuseAll = true
 await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
 check('a lane-wide failure never empties the picker', (await advertised(ROUTE_MAIN)).length > 0, true)
 check('it keeps the refused models rather than dropping them', (await advertised(ROUTE_MAIN)).includes('deepseek-v4-flash-free'), true)
-check('and says so in the log', ctx.__logs.some(line => line.includes('refused all')), true)
+check('and says so in the log', ctx.__logs.some(line => line.includes('served none of')), true)
 const visibleId = 'space-bunny-free'
 const beforeVisibilityEvents = ctx.__captured.events.filter(event => event === 'emit:llm/adapters-updated').length
 const hiddenSave = await callRoute(api(), 'POST', '/api/our-free-model/settings', { hiddenModelIds: [visibleId, visibleId], hideEacModels: true })

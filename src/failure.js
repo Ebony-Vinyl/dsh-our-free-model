@@ -18,6 +18,7 @@ export function forwardFailure(outcome, anthropic = false) {
     INVALID_CREDENTIAL: [401, 'authentication_error'],
     AUTHORIZATION_REQUIRED: [403, 'permission_error'],
     LANE_LOCKED: [403, 'permission_error'],
+    LANE_REFUSED: [503, 'server_error'],
     REGION_BLOCKED: [403, 'permission_error'],
     PERMISSION_DENIED: [403, 'permission_error'],
     QUOTA_EXHAUSTED: [429, 'insufficient_quota'],
