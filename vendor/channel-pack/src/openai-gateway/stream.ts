@@ -33,14 +33,25 @@ interface ToolState {
   id: string
   name?: string
   arguments: string
+  /** Has the opening frame (carrying `name`) been sent for this call? */
+  announced?: boolean
 }
 
 interface Accumulated {
   content: string
   reasoning: string
+  /** Keyed by the renumbered tool index, not by the adapter's block index. */
   tools: Map<number, ToolState>
+  /** Adapter block index → renumbered `tool_calls[].index`. */
+  toolSlots: Map<number, number>
+  nextToolIndex: number
   usage?: TokenUsage
   finishReason?: string
+}
+
+/** A fresh accumulator with the tool-slot bookkeeping both paths need. */
+function newAccumulated(): Accumulated {
+  return { content: '', reasoning: '', tools: new Map(), toolSlots: new Map(), nextToolIndex: 0 }
 }
 
 function finishReason(reason: FinishReason): string {
@@ -113,22 +124,41 @@ function consumeChunk(state: Accumulated, chunk: StreamChunk): Record<string, un
       state.reasoning += chunk.text
       return { delta: { reasoning_content: chunk.text } }
     case 'tool-call-delta': {
-      let tool = state.tools.get(chunk.index)
+      // `chunk.index` is the adapter's *block* index, shared with text and
+      // reasoning blocks. Re-emitting it as `tool_calls[].index` produced a
+      // sparse array on every thinking turn: the first call of a turn that
+      // thought first arrived as index 1 or 2, and an OpenAI client that
+      // accumulates `tool_calls` by index (the common shape) built an array
+      // with holes and dropped the call. Renumber from 0 in arrival order —
+      // the same rule src/forward.js applies on the forward listener.
+      let key = state.toolSlots.get(chunk.index)
+      if (key === undefined) {
+        key = state.nextToolIndex++
+        state.toolSlots.set(chunk.index, key)
+      }
+      let tool = state.tools.get(key)
       if (!tool) {
         tool = { id: String(chunk.id), arguments: '' }
-        state.tools.set(chunk.index, tool)
+        state.tools.set(key, tool)
       }
       tool.id = String(chunk.id || tool.id)
       if (chunk.name !== undefined) tool.name = chunk.name
       tool.arguments += chunk.argumentsDelta
+      // ⚠️ `name` rides the **first** frame only. OpenAI clients concatenate
+      // `function.name` across every delta with the same index, so repeating it
+      // built names like "ReadReadRead" (WorkBuddy then answered "Tool
+      // \"ReadReadReadReadRead\" does not exist in the current tool set"), and
+      // the model lost every tool-calling turn. `arguments` keeps streaming.
+      const first = tool.announced !== true
+      tool.announced = true
       return {
         delta: {
           tool_calls: [{
-            index: chunk.index,
+            index: key,
             id: tool.id,
             type: 'function',
             function: {
-              ...tool.name === undefined ? {} : { name: tool.name },
+              ...first && tool.name !== undefined ? { name: tool.name } : {},
               arguments: chunk.argumentsDelta,
             },
           }],
@@ -165,7 +195,7 @@ export async function* toOpenAiSse(
   model: string,
   suggest?: SuggestionHook,
 ): AsyncIterable<string> {
-  const state: Accumulated = { content: '', reasoning: '', tools: new Map() }
+  const state = newAccumulated()
   try {
     for await (const chunk of chunks) {
       const event = consumeChunk(state, chunk)
@@ -228,7 +258,7 @@ export async function collectOpenAiCompletion(
   model: string,
   suggest?: SuggestionHook,
 ): Promise<Record<string, unknown>> {
-  const state: Accumulated = { content: '', reasoning: '', tools: new Map() }
+  const state = newAccumulated()
   try {
     for await (const chunk of chunks) {
       const event = consumeChunk(state, chunk)

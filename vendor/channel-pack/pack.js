@@ -63804,22 +63804,29 @@ function consumeChunk(state, chunk) {
       state.reasoning += chunk.text;
       return { delta: { reasoning_content: chunk.text } };
     case "tool-call-delta": {
-      let tool = state.tools.get(chunk.index);
+      let key = state.toolSlots.get(chunk.index);
+      if (key === void 0) {
+        key = state.nextToolIndex++;
+        state.toolSlots.set(chunk.index, key);
+      }
+      let tool = state.tools.get(key);
       if (!tool) {
         tool = { id: String(chunk.id), arguments: "" };
-        state.tools.set(chunk.index, tool);
+        state.tools.set(key, tool);
       }
       tool.id = String(chunk.id || tool.id);
       if (chunk.name !== void 0) tool.name = chunk.name;
       tool.arguments += chunk.argumentsDelta;
+      const first = tool.announced !== true;
+      tool.announced = true;
       return {
         delta: {
           tool_calls: [{
-            index: chunk.index,
+            index: key,
             id: tool.id,
             type: "function",
             function: {
-              ...tool.name === void 0 ? {} : { name: tool.name },
+              ...first && tool.name !== void 0 ? { name: tool.name } : {},
               arguments: chunk.argumentsDelta
             }
           }]
@@ -63848,7 +63855,7 @@ function consumeChunk(state, chunk) {
   }
 }
 async function* toOpenAiSse(chunks, requestId = `chatcmpl-${randomUUID10()}`, model, suggest) {
-  const state = { content: "", reasoning: "", tools: /* @__PURE__ */ new Map() };
+  const state = { content: "", reasoning: "", tools: /* @__PURE__ */ new Map(), toolSlots: /* @__PURE__ */ new Map(), nextToolIndex: 0 };
   try {
     for await (const chunk of chunks) {
       const event = consumeChunk(state, chunk);
@@ -63903,7 +63910,7 @@ async function* toOpenAiSse(chunks, requestId = `chatcmpl-${randomUUID10()}`, mo
   }
 }
 async function collectOpenAiCompletion(chunks, requestId = `chatcmpl-${randomUUID10()}`, model, suggest) {
-  const state = { content: "", reasoning: "", tools: /* @__PURE__ */ new Map() };
+  const state = { content: "", reasoning: "", tools: /* @__PURE__ */ new Map(), toolSlots: /* @__PURE__ */ new Map(), nextToolIndex: 0 };
   try {
     for await (const chunk of chunks) {
       const event = consumeChunk(state, chunk);
