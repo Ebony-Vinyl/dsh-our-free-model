@@ -114,6 +114,7 @@ const suites = [
   ['aggregate', 'aggregate-test.mjs', []],
   ['aggregate-wiring', 'aggregate-wiring-test.mjs', []],
   ['gateway-source', 'gateway-source-test.mjs', []],
+  ['gateway-tool-wire', 'gateway-tool-wire-test.mjs', []],
 ].filter(([name]) => (mode === 'contributor' ? !['manifest', 'release'].includes(name)
   : mode === 'release' ? releaseSuites.has(name) : true)
   && (only === null || name.startsWith(only)))
