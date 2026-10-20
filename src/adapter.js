@@ -203,7 +203,83 @@ export class FreeModelAdapter {
       yield * this.runCombo(options, entry, snapshot)
       return
     }
+    // A chain link owned by another adapter never reaches here as a pinned
+    // entry (it is not in our catalog), so only `runCombo` dispatches foreign
+    // links; a direct call still resolves through our own lanes.
     yield * this.runSingle(options, entry, snapshot, {})
+  }
+
+  /**
+   * Does this chain link belong to another adapter?
+   *
+   * Our own catalog rows are plain objects with a `channel`; a foreign row is
+   * built by `chainMembers()` and carries `foreign: true` plus the provider
+   * route it must be dispatched under. Keeping the marker explicit means a
+   * future lane can never be mistaken for a channel by accident.
+   */
+  static isForeignLink(candidate) {
+    return candidate?.foreign === true && typeof candidate.provider === 'string' && candidate.provider !== ''
+  }
+
+  /**
+   * Run one link that another adapter owns, through the host's own registry.
+   *
+   * Why this exists: the chain editor offers the models the picker offers, and
+   * after the absorbed channels were vendored in, those include `buddy/…` and
+   * `gemini/…` rows that this plugin does not serve. Before this, such a link
+   * could be *stored* but never *resolved* (`state.catalog` has no such id), so
+   * the chain silently skipped it. Dispatching through `ctx.llm.stream()` hands
+   * the turn to the owning adapter and keeps one code path for the caller.
+   *
+   * The chunk vocabulary is the harness's own, so no translation is needed.
+   * Failures are normalised into the same `advance` verdict the local links
+   * report, which is what lets a chain mix both kinds in any order.
+   */
+  async * runForeign(options, candidate, entry) {
+    const started = Date.now()
+    const dispatch = this.deps.dispatchForeign
+    if (typeof dispatch !== 'function') {
+      yield { type: 'finish', reason: { kind: 'error', failure: {
+        message: `the chain "${entry.name}" links to ${candidate.id}, but this host cannot dispatch another adapter's model`,
+        code: CODE.server,
+      } } }
+      return { advance: false, verdict: null, ok: false }
+    }
+    let stream
+    try {
+      stream = await dispatch({
+        provider: candidate.provider,
+        model: candidate.model ?? candidate.id,
+        messages: options.messages,
+        system: options.system,
+        tools: options.tools,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
+        stop: options.stop,
+        signal: options.signal,
+        sessionId: options.sessionId,
+        purpose: options.purpose,
+      })
+    } catch (error) {
+      const failure = { message: String(error?.message ?? error).slice(0, 400), code: error?.code ?? CODE.server }
+      yield { type: 'finish', reason: { kind: 'error', failure } }
+      this.deps.warn?.(`our-free-model: chain "${entry.name}" could not reach ${candidate.id} — ${failure.message}`)
+      return { advance: true, verdict: { kind: 'retryable', message: failure.message }, ok: false }
+    }
+    let ok = false
+    try {
+      for await (const chunk of stream) {
+        if (chunk?.type === 'text-delta' || chunk?.type === 'tool-call') ok = true
+        yield chunk
+      }
+    } catch (error) {
+      const failure = { message: String(error?.message ?? error).slice(0, 400), code: error?.code ?? CODE.server }
+      yield { type: 'finish', reason: { kind: 'error', failure } }
+      this.deps.warn?.(`our-free-model: chain "${entry.name}" failed inside ${candidate.id} — ${failure.message}`)
+      return { advance: !ok, verdict: { kind: 'retryable', message: failure.message }, ok: false }
+    }
+    this.deps.recordTurn?.({ at: started, model: entry.id, ok, recovered: false, attempts: 0, origin: 'harness' })
+    return { advance: false, verdict: null, ok }
   }
 
   /**
@@ -231,7 +307,7 @@ export class FreeModelAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { message: 'our free model is switched off in its settings page', code: 'CONFIG_DISABLED' } } }
       return
     }
-    const candidates = comboChain(entry, snapshot.catalog)
+    const candidates = comboChain(entry, snapshot.catalog, { foreign: this.deps.resolveForeignLink })
     if (candidates.length === 0) {
       rejectedTurn(0)
       yield { type: 'finish', reason: { kind: 'error', failure: { message: `the chain "${entry.name}" has no model available on this egress`, code: CODE.server } } }
@@ -240,12 +316,16 @@ export class FreeModelAdapter {
     const tried = []
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index]
-      const iterator = this.runSingle(options, candidate, snapshot, {
-        wire: wireOf(candidate),
-        turnModel: entry.id,
-        recordTurn: false,
-        allowAdvance: true,
-      })
+      // A link owned by another adapter is dispatched through the host registry;
+      // every other link is one of our own lanes and takes the local path.
+      const iterator = FreeModelAdapter.isForeignLink(candidate)
+        ? this.runForeign(options, candidate, entry)
+        : this.runSingle(options, candidate, snapshot, {
+          wire: wireOf(candidate),
+          turnModel: entry.id,
+          recordTurn: false,
+          allowAdvance: true,
+        })
       let committed = false
       let result
       const held = []

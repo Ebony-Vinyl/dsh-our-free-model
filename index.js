@@ -51,7 +51,7 @@ import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
 import { buildAggregateCatalog, fetchProviderModels, isAggregateEntry, testProvider } from './src/aggregate.js'
-import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
+import { buildComboCatalog, chainMemberRows, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
 import { getProvider, listProviders } from './src/providers/index.js'
 import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPercent } from './src/token-saver/index.js'
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver/prompts.js'
@@ -406,6 +406,104 @@ export function apply(ctx, config) {
     }
   }
 
+  /**
+   * The host registry, read through `ctx.get` so every composition keeps working.
+   *
+   * A `chainMembers()`-style listing must be able to name the absorbed channels,
+   * and a chain link to one must be dispatchable — both go through the `llm`
+   * service. Reading it per call (not once at apply time) matters: the channel
+   * pack mounts on its own fiber after `credentials`/`commands`/`llm` appear, so
+   * a snapshot taken before that would miss every channel.
+   */
+  const llmRegistry = () => {
+    const llm = ctx.get('llm')
+    return llm !== undefined && typeof llm.listProviders === 'function' ? llm : undefined
+  }
+
+  /** Cache of `memberId -> row`, refreshed each time the editor asks. */
+  let foreignIndex = new Map()
+
+  /**
+   * Build the identifier a chain link stores for a model owned by another adapter.
+   *
+   * A bare model id is **not unique** across the absorbed channels: `deepseek-v4-flash`
+   * is served by CodeArts, CodeBuddy, LobsterAI and TRAE at the same time, and
+   * `glm-5.3-flash` by several more. Deduplicating on the bare id therefore
+   * silently swallowed distinct rows — the editor offered fewer models than the
+   * picker showed, and a link could not say which channel it meant.
+   *
+   * `provider/model` is the fix: it is unique, it reads the way the aggregate
+   * lane already writes its rows, and it splits back apart at dispatch time.
+   */
+  const foreignMemberId = (provider, model) => `${provider}/${model}`
+
+  /**
+   * Rebuild the foreign-model index from the host registry.
+   *
+   * Keyed by {@link foreignMemberId}. A bare alias is kept for every row whose
+   * id is unique across all channels, so a chain saved before this change — or
+   * one typed by hand — still resolves instead of silently dropping its link.
+   */
+  async function refreshForeignIndex() {
+    const llm = llmRegistry()
+    if (llm === undefined) return
+    const own = new Set(state().catalog.map(entry => entry.id))
+    const next = new Map()
+    /** Bare id -> how many channels serve it; only the unique ones get an alias. */
+    const bareCount = new Map()
+    const rows = []
+    for (const provider of llm.listProviders()) {
+      let models
+      try {
+        models = await llm.listModels(provider.id)
+      } catch {
+        continue
+      }
+      for (const model of Array.isArray(models) ? models : []) {
+        const bare = String(model?.id ?? '').trim()
+        if (bare === '') continue
+        const id = foreignMemberId(provider.id, bare)
+        if (own.has(id)) continue
+        bareCount.set(bare, (bareCount.get(bare) ?? 0) + 1)
+        rows.push({
+          id,
+          model: bare,
+          name: String(model?.name ?? bare),
+          provider: provider.id,
+          channel: provider.id,
+          foreign: true,
+          vision: Array.isArray(model?.inputModalities) && model.inputModalities.includes('image'),
+        })
+      }
+    }
+    for (const row of rows) {
+      next.set(row.id, row)
+      // A bare id that resolves to exactly one channel is unambiguous, so keep
+      // it as an alias; with two or more, choosing one would be a guess.
+      if (bareCount.get(row.model) === 1) next.set(row.model, row)
+    }
+    foreignIndex = next
+  }
+
+  /** Resolve one chain link owned by another adapter. */
+  const resolveForeignLink = id => foreignIndex.get(String(id ?? '').trim())
+
+  /**
+   * Dispatch one call to another adapter through the host's own registry.
+   *
+   * `LlmRuntime.stream(options)` resolves the owning adapter and runs the same
+   * `llm/stream` waterfall a first-party call would, so the chunk vocabulary is
+   * already the harness's own. Returning the async iterable (rather than a
+   * promise) lets the chain commit on the first answer-bearing delta.
+   */
+  const dispatchForeign = options => {
+    const llm = llmRegistry()
+    if (llm === undefined || typeof llm.stream !== 'function') {
+      throw Object.assign(new Error('this host does not expose llm.stream()'), { code: 'UNAVAILABLE' })
+    }
+    return llm.stream(options)
+  }
+
   const modelRuntime = createModelRuntime({
     ...stores,
     logger,
@@ -414,6 +512,8 @@ export function apply(ctx, config) {
     sealedCredential: sealedCredentialOf,
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
+    resolveForeignLink,
+    dispatchForeign,
   })
   const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
   const runForwarded = modelRuntime.complete
@@ -1042,10 +1142,80 @@ export function apply(ctx, config) {
     // credentials. JSON API and SSE must report the same admission boundary.
     logger.warn?.(`our-free-model: ${surface} admission rejected status=${status} source=${source} reason=${reason}`)
   }
+  /**
+   * Every model a chain may link to, including the absorbed channels.
+   *
+   * The chain editor must offer what the model picker offers — no more, no less:
+   *
+   * - **More**: `state().catalog` is this plugin's own lanes only. The channels
+   *   (`buddy`, `gemini`, `qoder`, …) register their own adapter routes from
+   *   `vendor/channel-pack`, so a `buddy/…` id simply is not in our catalog and
+   *   the editor could not offer it at all. The host registry
+   *   (`ctx.llm.listProviders()` / `listModels()`) is the only place that knows
+   *   about every registered adapter, so it is the base of this list.
+   * - **Less**: a model the user hid from the picker (`hideFreeModels`,
+   *   `hideEacModels`, per-id `hiddenModelIds`) must not be addable here either.
+   *   Offering it would let a user build a chain out of rows the picker refuses
+   *   to show, which is exactly the inconsistency this function removes.
+   *
+   * Hidden state is decided by the *same* predicate the picker uses
+   * (`isModelHidden`) so the two surfaces cannot drift. Entries the plugin owns
+   * carry their capability metadata (context/output/vision) from our catalog;
+   * channel rows carry what the host reports, which is thinner by design.
+   */
+  async function chainMembers() {
+    const current = state()
+    // The index is refreshed here rather than on a timer: the user opens the
+    // editor rarely, and a stale list is worse than a slightly slower one.
+    await refreshForeignIndex()
+    const rows = chainMemberRows(current.catalog, foreignIndex, entry => isModelHidden(entry, current.settings))
+    if (process.env.OFM_DEBUG_MEMBERS === '1') await writeChainMembersDebug(current, rows)
+    return rows
+  }
+
+  /**
+   * Dump what the editor was offered, when `OFM_DEBUG_MEMBERS=1`.
+   *
+   * Off by default and best-effort: the point is to answer "the picker shows N,
+   * the editor shows M" without guessing, and a diagnostic must never be able to
+   * break the surface it describes.
+   */
+  async function writeChainMembersDebug(current, rows) {
+    try {
+      const llm = llmRegistry()
+      const perProvider = {}
+      if (llm !== undefined) {
+        for (const provider of llm.listProviders()) {
+          try {
+            perProvider[provider.id] = (await llm.listModels(provider.id)).map(model => model.id)
+          } catch (error) {
+            perProvider[provider.id] = `ERR ${error?.message ?? error}`
+          }
+        }
+      }
+      const { writeFileSync } = await import('node:fs')
+      writeFileSync(`${dataDir}/chain-members-debug.json`, JSON.stringify({
+        at: new Date().toISOString(),
+        providers: llm?.listProviders().map(provider => provider.id) ?? [],
+        perProvider,
+        foreignIndexIds: [...foreignIndex.keys()],
+        rowCount: rows.length,
+        rows: rows.map(row => `${row.channel}:${row.id}`),
+        ownIds: current.catalog.map(entry => entry.id),
+        settings: {
+          hideFreeModels: current.settings?.hideFreeModels,
+          hideEacModels: current.settings?.hideEacModels,
+          hiddenModelIds: current.settings?.hiddenModelIds,
+        },
+      }, null, 2))
+    } catch { /* diagnostics must never break the editor */ }
+  }
+
   const api = createApiRoutes({
     settings, stats, availability, catalog: () => modelRuntime.catalog, state,
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress,
     onVisibilityChanged: emitTopology,
+    chainMembers,
     pool: fetchPoolSnapshot,
     eacAuth,
     picks,
@@ -1127,24 +1297,33 @@ export function apply(ctx, config) {
     },
     // ── fallback chains ─────────────────────────────────────────────────────
     combos: {
-      list: () => ({
+      list: async () => ({
         combos: normalizeCombos(settings.get().combos),
         // Every id a chain may reference, with the display name the picker uses —
         // the editor offers a searchable list instead of a free-text field, so a
         // typo cannot become a chain link that silently never resolves.
-        models: state().catalog.map(entry => ({
-          id: entry.id, name: entry.name, channel: entry.channel ?? 'free', vision: entry.vision === true,
-          contextWindow: entry.contextWindow, maxOutput: entry.maxOutput,
-        })),
+        //
+        // This list is *not* `state().catalog`: that holds only the lanes this
+        // plugin mounts (free / EAC / Kilo / aggregate). The absorbed channels
+        // live in `vendor/channel-pack`, register their own adapter routes on the
+        // host, and never appear in our catalog — which is why the chain editor
+        // used to offer no `buddy/…` or `gemini/…` row at all. The host's own
+        // registry is the only complete answer, so it is asked here and merged.
+        models: await chainMembers(),
         usable: state().catalog.filter(isComboEntry).map(publicCombo),
         strategies: ['fallback', 'round-robin'],
       }),
-      preview: patch => {
+      preview: async patch => {
         if (patch === null || typeof patch !== 'object' || !Array.isArray(patch.models)
           || patch.models.length > 1000 || patch.models.some(id => typeof id !== 'string' || id.length > 300)) {
           throw httpError(400, 'models must be an array of model ids')
         }
-        const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models }]), state().catalog)
+        await refreshForeignIndex()
+        const entries = buildComboCatalog(
+          normalizeCombos([{ name: 'preview', models: patch.models }]),
+          state().catalog,
+          { foreign: resolveForeignLink },
+        )
         return { capacity: entries.length ? publicCombo(entries[0]) : null }
       },
       save: async patch => {
@@ -1740,14 +1919,19 @@ export function createApiRoutes(deps) {
       }
       // ── fallback chains ────────────────────────────────────────────────────
       if (method === 'GET' && routePath === '/combos') {
-        return send(200, deps.combos.list())
+        // `list()` is async: it queries the host registry for the absorbed
+        // channels' models. Without the await, `send` would serialise a pending
+        // Promise into `{}` and the editor would open with an empty list.
+        return send(200, await deps.combos.list())
       }
       if (method === 'POST' && routePath === '/combos') {
         const body = await readJson(req)
         return send(200, { ok: true, ...await deps.combos.save(body) })
       }
       if (method === 'POST' && routePath === '/combos/preview') {
-        return send(200, deps.combos.preview(await readJson(req)))
+        // Async like `list()`: it may consult the host registry for foreign
+        // links. A missing await serialises a Promise into `{}`.
+        return send(200, await deps.combos.preview(await readJson(req)))
       }
       // ── token savers ───────────────────────────────────────────────────────
       if (method === 'GET' && routePath === '/token-saver') {

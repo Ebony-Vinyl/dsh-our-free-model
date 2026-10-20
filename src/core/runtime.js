@@ -61,6 +61,13 @@ export function createModelRuntime({
   sealedCredential = () => null,
   onSealedUnavailable = () => {},
   onTopology = () => {},
+  /** Resolve a chain link owned by another adapter, or `undefined` when the id
+   *  names nothing. Supplied by the host from `ctx.llm.listModels()`; a
+   *  composition without that registry simply has no foreign links. */
+  resolveForeignLink = () => undefined,
+  /** Dispatch one call to another adapter through the host registry
+   *  (`ctx.llm.stream()`). `undefined` disables cross-adapter chain links. */
+  dispatchForeign,
 }) {
   let catalog = materializeCatalog(catalogStore.get().entries ?? [])
   let sealedCatalog = sealedCredential() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
@@ -99,7 +106,7 @@ export function createModelRuntime({
       merged.push(entry)
     }
     const combos = normalizeCombos(settings.get().combos)
-    comboCatalog = buildComboCatalog(combos, merged)
+    comboCatalog = buildComboCatalog(combos, merged, { foreign: resolveForeignLink })
     pruneRotation(combos)
     for (const entry of comboCatalog) {
       if (seen.has(entry.id)) continue
@@ -124,6 +131,8 @@ export function createModelRuntime({
     state,
     resolveImage,
     sealedCredential,
+    resolveForeignLink,
+    dispatchForeign,
     recordUsage: record => {
       if (disposed) return
       recordUsage(stats, record)
