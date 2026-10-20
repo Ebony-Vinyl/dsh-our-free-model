@@ -855,3 +855,7 @@ MIT — see [LICENSE](LICENSE).
 This project is an independent plugin and is not affiliated with, endorsed by, or
 sponsored by any model provider. Using it to reach free tiers is subject to those
 providers' own terms; check them before deploying anywhere beyond your own machine.
+
+### What model tests verify
+
+EAC, Kilo, aggregate providers and combination models are labeled “Listed · not tested” when only directory membership is known. This does not change picker admission. A manual test verifies one tool-free text response: nonempty text and a normal finish are required; empty, reasoning-only, truncated and tool-call responses fail. It does not verify external harnesses, web search or multi-step tool use. Decode speed uses the interval from the first content frame to the end; unmeasurable windows show no rate.
