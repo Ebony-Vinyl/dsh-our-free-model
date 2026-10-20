@@ -55,6 +55,7 @@
  */
 
 import { TtlCache } from './ttl-cache.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { ClineModel } from './cline-models.js'
 
 /** 社区模型目录（公开、无需认证）。与参考实现的 `MODELS_DEV_URL` 同源。 */
@@ -229,7 +230,7 @@ export interface ClineModelsDevLoaderOptions {
 export function makeClineModelsDevLoader(
   options: ClineModelsDevLoaderOptions = {},
 ): () => Promise<Map<string, ClineModelsDevEntry>> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const cache = new TtlCache<Map<string, ClineModelsDevEntry>>({
     ttlMs: options.ttlMs ?? CLINE_MODELS_DEV_TTL_MS,
     ...options.now === undefined ? {} : { now: options.now },

@@ -40,6 +40,7 @@
  */
 
 import type { ClineCredential } from './cline.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { clineHeaders } from './cline.js'
 import {
   CLINE_MODELS_PATH,
@@ -286,7 +287,7 @@ export async function fetchClineRemoteModels(
   product: ClineProduct,
   options: { credential?: ClineCredential; fetcher?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<ClineRemoteModels> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const warnings: string[] = []
 
   const recommendedPromise = (async (): Promise<ClineRecommendedModels> => {

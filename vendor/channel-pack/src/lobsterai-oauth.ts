@@ -35,6 +35,7 @@ import {
   type LobsteraiCredential,
 } from './lobsterai.js'
 import type { LobsteraiProduct } from './lobsterai-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 在浏览器中打开登录 URL；永不抛出。 */
 export type OpenBrowser = (url: string) => void | Promise<void>
@@ -232,7 +233,7 @@ export interface StartedLobsteraiLoginFlow {
 export async function startLobsteraiLoginFlow(
   options: LobsteraiLoginFlowOptions & { product: LobsteraiProduct; clientVersion: string },
 ): Promise<StartedLobsteraiLoginFlow> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const { product, clientVersion } = options
   const session = createLobsteraiLoginSession()
   const state = randomUUID()

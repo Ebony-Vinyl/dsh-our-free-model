@@ -28,6 +28,7 @@ import {
   type QoderCredential,
 } from './qoder.js'
 import { QODER, type QoderProduct } from './qoder-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import {
   runQoderLoginFlow,
   startQoderLoginFlow,
@@ -188,7 +189,7 @@ export class QoderAuth extends Service {
 
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   private get fetchImpl(): typeof fetch {
-    return this.options.fetcher ?? fetch
+    return this.options.fetcher ?? createDomesticFetch()
   }
 
   /** 标记 refresh_token 已失效：停止重试，并向 status() 暴露 refreshable: false。 */

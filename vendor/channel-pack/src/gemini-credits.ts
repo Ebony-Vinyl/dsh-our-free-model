@@ -64,6 +64,7 @@
  */
 
 import { roundCredits, type CreditBalance, type CreditPackage } from './credits.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import {
   GEMINI,
   GEMINI_CREDITS_TIMEOUT_MS,
@@ -330,7 +331,7 @@ export async function fetchGeminiCreditBalance(
     if (cached !== undefined && now - cached.at < GEMINI_QUOTA_CACHE_TTL_MS) return cached.result
   }
 
-  const result = await requestQuota(credential, options.fetcher ?? fetch)
+  const result = await requestQuota(credential, options.fetcher ?? createDomesticFetch())
   cache.set(token, { at: now, result })
   return result
 }

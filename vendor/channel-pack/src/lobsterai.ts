@@ -24,6 +24,7 @@
 
 import { createHash } from 'node:crypto'
 import { jwtExpiresAtMs } from './buddy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { LobsteraiProduct } from './lobsterai-product.js'
 
 // ── 端点路径 ──
@@ -645,7 +646,7 @@ export class LobsteraiClientVersionResolver {
     if (this.cached !== undefined && now - this.cachedAt < ttl) {
       return { version: this.cached, source: 'cache' }
     }
-    const fetched = this.options.fetcher ?? fetch
+    const fetched = this.options.fetcher ?? createDomesticFetch()
     try {
       const response = await fetched(product.clientVersionApi, {
         method: 'GET',
