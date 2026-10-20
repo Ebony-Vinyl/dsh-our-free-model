@@ -74,8 +74,9 @@ await check('the editor shows the stored chain numbers', async () => {
     models: MODELS, onSave: row => saves.push(row), onCancel: () => {},
   })
   const inputs = numberInputs(app.nodes())
-  assert.equal(inputs.length, 2, 'two number inputs: context window and max output')
-  assert.deepEqual(inputs.map(node => node.props.value), ['1000000', '200000'])
+  assert.equal(inputs.length, 4, 'four number inputs: window, output, failure threshold, blackout')
+  assert.deepEqual(inputs.slice(0, 2).map(node => node.props.value), ['1000000', '200000'])
+  assert.deepEqual(inputs.slice(2).map(node => node.props.value), ['', ''], 'the blackout policy starts off')
   assert.deepEqual(saves, [], 'nothing is written until save')
 })
 
@@ -87,14 +88,18 @@ await check('editing the numbers lands in the save payload', async () => {
     models: MODELS, onSave: row => saves.push(row), onCancel: () => {},
   })
   const before = numberInputs(app.nodes())
-  assert.deepEqual(before.map(node => node.props.value), ['', ''], 'no stored number reads as empty')
+  assert.deepEqual(before.map(node => node.props.value), ['', '', '', ''], 'no stored number reads as empty')
   before[0].props.onChange({ target: { value: '262144' } })
   before[1].props.onChange({ target: { value: '65536' } })
+  before[2].props.onChange({ target: { value: '3' } })
+  before[3].props.onChange({ target: { value: '30' } })
   const save = buttonWith(app.nodes(), app.dict.zh['routing.save'])
   await save.props.onClick()
   assert.equal(saves.length, 1)
   assert.equal(saves[0].contextWindow, 262144)
   assert.equal(saves[0].maxOutput, 65536)
+  assert.equal(saves[0].failureThreshold, 3)
+  assert.equal(saves[0].blackoutMinutes, 30)
 })
 
 await check('a cleared field is written as absent', async () => {
@@ -110,6 +115,8 @@ await check('a cleared field is written as absent', async () => {
   await buttonWith(app.nodes(), app.dict.zh['routing.save']).props.onClick()
   assert.equal('contextWindow' in saves[0], false, 'an empty input must not write a number')
   assert.equal('maxOutput' in saves[0], false)
+  assert.equal('failureThreshold' in saves[0], false)
+  assert.equal('blackoutMinutes' in saves[0], false)
 })
 
 // 审查意见 #341: "0.5 容量截断成 0"。0.5 个 token 不是容量:输入框里的

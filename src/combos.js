@@ -89,6 +89,8 @@ export function normalizeCombos(raw) {
     seen.add(id)
     const contextWindow = positiveInt(row.contextWindow)
     const maxOutput = positiveInt(row.maxOutput)
+    const failureThreshold = positiveInt(row.failureThreshold)
+    const blackoutMinutes = positiveInt(row.blackoutMinutes)
     out.push({
       id,
       name: String(row.name ?? '').trim() || id.slice(COMBO_PREFIX.length),
@@ -98,6 +100,8 @@ export function normalizeCombos(raw) {
       enabled: row.enabled !== false,
       ...contextWindow === undefined ? {} : { contextWindow },
       ...maxOutput === undefined ? {} : { maxOutput },
+      ...failureThreshold === undefined ? {} : { failureThreshold },
+      ...blackoutMinutes === undefined ? {} : { blackoutMinutes },
     })
   }
   return out
@@ -154,6 +158,11 @@ export function buildComboCatalog(combos, catalog) {
       // an intersection row, so the request path can keep the session default
       // in charge of that case; a number here overrides it for every member.
       maxOutputOverride: combo.maxOutput,
+      // The chain's own blackout policy: a member that fails this many times in
+      // a row is skipped for this many minutes. Zero/absent means the chain
+      // keeps trying every member on every turn.
+      failureThreshold: combo.failureThreshold,
+      blackoutMinutes: combo.blackoutMinutes,
       canDisableThinking: members.every(entry => entry.canDisableThinking !== false),
       regionSensitive: false,
       wire: 'chat',
@@ -179,13 +188,22 @@ function number(value) {
  *
  * @param {object} entry - a combo catalog row
  * @param {Array<object>} catalog
- * @param {{peek?: boolean}} [options] - `peek` computes the order without consuming a turn
+ * @param {{peek?: boolean, now?: number}} [options] - `peek` computes the order
+ *   without consuming a turn; `now` lets a test freeze the blackout clock
  */
 export function comboChain(entry, catalog, options = {}) {
   const ids = Array.isArray(entry?.combo) ? entry.combo : []
   const byId = new Map()
   for (const row of catalog) byId.set(row.id, row)
-  const members = ids.map(id => byId.get(id)).filter(row => row !== undefined)
+  const now = options.now ?? Date.now()
+  // A blacklisted member is skipped, not removed: the chain keeps its configured
+  // order, and the member returns by itself when its window expires. When every
+  // member is benched the filter falls back to the full list — refusing to try
+  // anyone would turn a transient outage into a hard failure the user cannot
+  // even see, while trying a benched member costs one more failed attempt.
+  const present = ids.map(id => byId.get(id)).filter(row => row !== undefined)
+  const healthy = present.filter(row => !isBlacklisted(entry.id, row.id, now))
+  const members = healthy.length > 0 ? healthy : present
   if (members.length <= 1 || entry.strategy !== 'round-robin') return members
   const limit = Number.isFinite(Number(entry.stickyLimit)) && Number(entry.stickyLimit) > 0 ? Math.trunc(Number(entry.stickyLimit)) : 1
   const cursor = rotation.get(entry.id) ?? { index: 0, used: 0 }
@@ -196,6 +214,92 @@ export function comboChain(entry, catalog, options = {}) {
     rotation.set(entry.id, used >= limit ? { index: (index + 1) % members.length, used: 0 } : { index, used })
   }
   return ordered
+}
+
+/**
+ * Consecutive failures and the blackout they earn, per chain member.
+ *
+ * The counter is process state on purpose: it is a health signal for this run,
+ * not a fact worth writing to disk on every failed turn, and a restart clearing
+ * it is the same trade the rotation cursor makes. Keys are `${comboId}\u0000${memberId}`
+ * so two chains that share a member keep separate verdicts — one chain may have
+ * proven the member bad while another is still warming it up.
+ */
+const failureStreak = new Map()
+/** `${comboId}\u0000${memberId}` -> epoch ms at which the member becomes usable again. */
+const blacklistedUntil = new Map()
+
+const streakKey = (comboId, memberId) => `${comboId}\u0000${memberId}`
+
+/** Is this member inside its blackout window right now? */
+export function isBlacklisted(comboId, memberId, now = Date.now()) {
+  const until = blacklistedUntil.get(streakKey(comboId, memberId))
+  if (until === undefined) return false
+  if (until > now) return true
+  // Expired: drop both the window and the streak it earned, so the member gets
+  // a fresh N failures rather than being benched again on its first bad turn.
+  blacklistedUntil.delete(streakKey(comboId, memberId))
+  failureStreak.delete(streakKey(comboId, memberId))
+  return false
+}
+
+/** When does this member's blackout end? `0` when it is not blacklisted. */
+export function blacklistedUntilOf(comboId, memberId, now = Date.now()) {
+  return isBlacklisted(comboId, memberId, now) ? blacklistedUntil.get(streakKey(comboId, memberId)) : 0
+}
+
+/** Consecutive failures recorded for this member right now. */
+export function failureCount(comboId, memberId) {
+  return failureStreak.get(streakKey(comboId, memberId)) ?? 0
+}
+
+/**
+ * Record one finished attempt for a chain member.
+ *
+ * A success clears the streak — "consecutive" is the whole contract, and a
+ * member that answers once has demonstrated it is not broken. A failure adds
+ * one; reaching the chain's threshold benches the member for the configured
+ * minutes. Returns the blackout end (0 when not benched) so the caller can say
+ * so in the log without re-reading the maps.
+ *
+ * @param {{comboId: string, memberId: string, ok: boolean, threshold?: number, blackoutMinutes?: number}} row
+ */
+export function recordMemberOutcome({ comboId, memberId, ok, threshold, blackoutMinutes }) {
+  const key = streakKey(comboId, memberId)
+  if (ok === true) {
+    failureStreak.delete(key)
+    return 0
+  }
+  const limit = positiveInt(threshold)
+  const minutes = positiveInt(blackoutMinutes)
+  if (limit === undefined || minutes === undefined) {
+    // No policy on this chain: keep no streak, so switching the policy on later
+    // does not bench a member on failures it collected while the rule was off.
+    failureStreak.delete(key)
+    return 0
+  }
+  const next = (failureStreak.get(key) ?? 0) + 1
+  if (next < limit) {
+    failureStreak.set(key, next)
+    return 0
+  }
+  failureStreak.delete(key)
+  const until = Date.now() + minutes * 60_000
+  blacklistedUntil.set(key, until)
+  return until
+}
+
+/** Drop blackout state for chains that no longer exist, so the maps cannot grow forever. */
+export function pruneBlacklist(combos) {
+  const live = new Set(combos.map(combo => combo.id))
+  for (const key of blacklistedUntil.keys()) if (!live.has(key.split('\u0000')[0])) blacklistedUntil.delete(key)
+  for (const key of failureStreak.keys()) if (!live.has(key.split('\u0000')[0])) failureStreak.delete(key)
+}
+
+/** Test seam: both maps are process state. */
+export function resetBlacklist() {
+  failureStreak.clear()
+  blacklistedUntil.clear()
 }
 
 /** Drop rotation cursors for combos that no longer exist, so the map cannot grow forever. */

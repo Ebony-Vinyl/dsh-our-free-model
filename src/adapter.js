@@ -29,7 +29,7 @@ import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor,
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
-import { isComboEntry, comboChain } from './combos.js'
+import { isComboEntry, comboChain, recordMemberOutcome, failureCount } from './combos.js'
 import { applyTokenSavers, saverConfig } from './token-saver/index.js'
 import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
@@ -273,6 +273,9 @@ export class FreeModelAdapter {
         }
       }
       if (committed) {
+        // The member answered: clear its consecutive-failure streak, so a chain
+        // that benches a model only does so after N failures in a row.
+        recordMemberOutcome({ comboId: entry.id, memberId: candidate.id, ok: true })
         this.deps.recordTurn?.({ at: started, model: entry.id, ok: result?.ok === true, recovered: result?.recovered === true, attempts: index + 1, origin: 'harness' })
         return
       }
@@ -286,7 +289,17 @@ export class FreeModelAdapter {
       }
       const reason = result.verdict === null || result.verdict === undefined ? 'failed' : describeVerdict(result.verdict)
       tried.push(`${candidate.id} (${reason})`)
-      this.deps.warn?.(`our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${reason}`)
+      // This member failed before answering. Count it against the chain's
+      // blackout policy; when it crosses N, say so in the log with the streak
+      // and the window, so "why did it stop trying my model" has an answer.
+      const until = recordMemberOutcome({
+        comboId: entry.id, memberId: candidate.id, ok: false,
+        threshold: entry.failureThreshold, blackoutMinutes: entry.blackoutMinutes,
+      })
+      const streak = failureCount(entry.id, candidate.id)
+      this.deps.warn?.(until > 0
+        ? `our-free-model: chain "${entry.name}" benched ${candidate.id} for ${entry.blackoutMinutes}m after ${entry.failureThreshold} consecutive failures — ${reason}`
+        : `our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${reason}${entry.failureThreshold === undefined ? '' : ` (${streak}/${entry.failureThreshold})`}`)
     }
     rejectedTurn(candidates.length)
     yield { type: 'finish', reason: { kind: 'error', failure: {

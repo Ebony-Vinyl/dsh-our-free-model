@@ -52,7 +52,7 @@ import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
 import { buildAggregateCatalog, fetchProviderModels, isAggregateEntry, testProvider } from './src/aggregate.js'
-import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
+import { blacklistedUntilOf, buildComboCatalog, failureCount, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
 import { getProvider, listProviders } from './src/providers/index.js'
 import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPercent } from './src/token-saver/index.js'
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver/prompts.js'
@@ -1251,6 +1251,14 @@ export function apply(ctx, config) {
         // The built virtual rows: a stored chain's effective capacity is one of
         // these, already folding the chain's own override over the intersection.
         usable: state().catalog.filter(isComboEntry).map(publicCombo),
+        // Live health per chain member: the editor shows "benched for Xm" and
+        // "3/5 consecutive failures" without a second round trip. Process state,
+        // so a restart resets it along with the counters themselves.
+        health: Object.fromEntries(normalizeCombos(settings.get().combos).map(combo => [combo.id,
+          Object.fromEntries(combo.models.map(id => {
+            const until = blacklistedUntilOf(combo.id, id)
+            return [id, { failures: failureCount(combo.id, id), until }]
+          }))])),
         strategies: ['fallback', 'round-robin'],
       }),
       preview: patch => {
@@ -2393,6 +2401,8 @@ function publicSettings(settings, forwardInfo, egressInfo) {
       enabled: combo.enabled,
       contextWindow: combo.contextWindow,
       maxOutput: combo.maxOutput,
+      failureThreshold: combo.failureThreshold,
+      blackoutMinutes: combo.blackoutMinutes,
     })),
     forward: {
       ...(settings.forward ?? {}),

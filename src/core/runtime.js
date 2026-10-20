@@ -3,7 +3,7 @@ import path from 'node:path'
 import { FreeModelAdapter, ROUTE_MAIN, ROUTE_REGION } from '../adapter.js'
 import { buildCatalog, buildEacCatalog, buildKiloCatalog, isEacEntry, isKiloEntry, parseListing, reviveKiloCatalog } from '../catalog.js'
 import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
-import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
+import { buildComboCatalog, isComboEntry, normalizeCombos, pruneBlacklist, pruneRotation } from '../combos.js'
 import { isChannelEntry } from '../chan-lane.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
@@ -109,6 +109,7 @@ export function createModelRuntime({
     const combos = normalizeCombos(settings.get().combos)
     comboCatalog = buildComboCatalog(combos, merged)
     pruneRotation(combos)
+    pruneBlacklist(combos)
     for (const entry of comboCatalog) {
       if (seen.has(entry.id)) continue
       seen.add(entry.id)

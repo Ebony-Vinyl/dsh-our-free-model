@@ -111,6 +111,8 @@ const suites = [
   ['route', 'route-test.mjs', []],
   ['combo-advance', 'combo-advance-test.mjs', []],
   ['combo-capacity', 'combo-capacity-test.mjs', []],
+  ['combo-blacklist', 'combo-blacklist-test.mjs', []],
+  ['combo-blacklist-e2e', 'combo-blacklist-e2e-test.mjs', []],
   ['routing-caps-ui', 'routing-caps-ui-test.mjs', []],
   ['prompt-saver', 'prompt-saver-test.mjs', []],
   ['anthropic', 'anthropic-test.mjs', []],

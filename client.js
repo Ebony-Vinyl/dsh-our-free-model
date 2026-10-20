@@ -692,6 +692,13 @@ window.__ModuleLoader__.load({
         'routing.maxOutput': '最大输出（token）',
         'routing.capacityAuto': '自动',
         'routing.capacityHint': '留空时按整条链上全部成员的最小值自动计算；填写后，链上每个模型都使用这个值。',
+        'routing.failureThreshold': '连续失败次数',
+        'routing.blackoutMinutes': '拉黑时长（分钟）',
+        'routing.blackoutOff': '不启用',
+        'routing.blackoutHint': '某个成员连续失败达到这个次数后，在指定分钟内跳过它，由链上其余成员继续应答。两项都留空时不启用。',
+        'routing.blackoutPolicy': '连续失败 {n} 次后拉黑 {m} 分钟',
+        'routing.blacklistedFor': '已拉黑，剩余 {m} 分钟',
+        'routing.failStreak': '连续失败 {n}/{max}',
         'routing.memberCapacity': '这个成员提供的上下文窗口与最大输出',
         'routing.members': '成员（按顺序）',
         'routing.addMember': '添加成员',
@@ -1387,6 +1394,13 @@ window.__ModuleLoader__.load({
         'routing.maxOutput': 'Max output (tokens)',
         'routing.capacityAuto': 'Auto',
         'routing.capacityHint': 'Empty means the smallest value across the chain members; a number here applies to every model in the chain.',
+        'routing.failureThreshold': 'Consecutive failures',
+        'routing.blackoutMinutes': 'Blackout (minutes)',
+        'routing.blackoutOff': 'Off',
+        'routing.blackoutHint': 'After a member fails this many times in a row, skip it for this many minutes while the rest of the chain keeps answering. Leave both empty to keep the rule off.',
+        'routing.blackoutPolicy': 'Bench a member for {m} min after {n} consecutive failures',
+        'routing.blacklistedFor': 'benched, {m} min left',
+        'routing.failStreak': '{n}/{max} consecutive failures',
         'routing.memberCapacity': 'The context window and the max output this member brings',
         'routing.members': 'Members (in order)',
         'routing.addMember': 'Add member',
@@ -5842,6 +5856,8 @@ window.__ModuleLoader__.load({
       const [stickyLimit, setStickyLimit] = useState(String(chain.stickyLimit ?? 1))
       const [contextWindow, setContextWindow] = useState(chain.contextWindow > 0 ? String(chain.contextWindow) : '')
       const [maxOutput, setMaxOutput] = useState(chain.maxOutput > 0 ? String(chain.maxOutput) : '')
+      const [failureThreshold, setFailureThreshold] = useState(chain.failureThreshold > 0 ? String(chain.failureThreshold) : '')
+      const [blackoutMinutes, setBlackoutMinutes] = useState(chain.blackoutMinutes > 0 ? String(chain.blackoutMinutes) : '')
       const [enabled, setEnabled] = useState(chain.enabled !== false)
       const [members, setMembers] = useState(Array.isArray(chain.models) ? chain.models : [])
       const [picking, setPicking] = useState(false)
@@ -5872,6 +5888,8 @@ window.__ModuleLoader__.load({
           const limit = Number(stickyLimit)
           const contextWindowTokens = tokenValue(contextWindow)
           const maxOutputTokens = tokenValue(maxOutput)
+          const threshold = Number(failureThreshold)
+          const minutes = Number(blackoutMinutes)
           await onSave({
             ...chain.id === undefined ? {} : { id: chain.id },
             name,
@@ -5881,6 +5899,8 @@ window.__ModuleLoader__.load({
             enabled,
             ...contextWindowTokens === undefined ? {} : { contextWindow: contextWindowTokens },
             ...maxOutputTokens === undefined ? {} : { maxOutput: maxOutputTokens },
+            ...Number.isFinite(threshold) && threshold > 0 ? { failureThreshold: Math.floor(threshold) } : {},
+            ...Number.isFinite(minutes) && minutes > 0 ? { blackoutMinutes: Math.floor(minutes) } : {},
           })
         } catch (failure) { setError(String(failure?.message ?? failure)) } finally { setBusy(false) }
       }
@@ -5934,6 +5954,22 @@ window.__ModuleLoader__.load({
               onChange: event => setMaxOutput(event.target.value),
             }))),
         h('p', { className: 'ofm_note' }, t('routing.capacityHint')),
+        h('div', { className: 'ofm_row' },
+          h('div', { className: 'ofm_field' },
+            h('span', null, t('routing.failureThreshold')),
+            h('input', {
+              className: 'ofm_input', type: 'number', min: 1, max: 100, style: { width: 148 },
+              value: failureThreshold, disabled: busy, placeholder: t('routing.blackoutOff'),
+              onChange: event => setFailureThreshold(event.target.value),
+            })),
+          h('div', { className: 'ofm_field' },
+            h('span', null, t('routing.blackoutMinutes')),
+            h('input', {
+              className: 'ofm_input', type: 'number', min: 1, max: 1440, style: { width: 148 },
+              value: blackoutMinutes, disabled: busy, placeholder: t('routing.blackoutOff'),
+              onChange: event => setBlackoutMinutes(event.target.value),
+            }))),
+        h('p', { className: 'ofm_note' }, t('routing.blackoutHint')),
         h('div', { className: 'ofm_paneltitle' }, t('routing.members'),
           h('span', { className: 'ofm_sec_hint' }, t('routing.memberCount').replace('{n}', String(members.length)))),
         members.length === 0
@@ -5975,9 +6011,13 @@ window.__ModuleLoader__.load({
      * broken", and the user is the only one who can tell which one it is.
      */
     function ChainCard(props) {
-      const { t, chain, resolved, missing, lookup, onEdit, onDelete, confirming, index, capacity } = props
+      const { t, chain, resolved, missing, lookup, onEdit, onDelete, confirming, index, capacity, health } = props
       const lanes = LANE_LABEL(t)
       const usable = chain.enabled !== false && resolved.length > 0
+      const now = Date.now()
+      const policy = chain.failureThreshold > 0 && chain.blackoutMinutes > 0
+        ? t('routing.blackoutPolicy').replace('{n}', String(chain.failureThreshold)).replace('{m}', String(chain.blackoutMinutes))
+        : null
       return h('div', { className: 'ofm_card ofm_rise', style: { animationDelay: `${Math.min(index, 8) * 22}ms` } },
         h('div', { className: 'ofm_cardhead' },
           h('span', { className: 'ofm_cardname', title: chain.name }, chain.name),
@@ -5986,12 +6026,21 @@ window.__ModuleLoader__.load({
           h('span', null, chain.id),
           h('span', null, chain.strategy === 'round-robin' ? t('routing.strategy.roundRobin') : t('routing.strategy.fallback')),
           h('span', null, t('routing.memberCount').replace('{n}', String((chain.models ?? []).length)))),
+        policy === null ? null : h('div', { className: 'ofm_note' }, policy),
         h(ChainCapacity, { capacity, t }),
         h('div', { className: 'ofm_row' },
           h('span', { className: 'ofm_note' }, t('routing.resolved')),
           resolved.length === 0
             ? h('span', { className: 'ofm_note' }, '—')
-            : resolved.map(id => h('span', { key: id, className: 'ofm_tag' }, `${lookup.get(id)?.name ?? id} · ${lanes[lookup.get(id)?.channel] ?? ''}`))),
+            : resolved.map(id => {
+              const row = health?.[id]
+              const benched = Number(row?.until) > now
+              const failures = Number(row?.failures) || 0
+              const state = benched
+                ? ` · ${t('routing.blacklistedFor').replace('{m}', String(Math.max(1, Math.ceil((row.until - now) / 60_000))))}`
+                : failures > 0 && chain.failureThreshold > 0 ? ` · ${t('routing.failStreak').replace('{n}', String(failures)).replace('{max}', String(chain.failureThreshold))}` : ''
+              return h('span', { key: id, className: 'ofm_tag', style: benched ? { opacity: 0.55 } : undefined }, `${lookup.get(id)?.name ?? id} · ${lanes[lookup.get(id)?.channel] ?? ''}${state}`)
+            })),
         missing.length === 0
           ? null
           : h(Fragment, null,
@@ -6078,6 +6127,7 @@ window.__ModuleLoader__.load({
               key: chain.id, t, index, chain, lookup,
               resolved: resolvedOf(chain), missing: missingOf(chain),
               capacity: (panel.data?.usable ?? []).find(row => row.id === chain.id),
+              health: panel.data?.health?.[chain.id],
               confirming: confirm === chain.id,
               onEdit: () => setEditing({ chain }),
               onDelete: () => { if (confirm === chain.id) void remove(chain.id); else setConfirm(chain.id) },
