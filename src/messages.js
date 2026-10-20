@@ -15,6 +15,21 @@ import { MAX_TOOL_NAME_LEN, baseModelId, restoreToolName } from './upstream.js'
 /** Content types an image lane can carry, matched against the verified media type. */
 const IMAGE_MEDIA = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
+/**
+ * Does this id belong to a DeepSeek model whose chat wire demands the
+ * `reasoning_content` echo? See {@link toChatMessages} for the rule itself.
+ *
+ * Matched on the base id by family name rather than by an exact id list, so a
+ * newly published `deepseek-v4.x-…-free` is covered the day the listing starts
+ * naming it — the requirement is a property of the family's thinking mode, not
+ * of one id. `union-alpha` and the `muse-spark` pair are deliberately outside
+ * this: they answer on the Messages and Responses wires respectively, never on
+ * the chat wire this predicate is read by.
+ */
+function isDeepSeekThinkingModel(model) {
+  return /^deepseek/i.test(baseModelId(model))
+}
+
 /** Text of a content block list, joining every text-bearing block. */
 function textOf(blocks) {
   const parts = []
@@ -156,11 +171,35 @@ function callIdOf(message) {
 /**
  * Project harness messages onto OpenAI Chat Completions.
  *
- * Assistant reasoning is never replayed upstream; only visible text and tool
- * calls are. Tool results are first-class `role: 'tool'` messages keyed by the
- * provider call id they answer.
+ * Assistant reasoning is dropped by default; only visible text and tool calls
+ * are replayed. Tool results are first-class `role: 'tool'` messages keyed by
+ * the provider call id they answer.
+ *
+ * ## The DeepSeek exception (`opts.model`)
+ *
+ * DeepSeek's V4 thinking mode refuses a follow-up turn outright when an
+ * earlier turn's `reasoning_content` is missing:
+ *
+ * > The `reasoning_content` in the thinking mode must be passed back to the API.
+ * > — https://api-docs.deepseek.com/guides/thinking_mode/
+ *
+ * and the requirement binds on **every** request that carries `tools`, not only
+ * on turns that actually called one. This lane always carries tools — the v2
+ * fingerprint gate injects `read` and `shell` unconditionally (see
+ * `applyFingerprint` in `src/upstream.js`) — so on a DeepSeek id the condition
+ * never lifts and this projector is the place that has to satisfy it.
+ *
+ * The absorbed channel pack already solved the same wall for its own DeepSeek
+ * families (`vendor/channel-pack/pack.js`, `serializeMessages`), and its
+ * solution is the one mirrored here: the field is emitted **unconditionally,
+ * as an empty string when the turn carried no reasoning**, because what the
+ * upstream checks is the field's presence rather than its length.
+ *
+ * Scoped to DeepSeek ids: every other gateway keeps receiving exactly the body
+ * it has always received.
  */
-export function toChatMessages(messages, resolveImage, warnings) {
+export function toChatMessages(messages, resolveImage, warnings, opts = {}) {
+  const carriesReasoning = isDeepSeekThinkingModel(opts.model)
   const out = []
   const followUp = []
   const flushFollowUp = () => {
@@ -224,6 +263,7 @@ export function toChatMessages(messages, resolveImage, warnings) {
       case 'assistant': {
         const text = textOf(blocks)
         const calls = []
+        let reasoning = ''
         for (const block of blocks) {
           if (block?.type === 'tool-call') {
             calls.push({
@@ -231,11 +271,19 @@ export function toChatMessages(messages, resolveImage, warnings) {
               type: 'function',
               function: { name: String(block.name ?? ''), arguments: typeof block.arguments === 'string' ? block.arguments : '{}' },
             })
+          } else if (block?.type === 'reasoning' && typeof block.text === 'string') {
+            // A turn can carry more than one reasoning block (the recovery path
+            // splices a checkpoint ahead of the resumed reasoning); the wire
+            // wants the whole of it as one string.
+            reasoning += block.text
           }
         }
         if (!text && calls.length === 0) break
         const entry = { role: 'assistant', content: text || null }
         if (calls.length > 0) entry.tool_calls = calls
+        // DeepSeek V4 思考模式的强制字段：必须存在，无推理时是空串。见函数头
+        // 说明 —— 上游校验的是「字段在不在」，不是「内容长不长」。
+        if (carriesReasoning) entry.reasoning_content = reasoning
         out.push(entry)
         break
       }
