@@ -306,6 +306,8 @@ Gemini 登录需要访问 `accounts.google.com`、`oauth2.googleapis.com`、`www
 
 Gemini 的登录、续期、项目探测和推理，以及 Cline 的登录、续期和推理，共用逐请求代理：优先使用已运行的插件出口代理，其次读取 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`，最后在 Windows 读取当前用户的手动系统代理；没有代理时直连。环境代理遵守 `NO_PROXY`，系统代理遵守 `ProxyOverride`；回环请求不自动使用代理。无需为这两条渠道设置 `NODE_USE_ENV_PROXY`，也不会改动宿主的全局代理。
 
+**额度与配额查询也走同一条代理**：设置页的「积分/配额」卡片（`credits.balances`）与用量徽标（`usage.badge`）读的是同一批上游端点，因此同样经过上述路径。早期版本只把代理注入到登录与推理，配额查询回落成全局 `fetch` 直连，需要在代理出网的环境里会表现为「登录成功、账号已显示，但配额查询报 `fetch failed`」——当前实现已覆盖该路径。
+
 Windows 自动检测只支持手动代理，不执行 PAC 自动配置脚本；系统设置最多缓存 30 秒。仅配置 PAC 时，请改用插件出口或环境代理。网络失败会显示所选路径及 `UND_ERR_CONNECT_TIMEOUT`、`ENOTFOUND` 等底层错误码；代理连接失败不会自动重试直连。浏览器回调未到达的授权超时仍需检查本机回调地址和端口是否可达。
 
 ## 聚合渠道、省 Token、路由与本地网关
@@ -643,6 +645,8 @@ node scripts/sniff-test.mjs # 200 响应按 body 形状分流：SSE 帧、单包
 node scripts/release-e2e.mjs # 使用真实 feed/manifest.json 执行一次升级，并验证虚报字节的清单会被拒绝
 node scripts/picker-test.mjs # 选择器只广播可用的模型，且永不广播空集合
 node scripts/tui-test.mjs # 无 web server 的 composition 中插件仍能启动并输出模型
+node scripts/channel-network-test.mjs # 渠道代理：登录、续期、项目探测与推理共用逐请求代理
+node scripts/channel-quota-network-test.mjs # 配额/余额查询（credits.balances）同样走该代理，不回落全局 fetch
 node scripts/host-selftest.mjs # Host 半身端到端，会真实出网
 node scripts/build-manifest.mjs # 发布：重新生成 feed/manifest.json（发布文件哈希清单）
 ```
