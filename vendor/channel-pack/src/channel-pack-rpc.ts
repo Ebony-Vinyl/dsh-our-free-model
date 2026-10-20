@@ -882,11 +882,23 @@ export function registerChannelPackRpc(
    */
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
   config: { disableOpencode?: boolean } = {},
+  /**
+   * 渠道出网封装（可选）。
+   *
+   * 为什么需要：PR #198 把代理注入到了登录、续期、项目探测与推理，但**余额/配额
+   * 查询走的是本模块的 RPC 分支**，那条路径当时没有接线，于是回落成全局 `fetch`
+   * 直连。用户的 Windows 系统代理（或环境代理）因此只对登录生效，配额查询仍报
+   * `fetch failed`。这里把同一份封装透传下去，让两者走同一条出网路径。
+   *
+   * 省略时保持历史行为（全局 `fetch`）。
+   */
+  network?: { fetch: typeof fetch },
 ): void {
   ctx.inject(['connection'], (connectionCtx) => {
     registerChannelPackEndpoints(
       connectionCtx as Context, pool, codearts, buddy, workbuddy, lobsterai,
       qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config,
+      network,
     )
   })
 }
@@ -982,6 +994,7 @@ function registerChannelPackEndpoints(
   gemini: GeminiAuth,
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
   config: { disableOpencode?: boolean } = {},
+  network?: { fetch: typeof fetch },
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const connection = (ctx as any).connection ?? ctx.get('connection')
@@ -3082,7 +3095,9 @@ function registerChannelPackEndpoints(
           //（本机实测 `total_count: 0` 且 `details` 缺失正是「真的为 0」）。
           const values = await collectCreditBalances<MinimaxCredential, undefined>(accounts, undefined, {
             resolve: (ref) => ctx.credentials.resolve(ref),
-            fetchBalance: (credential) => fetchMinimaxCreditBalance(credential),
+            // 同 GEMINI 分支：余额查询也是真实的 HTTPS 端点，必须与推理走同一条出网路径。
+            ...(network === undefined ? {} : { fetcher: network.fetch }),
+            fetchBalance: (credential) => fetchMinimaxCreditBalance(credential, network?.fetch),
             warn: (msg) => ctx.logger?.warn?.(msg),
           })
           return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }
@@ -3110,8 +3125,15 @@ function registerChannelPackEndpoints(
           // 档位取不到时 `extra` 缺席，面板不渲染那一行（**不是错误**）。
           const values = await collectCreditBalances<GeminiCredential, typeof GEMINI>(accounts, GEMINI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
+            // ⚠️ 必须把渠道出网封装传进去：配额是 Google 的 HTTPS 端点，在需要代理
+            // 的网络里直连只会得到 `fetch failed`（UND_ERR_CONNECT_TIMEOUT），
+            // 而登录早已走代理成功——两者必须同源，否则用户看到「已登录但配额查不到」。
+            ...(network === undefined ? {} : { fetcher: network.fetch }),
             fetchBalanceDetailed: async (credential) => {
-              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, { force: req.force === true })
+              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, {
+                force: req.force === true,
+                ...(network === undefined ? {} : { fetcher: network.fetch }),
+              })
               const extra: RpcCreditsBalanceExtra | undefined = tier === undefined
                 ? undefined
                 : { accountTier: { label: tier.label, title: `${tier.name}（${tier.id}）` } }
