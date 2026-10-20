@@ -332,6 +332,63 @@ try {
     assert.equal(text, 'VISIBLE', '已交付的正文被改写')
   })
 
+  await check('渠道以 400 INVALID_REQUEST 拒绝「unapproved channel」时，链路仍降级', async () => {
+    // 实测形状：buddy 对上游不接受的请求回 400，body 是英文的
+    // `Illegal API invocation from an unapproved channel`，包把它原样拼进
+    // LlmError(code='INVALID_REQUEST', status=400)。
+    //
+    // 这条**不能**落到「未匹配 4xx = 请求级、无冷却」的兜底：同一个请求体在
+    // 其它渠道是正常的，按请求级处理会让链路停在第一个成员上，而后面五个
+    // 健康成员一直空转。marker 规则把它归为账号级、带冷却，于是照常降级。
+    resetRotation()
+    const banned = { id: 'buddy/deepseek-v4.1-flash', model: 'deepseek-v4.1-flash', name: 'B', provider: 'buddy', channel: 'buddy', foreign: true }
+    const healthy = { id: 'codearts/deepseek-v4.1-flash', model: 'deepseek-v4.1-flash', name: 'C', provider: 'codearts', channel: 'codearts', foreign: true }
+    const foreign = new Map([[banned.id, banned], [healthy.id, healthy]])
+
+    const dispatched = []
+    const adapter = new FreeModelAdapter({
+      state: () => ({ catalog: ownCatalog, membership: {}, settings: {}, attributionUserAgent: 'test' }),
+      recordUsage: () => {},
+      recordTurn: () => {},
+      resolveForeignLink: id => foreign.get(id),
+      dispatchForeign: options => {
+        dispatched.push(options.provider)
+        if (options.provider === 'buddy') {
+          return (async function* () {
+            yield {
+              type: 'finish',
+              reason: {
+                kind: 'error',
+                failure: {
+                  message: 'buddy: 请求被拦截，请重新发送 Illegal API invocation from an unapproved channel',
+                  code: 'INVALID_REQUEST',
+                  status: 400,
+                },
+              },
+            }
+          })()
+        }
+        return (async function* () {
+          yield { type: 'text-delta', text: 'HEALTHY_ANSWER' }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        })()
+      },
+    })
+
+    const combos = normalizeCombos([{ name: 'blocked', models: [banned.id, healthy.id] }])
+    const [entry] = buildComboCatalog(combos, [], { foreign: id => foreign.get(id) })
+    const snapshot = { catalog: [entry], settings: {}, attributionUserAgent: 'test' }
+
+    const chunks = []
+    for await (const chunk of adapter.runStream({ model: entry.id, messages: [], provider: 'our-free-model' }, entry, snapshot)) {
+      chunks.push(chunk)
+    }
+
+    assert.deepEqual(dispatched, ['buddy', 'codearts'], `链路没有降级，只尝试了 ${dispatched.join(',') || '（无）'}`)
+    const text = chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')
+    assert.equal(text, 'HEALTHY_ANSWER')
+  })
+
   console.log(`chain-members: ${checks}/${checks} 项通过`)
 } finally {
   resetRotation()

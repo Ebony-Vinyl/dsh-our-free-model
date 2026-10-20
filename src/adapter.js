@@ -313,8 +313,14 @@ export class FreeModelAdapter {
     }
 
     if (terminal !== null) {
-      this.deps.warn?.(`our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${terminal.message ?? 'upstream failure'}`)
-      return { ok: false, ...advanceVerdict(terminal.code, terminal.message, terminal.status) }
+      const outcome = advanceVerdict(terminal.code, terminal.message, terminal.status)
+      // Both endings deserve a line: "advanced" explains a model switch the
+      // caller never saw, and "stopped" is the only record of *why* a chain gave
+      // up — reading the verdict back beats guessing.
+      this.deps.warn?.(outcome.advance === true
+        ? `our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${describeVerdict(outcome.verdict)}`
+        : `our-free-model: chain "${entry.name}" stopped at ${candidate.id} — ${describeVerdict(outcome.verdict)}: ${String(terminal.message ?? 'upstream failure').slice(0, 200)}`)
+      return { ok: false, ...outcome }
     }
 
     // A clean end is the chain's own business to record: `runCombo` counts one
