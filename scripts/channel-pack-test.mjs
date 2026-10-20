@@ -9,7 +9,7 @@ import path from 'node:path'
 import { registerHooks } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { verifyChannelModelActions } from './channel-model-actions-test.mjs'
-import { verifyChannelCreditsUi } from './channel-credits-ui-test.mjs'
+import { verifyChannelCreditsUi, verifyBalancePercent } from './channel-credits-ui-test.mjs'
 import { verifyChannelCreditsRpc } from './channel-credits-rpc-test.mjs'
 import { verifyChannelImagePricing } from './channel-image-pricing-test.mjs'
 
@@ -224,7 +224,9 @@ try {
   console.log('ok  actual channel page: 13 account cards, OpenCode removed')
   await verifyChannelModelActions()
   await verifyChannelCreditsUi()
+  await verifyBalancePercent()
   console.log('ok  共享渠道余额：十三渠道能力、失败原因、重试、签到反馈和请求交错')
+  console.log('ok  共享渠道卡片：余额百分比的分母口径（重叠包、失效包、无明细）')
   console.log('ok  共享渠道卡片：批量开关、单次请求、重复点击保护和失败恢复')
 
   // The retained OFM anonymous lane still enumerates and streams without any

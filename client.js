@@ -538,6 +538,8 @@ window.__ModuleLoader__.load({
         'chan.credits.failed': '余额查询失败：{reason}',
         'chan.credits.partial': '{count} 个账号未能查询余额，请展开账号查看原因并重试。',
         'chan.credits.unavailable': '未返回余额数据',
+        'chan.credits.noAccount': '未在该渠道登录账号',
+        'chan.credits.percent.title': '剩余额度占本周期总额度',
         'chan.claim.failed': '领取失败：{reason}',
         'chan.auto.title': '每日自动签到',
         'chan.auto.running': '签到进行中…',
@@ -1227,6 +1229,8 @@ window.__ModuleLoader__.load({
         'chan.credits.failed': 'Balance query failed: {reason}',
         'chan.credits.partial': 'Could not query {count} accounts. Expand accounts to see the reasons and retry.',
         'chan.credits.unavailable': 'No balance data returned',
+        'chan.credits.noAccount': 'Not signed in on this channel',
+        'chan.credits.percent.title': 'Remaining share of this cycle’s allowance',
         'chan.claim.failed': 'Claim failed: {reason}',
         'chan.auto.title': 'Daily auto check-in',
         'chan.auto.running': 'Check-in running…',
@@ -1821,6 +1825,8 @@ window.__ModuleLoader__.load({
 .ofm_navmark img,.ofm_chanlogo img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 .ofm_chanlogo{padding:0;overflow:hidden}
 .ofm_credittotal b{color:var(--dsw-alias-state-success-primary);font-variant-numeric:tabular-nums}
+/* 剩余占本周期额度总额的比例，紧随余额数字之后；用中性色，避免与余额本身的绿色语义竞争。 */
+.ofm_creditpct{margin-left:5px;font-size:10.5px;font-weight:600;opacity:.72;font-variant-numeric:tabular-nums}
 .ofm_creditbadge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 9%,transparent);color:var(--dsw-alias-state-warning-primary,#f0a441);white-space:nowrap}
 .ofm_creditbadge.strong{max-width:100%;white-space:normal;overflow-wrap:anywhere;color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 9%,transparent)}
 /* ══ 账号池状态 ════════════════════════════════════════════════════════ */
@@ -2416,6 +2422,96 @@ window.__ModuleLoader__.load({
       if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
       if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}K`
       return String(n)
+    }
+
+    /** A finite number from a gateway field that may be a string, or undefined. */
+    function finite(value) {
+      const n = Number(value)
+      return Number.isFinite(n) ? n : undefined
+    }
+
+    /**
+     * Remaining percentage for one account's balance, with its denominator.
+     *
+     * `balance.total` is the gateway's own **remaining** aggregate and is the
+     * authority for the numerator (measured: a codearts account reports
+     * 总积分包 7150.69 = 基础积分包 500 + 赠送积分包 6650.69, so summing every
+     * bundle would double-count the same credits and print far more than the
+     * account holds).
+     *
+     * The denominator is where a bundle sum goes wrong a second time, and this
+     * was measured rather than assumed. The bundles overlap in the same way
+     * (`总积分包.used` 349.31 IS `赠送积分包.used` 349.31), so `total + Σused`
+     * over every bundle inflates the denominator too: on that same account it
+     * yields 7849.31 and reads 91.10%, while the true cycle allowance is
+     * 7500 → 95.34%. `total + Σused` is only correct where the bundles do not
+     * overlap (buddy: 3896.29 + 642.71 = 4539 → 85.84%, matching its bundle
+     * totals exactly), so the two cases must be told apart.
+     *
+     * The discriminator is the bundle whose `remaining` equals `balance.total`:
+     * when one exists it is the aggregate the others are cut from, and its own
+     * `used` is the used side of the same aggregate. When no bundle matches the
+     * aggregate (or none overlaps at all), every bundle is its own allowance and
+     * the sums are already correct.
+     *
+     * Returns null when no denominator can be trusted, so the caller shows the
+     * number without a percentage rather than a fabricated one. That includes
+     * channels that ship the aggregate with **no bundle detail at all**
+     * (`minimax-credits.ts` returns `packages: []`): with nothing to divide by,
+     * any percentage would just be `remaining / remaining` = 100%, which reads
+     * as "never used" no matter what the account actually spent.
+     *
+     * Only bundles still in force count. A bundle the gateway marks
+     * `active: false` is expired and cannot be spent, so its `total`/`used` must
+     * not enter an allowance the user still has (measured on buddy: four expired
+     * 裂变包 each report total 100 / used 100, and including them moves the
+     * reading from 85.84% to 78.90%).
+     *
+     * @param {{ total?: unknown, packages?: unknown }} balance One account's balance.
+     * @returns {{ remaining: number, total: number, percent: number } | null}
+     */
+    function balancePercent(balance) {
+      const remaining = finite(balance?.total)
+      if (remaining === undefined) return null
+      const packages = Array.isArray(balance?.packages) ? balance.packages : []
+      const active = packages.filter(pkg => pkg?.active !== false)
+
+      // The aggregate bundle: same remaining as the account-level total. Ties are
+      // settled by the largest `used`, because the aggregate carries the whole
+      // cycle's usage while a sliver of it carries only its own share.
+      let aggregate = null
+      for (const pkg of active) {
+        if (finite(pkg?.remaining) !== remaining) continue
+        if (aggregate === null || (finite(pkg?.used) ?? 0) > (finite(aggregate?.used) ?? 0)) aggregate = pkg
+      }
+
+      let denominator
+      if (aggregate !== null) {
+        denominator = remaining + (finite(aggregate.used) ?? 0)
+      } else {
+        const packageRemaining = active.reduce((sum, pkg) => sum + (finite(pkg?.remaining) ?? 0), 0)
+        const packageTotal = active.reduce((sum, pkg) => sum + (finite(pkg?.total) ?? 0), 0)
+        const usedTotal = active.reduce((sum, pkg) => sum + (finite(pkg?.used) ?? 0), 0)
+        // No bundle detail means no allowance to divide by. Refusing to answer is
+        // the honest outcome; see the note above.
+        if (!(packageTotal > 0)) return null
+        // Without an aggregate the bundles have to account for the total
+        // themselves. If they do not, this is a balance shape we do not
+        // understand and any divisor would be a guess — measured shapes that DO
+        // pass here: buddy (3896.29 = 3896.29) and trae (3656.3372 =
+        // 3656.3372). A shape whose bundles overshoot the total is refused
+        // rather than allowed to produce a meaningless percentage.
+        if (Math.abs(packageRemaining - remaining) >= 0.005) return null
+        // Two independent readings of the same allowance; prefer the larger so a
+        // bundle that reports `used` but no `total` cannot shrink the divisor.
+        denominator = Math.max(packageTotal, remaining + usedTotal)
+      }
+      if (!(denominator > 0) || denominator < remaining) return null
+      return {
+        remaining,
+        total: denominator,
+        percent: Math.round((remaining / denominator) * 1000) / 10,
+      }
     }
 
     function ago(ts, locale) {
@@ -4189,6 +4285,24 @@ window.__ModuleLoader__.load({
       const balancesTotal = (balances ?? []).reduce((sum, row) => sum + (Number.isFinite(row.balance?.total) ? row.balance.total : 0), 0)
       const balancesKnown = (balances ?? []).some(row => Number.isFinite(row.balance?.total))
       const balanceFailures = (balances ?? []).filter(row => row.error || !Number.isFinite(row.balance?.total)).length
+      // An empty account list is a successful answer that carries no accounts:
+      // the channel is supported but nobody has signed in on it yet. Measured on
+      // this gateway — workbuddy, lobsterai, cline, loomy, raccoon, minimax and
+      // zcode all answer `ok: true, accounts: []`. That is a state to name, not a
+      // failure to report (`balances === []` is not `balanceError !== ''`).
+      const balancesEmpty = Array.isArray(balances) && balances.length === 0 && accountsCount === 0
+      // Remaining share of the queried accounts' combined allowance. With no
+      // bundle detail there is no trustworthy denominator, so the card omits the
+      // percentage instead of inventing one.
+      const balancesReadings = (balances ?? [])
+        .map(row => balancePercent(row.balance))
+        .filter(reading => reading !== null)
+      const balancesPercent = (() => {
+        if (balancesReadings.length === 0) return null
+        const remaining = balancesReadings.reduce((sum, reading) => sum + reading.remaining, 0)
+        const total = balancesReadings.reduce((sum, reading) => sum + reading.total, 0)
+        return total > 0 ? Math.round((remaining / total) * 100) : null
+      })()
 
       // Refetch what is on screen whenever the pack reports a change for this
       // channel: an account added in another tab, a completed background login,
@@ -4390,7 +4504,13 @@ window.__ModuleLoader__.load({
             `${balanceLabel} `,
             h('b', null, balanceLoading ? '…' : balancesKnown
               ? creditCapability.quota ? t('chan.credits.loaded').replace('{count}', String((balances ?? []).filter(row => Number.isFinite(row.balance?.total)).length)) : kilo(balancesTotal)
-              : balances === undefined ? '…' : '—')) : null),
+              : balances === undefined ? '…' : balancesEmpty ? t('chan.credits.noAccount') : '—'),
+            // The share of the allowance still left, when it can be derived
+            // honestly. Quota channels already report a percentage per account,
+            // so this only adds value for the credit channels.
+            !creditCapability.quota && balancesPercent !== null
+              ? h('span', { className: 'ofm_creditpct', title: t('chan.credits.percent.title') }, `${balancesPercent}%`)
+              : null) : null),
         h('div', { className: 'ofm_chanacts' },
           channel.id === 'zcode' ? h('div', { className: 'ofm_seg', role: 'group', 'aria-label': t('chan.zcode.provider') },
             h('button', {
@@ -6612,7 +6732,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject
     exports.name = 'our-free-model'
     // Headless test seams use the same stub React as scripts/client-lint.mjs.
-    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, DICT, useChannelRpc, Shell, CSS }
+    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, DICT, useChannelRpc, Shell, CSS, balancePercent }
     return module.exports
   },
 })
