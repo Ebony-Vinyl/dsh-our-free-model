@@ -6,7 +6,7 @@ import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
-import { laneView, refusedState } from '../verdict.js'
+import { laneView, refusedState, roundRefused } from '../verdict.js'
 import { CODE, getJson } from '../http.js'
 import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
@@ -324,15 +324,14 @@ export function createModelRuntime({
     }, 2)
     if (disposed) return {}
     const verdicts = Object.values(results)
-    // A round counts as refused when no model answered — refusals and region
-    // blocks both count, because either way the dial comes back empty and a
-    // mixed round like "9 refused, 1 not served here" is still nothing usable.
-    const refusedRound = verdicts.length > 0 && verdicts.every(row => refusedState(row.state))
+    // Nothing answered and something was refused: a mixed round of refusals and
+    // unreachable rows still means this exit serves nothing (see roundRefused).
+    const refusedRound = roundRefused(verdicts.map(row => row.state))
     const refusedStreak = refusedRound ? (Number(availability.get().refusedStreak) || 0) + 1 : 0
     availability.update({ at: Date.now(), egress, refusedStreak })
     availability.flush()
     if (refusedRound) {
-      logger.warn?.(`our-free-model: the gateway refused all ${verdicts.length} models this round (${verdicts[0].detail ?? 'no detail'}) — round ${refusedStreak} of consecutive refusals`
+      logger.warn?.(`our-free-model: the gateway served none of ${verdicts.length} models this round (${verdicts[0].detail ?? 'no detail'}) — round ${refusedStreak} of consecutive refusals`
         + (refusedStreak >= 2 ? '; the picker stops advertising them until an exit answers (settings.keepRefusedModels overrides)' : '; still advertising them'))
     }
     const allThrottled = verdicts.length > 0 && verdicts.every(row => row.state === STATE.throttled)

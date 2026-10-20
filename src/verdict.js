@@ -75,6 +75,26 @@ export function refusedState(state) {
   return state === STATE.unavailable || state === STATE.regionBlocked
 }
 
+/**
+ * Was a whole probe round a refusal?
+ *
+ * "Refused" is not "every row refused": a round can mix hard refusals with a
+ * row the probe simply could not reach (`unknown` — a reset connection, a
+ * dropped TLS handshake). Requiring every row to refuse turns one flaky socket
+ * into evidence that the lane is healthy, which is exactly backwards on a
+ * network that refuses the exit and blips while doing it.
+ *
+ * So the test is: something was explicitly refused, and *nothing answered*.
+ * A single `available` row proves the lane is alive; a round of nothing but
+ * `throttled` rows is a rate-limit, which has its own backoff and must not be
+ * counted here.
+ */
+export function roundRefused(states) {
+  if (!Array.isArray(states) || states.length === 0) return false
+  if (states.includes(STATE.available)) return false
+  return states.some(refusedState)
+}
+
 /** A verdict's class: the stored state when there is no detail to read. */
 export function classOfVerdict(verdict) {
   if (verdict === null || verdict === undefined) return DETAIL_CLASS.unknown

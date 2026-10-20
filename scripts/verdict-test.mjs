@@ -19,7 +19,7 @@
  * Run: node scripts/verdict-test.mjs
  */
 import assert from 'node:assert/strict'
-import { DETAIL_CLASS, LANE, classOfVerdict, classifyDetail, isFresh, laneView, refusalFor, refusedState } from '../src/verdict.js'
+import { DETAIL_CLASS, LANE, classOfVerdict, classifyDetail, isFresh, laneView, refusalFor, refusedState, roundRefused } from '../src/verdict.js'
 import { STATE } from '../src/probe.js'
 import { computeMembership } from '../src/core/runtime.js'
 import { ROUTE_MAIN, ROUTE_REGION } from '../src/adapter.js'
@@ -218,6 +218,20 @@ check('refused and region-blocked both mean an empty dial', () => {
   assert.equal(refusedState(STATE.available), false)
   assert.equal(refusedState(STATE.throttled), false)
   assert.equal(refusedState(STATE.unknown), false)
+})
+
+check('a round is refused when something refused and nothing answered', () => {
+  // Live round at 10:24:46 was nine refusals, one region block and one
+  // `fetch failed`; requiring every row to refuse would call that a healthy
+  // lane and reset the streak — the exact thing the streak exists to prevent.
+  assert.equal(roundRefused([STATE.unavailable, STATE.unavailable, STATE.regionBlocked]), true)
+  assert.equal(roundRefused([STATE.unavailable, STATE.regionBlocked, STATE.unknown]), true)
+  // One answer proves the lane is alive, no matter how many rows refused.
+  assert.equal(roundRefused([STATE.unavailable, STATE.unavailable, STATE.available]), false)
+  // A pure rate-limit window is not a refusal: throttling has its own backoff.
+  assert.equal(roundRefused([STATE.throttled, STATE.throttled]), false)
+  assert.equal(roundRefused([STATE.unknown, STATE.unknown]), false)
+  assert.equal(roundRefused([]), false)
 })
 
 console.log(failures === 0 ? '\nverdict: refuse, prune and broadcast agree' : `\n${failures} verdict check(s) failed`)
