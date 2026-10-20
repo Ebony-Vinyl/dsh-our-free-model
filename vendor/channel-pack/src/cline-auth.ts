@@ -38,6 +38,7 @@ import {
   type ClineProduct,
 } from './cline-product.js'
 import { RefreshScheduler } from './refresh.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { AccountPool } from './account-pool.js'
 import {
   refreshAccountWithReconcile,
@@ -179,7 +180,7 @@ export class ClineAuth extends Service {
 
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   private get fetchImpl(): typeof fetch {
-    return this.options.fetcher ?? fetch
+    return this.options.fetcher ?? createDomesticFetch()
   }
 
   /** 标记 refresh_token 已失效：停止重试，并向 status() 暴露 refreshable: false。 */

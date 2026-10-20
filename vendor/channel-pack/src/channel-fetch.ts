@@ -5,6 +5,7 @@ import path from 'node:path'
 import { Dispatcher1Wrapper, type Dispatcher } from 'undici'
 import { normalizeProxy } from './opencode.js'
 import { createProxyDispatcher } from './opencode-proxy.js'
+import { createDomesticFetch, isDomesticHost } from './domestic-direct.js'
 
 export interface ChannelOutlet {
   active: () => boolean
@@ -109,6 +110,8 @@ export function createChannelFetch(options: ChannelFetchOptions = {}): { fetch: 
   let systemAt = 0
   let closed = false
   const fetchImpl: typeof fetch = (input, init) => (options.fetchImpl ?? globalThis.fetch)(input, init)
+  // 国内域名走真实 IP 直连，其余域名原样交给 fetchImpl（行为零变化）。
+  const domesticFetch = createDomesticFetch(fetchImpl)
   const fetcher: typeof fetch = async (input, init) => {
     if (closed) throw new Error('渠道出网服务已停止')
     const target = new URL(input instanceof Request ? input.url : String(input))
@@ -128,6 +131,13 @@ export function createChannelFetch(options: ChannelFetchOptions = {}): { fetch: 
         route = '插件出口代理'
         // relay 不允许自动跳转绕过选定出口。
         return await options.outlet.fetch(input, { ...init, redirect: 'error' })
+      }
+      // 透明代理（fake-ip TUN）会把国内渠道域名送往海外节点，国内服务在 TLS
+      // 阶段直接重置连接；用 DoH 拿真实 IP 后直连，使其命中 GEOIP,CN,DIRECT。
+      // 放在 outlet 之后：显式配置的出口优先，这里只接管“本会走系统代理”的流量。
+      if (isDomesticHost(target.hostname)) {
+        route = '国内直连（fake-ip 绕行）'
+        return await domesticFetch(input, init)
       }
       const env = options.environment ?? process.env
       const envValue = (name: string) => env[name.toLowerCase()] ?? env[name]

@@ -45,6 +45,7 @@ import {
   sendRaccoonSmsCode,
 } from './raccoon-oauth.js'
 import { RACCOON, type RaccoonProduct } from './raccoon-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { renderQrSvg } from './raccoon-qr.js'
 
 /** 本地登录页的路径。 */
@@ -94,7 +95,7 @@ export async function startRaccoonLoginFlow(
   options: RaccoonLoginFlowOptions = {},
 ): Promise<StartedRaccoonLoginFlow> {
   const product = options.product ?? RACCOON
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const state: FlowState = {
     qrCode: generateQrCode(),
     phone: '',

@@ -69,6 +69,7 @@ import {
   CLINE_REGISTER_PATH,
   type ClineProduct,
 } from './cline-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 在浏览器中打开 URL；永不抛出。 */
 export type OpenBrowser = (url: string) => void | Promise<void>
@@ -179,7 +180,7 @@ export async function requestClineDeviceAuthorization(
   product: ClineProduct,
   options: { fetcher?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<ClineDeviceAuthorization> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const response = await fetcher(`${product.workOsBase}${CLINE_DEVICE_AUTHORIZATION_PATH}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -231,7 +232,7 @@ export async function pollClineWorkOsTokens(
   authorization: ClineDeviceAuthorization,
   options: ClineLoginFlowOptions,
 ): Promise<{ accessToken: string; refreshToken: string }> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const deadline = Date.now() + (options.timeoutMs ?? authorization.expiresInMs)
   // ⚠️ 至少 1 秒：服务端可能下发 0 或负数，无节制的轮询会被限流。
   let intervalMs = Math.max(1_000, options.pollIntervalMs ?? authorization.intervalMs)
@@ -316,7 +317,7 @@ export async function registerClineTokens(
   workOsTokens: { accessToken: string; refreshToken: string },
   options: ClineLoginFlowOptions,
 ): Promise<unknown> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const response = await fetcher(`${options.product.apiBase}${CLINE_REGISTER_PATH}`, {
     method: 'POST',
     headers: {

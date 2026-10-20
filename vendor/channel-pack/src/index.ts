@@ -75,6 +75,7 @@ import { primeOpencodeCapabilities, refreshOpencodeCapabilities } from './openco
 import { closeAllProxyDispatchers } from './opencode-proxy.js'
 import { createChannelFetch, type ChannelOutlet } from './channel-fetch.js'
 export { createChannelFetch, parseWindowsProxy, channelProxyBypassed } from './channel-fetch.js'
+export { isDomesticHost, isDomesticUrl, createDomesticFetch } from './domestic-direct.js'
 import { execFile } from 'node:child_process'
 
 /**

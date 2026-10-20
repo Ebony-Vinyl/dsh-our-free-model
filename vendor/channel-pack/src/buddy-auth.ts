@@ -20,6 +20,7 @@ import {
   type BuddyLoginFlowOptions,
 } from './buddy-oauth.js'
 import { RefreshScheduler } from './refresh.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { BuddyCredential, BuddyRemoteModel } from './buddy.js'
 import { AccountPool } from './account-pool.js'
 import { CODEBUDDY, type BuddyProduct } from './product.js'
@@ -452,7 +453,7 @@ export class BuddyAuth extends Service {
 
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   private get fetchImpl(): typeof fetch {
-    return this.options.fetcher ?? fetch
+    return this.options.fetcher ?? createDomesticFetch()
   }
 
 }
