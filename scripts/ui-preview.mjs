@@ -315,6 +315,21 @@ say(`plugin booted; DSH_HOME ${home}`)
   // resolve rather than answering.
   await until(async () => (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json?.catalog?.some(row => row.id === 'deepseek-v4-flash-free'),
     { what: 'the boot listing round', timeoutMs: 30000 })
+  // /summary must describe the lane itself, not only the rows: the client builds
+  // its diagnostic block from this field and treats a missing one as "no verdict".
+  {
+    const summary = (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json
+    const lane = summary?.lane
+    const want = REFUSED_EXIT ? 'refused' : 'ok'
+    if (lane?.state !== want) {
+      throw new Error(`/summary lane.state is ${JSON.stringify(lane?.state)}, expected ${want} (lane=${JSON.stringify(lane).slice(0, 400)})`)
+    }
+    if (!(lane.counts?.total > 0)) throw new Error(`/summary lane.counts.total is ${JSON.stringify(lane?.counts)}`)
+    if (REFUSED_EXIT && lane.counts.abusiveIp !== lane.counts.total) {
+      throw new Error(`/summary lane did not classify the refusal — ${JSON.stringify(lane.counts)}`)
+    }
+    say(`summary lane: state=${lane.state} counts=${JSON.stringify(lane.counts)} reason=${lane.reason || '-'} streak=${lane.refusedStreak}`)
+  }
   const adapter = ctx.__captured.adapters[0]?.adapter
   const options = {
     provider: 'our-free-model',
