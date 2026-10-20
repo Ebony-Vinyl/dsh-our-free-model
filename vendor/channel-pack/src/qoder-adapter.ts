@@ -1097,6 +1097,11 @@ export function promotionActiveNow(promotion: QoderModelPromotion, now: Date): b
  * ⚠️ 折后价**不直接采信目录的 `priceFactor`**：它是采集时刻的生效价，
  * 窗口切换后即失真。改为按 `beforePromotionPriceFactor × discountFactor`
  * 本地推算（实测三条全部吻合），窗口外则用原价。
+ *
+ * ⚠️ **`priceFactor === 0` 单独不足以判定「免费」**：限时活动到期后上游会把
+ * 生效价改回常规价，而本兜底表是编译期快照。带 {@link QoderFallbackModel.freeUntil}
+ * 的条目在截止时刻之后必须回落到 {@link QoderFallbackModel.originalPriceFactor}，
+ * 否则会**永久误报「免费」**（用户按免费预期、实际被按常规倍率计费）。
  */
 export function qoderDisplayName(model: QoderFallbackModel, now: Date = new Date()): string {
   const promo = model.promotion
@@ -1104,6 +1109,18 @@ export function qoderDisplayName(model: QoderFallbackModel, now: Date = new Date
   const discount = promo?.discountFactor
   const hasPromo = promo !== undefined && before !== undefined && discount !== undefined
   const active = hasPromo && promotionActiveNow(promo, now)
+
+  // 限时活动到期后回落到常规价。`freeUntil` 缺失表示没有限时的免费活动，
+  // 此时 `priceFactor === 0` 就是「长期免费」（如 `qfmodel` 的免费额度）。
+  if (model.freeUntil !== undefined) {
+    const until = Date.parse(model.freeUntil)
+    // 截止时刻不可解析时不误杀：宁可多显示一次免费，也不要在解析失败时
+    // 把明明还在活动期内的模型标成收费。
+    if (Number.isFinite(until) && now.getTime() >= until) {
+      const regular = model.originalPriceFactor
+      return regular !== undefined ? `${model.name} · x${regular}` : model.name
+    }
+  }
 
   // 免费优先于一切（`0` 是合法倍率，不能显示成 `x0`）。
   if (model.priceFactor === 0) return `${model.name} · 免费`

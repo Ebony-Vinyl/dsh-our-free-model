@@ -268,6 +268,14 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const { verifyChannelPrFixes } = await import('./channel-pr-fixes-test.mjs')
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
+  // Qoder 的倍率是编译期快照，而上游会做限时活动；这条回归保证「限时免费」
+  // 到期后会回落到常规价，而不是永久误报免费。
+  {
+    const { verifyQoderPriceDisplay } = await import('./qoder-price-display-test.mjs')
+    const { qoderDisplayName } = await import('../vendor/channel-pack/src/qoder-adapter.ts')
+    verifyQoderPriceDisplay(qoderDisplayName)
+    console.log('ok  qoder price display: 限时免费到期后回落常规价，长期免费及无 freeUntil 条目不受影响')
+  }
   let hostValidate
   await realLlmInvariant.apply({ invariants: { register(_name, install) {
     install({ on(name, callback) { if (name === 'llm/stream') hostValidate = callback } },

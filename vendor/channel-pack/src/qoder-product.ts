@@ -78,6 +78,24 @@ export interface QoderFallbackModel {
    */
   originalPriceFactor?: number
   /**
+   * 「限时免费」的截止时刻（ISO 8601 带时区，如 `2026-10-25T00:00:00+08:00`）。
+   *
+   * ⚠️ **`priceFactor: 0` 单独存在不足以表达限时活动**：活动到期后上游会把
+   * 生效价改回常规价，但本兜底表是**编译期快照**，不会跟着变 —— 若只写
+   * `priceFactor: 0`，插件会在活动结束后**永久误报「免费」**。
+   *
+   * 上游客户端的做法是把「限时免费」放在 `tags` 的 `Limited-Time-Free` 角标上
+   * （见 `out/renderer/assets/index-*.js` 的 `LIMITED_TIME_FREE_MODEL_TAG`），
+   * 与 `priceFactor`/`originalPriceFactor` 是**三个独立字段**。本兜底表拿不到
+   * 角标，故用截止时刻在本地推算：到期后 `qoderDisplayName` 回落到
+   * {@link originalPriceFactor}（上游的划线原价）。
+   *
+   * 与 {@link QoderModelPromotion} 的区别：`promotion` 表达**每日错峰时段**
+   * （`windowStart`/`windowEnd`），本字段表达**一次性活动的有效期**，
+   * 二者可同时存在。缺省表示「没有截止的限时活动」。
+   */
+  freeUntil?: string
+  /**
    * 错峰折扣（目录 `promotion`）。
    *
    * ⚠️ **`active` 是「目录下发那一刻」的快照，不可作为长期判据**：
@@ -566,7 +584,14 @@ const QODER_CN_FALLBACK_MODELS: readonly QoderFallbackModel[] = [
   // ⚠️ CN 的 `is_reasoning` 为 false（国际版为 true），故不声明 supportsThinking。
   // 实测最大窗口：938,000 目标 → 服务端计入 **999,991** 通过（连续 3 次可复现），
   // 939,000 时越界（`Internal Server Error`）→ 真实上限≈1,000,000。填 1M。
-  { id: 'dfmodel', name: 'DeepSeek-Flash', contextWindow: 1_000_000, supportsImage: true, priceFactor: 0.1, efforts: ['high', 'max', 'low'], defaultEffort: 'max', supportsDisable: true },
+  //
+  // ⚠️ **限时免费（2026-10-17 起）**：Qoder CN 对 DeepSeek-V4.1-Flash-1017 开启
+  // 0 倍计费活动，官方客户端显示「0.1x 划线 → 0x」并带「限时免费」角标，
+  // 悬停注「个人版限时免费畅用，至 10月25日 00:00（UTC+8）」。官方常规价仍是
+  // 0.1x（docs.qoder.cn 2026-09-21 调整表：DeepSeek-Flash 0.2x → 0.1x）。
+  // 故这里写「现价 0 / 原价 0.1 / 截止时刻」，而不是把 0.1 直接抹成 0 ——
+  // 后者会让插件在活动结束后**永久误报「免费」**。到期由 qoderDisplayName 回落。
+  { id: 'dfmodel', name: 'DeepSeek-Flash', contextWindow: 1_000_000, supportsImage: true, priceFactor: 0, originalPriceFactor: 0.1, freeUntil: '2026-10-25T00:00:00+08:00', efforts: ['high', 'max', 'low'], defaultEffort: 'max', supportsDisable: true },
   // ⚠️ `gmodel` / `gfmodel` / `kmodel*` 有档位但**无 `disabled` 分支** → 不能关闭。
   { id: 'gmodel', name: 'GLM-5.3', contextWindow: 1_000_000, supportsImage: true, supportsThinking: true, priceFactor: 0.8, efforts: ['high', 'low', 'max'], defaultEffort: 'max' },
   { id: 'gfmodel', name: 'GLM-5.3-Flash', contextWindow: 1_000_000, supportsImage: true, supportsThinking: true, priceFactor: 0.1, efforts: ['high', 'max'], defaultEffort: 'max' },

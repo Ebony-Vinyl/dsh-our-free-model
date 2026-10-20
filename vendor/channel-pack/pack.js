@@ -38023,7 +38023,14 @@ var QODER_CN_FALLBACK_MODELS = [
   // ⚠️ CN 的 `is_reasoning` 为 false（国际版为 true），故不声明 supportsThinking。
   // 实测最大窗口：938,000 目标 → 服务端计入 **999,991** 通过（连续 3 次可复现），
   // 939,000 时越界（`Internal Server Error`）→ 真实上限≈1,000,000。填 1M。
-  { id: "dfmodel", name: "DeepSeek-Flash", contextWindow: 1e6, supportsImage: true, priceFactor: 0.1, efforts: ["high", "max", "low"], defaultEffort: "max", supportsDisable: true },
+  //
+  // ⚠️ **限时免费（2026-10-17 起）**：Qoder CN 对 DeepSeek-V4.1-Flash-1017 开启
+  // 0 倍计费活动，官方客户端显示「0.1x 划线 → 0x」并带「限时免费」角标，
+  // 悬停注「个人版限时免费畅用，至 10月25日 00:00（UTC+8）」。官方常规价仍是
+  // 0.1x（docs.qoder.cn 2026-09-21 调整表：DeepSeek-Flash 0.2x → 0.1x）。
+  // 故这里写「现价 0 / 原价 0.1 / 截止时刻」，而不是把 0.1 直接抹成 0 ——
+  // 后者会让插件在活动结束后**永久误报「免费」**。到期由 qoderDisplayName 回落。
+  { id: "dfmodel", name: "DeepSeek-Flash", contextWindow: 1e6, supportsImage: true, priceFactor: 0, originalPriceFactor: 0.1, freeUntil: "2026-10-25T00:00:00+08:00", efforts: ["high", "max", "low"], defaultEffort: "max", supportsDisable: true },
   // ⚠️ `gmodel` / `gfmodel` / `kmodel*` 有档位但**无 `disabled` 分支** → 不能关闭。
   { id: "gmodel", name: "GLM-5.3", contextWindow: 1e6, supportsImage: true, supportsThinking: true, priceFactor: 0.8, efforts: ["high", "low", "max"], defaultEffort: "max" },
   { id: "gfmodel", name: "GLM-5.3-Flash", contextWindow: 1e6, supportsImage: true, supportsThinking: true, priceFactor: 0.1, efforts: ["high", "max"], defaultEffort: "max" },
@@ -39147,6 +39154,13 @@ function qoderDisplayName(model, now = /* @__PURE__ */ new Date()) {
   const discount = promo?.discountFactor;
   const hasPromo = promo !== void 0 && before !== void 0 && discount !== void 0;
   const active = hasPromo && promotionActiveNow2(promo, now);
+  if (model.freeUntil !== void 0) {
+    const until = Date.parse(model.freeUntil);
+    if (Number.isFinite(until) && now.getTime() >= until) {
+      const regular = model.originalPriceFactor;
+      return regular !== void 0 ? `${model.name} \xB7 x${regular}` : model.name;
+    }
+  }
   if (model.priceFactor === 0) return `${model.name} \xB7 \u514D\u8D39`;
   if (hasPromo && active) {
     const effective = Number((before * discount).toFixed(4));
