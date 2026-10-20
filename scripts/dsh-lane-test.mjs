@@ -124,7 +124,7 @@ checkThat('one failing host provider does not hide the others', ctx.__logs.some(
 check('the row is tagged with its lane', dshRow?.channel, 'dsh')
 check('the row keeps provider and model separate', [dshRow?.providerId, dshRow?.modelId], [PROVIDER, MODEL])
 check('the row is routing-only', dshRow?.route, null)
-check('the row renders as available, never probed', [dshRow?.availability, dshRow?.probedAt], ['available', 0])
+check('a listed row is not claimed as tested', [dshRow?.availability, dshRow?.availabilitySource, dshRow?.probedAt], ['unknown', 'listing', 0])
 checkThat('listModels never advertises a dsh row standalone', !(await adapter.listModels('our-free-model')).some(row => row.id === DSH_ID))
 const combos = await get('/combos')
 checkThat('the chain editor offers the DSH model', (combos.json?.models ?? []).some(row => row.id === DSH_ID && row.channel === 'dsh'), JSON.stringify((combos.json?.models ?? []).map(row => row.id)))

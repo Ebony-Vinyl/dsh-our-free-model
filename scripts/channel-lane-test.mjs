@@ -219,7 +219,7 @@ check('the row is tagged with its lane', chanRow?.channel, 'chan')
 check('with the provider and model kept separate', [chanRow?.providerId, chanRow?.modelId], [PROVIDER, MODEL])
 check('the listing is filtered to the pack providers — foreign plugins never leak', [byId.has(FOREIGN_ID), byId.has(SELF_LANE_ID)], [false, false])
 check('duplicate and malformed rows widened nothing', (summaryJson.catalog ?? []).filter(entry => entry.channel === 'chan').map(entry => entry.id), [CHAN_ID])
-check('a never-probed lane renders as available, not unknown', [chanRow?.availability, chanRow?.probedAt], ['available', 0])
+check('a listed row is not claimed as tested', [chanRow?.availability, chanRow?.availabilitySource, chanRow?.probedAt], ['unknown', 'listing', 0])
 check('the row is routing-only — no standalone route', chanRow?.route, null)
 check('the key reached the gateway — no unauthorized call', gatewayAuthFailures, 0)
 
