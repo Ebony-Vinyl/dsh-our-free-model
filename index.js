@@ -36,6 +36,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { buildChannelCatalog, fetchChannelListing, isChannelEntry } from './src/chan-lane.js'
+import { buildDshCatalog, isDshEntry } from './src/dsh-lane.js'
 import { CODE, UpstreamError } from './src/http.js'
 import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
 import { directFetch } from './src/eac.js'
@@ -414,6 +415,8 @@ export function apply(ctx, config) {
     resolveImage: imageResolver(ctx, logger),
     sealedCredential: sealedCredentialOf,
     chanGateway: chanGatewayDialTarget,
+    hostStream: options => ctx.llm.stream(options),
+    hostResolveModel: (provider, model, signal) => ctx.llm.resolveModelInfo(provider, model, signal),
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
   })
@@ -451,7 +454,55 @@ export function apply(ctx, config) {
       firstCatalogRoundFinished()
     }
     await syncChannelLane()
+    await syncDshLane()
     return result
+  }
+
+  /**
+   * 读取 DSH 设置页添加的模型。宿主目录是唯一来源；插件自身两个路由被排除，
+   * 防止组合链把自己重新加入为成员。
+   */
+  let dshLaneSync = null
+  async function syncDshLane() {
+    if (disposed) return false
+    if (dshLaneSync !== null) return dshLaneSync
+    const run = (async () => {
+      const providers = ctx.llm.listProviders?.() ?? []
+      const hostProviders = providers
+        .map(provider => typeof provider?.id === 'string' ? provider.id : '')
+        .filter(id => id !== '' && id !== ROUTE_MAIN && id !== ROUTE_REGION)
+      const models = []
+      const resolved = new Map()
+      const rounds = await Promise.allSettled(hostProviders.map(async providerId => {
+        const listed = await ctx.llm.listModels?.(providerId)
+        const rows = []
+        for (const model of Array.isArray(listed) ? listed : []) {
+          const info = await ctx.llm.resolveModelInfo?.(providerId, model.id)
+          rows.push({ model, info })
+        }
+        return { providerId, rows }
+      }))
+      for (const round of rounds) {
+        if (round.status === 'rejected') {
+          // 一个提供方失败不能清空其他提供方的模型；宿主自己的模型目录也按
+          // 提供方隔离失败，这里保持同一语义，并把原因留在日志里。
+          if (!disposed) logger.warn?.(`our-free-model: DSH provider listing failed (${round.reason?.message ?? round.reason}); keeping its models out of this round`)
+          continue
+        }
+        for (const { model, info } of round.value.rows) {
+          models.push(model)
+          if (info !== undefined) resolved.set(`${round.value.providerId}/${model.id}`, info)
+        }
+      }
+      if (disposed) return false
+      modelRuntime.syncDshCatalog(buildDshCatalog(models, resolved))
+      return true
+    })().catch(error => {
+      if (!disposed) logger.warn?.(`our-free-model: DSH model listing failed (${error?.message ?? error}); keeping the lane's previous roster`)
+      return false
+    })
+    dshLaneSync = run
+    try { return await run } finally { if (dshLaneSync === run) dshLaneSync = null }
   }
 
   // ── registration ────────────────────────────────────────────────────────────
@@ -481,6 +532,11 @@ export function apply(ctx, config) {
 
   ctx.on?.('loader/volatile-update', () => {
     registration.replace(routes())
+    void syncDshLane()
+  })
+
+  ctx.on?.('llm/adapters-updated', () => {
+    void syncDshLane()
   })
 
   /**
@@ -2455,7 +2511,7 @@ function buildSummary(deps) {
   // listing round that already succeeded, and a combo is a view over rows that
   // were themselves named — none of them is pinged, so "no verdict" must not
   // render as "unknown".
-  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isChannelEntry(entry) || isComboEntry(entry)
+  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isChannelEntry(entry) || isDshEntry(entry) || isComboEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,

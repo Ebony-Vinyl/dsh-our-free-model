@@ -5,6 +5,7 @@ import { buildCatalog, buildEacCatalog, buildKiloCatalog, isEacEntry, isKiloEntr
 import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneBlacklist, pruneRotation } from '../combos.js'
 import { isChannelEntry } from '../chan-lane.js'
+import { isDshEntry } from '../dsh-lane.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
 import { CODE, getJson } from '../http.js'
@@ -61,6 +62,8 @@ export function createModelRuntime({
   resolveImage,
   sealedCredential = () => null,
   chanGateway = () => null,
+  hostStream,
+  hostResolveModel,
   onSealedUnavailable = () => {},
   onTopology = () => {},
 }) {
@@ -74,6 +77,8 @@ export function createModelRuntime({
    *  loopback gateway. Routing-only: they are merged for chains to reference,
    *  never advertised standalone (see `computeMembership`). */
   let channelCatalog = []
+  /** DSH 自带模型：由宿主目录发布，组合链可引用，但不单独广播。 */
+  let dshCatalog = []
   /** The virtual rows a combo contributes; rebuilt last, after every real lane. */
   let comboCatalog = []
   /** The free lane's own roster: the base every other lane is merged onto. */
@@ -101,7 +106,7 @@ export function createModelRuntime({
   const rebuildCatalog = () => {
     const seen = new Set()
     const merged = []
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...channelCatalog]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...channelCatalog, ...dshCatalog]) {
       if (entry === null || entry === undefined || seen.has(entry.id)) continue
       seen.add(entry.id)
       merged.push(entry)
@@ -134,6 +139,8 @@ export function createModelRuntime({
     resolveImage,
     sealedCredential,
     chanGateway,
+    hostStream,
+    hostResolveModel,
     recordUsage: record => {
       if (disposed) return
       recordUsage(stats, record)
@@ -282,7 +289,7 @@ export function createModelRuntime({
     // The chan lane is excluded for the same reason as the other channels: its
     // rows are named by the pack's own gateway listing, and a probe here would
     // send a `chan:` id to the free lane as a model name.
-    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isChannelEntry(entry) && !isComboEntry(entry))
+    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isChannelEntry(entry) && !isDshEntry(entry) && !isComboEntry(entry))
     const results = await probeCatalog(probeable, { attributionUserAgent, signal: lifetime.signal }, (id, result) => {
       if (disposed) return
       availability.edit(value => ({
@@ -374,6 +381,13 @@ export function createModelRuntime({
       emitTopology()
       return catalog
     },
+    /** 宿主目录由入口读取；这里只替换本插件持有的路由副本。 */
+    syncDshCatalog(entries) {
+      if (disposed) return catalog
+      dshCatalog = Array.isArray(entries) ? entries.filter(isDshEntry) : []
+      rebuildCatalog()
+      return catalog
+    },
     get catalog() { return catalog },
     get egress() { return egress },
     get gatewayLatency() { return gatewayLatency },
@@ -400,7 +414,7 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   // read the catalog: the pack already serves those accounts under its own
   // routes, and advertising `chan:` ids standalone would be a second,
   // plugin-shaped path to the same accounts.
-  const routable = catalog.filter(entry => !isChannelEntry(entry))
+  const routable = catalog.filter(entry => !isChannelEntry(entry) && !isDshEntry(entry))
   const probeable = routable.filter(entry => !entry.channel)
   const refusedAll = probeable.length > 0 && probeable.every(entry => verdictOf(entry) === STATE.unavailable)
   let usable = routable.filter(entry => verdictOf(entry) !== STATE.unavailable)

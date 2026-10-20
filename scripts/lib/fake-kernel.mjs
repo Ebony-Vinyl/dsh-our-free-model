@@ -143,7 +143,7 @@ export async function stubUpstream({ listing = [], answer = () => ({ body: chatF
  */
 export function fakeContext({ inject, mounted = ['llm', 'webServer', 'timer', 'connection', 'attachments'], onRegister, profileContext } = {}) {
   const logs = []
-  const captured = { adapters: [], routes: [], serverRoutes: [], registrations: [], events: [], configurable: null, discovery: null }
+  const captured = { adapters: [], routes: [], serverRoutes: [], registrations: [], events: [], listeners: [], configurable: null, discovery: null }
   const disposers = []
   const mountedSet = new Set(mounted)
   const waiting = []
@@ -188,8 +188,15 @@ export function fakeContext({ inject, mounted = ['llm', 'webServer', 'timer', 'c
     },
     fiber: { entry: { options: { id: 'our-free-model' } } },
     get: name => (mountedSet.has(name) ? services[name] : undefined),
-    on: event => { captured.events.push(event); return () => {} },
-    emit: event => { captured.events.push(`emit:${event}`) },
+    on: (event, listener) => {
+      captured.events.push(event)
+      if (typeof listener === 'function') captured.listeners?.push({ event, listener })
+      return () => {}
+    },
+    emit: event => {
+      captured.events.push(`emit:${event}`)
+      for (const row of captured.listeners) if (row.event === event) row.listener()
+    },
     effect(fn, label) {
       try {
         const disposer = fn()

@@ -24,6 +24,7 @@ import { postSealedStreamed } from './eac.js'
 import { postKiloStreamed } from './kilo.js'
 import { postAggregateStreamed, isAggregateEntry } from './aggregate.js'
 import { postChannelStreamed, isChannelEntry } from './chan-lane.js'
+import { isDshEntry } from './dsh-lane.js'
 import { finishReason, readStream, sanitizeUsage, windowTokens } from './stream.js'
 import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, hasDeclaredEffortMenu, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
@@ -55,6 +56,10 @@ export class FreeModelAdapter {
    *   host has no gateway credential (or it is switched off).
    * @param {(record: object) => void} dependencies.recordUsage
    * @param {(record: object) => void} [dependencies.recordTurn]
+   * @param {(options: object) => AsyncIterable<object>} [dependencies.hostStream]
+   *   DSH 的模型流入口，仅由 `dsh:` 成员使用。
+   * @param {(provider: string, model: string, signal?: AbortSignal) => Promise<object>} [dependencies.hostResolveModel]
+   *   DSH 的精确模型能力查询，避免把宿主模型伪装成本插件的预算模型。
    * @param {(message: string) => void} [dependencies.warn]
    */
   constructor(dependencies) {
@@ -122,9 +127,23 @@ export class FreeModelAdapter {
       }))
   }
 
-  async resolveModel(provider, model) {
+  async resolveModel(provider, model, signal) {
     const state = this.deps.state()
     const entry = state.catalog.find(candidate => candidate.id === baseModelId(model))
+    if (entry !== undefined && isDshEntry(entry) && typeof this.deps.hostResolveModel === 'function') {
+      const info = await this.deps.hostResolveModel(entry.providerId, entry.modelId, signal)
+      return {
+        provider,
+        id: entry.id,
+        name: info.name ?? entry.name,
+        inputModalities: info.inputModalities ?? (entry.vision ? ['text', 'image'] : ['text']),
+        ...info.context === undefined ? {} : { context: info.context },
+        ...info.defaultMaxTokens === undefined ? {} : { defaultMaxTokens: info.defaultMaxTokens },
+        ...info.reasoning === undefined
+          ? entry.reasoning ? { reasoning: { efforts: [{ id: 'balanced', name: 'Balanced' }], defaultEffort: 'balanced' } } : {}
+          : { reasoning: info.reasoning },
+      }
+    }
     if (entry === undefined) {
       return {
         provider,
@@ -249,6 +268,7 @@ export class FreeModelAdapter {
       return
     }
     const tried = []
+    let lastFailure
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index]
       const iterator = this.runSingle(options, candidate, snapshot, {
@@ -288,6 +308,8 @@ export class FreeModelAdapter {
         return
       }
       const reason = result.verdict === null || result.verdict === undefined ? 'failed' : describeVerdict(result.verdict)
+      const ending = held.find(chunk => chunk.type === 'finish')?.reason?.failure
+      if (ending !== undefined) lastFailure = ending
       tried.push(`${candidate.id} (${reason})`)
       // This member failed before answering. Count it against the chain's
       // blackout policy; when it crosses N, say so in the log with the streak
@@ -304,7 +326,9 @@ export class FreeModelAdapter {
     rejectedTurn(candidates.length)
     yield { type: 'finish', reason: { kind: 'error', failure: {
       message: `the chain "${entry.name}" exhausted every candidate: ${tried.join('; ')}`,
-      code: CODE.server,
+      code: lastFailure?.code ?? CODE.server,
+      ...lastFailure?.status === undefined ? {} : { status: lastFailure.status },
+      ...lastFailure?.providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs: lastFailure.providerRetryAfterMs },
     } } }
   }
 
@@ -351,6 +375,7 @@ export class FreeModelAdapter {
     const kilo = isKiloEntry(entry)
     const aggregate = isAggregateEntry(entry)
     const chan = isChannelEntry(entry)
+    const dsh = isDshEntry(entry)
     // The absorbed channels speak the Chat wire regardless of what their ids
     // resemble; only the free lane splits endpoints per model, and an aggregate
     // row carries the wire its provider actually serves.
@@ -362,8 +387,12 @@ export class FreeModelAdapter {
     // A chain carries one ceiling for every member (see `runCombo`); the
     // request budget and the effort menu both resolve against that number.
     const capacityEntry = plan.maxOutput === undefined ? entry : { ...entry, maxOutput: plan.maxOutput }
-    const budget = budgetFor(options.reasoningEffort, capacityEntry, options.maxTokens, plan.maxOutput ?? settings.defaultMaxTokens)
-    const declared = toToolDefs(options.tools, style)
+    const budget = dsh
+      ? Number.isFinite(options.maxTokens) && options.maxTokens > 0
+        ? Math.trunc(options.maxTokens)
+        : plan.maxOutput ?? entry.maxOutput
+      : budgetFor(options.reasoningEffort, capacityEntry, options.maxTokens, plan.maxOutput ?? settings.defaultMaxTokens)
+    const declared = dsh ? [] : toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
     const session = sessionForConversation(options.sessionId)
     const recoveryId = mintRequestId()
@@ -372,6 +401,13 @@ export class FreeModelAdapter {
     let nextIndex = 0
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
     let rejectedInputUsage = false
+    const dshOptions = (input, ceiling) => ({
+      ...options,
+      provider: entry.providerId,
+      model: entry.modelId,
+      messages: input,
+      maxTokens: ceiling,
+    })
     const trustedOutcome = outcome => {
       // Only this Kilo router has a confirmed inflated multimodal stamp.
       // Other lanes may advertise a conservative/fallback window, so exceeding
@@ -423,6 +459,7 @@ export class FreeModelAdapter {
     // 一份 payload，共用同一个数组会让 `image-dropped` 按 build 次数重复累积，还会
     // 让已经交出去的首段样本跟着后面的 build 一起变长。
     const payloadFor = (input, ceiling, sink, savingsSink) => {
+      if (dsh) return dshOptions(input, ceiling)
       const payload = buildPayload(wire, entry.id, input, options, ceiling, resolveImage, sink)
       if (declared.length > 0) payload.tools = declared
       if (typeof options.temperature === 'number' && Number.isFinite(options.temperature)) payload.temperature = options.temperature
@@ -477,7 +514,7 @@ export class FreeModelAdapter {
       // its tools to this lane's gate placeholders would break the caller's calls.
       // The chan lane is the same pack's loopback gateway: it relays the body
       // to the channel adapter, which does its own shaping.
-      const renameMap = sealed || kilo || aggregate || chan ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
+      const renameMap = sealed || kilo || aggregate || chan || dsh ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
       const controller = new AbortController()
       const onAbort = () => controller.abort(options.signal?.reason)
       options.signal?.addEventListener('abort', onAbort, { once: true })
@@ -490,8 +527,10 @@ export class FreeModelAdapter {
       }, timeoutMs) : undefined
       timer?.unref?.()
       const channel = createChannel()
-      const request = (sealed
-        ? postSealedTurn(this.deps, payload, controller.signal, value => channel.push(value))
+      const request = (dsh
+        ? postDshTurn(this.deps, payload, controller.signal, value => channel.push(value))
+        : sealed
+          ? postSealedTurn(this.deps, payload, controller.signal, value => channel.push(value))
         : kilo
           ? postKiloStreamed({ body: payload, signal: controller.signal, onData: value => channel.push(value) })
           : aggregate
@@ -571,10 +610,12 @@ export class FreeModelAdapter {
         return { advance: shouldAdvance(verdict) || code === CODE.client || code === CODE.region, verdict }
       }
       try {
-        const reader = readStream(channel.read(), wire, renameMap, () => Date.now(), {
+        const reader = dsh
+          ? readDshStream(channel.read(), { startIndex: nextIndex, checkpointLimit: policy.checkpointLimit, onState: value => { partialOutcome = value } })
+          : readStream(channel.read(), wire, renameMap, () => Date.now(), {
           startIndex: nextIndex, checkpointLimit: policy.checkpointLimit,
           onState: value => { partialOutcome = value },
-        })
+          })
         let outcome
         try {
           while (true) {
@@ -784,6 +825,91 @@ async function postChannelTurn(deps, entry, payload, signal, onData) {
 }
 
 /**
+ * One DSH-hosted-model turn: the host owns endpoint selection and credentials,
+ * so the entire call goes back through `ctx.llm.stream`. A missing host stream
+ * is a configuration defect on this lane and fails locally.
+ */
+async function postDshTurn(deps, options, signal, onData) {
+  const stream = deps.hostStream
+  if (typeof stream !== 'function') throw new UpstreamError('the DSH model service is not available on this host', CODE.transport)
+  const iterator = stream({ ...options, signal })[Symbol.asyncIterator]()
+  try {
+    while (true) {
+      const row = await iterator.next()
+      if (row.done === true) return
+      onData(row.value)
+    }
+  } finally {
+    await iterator.return?.()
+  }
+}
+
+/**
+ * 宿主流已经使用本插件的分片协议。这里保留块索引、用量和终止帧，并把
+ * DSH 的终止错误转换成本插件统一判定的失败，供组合链决定是否前进。
+ */
+async function * readDshStream(lines, options = {}) {
+  const startIndex = Number.isSafeInteger(options.startIndex) && options.startIndex >= 0 ? options.startIndex : 0
+  let nextIndex = startIndex
+  let usage
+  let sawUsage = false
+  let sawText = false
+  let sawReasoning = false
+  let sawToolCall = false
+  let firstDeltaAt
+  let finish
+  let sawFinish = false
+  const state = () => ({
+    usage: usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    sawUsage, sawText, sawReasoning, sawToolCall, firstDeltaAt, nextIndex,
+  })
+  for await (const raw of lines) {
+    if (raw === undefined || raw === null) continue
+    let chunk = raw
+    if (typeof raw === 'string') {
+      try { chunk = JSON.parse(raw) } catch { continue }
+    }
+    if (chunk === null || typeof chunk !== 'object') continue
+    if (chunk.type === 'usage') {
+      usage = sanitizeUsage(chunk.usage)
+      if (usage !== undefined) sawUsage = true
+      options.onState?.(state())
+      yield chunk
+      continue
+    }
+    if (chunk.type === 'text-delta' && typeof chunk.text === 'string' && chunk.text.trim() !== '') sawText = true
+    if (chunk.type === 'reasoning-delta' && typeof chunk.text === 'string' && chunk.text.trim() !== '') sawReasoning = true
+    if (chunk.type === 'tool-call-delta') sawToolCall = true
+    if ((chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-call-delta') && firstDeltaAt === undefined) firstDeltaAt = Date.now()
+    if (Number.isSafeInteger(chunk.index) && chunk.index >= nextIndex) nextIndex = chunk.index + 1
+    if (chunk.type === 'finish' && chunk.reason?.kind === 'error') {
+      const failure = chunk.reason.failure ?? {}
+      const error = new UpstreamError(String(failure.message ?? 'the DSH-hosted model failed'), String(failure.code ?? CODE.server), {
+        ...Number.isInteger(failure.status) ? { status: failure.status } : {},
+        ...Number.isFinite(failure.providerRetryAfterMs) ? { providerRetryAfterMs: failure.providerRetryAfterMs } : {},
+      })
+      error.failure = failure
+      throw error
+    }
+    if (chunk.type === 'finish' && chunk.reason?.kind === 'aborted') {
+      options.onState?.(state())
+      throw new UpstreamError('request aborted', CODE.aborted)
+    }
+    if (chunk.type === 'finish') {
+      sawFinish = true
+      finish = chunk.reason.kind === 'tool-calls' ? 'tool_calls'
+        : chunk.reason.kind === 'max-tokens' ? 'length'
+          : chunk.reason.kind
+      options.onState?.(state())
+      continue
+    }
+    options.onState?.(state())
+    yield chunk
+  }
+  return { ...state(), finish, sawFinish }
+}
+
+/**
  * One co-paid-lane turn: unlock the sealed credential for this request frame
  * and hand it straight to the lane's poster. A host the gate refuses — or a
  * seal that does not open — is a non-retryable configuration state, not a
@@ -863,6 +989,7 @@ function toFailure(error) {
 function wireOf(entry) {
   if (isAggregateEntry(entry)) return entry.wire ?? 'chat'
   if (isEacEntry(entry) || isKiloEntry(entry) || isChannelEntry(entry)) return 'chat'
+  if (isDshEntry(entry)) return 'host'
   return wireFor(entry.id)
 }
 
