@@ -40,8 +40,20 @@ import { execSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { callRoute, chatFrames, fakeContext, freePort, stubUpstream, until } from './lib/fake-kernel.mjs'
 
+/**
+ * The flagged-exit state no default fixture reaches.
+ *
+ * On 2026-10-20 every model answered the same "abusive traffic from this IP"
+ * sentence for hours while the page showed a bare 0%. That is the state the
+ * diagnosis block exists for, so it needs a way to be photographed: run
+ * `OFM_PREVIEW_REFUSED=1 node scripts/ui-preview.mjs` and the free lane's stub
+ * refuses every model with the sentence upstream actually used.
+ */
+const REFUSED_EXIT = process.env.OFM_PREVIEW_REFUSED === '1'
+const REFUSAL = "OpenCode's free models aren't available from your current network because we've detected abusive traffic from this IP address. This isn't related to your account. If you're on a VPN or proxy, turn it off and try again."
+
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
-const OUT_DIR = path.join(ROOT, '.verify', 'ui-preview')
+const OUT_DIR = path.join(ROOT, '.verify', 'ui-preview', REFUSED_EXIT ? 'refused-exit' : '')
 const say = (...parts) => console.log('ui-preview:', ...parts)
 
 /** A big, obviously-compressible tool result: a real `git diff` shape. */
@@ -143,7 +155,9 @@ say('booting the host half through scripts/lib/fake-kernel.mjs')
 
 const freeLane = await stubUpstream({
   listing: ['deepseek-v4-flash-free', 'mimo-v2.6-flash-free', 'kimi-k3-free'],
-  answer: () => ({ body: chatFrames('answered by the free lane') }),
+  answer: () => (REFUSED_EXIT
+    ? { status: 400, body: JSON.stringify({ error: { message: REFUSAL } }) }
+    : { body: chatFrames('answered by the free lane') }),
 })
 process.env.OUR_FREE_MODEL_BASE = freeLane.base
 say(`free lane stub at ${freeLane.base}`)
@@ -312,18 +326,39 @@ say(`plugin booted; DSH_HOME ${home}`)
     ],
     sessionId: 'ui-preview:saver',
   }
+  // Probe rounds dial the stub too, so the no-dial assertion counts from here.
+  const dialsBefore = freeLane.requests.length
   const chunks = []
   for await (const chunk of adapter.stream(options, null, undefined)) chunks.push(chunk)
   const answer = chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')
-  if (!answer.includes('answered by the free lane')) {
-    throw new Error(`the adapter turn did not answer through the stub free lane — ${JSON.stringify(chunks).slice(0, 600)}`)
+  if (REFUSED_EXIT) {
+    // The whole point of this scenario: the lane refused, so the turn must fail
+    // fast with the upstream verdict instead of dialling and burning a timeout.
+    const finish = chunks.find(chunk => chunk.type === 'finish')
+    const failure = finish?.reason?.failure
+    if (failure?.code !== 'LANE_REFUSED') {
+      throw new Error(`the refused lane answered instead of failing fast — ${JSON.stringify(chunks).slice(0, 600)}`)
+    }
+    if (!failure.message.includes('abusive traffic')) {
+      throw new Error(`the refusal lost the upstream wording — ${failure.message}`)
+    }
+    if (freeLane.requests.length > dialsBefore) {
+      throw new Error(`the refused lane still dialled upstream ${freeLane.requests.length - dialsBefore} time(s)`)
+    }
+    say(`refused lane: fast-failed with ${failure.code} and no upstream dial (0 requests)`)
+  } else {
+    if (!answer.includes('answered by the free lane')) {
+      throw new Error(`the adapter turn did not answer through the stub free lane — ${JSON.stringify(chunks).slice(0, 600)}`)
+    }
+    await until(() => freeLane.requests.length > 0, { what: 'the upstream request', timeoutMs: 5000 })
   }
-  await until(() => freeLane.requests.length > 0, { what: 'the upstream request', timeoutMs: 5000 })
 }
-await until(async () => {
-  const stats = (await callRoute(api(), 'GET', '/api/our-free-model/stats')).json
-  return Number(stats?.savings?.saved) > 0
-}, { what: 'a non-zero savings measurement', timeoutMs: 15000 })
+if (!REFUSED_EXIT) {
+  await until(async () => {
+    const stats = (await callRoute(api(), 'GET', '/api/our-free-model/stats')).json
+    return Number(stats?.savings?.saved) > 0
+  }, { what: 'a non-zero savings measurement', timeoutMs: 15000 })
+}
 
 const statsView = (await callRoute(api(), 'GET', '/api/our-free-model/stats')).json
 say(`savings: ${JSON.stringify(statsView.savings)}`)

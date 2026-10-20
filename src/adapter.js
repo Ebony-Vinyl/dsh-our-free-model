@@ -31,6 +31,7 @@ import { isEacEntry, isKiloEntry } from './catalog.js'
 import { isComboEntry, comboChain } from './combos.js'
 import { applyTokenSavers, saverConfig } from './token-saver/index.js'
 import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
+import { refusalFor } from './verdict.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
 
 export const ROUTE_MAIN = 'our-free-model'
@@ -203,6 +204,19 @@ export class FreeModelAdapter {
       yield * this.runCombo(options, entry, snapshot)
       return
     }
+    // A verdict the probe has already recorded is a cheaper answer than the
+    // round trip that would discover it again — and the round trip is not free
+    // even when it fails: measured 2026-10-20, a refused free turn sat in the
+    // harness for minutes before the refusal surfaced as a generic error. The
+    // reading is only allowed to speak while it is fresh (src/verdict.js
+    // `isFresh`), so a user who fixed their exit is never blocked by an opinion
+    // older than two probe rounds.
+    const refusal = refusalOf(modelId, snapshot)
+    if (refusal !== null) {
+      this.deps.recordTurn?.({ at: Date.now(), model: modelId, ok: false, recovered: false, attempts: 0, origin: 'harness' })
+      yield { type: 'finish', reason: { kind: 'error', failure: { message: refusal.message, code: refusal.code } } }
+      return
+    }
     yield * this.runSingle(options, entry, snapshot, {})
   }
 
@@ -237,9 +251,21 @@ export class FreeModelAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { message: `the chain "${entry.name}" has no model available on this egress`, code: CODE.server } } }
       return
     }
+    // Links the probe has already refused are not tried: walking them would
+    // spend one refused round trip per link to learn what the verdict already
+    // says, and the chain exist to get the user an answer. When every link is
+    // refused the turn ends on the *first* refusal, so the reason names the exit
+    // rather than the last link's unrelated wording.
+    const dialable = candidates.filter(candidate => refusalOf(candidate.id, snapshot) === null)
+    if (dialable.length === 0) {
+      const refusal = refusalOf(candidates[0].id, snapshot)
+      rejectedTurn(0)
+      yield { type: 'finish', reason: { kind: 'error', failure: { message: refusal.message, code: refusal.code } } }
+      return
+    }
     const tried = []
-    for (let index = 0; index < candidates.length; index += 1) {
-      const candidate = candidates[index]
+    for (let index = 0; index < dialable.length; index += 1) {
+      const candidate = dialable[index]
       const iterator = this.runSingle(options, candidate, snapshot, {
         wire: wireOf(candidate),
         turnModel: entry.id,
@@ -276,7 +302,7 @@ export class FreeModelAdapter {
       tried.push(`${candidate.id} (${reason})`)
       this.deps.warn?.(`our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${reason}`)
     }
-    rejectedTurn(candidates.length)
+    rejectedTurn(dialable.length)
     yield { type: 'finish', reason: { kind: 'error', failure: {
       message: `the chain "${entry.name}" exhausted every candidate: ${tried.join('; ')}`,
       code: CODE.server,
@@ -734,6 +760,18 @@ function toFailure(error) {
     ...Number.isInteger(status) && status >= 100 && status <= 599 ? { status } : {},
     ...Number.isFinite(retryAfter) && retryAfter > 0 ? { providerRetryAfterMs: Math.trunc(retryAfter) } : {},
   }
+}
+
+/**
+ * The refusal a stored verdict justifies for one model, or `null` to let the
+ * request run. Kept as a module function because both the single-model path and
+ * the chain's candidate filter have to ask the same question with the same
+ * freshness rule.
+ */
+function refusalOf(modelId, snapshot) {
+  return refusalFor(modelId, snapshot?.availability?.results, {
+    probeIntervalMinutes: snapshot?.settings?.probeIntervalMinutes,
+  })
 }
 
 /**

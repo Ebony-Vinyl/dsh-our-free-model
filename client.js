@@ -231,6 +231,7 @@ window.__ModuleLoader__.load({
         'pref.exposeRegion': '展示地区受限模型',
         'pref.hideFreeModels': '隐藏匿名与 Kilo 免费模型',
         'pref.hideEacModels': '隐藏 EAC 模型',
+        'pref.keepRefused': '被拒时保留模型列表',
         'visibility.showModel': '在模型选择器中显示',
         'visibility.hidden': '已隐藏',
         'visibility.unlisted': '未公开模型',
@@ -384,6 +385,20 @@ window.__ModuleLoader__.load({
         'free.tankLabel': '免费车道可用度',
         'free.tankNote': '水位 = 当前可用模型占比（{ok}/{total}）',
         'free.tankEmpty': '尚未探测，水位按已声明模型占位。',
+        // The one line that turns "0%" into a diagnosis. Every sentence names
+        // the exit rather than the model, because that is what the upstream
+        // sentence is about and the only thing the user can change.
+        'lane.refusedTitle': '这个出口被上游拒了',
+        'lane.refusedBody': '{total} 个模型在 {ip} 上全部被拒，跟你的账号无关，换出口就会好。',
+        'lane.reason.abusiveIp': '上游提示「检测到来自该 IP 的滥用流量」。关掉隧道、换一个节点，或切回家庭宽带后重新探测。',
+        'lane.reason.regionBlocked': '上游提示「该模型不在你所在的国家/地区服务」。需要能到达该地区的出口。',
+        'lane.reason.throttled': '上游提示本轮额度已用完——这是暂时的，稍后自动恢复。',
+        'lane.reason.gone': '上游已经下架了这些模型 id，等清单刷新后会自动换成新的。',
+        'lane.reason.unknown': '上游没有给出可识别的原因，展开「运行日志」看原始回执。',
+        'lane.refusedStreak': '连续 {n} 轮被拒',
+        'lane.stale': '这份判定已超过两轮探测时间，可能不代表你现在的网络。',
+        'lane.reprobe': '重新探测这个出口',
+        'lane.openEgress': '打开出口设置',
         'eac.title': 'EAC 模型',
         'eac.sub': '桌面端协付渠道：GitHub 登录并 star 本仓库后解锁，与免费车道互不影响。',
         'eac.tankLabel': '协付池压力',
@@ -920,6 +935,7 @@ window.__ModuleLoader__.load({
         'pref.exposeRegion': 'Show region-limited models',
         'pref.hideFreeModels': 'Hide anonymous and Kilo free models',
         'pref.hideEacModels': 'Hide EAC models',
+        'pref.keepRefused': 'Keep models listed when refused',
         'visibility.showModel': 'Show in model picker',
         'visibility.hidden': 'Hidden',
         'visibility.unlisted': 'Unlisted models',
@@ -1073,6 +1089,17 @@ window.__ModuleLoader__.load({
         'free.tankLabel': 'Free-lane availability',
         'free.tankNote': 'Water level = share of reachable models ({ok}/{total})',
         'free.tankEmpty': 'Not probed yet; the level stands at the declared roster.',
+        'lane.refusedTitle': 'This exit is being refused',
+        'lane.refusedBody': 'All {total} models were refused on {ip}. This is about the exit address, not your account — another exit fixes it.',
+        'lane.reason.abusiveIp': 'Upstream reports "abusive traffic from this IP address". Turn the tunnel off, switch node, or go back to a home connection, then re-probe.',
+        'lane.reason.regionBlocked': 'Upstream reports the model is not served in your country. You need an exit that can reach that region.',
+        'lane.reason.throttled': 'This round\'s quota is spent upstream — temporary, it recovers on its own.',
+        'lane.reason.gone': 'Upstream has retired these model ids; the next catalog refresh replaces them.',
+        'lane.reason.unknown': 'Upstream gave no recognisable reason — open the run log for the raw response.',
+        'lane.refusedStreak': 'refused for {n} rounds in a row',
+        'lane.stale': 'This verdict is older than two probe rounds and may no longer describe your network.',
+        'lane.reprobe': 'Re-probe this exit',
+        'lane.openEgress': 'Open egress settings',
         'eac.title': 'EAC models',
         'eac.sub': 'The desktop co-paid lane: unlocked by a GitHub login plus a star, independent of the free lane.',
         'eac.tankLabel': 'Co-paid pool pressure',
@@ -1563,6 +1590,8 @@ window.__ModuleLoader__.load({
 /* ══ 提示条 ════════════════════════════════════════════════════════════ */
 .ofm_callout{display:flex;gap:9px;padding:10px 12px;border-radius:11px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 9%,transparent);font-size:11.5px;line-height:1.5;color:var(--dsw-alias-label-primary)}
 .ofm_error{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 9%,transparent)}
+.ofm_calloutcol{display:flex;flex:1 1 auto;min-width:0;flex-direction:column;gap:4px}
+.ofm_calloutact{display:flex;flex:0 0 auto;flex-wrap:wrap;align-items:flex-start;gap:6px}
 /* ══ 小组件统计 ════════════════════════════════════════════════════════ */
 .ofm_stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
 .ofm_stat{padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 78%,transparent);border:1px solid var(--dsw-alias-border-l1);box-shadow:inset 0 1px 0 rgb(255 255 255 / 4%)}
@@ -2753,7 +2782,7 @@ window.__ModuleLoader__.load({
     }, props.children)
 
     function Section(props) {
-      return h('section', { className: 'ofm_sec' },
+      return h('section', { className: 'ofm_sec', id: props.id },
         h('div', { className: 'ofm_sechead' },
           h('span', { className: 'ofm_sec_title' }, props.title),
           props.hint === undefined ? null : h('span', { className: 'ofm_sec_hint' }, props.hint)),
@@ -3622,7 +3651,11 @@ window.__ModuleLoader__.load({
           h(Switch, { checked: settings.exposeRegionModels !== false, label: t('pref.exposeRegion'), onChange: () => onApply({ exposeRegionModels: !(settings.exposeRegionModels !== false) }) })),
         h('div', { className: 'ofm_row', style: { gap: 20 } },
           h(Switch, { checked: settings.hideFreeModels === true, disabled: busy, label: t('pref.hideFreeModels'), onChange: () => onApply({ hideFreeModels: settings.hideFreeModels !== true }) }),
-          h(Switch, { checked: settings.hideEacModels === true, disabled: busy, label: t('pref.hideEacModels'), onChange: () => onApply({ hideEacModels: settings.hideEacModels !== true }) })),
+          h(Switch, { checked: settings.hideEacModels === true, disabled: busy, label: t('pref.hideEacModels'), onChange: () => onApply({ hideEacModels: settings.hideEacModels !== true }) }),
+          // The escape hatch for the suppression computed in `computeMembership`:
+          // two refused rounds normally stop advertising the lane, and this keeps
+          // the rows in the picker for a user who prefers them there.
+          h(Switch, { checked: settings.keepRefusedModels === true, disabled: busy, label: t('pref.keepRefused'), onChange: () => onApply({ keepRefusedModels: settings.keepRefusedModels !== true }) })),
         h('div', { className: 'ofm_row' },
           field(t('pref.interval'), h('input', { className: 'ofm_input', style: { maxWidth: 100 }, value: draft?.probeIntervalMinutes ?? 15, onChange: e => setDraft(c => ({ ...c, probeIntervalMinutes: Number(e.target.value.replace(/\D/g, '')) || 0 })) })),
           field(t('pref.maxTokens'), h('input', { className: 'ofm_input', style: { maxWidth: 120 }, value: draft?.defaultMaxTokens ?? 32768, onChange: e => setDraft(c => ({ ...c, defaultMaxTokens: Number(e.target.value.replace(/\D/g, '')) || 0 })) })),
@@ -6240,6 +6273,20 @@ window.__ModuleLoader__.load({
       // below two thirds — the pool gauge's own cut-offs measure queue pressure
       // and would paint a perfectly usable lane amber.
       const level = ratio >= 0.6 ? 'ok' : ratio >= 0.3 ? 'busy' : 'over'
+      // The lane's own reading, computed by src/verdict.js and shipped in the
+      // summary. Without it "0%" is the whole message, and a number with no
+      // diagnosis is the fastest way to make a user think the plugin is broken.
+      const lane = data.lane ?? null
+      // Written as a static chain on purpose: the copy linter proves each key is
+      // used by finding the literal `t('…')` call, so a `t(REASON_KEY[reason])`
+      // table would ship four translations nobody can prove are reachable.
+      const laneReason = lane === null ? ''
+        : lane.reason === 'abusive-ip' ? t('lane.reason.abusiveIp')
+          : lane.reason === 'region-blocked' ? t('lane.reason.regionBlocked')
+            : lane.reason === 'throttled' ? t('lane.reason.throttled')
+              : lane.reason === 'model-gone' ? t('lane.reason.gone')
+                : t('lane.reason.unknown')
+      const egressAnchor = () => document.getElementById('ofm-egress-sec')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return h('div', { className: 'ofm_page' },
         h(SponsorBanner, { t }),
         h('header', { className: 'ofm_hero ofm_glass' },
@@ -6272,12 +6319,22 @@ window.__ModuleLoader__.load({
               h('div', { className: 'ofm_row' },
                 h(Button, { disabled: busy || catalogBusy, onClick: refresh }, catalogBusy || summary.status === 'loading' ? t('probing') : t('refresh')),
                 h(Button, { disabled: busy || catalogBusy, onClick: reprobe }, t('reprobe')))))),
+        lane !== null && lane.state === 'refused' ? h('div', { className: 'ofm_callout ofm_error' },
+          h('div', { className: 'ofm_calloutcol' },
+            h('b', null, t('lane.refusedTitle')),
+            h('div', null, t('lane.refusedBody').replace('{total}', String(lane.counts.total)).replace('{ip}', lane.exitIp || '—')),
+            h('div', { className: 'ofm_note' }, laneReason),
+            lane.refusedStreak > 0 ? h('div', { className: 'ofm_note' }, t('lane.refusedStreak').replace('{n}', String(lane.refusedStreak))) : null,
+            lane.stale ? h('div', { className: 'ofm_note' }, t('lane.stale')) : null),
+          h('div', { className: 'ofm_calloutact' },
+            h(Button, { disabled: busy || catalogBusy, onClick: reprobe }, t('lane.reprobe')),
+            h(Button, { onClick: egressAnchor }, t('lane.openEgress')))) : null,
         h(Section, { title: t('section.models'), hint: t('section.modelsHint') }, h(Roster, { summary: data, t, onBench: bench, benches, auth: eacAuth, eacLogin, only: 'free', onApply: apply, busy })),
         h(Section, { title: t('section.dash'), hint: t('section.dashHint') },
           stats.status === 'ready' && stats.data !== undefined ? h(Dashboard, { stats: stats.data, summary: data, t })
             : h('p', { className: 'ofm_note' }, t('loading'))),
         h(Section, { title: t('section.forward'), hint: t('section.forwardHint') }, h(Forward, { settings: data.settings, t, onApply: apply, busy })),
-        h(Section, { title: t('section.egress'), hint: t('section.egressHint') }, h(Egress, { settings: data.settings, t, onApply: apply, busy })),
+        h(Section, { id: 'ofm-egress-sec', title: t('section.egress'), hint: t('section.egressHint') }, h(Egress, { settings: data.settings, t, onApply: apply, busy })),
         h(Section, { title: t('section.prefs'), hint: t('section.prefsHint') }, h(Preferences, { summary: data, t, onApply: apply, busy })),
         h(Section, { title: t('section.news'), hint: t('section.newsHint') }, h(NewsPanel, { t })))
     }

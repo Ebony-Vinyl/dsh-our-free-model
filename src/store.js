@@ -159,6 +159,11 @@ export const SETTINGS_INITIAL = {
   hiddenModelIds: [],
   hideFreeModels: false,
   hideEacModels: false,
+  /** Keep advertising a lane whose every model is currently being refused.
+   *  Off by default: three models that all answer "abusive traffic from this IP"
+   *  read as a broken plugin, and the free tab explains the exit instead. On,
+   *  the rows stay in the picker even when nothing on that exit can answer. */
+  keepRefusedModels: false,
   /** Minutes between background availability re-probes. */
   probeIntervalMinutes: 15,
   /** Serve the OpenAI-compatible forward listener for other local harnesses. */
