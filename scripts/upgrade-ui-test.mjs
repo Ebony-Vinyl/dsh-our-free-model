@@ -71,6 +71,19 @@ await check('same-version incomplete install still warns and disables upgrade an
   assert.equal(reload.props.disabled, true)
   assert.ok(!nodes.includes('upgrade.upToDate'))
 })
+await check('a managed install disables check, explains itself, and never renders a fake failure (issue #517)', () => {
+  // Every upgrade endpoint answers 409 by design on a managed install, so an
+  // enabled button can only ever produce a red error that reads as a fault.
+  const nodes = render({
+    ...baseline, managed: true, latest: '', available: false, checkedAt: 0,
+  })
+  const check = nodes.find(node => node?.children?.includes('upgrade.check'))
+  assert.equal(check.props.disabled, true, 'the button must not invite a guaranteed 409')
+  assert.ok(nodes.includes('upgrade.managed'), 'the panel must say why upgrade is off')
+  assert.ok(nodes.includes('upgrade.managedShort'), 'the "never checked" pill must be replaced by the honest one')
+  assert.ok(!nodes.includes('upgrade.failed'), 'a by-design 409 must not look like a failed upgrade')
+  assert.ok(!nodes.includes('upgrade.upToDate'))
+})
 await check('an unfinished upgrade cannot render an up-to-date indicator', () => {
   assert.ok(!render({ ...baseline, available: false, applying: true }).includes('upgrade.upToDate'))
   assert.ok(render({ ...baseline, available: false }).includes('upgrade.upToDate'))

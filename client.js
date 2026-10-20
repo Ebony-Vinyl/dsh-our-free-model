@@ -279,6 +279,9 @@ window.__ModuleLoader__.load({
         'section.newsHint': '公告由仓库主人推送，本页实时接收。',
         'section.upgrade': '插件升级',
         'section.upgradeHint': '在应用内直接升级插件，无需重新安装或重启。',
+        'section.upgradeHintManaged': '本机由包管理器托管，版本随包管理器更新；应用内升级已停用。',
+        'upgrade.managed': '本机为托管安装，版本由包管理器维护，应用内升级已停用。',
+        'upgrade.managedShort': '版本由包管理器维护',
         'news.unread': '{n} 条未读',
         'news.allRead': '全部已读',
         'news.markRead': '标记已读',
@@ -968,6 +971,9 @@ window.__ModuleLoader__.load({
         'section.newsHint': 'Published by the repository owner; this page receives them live.',
         'section.upgrade': 'Plugin upgrade',
         'section.upgradeHint': 'Upgrade in-app — no reinstall, no restart.',
+        'section.upgradeHintManaged': 'This install is managed by a package manager; updates follow it and in-app upgrade is off.',
+        'upgrade.managed': 'This install is managed by a package manager. It owns the version, so in-app upgrade is off.',
+        'upgrade.managedShort': 'Version maintained by the package manager',
         'news.unread': '{n} unread',
         'news.allRead': 'Mark all read',
         'news.markRead': 'Mark read',
@@ -3757,6 +3763,11 @@ window.__ModuleLoader__.load({
         }
       }
       const notes = useMemo(() => parseSafeHtml(data?.notes ?? ''), [data?.notes])
+      // A managed install lets the package manager own the version, so every
+      // upgrade endpoint answers 409 by design. The button used to stay enabled
+      // and surface that design decision as a red "upgrade failed", which reads
+      // as a fault; disabling it and saying why keeps the panel honest.
+      const managedInstall = data?.managed === true
       const upToDate = data !== undefined && data.latest !== '' && data.available === false
         && data.applying !== true && data.recoveryRequired !== true && data.versionMismatch !== true
       return h(Panel, null,
@@ -3766,9 +3777,11 @@ window.__ModuleLoader__.load({
           data?.latest !== undefined && data.latest !== '' ? h('span', { className: 'ofm_pill' }, `${t('upgrade.latest')}: ${data.latest}`) : null,
           data?.available === true ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot warn' }), t('upgrade.available').replace('{version}', data.latest)) : null,
           upToDate ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot ok' }), t('upgrade.upToDate')) : null,
-          h('span', { className: 'ofm_pill' }, `${t('upgrade.checkedAt')}: ${data?.checkedAt ? ago(data.checkedAt, t.locale) : t('upgrade.never')}`)),
+          managedInstall
+            ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot' }), t('upgrade.managedShort'))
+            : h('span', { className: 'ofm_pill' }, `${t('upgrade.checkedAt')}: ${data?.checkedAt ? ago(data.checkedAt, t.locale) : t('upgrade.never')}`)),
         h('div', { className: 'ofm_row' },
-          h(Button, { disabled: phase !== '' || status.status !== 'ready', onClick: check }, phase === 'checking' ? t('upgrade.checking') : t('upgrade.check')),
+          h(Button, { disabled: managedInstall || phase !== '' || status.status !== 'ready', onClick: check }, phase === 'checking' ? t('upgrade.checking') : t('upgrade.check')),
           data?.available === true ? h(Button, { kind: 'primary', disabled: phase !== '' || data.applying === true || data.recoveryRequired === true, onClick: applyUpgrade }, phase === 'applying' ? t('upgrade.applying') : t('upgrade.apply')) : null,
           h('a', {
             className: 'ofm_btn ofm_starlink',
@@ -3777,6 +3790,7 @@ window.__ModuleLoader__.load({
             rel: 'noopener noreferrer',
           }, h('span', { 'aria-hidden': 'true' }, '\u2606'), t('upgrade.star'))),
         phase === 'applying' ? h('div', { className: 'ofm_prog' }, h('i')) : null,
+        managedInstall ? h('div', { className: 'ofm_callout' }, t('upgrade.managed')) : null,
         data?.recoveryRequired === true ? h('div', { className: 'ofm_callout ofm_error' },
           h('div', null, t('upgrade.recovery'),
             data.recoveryBackup ? h('p', { className: 'ofm_note' }, `${t('upgrade.backup')}: ${data.recoveryBackup}`) : null)) : null,
@@ -3803,8 +3817,13 @@ window.__ModuleLoader__.load({
 
     function UpgradePage(props) {
       const { t, settings, onApply, busy } = props
+      // The subtitle promises in-app upgrade, which is false on a managed
+      // install (issue #517); read the same status the panel reads so the
+      // heading never contradicts the panel below it.
+      const status = useAsync(() => api('/update/status'), [])
+      const managed = status.data?.managed === true
       return h('div', { className: 'ofm_page' },
-        h(PageHero, { title: t('section.upgrade'), sub: t('section.upgradeHint') }),
+        h(PageHero, { title: t('section.upgrade'), sub: managed ? t('section.upgradeHintManaged') : t('section.upgradeHint') }),
         h(UpgradePanel, { t, settings, onApply, busy }))
     }
 
