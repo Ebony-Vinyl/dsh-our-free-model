@@ -83,6 +83,14 @@ await check('a managed install disables check, explains itself, and never render
   assert.ok(nodes.includes('upgrade.managedShort'), 'the "never checked" pill must be replaced by the honest one')
   assert.ok(!nodes.includes('upgrade.failed'), 'a by-design 409 must not look like a failed upgrade')
   assert.ok(!nodes.includes('upgrade.upToDate'))
+  // The reload endpoint 409s under managed too (index.js hotReload), so the
+  // same rule covers the reload button and the file-watcher switch beside it.
+  // The switch is selected by its label: this fake-React harness records a
+  // function component's input props, not its rendered `role`.
+  const reload = nodes.find(node => node?.children?.includes('reload.now'))
+  assert.equal(reload.props.disabled, true, 'reload must not invite the same guaranteed 409')
+  const watch = nodes.find(node => node?.props?.label === 'reload.auto')
+  assert.equal(watch.props.disabled, true, 'the watcher switch is a reload trigger under managed')
 })
 await check('an unfinished upgrade cannot render an up-to-date indicator', () => {
   assert.ok(!render({ ...baseline, available: false, applying: true }).includes('upgrade.upToDate'))

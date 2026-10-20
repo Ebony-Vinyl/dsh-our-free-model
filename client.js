@@ -3807,11 +3807,11 @@ window.__ModuleLoader__.load({
           data.lastApplied.ok === false && data.lastApplied.error ? ` — ${data.lastApplied.error}` : '') : null,
         h('p', { className: 'ofm_note' }, (settings.updateCheckHours ?? 0) > 0 ? t('upgrade.auto').replace('{n}', String(settings.updateCheckHours)) : t('upgrade.autoOff')),
         h('div', { className: 'ofm_row' },
-          h(Button, { disabled: phase !== '' || data?.applying === true || data?.recoveryRequired === true, onClick: () => {
+          h(Button, { disabled: managedInstall || phase !== '' || data?.applying === true || data?.recoveryRequired === true, onClick: () => {
             setPhase('reloading'); setError(''); setMessage(t('upgrade.phase.reload'))
             post('/reload').catch(err => { setMessage(''); setError(String(err?.message ?? err)) }).finally(() => { setPhase('') })
           } }, phase === 'reloading' ? t('reload.reloading') : t('reload.now')),
-          h(Switch, { checked: settings.autoReloadWatch === true, label: t('reload.auto'), onChange: () => onApply({ autoReloadWatch: !(settings.autoReloadWatch === true) }) }),
+          h(Switch, { checked: settings.autoReloadWatch === true, disabled: managedInstall, label: t('reload.auto'), onChange: () => onApply({ autoReloadWatch: !(settings.autoReloadWatch === true) }) }),
           h('span', { className: 'ofm_note' }, t('reload.done').replace('{n}', String(settings.reloadCount ?? 0)))))
     }
 
