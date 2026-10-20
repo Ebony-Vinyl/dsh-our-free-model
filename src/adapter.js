@@ -236,7 +236,6 @@ export class FreeModelAdapter {
    * report, which is what lets a chain mix both kinds in any order.
    */
   async * runForeign(options, candidate, entry) {
-    const started = Date.now()
     const dispatch = this.deps.dispatchForeign
     if (typeof dispatch !== 'function') {
       yield { type: 'finish', reason: { kind: 'error', failure: {
@@ -245,6 +244,24 @@ export class FreeModelAdapter {
       } } }
       return { advance: false, verdict: null, ok: false }
     }
+
+    /**
+     * Whether another candidate could answer this failure.
+     *
+     * The **same** two vetoes and the **same** table as `runSingle`'s
+     * `advanceVerdict`: the caller walked away, or this link already put an
+     * answer on the wire. Anything else is classified with `classifyFailure`,
+     * which is what keeps one definition of "retryable" across lanes — a
+     * channel's `PERMISSION_DENIED` carries a two-minute cooldown and therefore
+     * advances, exactly as a local lane's would.
+     */
+    let sawAnswer = false
+    const advanceVerdict = (code, message, status) => {
+      if (options.signal?.aborted === true || sawAnswer) return { advance: false, verdict: null }
+      const verdict = classifyFailure({ status, code, message })
+      return { advance: shouldAdvance(verdict) || code === CODE.client || code === CODE.region, verdict }
+    }
+
     let stream
     try {
       stream = await dispatch({
@@ -261,25 +278,49 @@ export class FreeModelAdapter {
         purpose: options.purpose,
       })
     } catch (error) {
-      const failure = { message: String(error?.message ?? error).slice(0, 400), code: error?.code ?? CODE.server }
+      const failure = toFailure(error)
       yield { type: 'finish', reason: { kind: 'error', failure } }
       this.deps.warn?.(`our-free-model: chain "${entry.name}" could not reach ${candidate.id} — ${failure.message}`)
-      return { advance: true, verdict: { kind: 'retryable', message: failure.message }, ok: false }
+      return { ok: false, ...advanceVerdict(failure.code, failure.message, failure.status) }
     }
-    let ok = false
+
+    /**
+     * The failure a terminal `finish` chunk carried, if it carried one.
+     *
+     * ⚠️ **This is the bug that stopped the chain.** The harness reports an
+     * adapter failure as a `finish` chunk with `reason.kind === 'error'`, *not*
+     * as a thrown exception: `dsh-llm` converts the adapter's throw into
+     * `adapterFailureChunk()` before the consumer ever sees it. Iterating the
+     * stream therefore ends **normally**, and an implementation that reads
+     * "the loop finished" as "the model answered" reports `advance: false` for
+     * every channel failure — the chain refuses to move on even though nothing
+     * was committed. Capturing the chunk's failure and classifying it is what
+     * makes a channel link fail over like a local one.
+     */
+    let terminal = null
     try {
       for await (const chunk of stream) {
-        if (chunk?.type === 'text-delta' || chunk?.type === 'tool-call') ok = true
+        if (chunk?.type === 'text-delta' && typeof chunk.text === 'string' && chunk.text.trim() !== '') sawAnswer = true
+        if (chunk?.type === 'tool-call-delta' || chunk?.type === 'tool-call') sawAnswer = true
+        if (chunk?.type === 'finish' && chunk.reason?.kind === 'error') terminal = chunk.reason.failure ?? {}
         yield chunk
       }
     } catch (error) {
-      const failure = { message: String(error?.message ?? error).slice(0, 400), code: error?.code ?? CODE.server }
+      const failure = toFailure(error)
       yield { type: 'finish', reason: { kind: 'error', failure } }
       this.deps.warn?.(`our-free-model: chain "${entry.name}" failed inside ${candidate.id} — ${failure.message}`)
-      return { advance: !ok, verdict: { kind: 'retryable', message: failure.message }, ok: false }
+      return { ok: false, ...advanceVerdict(failure.code, failure.message, failure.status) }
     }
-    this.deps.recordTurn?.({ at: started, model: entry.id, ok, recovered: false, attempts: 0, origin: 'harness' })
-    return { advance: false, verdict: null, ok }
+
+    if (terminal !== null) {
+      this.deps.warn?.(`our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${terminal.message ?? 'upstream failure'}`)
+      return { ok: false, ...advanceVerdict(terminal.code, terminal.message, terminal.status) }
+    }
+
+    // A clean end is the chain's own business to record: `runCombo` counts one
+    // turn for the whole chain (it passes `recordTurn: false` to the local
+    // path), so recording per link here would double every channel turn.
+    return { advance: false, verdict: null, ok: sawAnswer }
   }
 
   /**
