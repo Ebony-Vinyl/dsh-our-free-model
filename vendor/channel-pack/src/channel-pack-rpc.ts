@@ -20,6 +20,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { directFetch } from './direct-fetch.js'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { AccountPool } from './account-pool.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { isGatewayEnabled } from './openai-gateway/config.js'
 import { collectGatewayEffortViews, collectGatewayModels, toGatewayModelIds, type GatewayModelSource } from './openai-gateway/models.js'
 import {
@@ -570,7 +571,7 @@ export async function collectCreditsStatus<TCredential = BuddyCredential, TProdu
 ): Promise<RpcCreditsStatusResponse['accounts']> {
   // 与 collectClaimResults 同款：显式包装默认实现把 fetcher 送进第三参，
   // 不用 `as unknown as` 掩盖签名差异（见 CreditsEndpointDeps.fetcher 的说明）。
-  const fetcher = deps.fetcher ?? fetch
+  const fetcher = deps.fetcher ?? createDomesticFetch()
   const fetchStatus = deps.fetchStatus
     ?? (async (credential: TCredential, product: TProduct): Promise<CheckinStatus | null> =>
       fetchCheckinStatus(
@@ -624,7 +625,7 @@ export async function collectClaimResults<TCredential = BuddyCredential, TProduc
   //
   // 修法：显式包装 —— 把 `deps.fetcher`（或全局 `fetch`）送进第三参，
   // `entry` 只交给真正需要它的 provider（它们在自己的分支里注入 `claim`）。
-  const fetcher = deps.fetcher ?? fetch
+  const fetcher = deps.fetcher ?? createDomesticFetch()
   const fetchStatus = deps.fetchStatus
     ?? (async (credential: TCredential, product: TProduct): Promise<CheckinStatus | null> =>
       fetchCheckinStatus(
@@ -700,7 +701,7 @@ export async function collectCreditBalances<TCredential = BuddyCredential, TProd
   deps: CreditsEndpointDeps<TCredential, TProduct>,
 ): Promise<RpcCreditsBalancesResponse['accounts']> {
   // 同 collectClaimResults：显式包装，避免 `as unknown as` 掩盖签名差异。
-  const fetcher = deps.fetcher ?? fetch
+  const fetcher = deps.fetcher ?? createDomesticFetch()
   const fetchBalance = deps.fetchBalance
     ?? (async (credential: TCredential, product: TProduct): Promise<CreditBalance | null> =>
       fetchCreditBalance(

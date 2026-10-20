@@ -77,6 +77,7 @@ import { createChannelFetch } from './channel-fetch.js'
 import { attachDirectFetch, createDirectFetch, type SignedChannelOutlet } from './direct-fetch.js'
 export { directFetch, directLane, createDirectFetch, closeDirectFetch } from './direct-fetch.js'
 export { createChannelFetch, parseWindowsProxy, channelProxyBypassed } from './channel-fetch.js'
+export { isDomesticHost, isDomesticUrl, createDomesticFetch } from './domestic-direct.js'
 import { execFile } from 'node:child_process'
 
 /**

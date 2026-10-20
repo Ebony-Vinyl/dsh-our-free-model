@@ -37,6 +37,7 @@
  */
 
 import type { BuddyCredential } from './buddy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { BuddyProduct } from './product.js'
 import { fetchCreditBalance, type CreditBalance } from './credits.js'
 import {
@@ -240,7 +241,7 @@ export class BuddyBalanceSelector {
     let balance: CreditBalance | null
     try {
       balance = await (this.deps.fetchBalance
-        ?? ((cred, product) => fetchCreditBalance(cred, product, this.deps.fetcher ?? fetch)))(
+        ?? ((cred, product) => fetchCreditBalance(cred, product, this.deps.fetcher ?? createDomesticFetch())))(
         credential, this.deps.product,
       )
     } catch (error) {

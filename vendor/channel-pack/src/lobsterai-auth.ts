@@ -34,6 +34,7 @@ import {
   type LobsteraiCredential,
 } from './lobsterai.js'
 import { LOBSTERAI_REFRESH_PATH } from './lobsterai.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { buildLobsteraiModelsUrl, parseLobsteraiModels, type LobsteraiRemoteModel } from './lobsterai-adapter.js'
 import { LOBSTERAI, type LobsteraiProduct } from './lobsterai-product.js'
 import { classifyLobsteraiError, isLobsteraiTerminalError } from './lobsterai-errors.js'
@@ -196,7 +197,7 @@ export class LobsteraiAuth extends Service {
 
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   private get fetchImpl(): typeof fetch {
-    return this.options.fetcher ?? fetch
+    return this.options.fetcher ?? createDomesticFetch()
   }
 
   /**

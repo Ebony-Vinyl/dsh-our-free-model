@@ -31,6 +31,7 @@ import {
   type LoomyCredential,
 } from './loomy.js'
 import { LOOMY, type LoomyProduct } from './loomy-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { LOOMY_SESSION_TTL_SECONDS, loginLoomyBySmsCode, sendLoomySmsCode } from './loomy-oauth.js'
 import {
   startLoomyWechatLoginFlow,
@@ -166,7 +167,7 @@ export class LoomyAuth extends Service {
 
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   private get fetchImpl(): typeof fetch {
-    return this.options.fetcher ?? fetch
+    return this.options.fetcher ?? createDomesticFetch()
   }
 
   /**

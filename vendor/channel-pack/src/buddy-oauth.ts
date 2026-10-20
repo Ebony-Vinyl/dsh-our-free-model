@@ -42,6 +42,7 @@ import {
   parseTokenData,
 } from './buddy.js'
 import type { BuddyAccount, BuddyCredential, BuddyRemoteModel, BuddyToken } from './buddy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { CODEBUDDY, type BuddyProduct } from './product.js'
 
 /** 在浏览器中打开登录 URL；永不抛出（失败时打印 URL 供手动打开）。 */
@@ -135,7 +136,7 @@ async function request(
  * （无需认证）。platform 与 User-Agent 随产品配置变化，默认 CodeBuddy。
  */
 export async function fetchAuthState(
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
   product: BuddyProduct = CODEBUDDY,
 ): Promise<{ state: string; authUrl: string }> {
@@ -186,7 +187,7 @@ export async function loopGetToken(
     product?: BuddyProduct
   } = {},
 ): Promise<BuddyToken> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const product = options.product ?? CODEBUDDY
   const url = `${product.endpoint}${AUTH_TOKEN_PATH}?state=${encodeURIComponent(state)}`
   const headers: Record<string, string> = {
@@ -240,7 +241,7 @@ export async function getAccount(
     product?: BuddyProduct
   } = {},
 ): Promise<BuddyAccount> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const product = options.product ?? CODEBUDDY
   const url = `${product.endpoint}${LOGIN_ACCOUNT_PATH}?state=${encodeURIComponent(state)}`
   const headers: Record<string, string> = {
@@ -301,7 +302,7 @@ export async function getAccount(
  */
 export async function refreshToken(
   credential: BuddyCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
   product: BuddyProduct = CODEBUDDY,
 ): Promise<BuddyToken> {
@@ -360,7 +361,7 @@ export class RefreshTokenExpiredError extends Error {
  */
 export async function fetchModels(
   credential: BuddyCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
   product: BuddyProduct = CODEBUDDY,
 ): Promise<BuddyRemoteModel[]> {
@@ -560,7 +561,7 @@ export function decorateLoginUrl(authUrl: string, product: BuddyProduct): string
  * 与 CodeArts 的 runOAuthFlow 保持一致的分层。
  */
 export async function runBuddyLoginFlow(options: BuddyLoginFlowOptions = {}): Promise<BuddyLoginFlowResult> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const open = options.openBrowser ?? defaultOpenBrowser
   const product = options.product ?? CODEBUDDY
 

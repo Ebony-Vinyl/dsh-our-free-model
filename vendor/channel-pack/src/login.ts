@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { getRandomValues, randomUUID, randomBytes } from 'node:crypto'
 import type { CodeArtsCredential, CodeArtsCredentialResponse, LoginFlowOptions, LoginFlowResult } from './types.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import {
   CLIENT_ID, REDIRECT_PATH, credentialFromTokenResponse, exchangeAuthorizationCode,
   generateDpopKeyPair, generatePkcePair,
@@ -79,7 +80,7 @@ export async function pollForCredential(
   secret: string,
   options: { fetcher?: typeof fetch; maxAttempts?: number; pluginName?: string; pluginVersion?: string } = {},
 ): Promise<CodeArtsCredential> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const maxAttempts = options.maxAttempts ?? 120
   const pluginName = options.pluginName ?? PLUGIN_NAME
   const pluginVersion = options.pluginVersion ?? PLUGIN_VERSION

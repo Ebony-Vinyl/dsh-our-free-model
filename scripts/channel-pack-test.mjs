@@ -56,6 +56,10 @@ const hooks = registerHooks({
 process.env.DSH_CHANNEL_PACK_STATE_DIR = scratch
 process.env.DSH_HOME = scratch
 process.env.DSH_OPENAI_GATEWAY_ENABLED = '0'
+// 国内渠道的真实 IP 直连会绕过下面的 offlineFetch（它靠替换 globalThis.fetch 来
+// 断言"不会真的发出请求"）。本测试关心的是挂载/路由/凭据链路，不关心 DNS 劫持，
+// 因此显式关闭直连，让出网严格走可替换的 fetch。
+process.env.OFM_DOMESTIC_DIRECT = '0'
 process.env.QODER_MACHINE_TOKEN_PATH = path.join(scratch, 'machine-token.json')
 process.env.QODER_RUNTIME_INFO = path.join(scratch, 'missing-runtime-info.exe')
 const savedFetch = globalThis.fetch
