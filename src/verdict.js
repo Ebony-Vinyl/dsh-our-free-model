@@ -62,6 +62,19 @@ export function classifyDetail(detail) {
   return DETAIL_CLASS.unknown
 }
 
+/**
+ * Does this probe state mean "nothing can be had right now"?
+ *
+ * Two states answer no: the gateway refusing the exit outright (`unavailable`)
+ * and the gateway not serving the model in this country (`region-blocked`).
+ * They differ in who to blame, not in whether a dial would work, so both count
+ * when the lane decides whether a whole round was refused — a mixed round of
+ * refusals is still a round in which nothing answered.
+ */
+export function refusedState(state) {
+  return state === STATE.unavailable || state === STATE.regionBlocked
+}
+
 /** A verdict's class: the stored state when there is no detail to read. */
 export function classOfVerdict(verdict) {
   if (verdict === null || verdict === undefined) return DETAIL_CLASS.unknown

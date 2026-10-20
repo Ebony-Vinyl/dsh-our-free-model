@@ -6,7 +6,7 @@ import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
-import { laneView } from '../verdict.js'
+import { laneView, refusedState } from '../verdict.js'
 import { CODE, getJson } from '../http.js'
 import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
@@ -324,7 +324,10 @@ export function createModelRuntime({
     }, 2)
     if (disposed) return {}
     const verdicts = Object.values(results)
-    const refusedRound = verdicts.length > 0 && verdicts.every(row => row.state === STATE.unavailable)
+    // A round counts as refused when no model answered — refusals and region
+    // blocks both count, because either way the dial comes back empty and a
+    // mixed round like "9 refused, 1 not served here" is still nothing usable.
+    const refusedRound = verdicts.length > 0 && verdicts.every(row => refusedState(row.state))
     const refusedStreak = refusedRound ? (Number(availability.get().refusedStreak) || 0) + 1 : 0
     availability.update({ at: Date.now(), egress, refusedStreak })
     availability.flush()
@@ -432,7 +435,7 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   // "abusive traffic from this IP" rows plus one "not available in your
   // country" — testing only for `unavailable` would have read that as a healthy
   // round and quietly emptied the picker nine rows at a time.
-  const countsAsRefused = entry => verdictOf(entry) === STATE.unavailable || verdictOf(entry) === STATE.regionBlocked
+  const countsAsRefused = entry => refusedState(verdictOf(entry))
   const refusedAll = probeable.length > 0 && probeable.every(countsAsRefused)
   // Fail-open is right for *one* refused round: a busy exit or a gateway hiccup
   // must not empty the picker, and the user's own longer request often succeeds

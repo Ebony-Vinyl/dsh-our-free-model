@@ -19,7 +19,7 @@
  * Run: node scripts/verdict-test.mjs
  */
 import assert from 'node:assert/strict'
-import { DETAIL_CLASS, LANE, classOfVerdict, classifyDetail, isFresh, laneView, refusalFor } from '../src/verdict.js'
+import { DETAIL_CLASS, LANE, classOfVerdict, classifyDetail, isFresh, laneView, refusalFor, refusedState } from '../src/verdict.js'
 import { STATE } from '../src/probe.js'
 import { computeMembership } from '../src/core/runtime.js'
 import { ROUTE_MAIN, ROUTE_REGION } from '../src/adapter.js'
@@ -207,6 +207,17 @@ check('a region refusal still lands on the region route, which is a separate adv
   const membership = computeMembership([{ id: 'beam-free' }], { results, refusedStreak: 0 }, settings)
   assert.equal(membership[ROUTE_MAIN], undefined)
   assert.deepEqual(membership[ROUTE_REGION], ['beam-free'])
+})
+
+check('refused and region-blocked both mean an empty dial', () => {
+  // The live exit mixes them — nine refused, one not served here — so a round
+  // that counts only the refusals would read as "not refused" forever and the
+  // two-round suppression could never fire.
+  assert.equal(refusedState(STATE.unavailable), true)
+  assert.equal(refusedState(STATE.regionBlocked), true)
+  assert.equal(refusedState(STATE.available), false)
+  assert.equal(refusedState(STATE.throttled), false)
+  assert.equal(refusedState(STATE.unknown), false)
 })
 
 console.log(failures === 0 ? '\nverdict: refuse, prune and broadcast agree' : `\n${failures} verdict check(s) failed`)
