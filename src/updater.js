@@ -64,17 +64,41 @@ export const DEFAULT_MANIFEST_SOURCES = [
 ]
 
 /**
- * The Ed25519 public key (SPKI, base64) every release manifest must be signed
- * with before it may be applied. The matching private key lives with the
- * publisher (`scripts/build-manifest.mjs` signs when pointed at it); it is
- * deliberately not in this repository, because a trust root committed beside
- * the code it authenticates authenticates nothing.
+ * The Ed25519 public keys (SPKI, base64) a release manifest may be signed with
+ * before it is applied. The matching private keys live with their publishers
+ * (`scripts/build-manifest.mjs` signs when pointed at one); neither is in this
+ * repository, because a trust root committed beside the code it authenticates
+ * authenticates nothing.
+ *
+ * Two keys, both explicit, on purpose:
+ *
+ * 1. `UPSTREAM_MANIFEST_PUBLIC_KEY` — the release key of the upstream project.
+ *    Keeping it trusted is what lets an installed plugin keep receiving
+ *    upstream releases; dropping it silently would not be a security win, only
+ *    an outage.
+ * 2. `LOCAL_MANIFEST_PUBLIC_KEY` — this fork's own signing key (created
+ *    2026-10-20; the PEM is held outside the tree). Without it every local
+ *    release build refuses to write a manifest, because the builder validates
+ *    what it signs against the same set the updater verifies with.
+ *
+ * Order is preference order and is not security-relevant: a manifest carries
+ * exactly one signature and is authorised if *any* pinned key verifies it —
+ * the standard trust window for a fork or a key rotation. The set is pinned in
+ * this file and never read from a manifest, so a forger still cannot introduce
+ * their own key.
  *
  * The sha256 per file pins content, but those hashes travel inside the manifest
- * itself — whoever forges the manifest forges the hashes. This key is the step
- * the forger cannot take.
+ * itself — whoever forges the manifest forges the hashes. These keys are the
+ * step the forger cannot take.
  */
-export const PINNED_MANIFEST_PUBLIC_KEY = 'MCowBQYDK2VwAyEAeLdSVwYFyazc2PIBC0oLsvo4LghGEQz9iXIl3CqRuXI='
+export const UPSTREAM_MANIFEST_PUBLIC_KEY = 'MCowBQYDK2VwAyEAeLdSVwYFyazc2PIBC0oLsvo4LghGEQz9iXIl3CqRuXI='
+export const LOCAL_MANIFEST_PUBLIC_KEY = 'MCowBQYDK2VwAyEA/QccXrWO8e07drlv1foso/MuNF/ZmNew3WD7Tt01rsk='
+
+/** Every key that may authorise a manifest (see the note above). */
+export const PINNED_MANIFEST_PUBLIC_KEYS = [UPSTREAM_MANIFEST_PUBLIC_KEY, LOCAL_MANIFEST_PUBLIC_KEY]
+
+/** The primary key, for callers that still pass a single key. */
+export const PINNED_MANIFEST_PUBLIC_KEY = UPSTREAM_MANIFEST_PUBLIC_KEY
 
 /** The manifest fields a signature covers, in canonical (sorted-key) JSON. */
 const SIGNED_FIELDS = ['version', 'base', 'publishedAt', 'notes', 'files', 'minSupported']
@@ -117,18 +141,31 @@ export function signManifest(payload, privateKey) {
  * Verify a manifest's `signature` against an Ed25519 public key (SPKI, base64).
  * Any malformed input answers `false` — a signature that cannot be checked is
  * a signature that is not there.
+ *
+ * `publicKeyBase64` also accepts an array: the trust window where more than one
+ * key may authorise a manifest (see {@link PINNED_MANIFEST_PUBLIC_KEYS}). Each
+ * entry is tried in order and the first verified signature wins; an entry that
+ * cannot be loaded simply does not match. The set is always pinned in this
+ * file — never read from the manifest, so a forger cannot supply a key.
  */
 export function verifyManifestSignature(payload, publicKeyBase64) {
   const signature = payload !== null && typeof payload === 'object' && typeof payload.signature === 'string'
     ? payload.signature
     : ''
-  if (signature === '' || typeof publicKeyBase64 !== 'string' || publicKeyBase64 === '') return false
-  try {
-    const key = crypto.createPublicKey({ key: Buffer.from(publicKeyBase64, 'base64'), format: 'der', type: 'spki' })
-    return crypto.verify(null, Buffer.from(stableStringify(signaturePayload(payload))), key, Buffer.from(signature, 'base64'))
-  } catch {
-    return false
+  if (signature === '') return false
+  const keys = Array.isArray(publicKeyBase64) ? publicKeyBase64 : [publicKeyBase64]
+  const body = Buffer.from(stableStringify(signaturePayload(payload)))
+  const signed = Buffer.from(signature, 'base64')
+  for (const candidate of keys) {
+    if (typeof candidate !== 'string' || candidate === '') continue
+    try {
+      const key = crypto.createPublicKey({ key: Buffer.from(candidate, 'base64'), format: 'der', type: 'spki' })
+      if (crypto.verify(null, body, key, signed)) return true
+    } catch {
+      // A key that cannot be loaded authorises nothing; try the next one.
+    }
   }
+  return false
 }
 
 /** Cache hint only: query strings cannot refresh jsDelivr's branch resolution. */
@@ -401,7 +438,7 @@ async function snapshotManifestSource(source, fetchImpl, signal, revisions, reso
  * @param {{timeoutMs?: number, fetchImpl?: typeof fetch, verifyKey?: string}} [options]
  * @returns {Promise<{manifest: object, source: string, signed: boolean}>}
  */
-export async function downloadManifest(sources, { timeoutMs = 15000, fetchImpl = fetch, verifyKey = PINNED_MANIFEST_PUBLIC_KEY } = {}) {
+export async function downloadManifest(sources, { timeoutMs = 15000, fetchImpl = fetch, verifyKey = PINNED_MANIFEST_PUBLIC_KEYS } = {}) {
   const failures = []
   const revisions = new Map()
   for (const source of sources) {
@@ -789,7 +826,7 @@ export class PluginUpdater {
    *   throwaway keypair here, installs pin the release key
    * @param {string} [deps.runningVersion] - version captured by the running module
    */
-  constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEY, runningVersion }) {
+  constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEYS, runningVersion }) {
     this.deps = { pkgDir, dataDir, settings, log, fetchImpl, defaultSources, manifestPublicKey, runningVersion }
     this.latest = undefined
     this.checkedAt = 0

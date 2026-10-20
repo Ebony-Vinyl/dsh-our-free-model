@@ -31,7 +31,7 @@ const sourceFiles = [
   'packages/standalone/web/assets.json',
   ...['adapter', 'aggregate', 'anthropic', 'catalog', 'channel', 'combos', 'deferred-response', 'eac', 'eac-login', 'eac-user', 'effort',
     'egress', 'failure', 'forward', 'http', 'image-pricing', 'kilo', 'local-optimize', 'messages', 'probe', 'recovery',
-    'store', 'stream', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
+    'store', 'stream', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor', 'verdict']
     .map(name => `src/${name}.js`),
   ...['completion', 'runtime', 'stats'].map(name => `src/core/${name}.js`),
   'src/providers/index.js',
