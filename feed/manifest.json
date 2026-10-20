@@ -1,7 +1,7 @@
 {
   "version": "2.5.6",
   "base": "../",
-  "publishedAt": "2026-10-20T02:05:56.314Z",
+  "publishedAt": "2026-10-20T02:18:21.343Z",
   "notes": "",
   "files": [
     {
@@ -96,8 +96,8 @@
     },
     {
       "path": "src/core/runtime.js",
-      "size": 21579,
-      "sha256": "38a78fa89d4084c02cafd230ef64c2387dd1089689159f00a85db2e8e7317889"
+      "size": 21770,
+      "sha256": "1bc3dd854606c16949348bd603abdd914cc4f5eb1ae192fdeeb00094949377b6"
     },
     {
       "path": "src/core/stats.js",
@@ -381,8 +381,8 @@
     },
     {
       "path": "src/verdict.js",
-      "size": 9847,
-      "sha256": "13c7ce6fb86fe60817de5e9c12665770d6049771895c1ba3a294ece20e1b2d65"
+      "size": 10404,
+      "sha256": "02e8ea8d5823a82e3f5fa7a7362801a0a844872a501f665c15fda2ac642f95e1"
     },
     {
       "path": "vendor/channel-pack/LICENSE",
@@ -405,5 +405,5 @@
       "sha256": "6419471effa631519def7797d76d7ede38b9fcfa9a83c2148c8ef5d43355b43d"
     }
   ],
-  "signature": "WOHU880A4n8E0GXMQh50+bwKMmM2mxgMMu2vvLDXmwLl2MQIUiPN1T/BqxCl8Ot0xyuQfE0Ztsdzj8njXTRdBg=="
+  "signature": "h6V3wKNmwf2NG/9Hoea5vxbxauUCTaIuRwg46bQLl1WKzhw90dvtWj8qGMAJNPFSisc795suILkT8Y5gxCctBw=="
 }
