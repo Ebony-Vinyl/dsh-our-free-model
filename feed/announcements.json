@@ -2,6 +2,42 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-21-v2.5.8-plugin-release",
+      "title": "v2.5.8：修复更新重试、Qoder 思考档位与工具轮次推理回传",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-21T06:28:09Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.8",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.8 更新 DSH 插件端。</b>修复 Windows 更新备份重命名重试，并复用已校验的下载暂存；Qoder 思考档位按强度排序；Chat 工具轮次保留客户端回传的推理内容。移除 WorkBuddy 国内版和国际版渠道入口，保留历史账号与凭据；EAC DeepSeek Flash 显示名称增加 1017 标识。</p>"
+    },
+    {
+      "id": "2026-10-20-v2.5.7-plugin-release",
+      "title": "v2.5.7：修复 CodeArts 签名、托管更新提示与模型测速",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-20T13:59:07Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.7",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.7 更新 DSH 插件端。</b>CodeArts 使用独立签名传输，保留代理、超时与取消，并修复积分/签到跨插件实例出口串线；托管安装明确提示通过原安装方式更新。模型测速要求非空正文和正常结束，保存成功与失败结果，防止旧探测覆盖新实测。本版保留正常动画和现有赞助卡片，不包含低性能模式。</p>"
+    },
+    {
+      "id": "2026-10-20-v2.5.6-plugin-release",
+      "title": "v2.5.6：插件赞助卡片精简，免费模型与 EAC 页面统一展示",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-19T16:24:31Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.6",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.6 更新 DSH 插件端。</b>免费模型与 EAC 模型页面上方统一展示紧凑的北辰 API 赞助卡片，文案更新为“邀请可获百分之十的返现”。移除“来自赞助商的广告”导航和详情路由，保留卡片及其查看链接；同时修复部分路径下热重载依赖未刷新导致的旧模块继续运行问题。</p>"
+    },
+    {
       "id": "2026-10-19-v2.5.5-plugin-release",
       "title": "v2.5.5：插件端移除交流群区块与开屏赞助广告",
       "level": "update",

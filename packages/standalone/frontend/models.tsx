@@ -198,7 +198,7 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
         {test.state === 'pending' ? <Button variant="outline" onClick={cancel}><Square size={14} />取消测试</Button>
           : <Button variant="ghost" aria-label="关闭测试结果" title="关闭测试结果" onClick={() => setTest(undefined)}><X size={15} /></Button>}
       </div>
-      {test.state === 'success' && <pre>{test.result?.text || '请求已完成，上游没有返回可见正文。'}</pre>}
+      {test.state === 'success' && <><pre>{test.result?.text}</pre>{test.result?.persisted === false && <p role="status">测试已成功，但结果未能保存；请检查数据目录权限或重新测试。</p>}</>}
       {test.state === 'error' && <p>{test.error}</p>}
     </section>}
     {models.length ? <div className="model-table" role="table" aria-label="模型清单" aria-rowcount={models.length + 1} aria-colcount={5}>
@@ -214,7 +214,10 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
         <div className="model-virtual-content" style={{ height: virtual.getTotalSize() }}>
           {virtual.getVirtualItems().map(item => {
             const model = models[item.index]
-            const state = model.availability ?? 'unknown'
+            const state = model.availabilitySource === 'listing' ? 'listed' : model.availability ?? 'unknown'
+            const manual = model.availabilitySource === 'manual'
+            const failed = manual && state === 'unknown'
+            const availabilityName = failed ? '实测失败' : manual && state === 'available' ? '实测可用' : availabilityNames[state] ?? '未知状态'
             const disabledReason = !summary.settings.enabled ? '推理服务已暂停' : !model.routable && !model.hiddenByUser ? '模型尚未公开，请检查渠道账号或模型设置' : operation ? '请等待当前操作完成' : ''
             return <div role="row" aria-rowindex={item.index + 2} key={item.key} data-index={item.index} data-model-id={model.id}
               className="model-table-row" ref={virtual.measureElement} style={{ transform: `translateY(${item.start}px)` }}
@@ -226,8 +229,11 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
                 <Badge>{model.vision ? '视觉' : '纯文本'}</Badge>{model.reasoning && <Badge tone="blue">思考</Badge>}</div></div>
               <div role="cell" className="model-limits"><span title={model.contextWindow ? `${model.contextWindow} Token` : undefined}>{capacity(model.contextWindow)} <small>上下文</small></span>
                 <span title={model.maxOutput ? `${model.maxOutput} Token` : undefined}>{capacity(model.maxOutput)} <small>输出</small></span></div>
-              <div role="cell" className="model-state"><Badge tone={state === 'available' ? 'success' : ['unavailable', 'throttled', 'region-blocked'].includes(state) ? 'warning' : 'neutral'}>
-                {availabilityNames[state] ?? '未知状态'}</Badge>{!model.routable && <small>{model.hiddenByUser ? visibility.hidden : '未公开'}</small>}
+              <div role="cell" className="model-state"><Badge tone={state === 'available' ? 'success' : failed || ['unavailable', 'throttled', 'region-blocked'].includes(state) ? 'warning' : 'neutral'}>
+                {availabilityName}</Badge>
+                {manual && state !== 'available' && model.detail && <small title={model.detail}
+                  style={{ maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{model.detail}</small>}
+                {!model.routable && <small>{model.hiddenByUser ? visibility.hidden : '未公开'}</small>}
                 {model.ttftMs != null && <small>首响应 {number(model.ttftMs)} ms</small>}</div>
               <div role="cell" className="model-row-actions">
                 {['anonymous', 'kilo', 'eac', 'aggregate', 'combo'].includes(model.channel) && <Button variant="ghost"

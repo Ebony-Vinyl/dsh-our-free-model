@@ -23,7 +23,7 @@ import { CODE, UpstreamError, postStreamed } from './http.js'
 import { postSealedStreamed } from './eac.js'
 import { postKiloStreamed } from './kilo.js'
 import { postAggregateStreamed, isAggregateEntry } from './aggregate.js'
-import { finishReason, readStream, windowTokens } from './stream.js'
+import { finishReason, readStream, sanitizeUsage, windowTokens } from './stream.js'
 import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, hasDeclaredEffortMenu, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
@@ -341,6 +341,34 @@ export class FreeModelAdapter {
     let attemptBudget = budget
     let nextIndex = 0
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+    let rejectedInputUsage = false
+    const trustedOutcome = outcome => {
+      // Only this Kilo router has a confirmed inflated multimodal stamp.
+      // Other lanes may advertise a conservative/fallback window, so exceeding
+      // that metadata alone must not erase their otherwise valid accounting.
+      if (!kilo || entry.id !== 'kilo-auto/free' || outcome?.sawUsage !== true) return outcome
+      const usage = sanitizeUsage(outcome.usage, entry.contextWindow)
+      if (usage === outcome.usage) return outcome
+      rejectedInputUsage = true
+      return usage === undefined
+        ? { ...outcome, sawUsage: false, usage: { inputTokens: 0, outputTokens: 0 } }
+        : { ...outcome, usage }
+    }
+    const collectUsage = outcome => {
+      const trusted = trustedOutcome(outcome)
+      totalUsage = addUsage(totalUsage, trusted?.usage, trusted?.sawUsage)
+      // Once one attempt's input is unknown, no sum of the other attempts can
+      // restore an exact prompt/total. Keep decode counts but let the host use
+      // its local input estimate, including after an honest continuation.
+      if (rejectedInputUsage) {
+        totalUsage = {
+          inputTokens: 0,
+          outputTokens: totalUsage.outputTokens,
+          ...totalUsage.reasoningTokens === undefined ? {} : { reasoningTokens: totalUsage.reasoningTokens },
+        }
+      }
+      return trusted
+    }
     const blocks = createBlockTracker()
     let turnRecorded = false
     const finishTurn = (ok, recovered = false, attempts = 1) => {
@@ -528,7 +556,7 @@ export class FreeModelAdapter {
           await reader.return()
         }
         nextIndex = outcome.nextIndex
-        totalUsage = addUsage(totalUsage, outcome.usage, outcome.sawUsage)
+        outcome = collectUsage(outcome)
         usageAdded = true
         if (options.signal?.aborted === true) {
           record(false, outcome, { aborted: true })
@@ -601,7 +629,9 @@ export class FreeModelAdapter {
         record(true, outcome, recovering ? { recovered: reason.kind === 'stop' } : {})
         finishTurn(true, recovering && reason.kind === 'stop', attempt + 1)
         yield { type: 'usage', usage: totalUsage }
-        yield { type: 'finish', reason }
+        // Keep the provider token when the harness fallback maps an abnormal
+        // ending to stop. Strict consumers (manual tests) must not certify it.
+        yield { type: 'finish', reason, ...(reason.kind === 'stop' && !normalEnding ? { upstreamFinish: outcome.finish } : {}) }
         if (warnings.length > 0) this.deps.warn?.(`our-free-model: dropped unsupported content for ${entry.id}: ${warnings.join(', ')}`)
         return { advance: false, verdict: null, ok: true, recovered: recovering && reason.kind === 'stop' }
       } catch (error) {
@@ -618,7 +648,7 @@ export class FreeModelAdapter {
               ? `our free model reached its ${Math.round(timeoutMs / 1000)}s time limit before its finish token${recovering ? ', during the continuation from its checkpoint' : ''}`
               : `our free model continuation failed: ${failure.message}` }
         }
-        if (!usageAdded) totalUsage = addUsage(totalUsage, partialOutcome?.usage, partialOutcome?.sawUsage)
+        if (!usageAdded) partialOutcome = collectUsage(partialOutcome)
         record(false, partialOutcome, { ...(recovering || expired) ? { truncated: true } : {}, ...aborted ? { aborted: true } : {} })
         finishTurn(false, false, attempt + 1)
         for (const chunk of blocks.close()) yield chunk
@@ -635,7 +665,7 @@ export class FreeModelAdapter {
         options.signal?.removeEventListener('abort', onAbort)
         controller.abort()
         await request
-        if (!recorded) record(false, partialOutcome, { aborted: true })
+        if (!recorded) record(false, trustedOutcome(partialOutcome), { aborted: true })
         if (!continuationScheduled && !turnRecorded) finishTurn(false, false, attempt + 1)
       }
     }

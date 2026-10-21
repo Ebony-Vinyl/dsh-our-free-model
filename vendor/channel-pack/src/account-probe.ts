@@ -29,23 +29,21 @@
  *    `getAvailableAccount`（自动选择，只认启用账号）。
  */
 
+import { isRetiredProvider } from './retired-providers.js'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { createUserMessage, LlmError } from '@deepseek-ai/dsh-llm'
-import { BuddyAdapter } from './buddy-adapter.js'
 import { LobsteraiAdapter } from './lobsterai-adapter.js'
 import { QoderAdapter } from './qoder-adapter.js'
 import { ClineAdapter } from './cline-adapter.js'
 import { ZcodeAdapter } from './zcode-adapter.js'
 import { TraeAdapter } from './trae-adapter.js'
 import { CodeArtsAdapter, isRateLimited, parseRateLimitError } from './llm-adapter.js'
-import { productById } from './product.js'
 import { lobsteraiProductById } from './lobsterai-product.js'
 import { qoderProductById } from './qoder-product.js'
 import { clineProductById } from './cline-product.js'
 import { zcodeProductById } from './zcode-product.js'
 import { GeminiAdapter } from './gemini-adapter.js'
 import { GEMINI, GEMINI_DEFAULT_PROJECT, GEMINI_SESSION_LANE_SMOKE } from './gemini.js'
-import type { BuddyCredential } from './buddy.js'
 import type { LobsteraiCredential } from './lobsterai.js'
 import type { QoderCredential } from './qoder.js'
 import type { ClineCredential } from './cline.js'
@@ -78,7 +76,6 @@ const TRAE_PROVIDER_ID = 'trae'
  */
 type ProbeCredential =
   | CodeArtsCredential
-  | BuddyCredential
   | LobsteraiCredential
   | QoderCredential
   | ClineCredential
@@ -188,6 +185,7 @@ async function probeWithAdapter(
   modelId: string,
   timeoutMs: number,
 ): Promise<ProbeModelResult> {
+  if (isRetiredProvider(entry.provider)) throw new Error('provider-retired: WorkBuddy 渠道已移除')
   const signal = AbortSignal.timeout(timeoutMs)
   const ref = credentialRef(entry.credentialRef)
 
@@ -238,13 +236,11 @@ async function probeWithAdapter(
   // 积分耗尽时静默降级、**不写**标记，故它落 else 无害（`retestAccount`
   // 取不到 modelId 时根本不构造适配器）。新增 provider 时务必同步本分支，
   // 并补 `tests/unit/account-probe-adapter.spec.ts` 的对应用例。
-  const buddyProduct = productById(entry.provider)
   const lobsteraiProduct = lobsteraiProductById(entry.provider)
   const qoderProduct = qoderProductById(entry.provider)
   const clineProduct = clineProductById(entry.provider)
   const zcodeProduct = zcodeProductById(entry.provider)
   let adapter:
-    | BuddyAdapter
     | LobsteraiAdapter
     | QoderAdapter
     | ClineAdapter
@@ -252,14 +248,7 @@ async function probeWithAdapter(
     | TraeAdapter
     | GeminiAdapter
     | CodeArtsAdapter
-  if (buddyProduct !== undefined) {
-    adapter = new BuddyAdapter({
-      credentialRef: ref,
-      resolveCredential: async () => credential as BuddyCredential,
-      refresh: async () => {},
-      product: buddyProduct,
-    })
-  } else if (lobsteraiProduct !== undefined) {
+  if (lobsteraiProduct !== undefined) {
     adapter = new LobsteraiAdapter({
       credentialRef: ref,
       resolveCredential: async () => credential as LobsteraiCredential,

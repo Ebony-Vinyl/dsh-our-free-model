@@ -240,6 +240,44 @@ export function mapUsage(usage) {
   return out
 }
 
+/**
+ * Drop input-side usage that cannot fit inside the advertised context window.
+ *
+ * Multimodal replies on the Kilo `kilo-auto/free` router have stamped
+ * `totalTokens` far above the model's declared window after a short vision
+ * turn — hosts that soft-budget from that sample then fail-closed with
+ * CONTEXT_WINDOW_EXCEEDED even when the local conversation surface is tiny
+ * (see Ebony-Vinyl/dsh-our-free-model#494, #464; related image-spill history
+ * #151 / #195). Output / reasoning counts stay so decode stats remain usable;
+ * omitting `totalTokens` and zeroing prompt pressure lets the host fall back
+ * to its local estimate. The Adapter restricts this heuristic to that exact
+ * channel/model; an advertised fallback window is not proof of bad usage on
+ * other routes. Its accumulator must preserve the absence of exact input/total
+ * counts even when a later continuation reports ordinary usage.
+ *
+ * @param {object|undefined} usage - harness TokenUsage from {@link mapUsage}
+ * @param {number|undefined} contextWindow - advertised window for this model
+ * @returns {object|undefined} trusted usage, or undefined when nothing remains
+ */
+export function sanitizeUsage(usage, contextWindow) {
+  if (!usage || typeof usage !== 'object') return usage
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) return usage
+  const input = number(usage.inputTokens) ?? 0
+  const cacheRead = number(usage.cacheReadTokens) ?? 0
+  const prompt = input + cacheRead
+  const total = number(usage.totalTokens)
+  const over =
+    prompt > contextWindow
+    || (total !== undefined && total > contextWindow)
+  if (!over) return usage
+  const output = number(usage.outputTokens) ?? 0
+  const reasoning = number(usage.reasoningTokens)
+  if (output <= 0 && (reasoning === undefined || reasoning <= 0)) return undefined
+  const out = { inputTokens: 0, outputTokens: output }
+  if (reasoning !== undefined && reasoning > 0) out.reasoningTokens = reasoning
+  return out
+}
+
 function number(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }

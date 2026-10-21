@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "渠道包",
-    "description": "登录并管理七家渠道账号 — CodeArts（华为云）、CodeBuddy（腾讯）、WorkBuddy（国际版）、LobsterAI（有道）、Qoder、TRAE（字节）与 Cline，支持多账号池、凭据静默续期、模型列表开关、积分余额与每日签到。"
+    "description": "登录并管理渠道账号 — CodeArts（华为云）、LobsterAI（有道）、Qoder、TRAE（字节）与 Cline，支持多账号池、凭据静默续期、模型列表开关、积分余额与每日签到。"
   }
 }

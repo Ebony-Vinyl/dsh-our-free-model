@@ -116,6 +116,9 @@ export function fromOpenAiMessages(body, isResponses, modelId) {
     out.push({
       role: role === 'developer' ? 'developer' : role === 'system' ? 'system' : role === 'assistant' ? 'assistant' : 'user',
       content,
+      ...(role === 'assistant' && typeof row.reasoning_content === 'string'
+        ? { reasoning_content: row.reasoning_content }
+        : {}),
       ...role === 'assistant' ? { source: { kind: 'model', provider: ROUTE_MAIN, model: String(modelId ?? '') } } : {},
     })
   }

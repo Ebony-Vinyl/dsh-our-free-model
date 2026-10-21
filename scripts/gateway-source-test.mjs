@@ -45,5 +45,29 @@ try {
   assert.deepEqual(systemMessages.map(m => m.content[0].text), ['system one', 'system two', 'instructions', 'response system', 'response developer'])
   assert.equal(chat.signal, signal)
   assert.equal(responses.signal, signal)
+
+  const echoed = await toGenerateOptions({ model: 'deepseek/deepseek-v4.1-flash-free', messages: [
+    { role: 'user', content: '看一下仓库' },
+    {
+      role: 'assistant',
+      content: '',
+      reasoning_content: '先跑 git status。',
+      tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'bash', arguments: '{"command":"git status"}' } }],
+    },
+    { role: 'tool', tool_call_id: 'call-1', content: 'clean' },
+    { role: 'assistant', content: '仓库是干净的。', reasoning: '不需要再查了。' },
+    { role: 'assistant', content: '这条没有思考。' },
+    { role: 'assistant', content: null, reasoning_content: ' ' , tool_calls: [
+      { id: 'call-2', type: 'function', function: { name: 'bash', arguments: '{}' } },
+    ] },
+  ] }, signal)
+  const assistants = echoed.messages.filter(m => m.role === 'assistant')
+  assert.deepEqual(assistants[0].content.map(block => block.type), ['reasoning', 'tool-call'])
+  assert.equal(assistants[0].content[0].text, '先跑 git status。')
+  assert.equal(assistants[1].content.find(block => block.type === 'reasoning').text, '不需要再查了。')
+  assert.equal(assistants[1].content.some(block => block.type === 'text' && block.text === '仓库是干净的。'), true)
+  assert.equal(assistants[2].content.some(block => block.type === 'reasoning'), false)
+  assert.equal(assistants[3].content.find(block => block.type === 'reasoning').text, ' ')
   console.log('ok gateway source: chat system, Responses system/developer/instructions, independent identities and unchanged other roles')
+  console.log('ok gateway reasoning: chat history keeps reasoning_content / reasoning, including a single-space placeholder')
 } finally { hooks.deregister() }

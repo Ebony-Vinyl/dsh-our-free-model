@@ -74,12 +74,6 @@ export type BadgePlanSelector =
   /** **整个余额**就是一个套餐（ZCode）。 */
   | { readonly kind: 'balance' }
 
-/** 包名匹配窄正则的渠道（两个 buddy 同源，共用一条规则）。 */
-const planPackageSelector: BadgePlanSelector = Object.freeze({
-  kind: 'package',
-  matches: (name: string) => PLAN_PACKAGE_PATTERN.test(name),
-})
-
 /** 套餐包名等于固定字符串的渠道（Qoder 系的包名是本仓库自己合成的）。 */
 const qoderPlanSelector: BadgePlanSelector = Object.freeze({
   kind: 'package',
@@ -90,8 +84,6 @@ const qoderPlanSelector: BadgePlanSelector = Object.freeze({
  * 渠道 → 套餐形态。**未登记的渠道＝没有订阅**（默认关闭）。
  */
 export const BADGE_PLAN_SELECTORS: Readonly<Record<string, BadgePlanSelector>> = Object.freeze({
-  buddy: planPackageSelector,
-  workbuddy: planPackageSelector,
   qoder: qoderPlanSelector,
   qodercn: qoderPlanSelector,
   zcode: Object.freeze({ kind: 'balance' }) as BadgePlanSelector,
