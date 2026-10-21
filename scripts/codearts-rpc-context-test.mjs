@@ -232,7 +232,7 @@ try {
     const detach = attachDirectFetch(network.fetch)
     try {
       const offset = first.routes.length
-      const auths = ['codearts', 'lobsterai', 'qoder', 'qodercn', 'trae', 'cline', 'loomy', 'raccoon', 'minimax', 'zcode', 'gemini'].map(provider => first.ctx[provider + 'Auth'])
+      const auths = ['codearts', 'buddy', 'workbuddy', 'lobsterai', 'qoder', 'qodercn', 'trae', 'cline', 'loomy', 'raccoon', 'minimax', 'zcode', 'gemini'].map(provider => first.ctx[provider + 'Auth'])
       registerChannelPackRpc(first.ctx, first.ctx.accountPool, ...auths)
       const route = first.routes.slice(offset).find(row => row.path === '/api/channel-pack')
       assert.ok(route)

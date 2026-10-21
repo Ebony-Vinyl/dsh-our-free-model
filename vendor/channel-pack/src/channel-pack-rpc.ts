@@ -17,7 +17,6 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { isRetiredProvider } from './retired-providers.js'
 import { directFetch } from './direct-fetch.js'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { AccountPool } from './account-pool.js'
@@ -32,6 +31,7 @@ import {
 } from './openai-gateway/runtime.js'
 import type { CodeArtsAuth } from './service.js'
 import type { CodeArtsCredential } from './types.js'
+import type { BuddyAuth } from './buddy-auth.js'
 import type { LobsteraiAuth } from './lobsterai-auth.js'
 import type { QoderAuth } from './qoder-auth.js'
 import type { TraeAuth } from './trae-auth.js'
@@ -93,12 +93,19 @@ import {
   isClineRefreshable,
   type ClineCredential,
 } from './cline.js'
+import { decorateLoginUrl, fetchAuthState, runBuddyLoginFlow } from './buddy-oauth.js'
+import { credentialExpiresAtMs } from './buddy.js'
+import type { BuddyCredential } from './buddy.js'
 import {
+  claimDailyCheckin,
   claimUnitOf,
+  fetchCheckinStatus,
+  fetchCreditBalance,
   type CheckinStatus,
   type ClaimOutcome,
   type CreditBalance,
 } from './credits.js'
+import { CODEBUDDY, WORKBUDDY, productById, type BuddyProduct } from './product.js'
 import {
   captchaDemand,
   putSuppliedParam,
@@ -279,6 +286,18 @@ export function normalizeZcodeLoginProvider(raw: string | undefined): ZcodeLogin
   return ZCODE_LOGIN_PROVIDER
 }
 
+/** 解析 Buddy 凭据 JSON；解析失败返回 undefined。 */
+function parseBuddyCredential(raw: string): BuddyCredential | undefined {
+  try {
+    const parsed = JSON.parse(raw) as BuddyCredential
+    return typeof parsed === 'object' && parsed !== null && typeof parsed.access_token === 'string'
+      ? parsed
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** 解析 CodeArts 凭据 JSON；解析失败返回 undefined。 */
 function parseCodeArtsCredential(raw: string): CodeArtsCredential | undefined {
   try {
@@ -391,10 +410,17 @@ export function buildRaccoonNickname(
  * 前端拿它决定要不要渲染按钮、要不要发读取请求；后端拿它拒绝越权写入。
  * 两边不一致的后果是「按钮出现但点了报错」或「功能存在却点不出来」。
  *
- * 当前只有 Loomy 支持锁定永久积分：其服务端给出 dailyBalance 与 balance。
+ * 只有这三家有两个可分的积分池：
+ * - Loomy：服务端直接给 `dailyBalance`（当日到期）与 `balance`（永久）；
+ * - CodeBuddy / WorkBuddy：要从资源包列表按**扣费截止距今是否满 15 天**现算
+ *   （判据见 `buddy-balance-rank.ts`，实测两站形状不同但都成立）。
+ * 其余渠道（CodeArts / LobsterAI / Qoder / TRAE / Cline / Raccoon）的积分
+ * 模型里没有「会不会作废」这一层区分，登记进来只会多一个无效开关。
  */
 export const PERMANENT_LOCK_PROVIDERS: ReadonlySet<string> = new Set([
   LOOMY.id,
+  CODEBUDDY.id,
+  WORKBUDDY.id,
 ])
 
 /**
@@ -462,11 +488,11 @@ export function computeClaimSummary(outcomes: readonly ClaimOutcome[]): RpcCredi
  * 完全不同（无签名、三步签到、身份字段是 keyfrom），但「逐账号顺序执行、
  * 单个失败不中断、凭据解析在 try 之内」这套编排逻辑是**通用**的。
  * 泛型化让 `collect*` 三兄弟只写一遍，两套协议各自注入自己的下钻函数。
- * 各渠道显式注入协议实现；不默认调用任何已退役渠道的端点。
+ * 默认类型参数保持 Buddy 系，故既有调用点与测试一行都不用改。
  */
 export interface CreditsEndpointDeps<
-  TCredential = unknown,
-  TProduct = unknown,
+  TCredential = BuddyCredential,
+  TProduct = BuddyProduct,
 > {
   /**
    * 解析凭据引用。
@@ -474,11 +500,11 @@ export interface CreditsEndpointDeps<
    * 实现允许抛错，调用方必须把异常算在单个账号头上。
    */
   resolve(ref: CredentialRef): Promise<{ value: string } | undefined>
-  /** 查询对应渠道的签到状态。 */
+  /** 查询签到状态；默认使用真实的 fetchCheckinStatus。 */
   fetchStatus?: (credential: TCredential, product: TProduct) => Promise<CheckinStatus | null>
-  /** 执行对应渠道的签到领取。 */
+  /** 执行签到领取；默认使用真实的 claimDailyCheckin。 */
   claim?: (credential: TCredential, product: TProduct, entry: ProviderAccountEntry) => Promise<ClaimOutcome>
-  /** 查询对应渠道的积分余额。 */
+  /** 查询积分余额；默认使用真实的 fetchCreditBalance。 */
   fetchBalance?: (credential: TCredential, product: TProduct) => Promise<CreditBalance | null>
   /**
    * 余额查询的**带原因**版本（优先于 {@link fetchBalance}）。
@@ -507,6 +533,23 @@ export interface CreditsEndpointDeps<
    * 故它传 `false` 跳过预检，直接交给 `claim`。
    */
   precheckStatus?: boolean
+  /**
+   * 默认实现（`fetchCheckinStatus` / `claimDailyCheckin` / `fetchCreditBalance`）
+   * 使用的 fetch。
+   *
+   * ⚠️ **必须经此注入，不要在调用点直接 `fetch(...)`**：这些默认实现的真实签名是
+   * `(credential, product, fetcher)`，而本模块的历史写法是
+   * `deps.claim ?? (claimDailyCheckin as unknown as …)`，把三参函数硬转成
+   * 「只传两个参数」的类型 —— 于是调用点写 `claim(credential, product, entry)`
+   * 时，`entry` 落进了 `fetcher` 位置，运行时抛
+   * **`TypeError: fetcher is not a function`**（真实缺陷：用户一键领取 4 个
+   * CodeBuddy 账号全部失败）。
+   *
+   * 现改为**显式包装**默认实现（见下面的 `resolveClaim` 等），既保留 `entry`
+   * 给需要它的 provider（TRAE 用 `entry.id` 取签到设备代次），又把 fetcher
+   * 正确送进第三参。未提供时用全局 `fetch`。
+   */
+  fetcher?: typeof fetch
 }
 
 /**
@@ -520,12 +563,21 @@ export interface CreditsEndpointDeps<
  * 之外，任一账号的异常都会冒泡到 handleMethod 外层 catch，使整批请求以
  * `channel-pack/handler-failed` 失败——违背「单个账号失败不中断整体」的设计。
  */
-export async function collectCreditsStatus<TCredential = unknown, TProduct = unknown>(
+export async function collectCreditsStatus<TCredential = BuddyCredential, TProduct = BuddyProduct>(
   accounts: readonly ProviderAccountEntry[],
   product: TProduct,
   deps: CreditsEndpointDeps<TCredential, TProduct>,
 ): Promise<RpcCreditsStatusResponse['accounts']> {
-  const fetchStatus = deps.fetchStatus ?? (async () => { throw new Error('该渠道未提供签到状态查询') })
+  // 与 collectClaimResults 同款：显式包装默认实现把 fetcher 送进第三参，
+  // 不用 `as unknown as` 掩盖签名差异（见 CreditsEndpointDeps.fetcher 的说明）。
+  const fetcher = deps.fetcher ?? fetch
+  const fetchStatus = deps.fetchStatus
+    ?? (async (credential: TCredential, product: TProduct): Promise<CheckinStatus | null> =>
+      fetchCheckinStatus(
+        credential as unknown as BuddyCredential,
+        product as unknown as BuddyProduct,
+        fetcher,
+      ))
   const results: RpcCreditsStatusResponse['accounts'] = []
   // 顺序查询，避免并发触发风控
   for (const entry of accounts) {
@@ -556,13 +608,38 @@ export async function collectCreditsStatus<TCredential = unknown, TProduct = unk
  * 与 collectCreditsStatus 同理：凭据解析位于每个账号自己的 try 之内，
  * 异常只让该账号记为 failed。
  */
-export async function collectClaimResults<TCredential = unknown, TProduct = unknown>(
+export async function collectClaimResults<TCredential = BuddyCredential, TProduct = BuddyProduct>(
   accounts: readonly ProviderAccountEntry[],
   product: TProduct,
   deps: CreditsEndpointDeps<TCredential, TProduct>,
 ): Promise<RpcCreditsClaimAllResponse> {
-  const fetchStatus = deps.fetchStatus ?? (async () => { throw new Error('该渠道未提供签到状态查询') })
-  const claim = deps.claim ?? (async () => { throw new Error('该渠道未提供签到领取') })
+  // ⚠️ **默认实现必须显式适配，不能 `as unknown as` 硬转。**
+  //
+  // 真实签名是 `(credential, product, fetcher)`，而本接口把 `claim` 声明为
+  // `(credential, product, entry)`（TRAE 需要 `entry.id` 取签到设备代次）。
+  // 历史写法用 `as unknown as` 把这个不匹配「压」过去 —— TypeScript 于是不再
+  // 报错，但调用点传的第三个实参是 `entry`，它落进 `fetcher` 位置，运行时抛
+  // **`TypeError: fetcher is not a function`**。
+  // **真实缺陷**：用户一键领取 4 个 CodeBuddy 账号全部失败，报错就是这句。
+  //
+  // 修法：显式包装 —— 把 `deps.fetcher`（或全局 `fetch`）送进第三参，
+  // `entry` 只交给真正需要它的 provider（它们在自己的分支里注入 `claim`）。
+  const fetcher = deps.fetcher ?? fetch
+  const fetchStatus = deps.fetchStatus
+    ?? (async (credential: TCredential, product: TProduct): Promise<CheckinStatus | null> =>
+      fetchCheckinStatus(
+        credential as unknown as BuddyCredential,
+        product as unknown as BuddyProduct,
+        fetcher,
+      ))
+  const claim = deps.claim
+    ?? (async (credential: TCredential, product: TProduct): Promise<ClaimOutcome> =>
+      claimDailyCheckin(
+        credential as unknown as BuddyCredential,
+        product as unknown as BuddyProduct,
+        fetcher,
+      ))
+  // 默认保留预检（CodeBuddy 系需要）；LobsterAI 显式传 false 跳过。
   const precheck = deps.precheckStatus !== false
   const results: RpcCreditsClaimAllResponse['results'] = []
   const outcomes: ClaimOutcome[] = []
@@ -617,12 +694,20 @@ export async function collectClaimResults<TCredential = unknown, TProduct = unkn
  * 凭据解析同样位于每个账号自己的 try 之内：单个账号的凭据缺失/损坏/名称非法
  * 都不会冒泡中断整批。
  */
-export async function collectCreditBalances<TCredential = unknown, TProduct = unknown>(
+export async function collectCreditBalances<TCredential = BuddyCredential, TProduct = BuddyProduct>(
   accounts: readonly ProviderAccountEntry[],
   product: TProduct,
   deps: CreditsEndpointDeps<TCredential, TProduct>,
 ): Promise<RpcCreditsBalancesResponse['accounts']> {
-  const fetchBalance = deps.fetchBalance ?? (async () => { throw new Error('该渠道未提供余额查询') })
+  // 同 collectClaimResults：显式包装，避免 `as unknown as` 掩盖签名差异。
+  const fetcher = deps.fetcher ?? fetch
+  const fetchBalance = deps.fetchBalance
+    ?? (async (credential: TCredential, product: TProduct): Promise<CreditBalance | null> =>
+      fetchCreditBalance(
+        credential as unknown as BuddyCredential,
+        product as unknown as BuddyProduct,
+        fetcher,
+      ))
   const fetchDetailed = deps.fetchBalanceDetailed
   const results: RpcCreditsBalancesResponse['accounts'] = []
   // 顺序查询，避免并发触发风控
@@ -774,6 +859,8 @@ export function registerChannelPackRpc(
   ctx: Context,
   pool: AccountPool,
   codearts: CodeArtsAuth,
+  buddy: BuddyAuth,
+  workbuddy: BuddyAuth,
   lobsterai: LobsteraiAuth,
   qoder: QoderAuth,
   /** Qoder **中国版**实例（与 `qoder` 同协议、不同 product；RPC 分支按注册表分派）。 */
@@ -806,7 +893,7 @@ export function registerChannelPackRpc(
 ): void {
   ctx.inject(['connection'], (connectionCtx) => {
     registerChannelPackEndpoints(
-      connectionCtx as Context, pool, codearts, lobsterai,
+      connectionCtx as Context, pool, codearts, buddy, workbuddy, lobsterai,
       qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config,
     )
   })
@@ -889,6 +976,8 @@ function registerChannelPackEndpoints(
   ctx: Context,
   pool: AccountPool,
   codearts: CodeArtsAuth,
+  buddy: BuddyAuth,
+  workbuddy: BuddyAuth,
   lobsterai: LobsteraiAuth,
   qoder: QoderAuth,
   qoderCn: QoderAuth,
@@ -982,7 +1071,7 @@ function registerChannelPackEndpoints(
     store: createAutoCheckinStore(ctx),
     listProviderIds: async () => {
       const accounts = await pool.listAllAccounts()
-      return [...new Set(accounts.filter((entry) => !isRetiredProvider(entry.provider)).map((entry) => entry.provider))].sort()
+      return [...new Set(accounts.map((entry) => entry.provider))].sort()
     },
     claim: (provider) =>
       handleMethod('credits.claimAll', { provider }) as Promise<BadgeRpcResult<RpcCreditsClaimAllResponse>>,
@@ -1285,13 +1374,6 @@ function registerChannelPackEndpoints(
    * 反过来（switch 先匹配）又会被别的 provider 的 case 误吞。
    */
   async function handleMethod(method: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
-    // 旧客户端仍可能携带退役 provider 或历史账号 id。拒绝调用但不删除数据。
-    const request = payload !== null && typeof payload === 'object'
-      ? payload as Record<string, unknown> : undefined
-    const account = typeof request?.accountId === 'string' ? pool.findAccount(request.accountId) : undefined
-    if (isRetiredProvider(request?.provider) || isRetiredProvider(account?.provider)) {
-      return { ok: false, error: { code: 'provider-retired', message: 'WorkBuddy 国内版和国际版渠道已移除；历史账号凭据保持不变。' } }
-    }
     // 每个 RPC 独立绑定传输与取消信号，避免使用最后挂载上下文的默认出口。
     // 合并上游自行设置的超时，既保留超时也响应客户端断开；后台调用可省略 signal。
     const codeartsFetcher: typeof fetch = (input, init) => {
@@ -1327,7 +1409,54 @@ function registerChannelPackEndpoints(
         const suffix = shortId().toUpperCase()
         const refName = `${provider.toUpperCase()}_ACCOUNT_${suffix}`
 
-        if (provider === 'codearts') {
+        // CodeBuddy 系（buddy / workbuddy）共用两步登录流程：
+        // 只获取 loginUrl 和 state 立即返回，后台用同一个 state 异步执行
+        // 完整登录流程。两者的差异只在产品配置（platform、登录 URL 附加
+        // 参数、X-Product-Code、User-Agent），全部由 product 承载。
+        const product = productById(provider)
+        if (product !== undefined) {
+          let state: string
+          let authUrl: string
+          try {
+            const authState = await fetchAuthState(undefined, undefined, product)
+            state = authState.state
+            // WorkBuddy 的登录 URL 需要追加 version 与 loginSessionId
+            authUrl = decorateLoginUrl(authState.authUrl, product)
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error)
+            throw new Error(`无法获取 ${product.displayName} 登录地址（Host 网络请求失败）：${reason}`)
+          }
+          const ref = credentialRef(refName)
+          // 先在 pool 中添加启用的占位条目（无凭据），方便客户端 login.poll 检测到
+          await pool.addAccount({
+            id,
+            provider: product.id,
+            nickname: id,
+            enabled: true,
+            credentialRef: refName,
+            refreshable: false,
+            createdAt: Date.now(),
+          })
+          // 后台异步执行完整登录流程，使用同一个 state
+          runBuddyLoginFlow({ openBrowser: () => {}, state, product }).then(async (flow) => {
+            await ctx.credentials.set(ref, flow.access)
+            // 续期定时器归属该产品自己的服务实例
+            ;(product.id === CODEBUDDY.id ? buddy : workbuddy).scheduleRefresh()
+            const credential = parseBuddyCredential(flow.access)
+            await pool.updateAccount(id, {
+              nickname: credential?.nickname ?? id,
+              // Buddy 的 expires_at 是字符串形式的毫秒时间戳，
+              // 必须用 credentialExpiresAtMs 解析（Date.parse 对纯数字串会得到 NaN）。
+              expiresAt: credential ? credentialExpiresAtMs(credential) : undefined,
+              refreshable: Boolean(credential?.refresh_token),
+            })
+          }).catch((err) => {
+            ctx.logger.warn(`[channel-pack] background ${product.id} login failed for ${id}: ${err}`)
+            // 登录失败：移除占位条目，避免留下无凭据的幽灵账号
+            void pool.removeAccount(id).catch(() => {})
+          })
+          return { ok: true, value: { accountId: id, loginUrl: authUrl } }
+        } else if (provider === 'codearts') {
           // CodeArts 也是**回调式**登录（本地回调服务器收授权码），但同样必须
           // 走两步式：先返回 loginUrl 让前端立刻 window.open，后台再等回调。
           //
@@ -1914,6 +2043,12 @@ function registerChannelPackEndpoints(
             case 'codearts':
               await codearts.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
+            case 'buddy':
+              await buddy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+              break
+            case 'workbuddy':
+              await workbuddy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+              break
             case LOBSTERAI.id:
               await lobsterai.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
@@ -2230,9 +2365,20 @@ function registerChannelPackEndpoints(
             error: { code: 'bad-request', message: `该 provider 不支持锁定永久积分：${provider || '(空)'}` },
           }
         }
+        /**
+         * 组装响应。
+         *
+         * ⚠️ 两个 buddy 必须**回传当前生效的窗口天数**：窗口可被
+         * `DSH_BUDDY_EXPIRING_WINDOW_DAYS` 覆盖，前端文案若继续写死 15 就会
+         * 与真实判据不一致（用户看到「只烧 15 天内的」而实际按 31 天筛号）。
+         * Loomy 没有窗口概念 → 不带该字段。
+         */
         const lockResponse = (): RpcPermanentLockResponse => ({
           provider,
           locked: pool.permanentLocked(provider),
+          ...(provider === CODEBUDDY.id || provider === WORKBUDDY.id
+            ? { windowDays: buddyExpiringWindowDays() }
+            : {}),
         })
         if (req.locked === undefined) {
           return { ok: true, value: lockResponse() }
@@ -2412,7 +2558,18 @@ function registerChannelPackEndpoints(
       // ── 每日签到（积分领取）──
       // 查询某 provider 下全部启用账号的签到状态。
       //
-      // 各渠道显式分派协议，未知或退役渠道不调用任何默认端点。
+      // 四个 provider 分属**三套互不相同的协议**，各自在自己的分支里处理：
+      //   - CodeBuddy 系（buddy / workbuddy）：`productById()` 取 BuddyProduct，
+      //     走 `collectCreditsStatus` 的默认实现；
+      //   - `lobsterai`：slot → context 三步，无独立状态端点；
+      //   - `codearts`：华为云 SDK-HMAC-SHA256 签名，无独立状态端点。
+      //
+      // ⚠️ 只有 CodeBuddy 系能经 `productById()` 解析出产品配置；后两者
+      // **必须各自提前分支**，否则会落到下面的 bad-request。历史上 CodeArts
+      // 就是因此恒回 `unsupported provider: codearts`（客户端在面板挂载时
+      // 无条件调用 credits.balances，于是每打开一次设置页都在控制台报错并把
+      // 账号卡片标成查询失败）。现在 CodeArts 已有真实实现，该 bad-request
+      // 只对**未知** provider 生效。
       case 'credits.status': {
         const req = payload as RpcCreditsStatusRequest
         if (req.provider === 'codearts') {
@@ -2496,7 +2653,16 @@ function registerChannelPackEndpoints(
           )
           return { ok: true, value: { accounts: value } satisfies RpcCreditsStatusResponse }
         }
-        return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
+        const product = productById(req.provider)
+        if (product === undefined) {
+          return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
+        }
+        const accounts = await pool.listAccounts(req.provider)
+        const results = await collectCreditsStatus(accounts, product, {
+          resolve: (ref) => ctx.credentials.resolve(ref),
+          warn: (msg) => ctx.logger?.warn?.(msg),
+        })
+        return { ok: true, value: { accounts: results } satisfies RpcCreditsStatusResponse }
       }
 
       // 一键领取：逐账号顺序执行（并发易触发风控），单个账号失败不中断整体。
@@ -2536,7 +2702,7 @@ function registerChannelPackEndpoints(
           // LobsterAI 的 clientVersion 是签到必填参数，需动态解析
           //（带缓存，通常无额外网络开销）。
           const clientVersion = await lobsterai.resolveClientVersion()
-          const value = await collectClaimResults<LobsteraiCredential, typeof LOBSTERAI>(accounts, LOBSTERAI, {
+          const value = await collectClaimResults(accounts, LOBSTERAI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             claim: (credential, product) =>
               claimLobsteraiDailyCheckin(credential, product, clientVersion),
@@ -2620,6 +2786,26 @@ function registerChannelPackEndpoints(
             error: {
               code: 'bad-request',
               message: 'Cline 不支持每日签到（其后端没有签到接口）',
+            },
+          }
+        }
+        if (req.provider === 'workbuddy') {
+          // WorkBuddy **国际版没有签到接口**：客户端能力矩阵登记为
+          // `workbuddy: { balance: true, dailyCheckin: false }`，故它从不渲染
+          // 「一键领取积分」按钮、也从不调用本方法 —— 也就是说这条守卫此前
+          // **缺失但没被触发**（真实缺陷，2026-10-02 补）。
+          //
+          // ⚠️ 为什么必须补：没有它时 `workbuddy` 会落到下面 `productById` 拿到的
+          // buddy 产品上，用**国际版**凭据去发国内版的签到请求 —— 必然失败，而且是
+          // 一次真实的上游请求。而「每日首次启动自动签到」（`src/auto-checkin.ts`）
+          // 正是靠「调用 `claimAll`、按返回的信封判跳过」来决定遍历范围的，它**不维护
+          // 第二份能力名单** ⇒ 这里漏一个守卫，它就会真去发一轮必然失败的请求。
+          // 两处是同源改动，别只改一半。
+          return {
+            ok: false,
+            error: {
+              code: 'bad-request',
+              message: 'WorkBuddy 国际版不支持每日签到（其后端没有签到接口）',
             },
           }
         }
@@ -2716,7 +2902,15 @@ function registerChannelPackEndpoints(
             value: { results, summary: computeClaimSummary(outcomes) } satisfies RpcCreditsClaimAllResponse,
           }
         }
-        return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
+        const product = productById(req.provider)
+        if (product === undefined) {
+          return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
+        }
+        const value = await collectClaimResults(accounts, product, {
+          resolve: (ref) => ctx.credentials.resolve(ref),
+          warn: (msg) => ctx.logger?.warn?.(msg),
+        })
+        return { ok: true, value: value satisfies RpcCreditsClaimAllResponse }
       }
 
       // 积分余额（Credits Balance）：逐账号顺序查询。
@@ -2759,7 +2953,7 @@ function registerChannelPackEndpoints(
           return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }
         }
         if (req.provider === LOBSTERAI.id) {
-          const values = await collectCreditBalances<LobsteraiCredential, typeof LOBSTERAI>(accounts, LOBSTERAI, {
+          const values = await collectCreditBalances(accounts, LOBSTERAI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             fetchBalance: (credential, product) => fetchLobsteraiCreditBalance(credential, product),
             warn: (msg) => ctx.logger?.warn?.(msg),
@@ -3133,7 +3327,25 @@ function registerChannelPackEndpoints(
           }
           return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }
         }
-        return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
+        const product = productById(req.provider)
+        if (product === undefined) {
+          return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
+        }
+        const values = await collectCreditBalances(accounts, product, {
+          resolve: (ref) => ctx.credentials.resolve(ref),
+          warn: (msg) => ctx.logger?.warn?.(msg),
+        })
+        // ⚠️ 只有 buddy 系会走到这里（`productById` 只认 CodeBuddy / WorkBuddy），
+        // 而它们正是唯一需要「窗口天数」的 provider：面板要把资源包分成
+        // 临时 / 永久两桶显示，窗口必须**由后端给出**（可被
+        // DSH_BUDDY_EXPIRING_WINDOW_DAYS 覆盖），前端写死就会与选号判据分叉。
+        return {
+          ok: true,
+          value: {
+            accounts: values,
+            windowDays: buddyExpiringWindowDays(),
+          } satisfies RpcCreditsBalancesResponse,
+        }
       }
 
       // ── Cline「订阅额度」：官方额度窗口 + 请求记录 ──
@@ -3519,7 +3731,7 @@ function registerChannelPackEndpoints(
         for (const provider of req.providers) {
           // 空 id 不进结果：它不可能对应任何 provider，留着只会让前端多一个
           // 无意义的键（前端按 PROVIDERS 取，多出来的键会被忽略，但脏数据不该产生）。
-          if (provider.length === 0 || isRetiredProvider(provider)) continue
+          if (provider.length === 0) continue
           const catalog = modelAdapters?.[provider]?.listAllModels()
           const total = catalog?.length ?? 0
           // ⚠️ `listAllModels()` **不带 disabled 字段**，故必须另取黑名单再按 id 计数。
