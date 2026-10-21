@@ -513,12 +513,13 @@ function modelIdsFrom(payload) {
  * @param {string} options.providerId - registry provider id
  * @param {string} [options.modelId] - the bare outbound model id and label for synthesised frames
  * @param {object|string} options.body - the request body the caller built for this wire
+ * @param {string} [options.session] - the stable upstream session id for this conversation; rides `x-session-id` so a provider that keeps per-session state cannot merge concurrent conversations
  * @param {AbortSignal} [options.signal]
  * @param {(payload: string) => void} options.onData - one `data:` payload, in order
  * @param {number} [options.timeoutMs] - idle budget handed to the shared readers
  * @returns {Promise<{status:number}>}
  */
-export async function postAggregateStreamed({ config, providerId, modelId, body, signal, onData, timeoutMs = TURN_TIMEOUT_MS }) {
+export async function postAggregateStreamed({ config, providerId, modelId, body, session, signal, onData, timeoutMs = TURN_TIMEOUT_MS }) {
   const resolved = resolveProvider(config, providerId)
   const model = text(modelId)
   let outbound = body
@@ -533,7 +534,14 @@ export async function postAggregateStreamed({ config, providerId, modelId, body,
   try {
     response = await egressFetch(resolved.chatUrl, {
       method: 'POST',
-      headers: { ...resolved.headers, accept: 'text/event-stream' },
+      headers: {
+        ...resolved.headers,
+        accept: 'text/event-stream',
+        // The provider's gateway either ignores this or uses it to keep this
+        // conversation's state separate from concurrent ones on the same key —
+        // the free lane's session dimension, without its fingerprint family.
+        ...(text(session) === '' ? {} : { 'x-session-id': text(session) }),
+      },
       body: bodyText,
       redirect: 'error',
       signal,

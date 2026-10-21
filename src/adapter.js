@@ -44,6 +44,11 @@ export const ROUTE_LABELS = {
 
 const STYLE_FOR_WIRE = { chat: 'chat', responses: 'flat', messages: 'claude' }
 
+// One process-level flag, not per-turn: the first id-less turn that lands on the
+// reserved "global" session is what the user needs to hear about, not every
+// title generation or summary that follows it.
+let globalSessionWarned = false
+
 export class FreeModelAdapter {
   /**
    * @param {object} dependencies
@@ -336,6 +341,16 @@ export class FreeModelAdapter {
     const declared = toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
     const session = sessionForConversation(options.sessionId)
+    // A turn without a conversation id lands on the reserved "global" session,
+    // shared by every such turn on this machine. Minting a fresh session per
+    // id-less turn is not an option: the free lane accounts quota per session,
+    // so a new id per request would burn the allowance into 429s. The stable
+    // shared session is the price of that quota model — make it visible once
+    // instead of letting concurrent id-less conversations silently share state.
+    if (globalSessionWarned === false && !(typeof options.sessionId === 'string' && options.sessionId.trim() !== '')) {
+      globalSessionWarned = true
+      this.deps.warn?.('our-free-model: a turn arrived without a conversation id; it shares the reserved "global" upstream session with every other id-less turn')
+    }
     const recoveryId = mintRequestId()
     let attemptMessages = messages
     let attemptBudget = budget
@@ -460,6 +475,7 @@ export class FreeModelAdapter {
               providerId: entry.providerId,
               modelId: entry.modelId,
               body: payload,
+              session,
               signal: controller.signal,
               onData: value => channel.push(value),
             })
