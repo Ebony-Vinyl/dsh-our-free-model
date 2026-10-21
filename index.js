@@ -1078,6 +1078,7 @@ export function apply(ctx, config) {
           next.baseUrl = url.slice(0, 512)
         }
         if (Array.isArray(patch.models)) next.models = patch.models.map(value => String(value ?? '').trim()).filter(value => value !== '').slice(0, 300)
+        if (Array.isArray(patch.visionModels)) next.visionModels = patch.visionModels.map(value => String(value ?? '').trim()).filter(value => value !== '').slice(0, 300)
         providers[id] = next
         settings.update({ aggregate: { ...section, providers } })
         settings.flush()
@@ -2047,6 +2048,7 @@ function publicAggregate(section) {
       keyHint: key === '' ? '' : `…${key.slice(-4)}`,
       baseUrl: typeof value.baseUrl === 'string' ? value.baseUrl : '',
       models: Array.isArray(value.models) ? value.models : [],
+      visionModels: Array.isArray(value.visionModels) ? value.visionModels : [],
       discovered: Array.isArray(value.discovered) ? value.discovered : [],
       addedAt: Number.isFinite(value.addedAt) ? value.addedAt : 0,
       lastTest: value.lastTest ?? null,

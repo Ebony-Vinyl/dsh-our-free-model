@@ -597,6 +597,9 @@ window.__ModuleLoader__.load({
         'agg.models': '模型覆盖',
         'agg.modelsHint': '逗号或换行分隔的模型 ID；留空则用它自己声明的清单。',
         'agg.modelsPlaceholder': 'model-a, model-b',
+        'agg.visionModels': '视觉模型修正',
+        'agg.visionModelsHint': '能读图的模型 ID（逗号或换行分隔）。这些模型会在清单里标记为支持视觉、可以参与带图对话；注册表只记录能力有凭据的模型，其余由你判定。',
+        'agg.visionModelsPlaceholder': 'gpt-4o, gemini-2.5-flash',
         'agg.test': '测试',
         'agg.testing': '测试中…',
         'agg.testOk': '验证通过',
@@ -1292,6 +1295,9 @@ window.__ModuleLoader__.load({
         'agg.models': 'Model override',
         'agg.modelsHint': 'Model ids separated by commas or newlines; empty uses the list the provider declares.',
         'agg.modelsPlaceholder': 'model-a, model-b',
+        'agg.visionModels': 'Vision models',
+        'agg.visionModelsHint': 'Model ids that can read images (comma or newline separated). They are offered as vision-capable and may join image turns; the registry only records models whose capability is proven — everything else is your call.',
+        'agg.visionModelsPlaceholder': 'gpt-4o, gemini-2.5-flash',
         'agg.test': 'Test',
         'agg.testing': 'Testing…',
         'agg.testOk': 'Verified',
@@ -5469,6 +5475,7 @@ window.__ModuleLoader__.load({
       const [baseUrl, setBaseUrl] = useState(state?.baseUrl ?? '')
       const [key, setKey] = useState('')
       const [models, setModels] = useState((state?.models ?? []).join(', '))
+      const [visionModels, setVisionModels] = useState((state?.visionModels ?? []).join(', '))
       const [verdict, setVerdict] = useState(state?.lastTest ?? null)
       const [found, setFound] = useState(null)
       const [confirm, setConfirm] = useState(false)
@@ -5481,7 +5488,7 @@ window.__ModuleLoader__.load({
         try { await action() } catch (failure) { setError(String(failure?.message ?? failure)) } finally { setBusy('') }
       }
       const save = () => run('save', async () => {
-        const body = { providerId: provider.id, enabled, baseUrl, models: parseModelIds(models) }
+        const body = { providerId: provider.id, enabled, baseUrl, models: parseModelIds(models), visionModels: parseModelIds(visionModels) }
         if (key !== '') body.apiKey = key
         const answer = await post('/providers', body)
         setKey('')
@@ -5537,7 +5544,14 @@ window.__ModuleLoader__.load({
               className: 'ofm_input', rows: 2, value: models, placeholder: t('agg.modelsPlaceholder'),
               disabled: busy !== '',
               onChange: event => setModels(event.target.value),
-            }))),
+            })),
+          field(t('agg.visionModels'),
+            h('textarea', {
+              className: 'ofm_input', rows: 2, value: visionModels, placeholder: t('agg.visionModelsPlaceholder'),
+              disabled: busy !== '',
+              onChange: event => setVisionModels(event.target.value),
+            }))
+        ),
         h('div', { className: 'ofm_row' },
           h('span', { className: 'ofm_note' }, t('agg.keyKeep')),
           state?.hasKey === true ? h('span', { className: 'ofm_note' }, t('agg.hasKey').replace('{hint}', state.keyHint)) : h('span', { className: 'ofm_note' }, t('agg.noKey')),
@@ -5547,6 +5561,7 @@ window.__ModuleLoader__.load({
           provider.baseUrl === '' ? null : h('span', { className: 'ofm_note' }, t('agg.baseUrlDefault').replace('{url}', provider.baseUrl)),
           provider.baseUrlOverrideEnv === '' ? null : h('span', { className: 'ofm_note' }, t('agg.baseUrlEnv').replace('{env}', provider.baseUrlOverrideEnv))),
         h('p', { className: 'ofm_note' }, t('agg.modelsHint')),
+        h('p', { className: 'ofm_note' }, t('agg.visionModelsHint')),
         h('div', { className: 'ofm_row' },
           h(Button, { kind: 'primary', disabled: busy !== '', onClick: save }, busy === 'save' ? t('agg.saving') : fresh ? t('agg.add') : t('agg.save')),
           miniBtn(t('agg.test'), test, { disabled: busy !== '' }),

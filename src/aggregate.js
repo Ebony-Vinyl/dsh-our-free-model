@@ -197,7 +197,7 @@ function stringList(value) {
  * carry no context window, and none carries an output ceiling — the registry
  * records ids and published capacities, not a serving contract).
  */
-function entryOf(provider, modelId, source) {
+function entryOf(provider, modelId, source, visionOverrides) {
   const row = provider.models.find(model => model.id === modelId) ?? null
   const contextWindow = number(row?.contextWindow) ?? DEFAULT_CONTEXT_WINDOW
   const label = text(row?.name) !== '' ? text(row.name) : displayModelName(modelId)
@@ -208,7 +208,10 @@ function entryOf(provider, modelId, source) {
     providerId: provider.id,
     modelId,
     format: provider.format,
-    vision: row?.vision === true,
+    // The registry marks only the models whose vision capability is proven; the
+    // per-provider override covers the rest — a custom port or relay whose
+    // upstream reads images but which no listing can prove one way or the other.
+    vision: row?.vision === true || visionOverrides.has(modelId),
     reasoning: row?.reasoning !== false,
     contextWindow,
     maxOutput: Math.min(DEFAULT_MAX_OUTPUT, contextWindow),
@@ -226,7 +229,7 @@ function entryOf(provider, modelId, source) {
  * Build catalog entries for every enabled provider/model in the user's config.
  *
  * @param {object} config - the plugin settings' `aggregate` section:
- *   { enabled: boolean, providers: { [providerId]: { enabled, apiKey, baseUrl?, models?: string[], discovered?: string[], addedAt? } } }
+ *   { enabled: boolean, providers: { [providerId]: { enabled, apiKey, baseUrl?, models?: string[], visionModels?: string[], discovered?: string[], addedAt? } } }
  * @returns {Array<object>} entries shaped like other lanes' rows, plus:
  *   { id: 'provider/model', name, channel:'aggregate', providerId, modelId, format, vision, reasoning, contextWindow, maxOutput, wire: 'chat'|'messages'|'responses', source: 'static'|'discovered' }
  */
@@ -247,7 +250,8 @@ export function buildAggregateCatalog(config) {
     // stay out until the user supplies a real base URL.
     if (effectiveChatUrl(provider, setting) === null) continue
     const { ids, source } = modelIdsFor(provider, setting)
-    for (const modelId of ids) entries.push(entryOf(provider, modelId, source))
+    const visionOverrides = new Set(stringList(setting?.visionModels))
+    for (const modelId of ids) entries.push(entryOf(provider, modelId, source, visionOverrides))
   }
   return entries
 }
