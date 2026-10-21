@@ -45,15 +45,15 @@ jobs:
           set -euo pipefail
           dmg=$(ls packages/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -1)
           sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
-          version=$(node -p "require('./packages/desktop/package.json').version")
+          version="${GITHUB_REF_NAME#v}"
           arch=$(uname -m)
-          release_tag="${GITHUB_REF_NAME}-macos-unofficial"
+          release_tag="${GITHUB_REF_NAME}"
           cat > release-notes.md <<NOTES
-          ## 非官方社区构建 / Unofficial community build
+          ## macOS 社区构建 / macOS community build
 
-          这不是仓库作者发布的官方安装包。作者自 2.4.0 起将桌面安装包限制为 Windows-only，Mac 用户停留在 2.3.0。本 dmg 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现。
+          本 dmg 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现，未经过 Apple 签名公证。它直接挂到作者发布的主 release（vX.Y.Z），与 Windows 安装包、插件同处一个 release，不再单独开「非官方」release。
 
-          This is NOT an official release by the repository author. The author restricted desktop installers to Windows-only since 2.4.0, leaving Mac users on 2.3.0. This dmg is built by GitHub Actions from public, auditable source.
+          This dmg is built by GitHub Actions from the public, auditable source of this repository and is unsigned / not notarized. It is attached to the same release as the author's Windows installer and plugin (no separate "unofficial" release).
 
           | 项 / Item | 值 / Value |
           |---|---|
@@ -95,7 +95,19 @@ jobs:
             echo "- 构建记录 / CI run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "- SHA256: $sha"
           } >> release-notes.md
-          gh release create "$release_tag" "$dmg" \
-            --title "${version} macOS (${arch}) — 非官方社区构建 / unofficial community build" \
-            --notes-file release-notes.md \
-            --target "$GITHUB_SHA" || gh release upload "$release_tag" "$dmg" --clobber
+          # 直接挂到作者创建的主 release（vX.Y.Z）；若主 release 尚未生成则等待（最多约 6 分钟）再上传，
+          # 避免并发创建重复 release，也消除「非官方社区构建」的独立条目。
+          for i in $(seq 1 30); do
+            if gh release view "$release_tag" >/dev/null 2>&1; then break; fi
+            echo "等待主 release $release_tag 出现… ($i/30)"; sleep 12
+          done
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" "$dmg" --clobber
+            echo "已将 dmg 上传到主 release $release_tag"
+          else
+            # 兜底：主 release 迟迟未出现时自行创建（不再标「非官方」）
+            gh release create "$release_tag" "$dmg" \
+              --title "Our Free Model ${version} macOS (${arch}) 社区构建 / community build" \
+              --notes-file release-notes.md \
+              --target "$GITHUB_SHA"
+          fi
