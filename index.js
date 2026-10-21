@@ -35,7 +35,7 @@ import { isEacEntry, isKiloEntry } from './src/catalog.js'
 import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
-import { buildChannelCatalog, fetchChannelListing, isChannelEntry } from './src/chan-lane.js'
+import { buildChannelCatalog, CHANNEL_PACK_PROVIDERS, fetchChannelListing, isChannelEntry } from './src/chan-lane.js'
 import { buildDshCatalog, isDshEntry } from './src/dsh-lane.js'
 import { CODE, UpstreamError } from './src/http.js'
 import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
@@ -470,7 +470,7 @@ export function apply(ctx, config) {
       const providers = ctx.llm.listProviders?.() ?? []
       const hostProviders = providers
         .map(provider => typeof provider?.id === 'string' ? provider.id : '')
-        .filter(id => id !== '' && id !== ROUTE_MAIN && id !== ROUTE_REGION)
+        .filter(id => id !== '' && id !== ROUTE_MAIN && id !== ROUTE_REGION && !CHANNEL_PACK_PROVIDERS.includes(id))
       const models = []
       const resolved = new Map()
       const rounds = await Promise.allSettled(hostProviders.map(async providerId => {

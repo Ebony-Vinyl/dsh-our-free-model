@@ -82,9 +82,14 @@ const routes = []
 const ctx = fakeContext({ inject, mounted: ['llm', 'webServer', 'timer', 'connection', 'attachments'], onRegister: route => routes.push(route) })
 const hostModels = [{ provider: PROVIDER, id: MODEL, name: 'DSH fixture', description: 'host-owned model', inputModalities: ['text', 'image'] }]
 let streamCalls = []
-ctx.__services.llm.listProviders = () => [{ id: PROVIDER, name: 'Beichen' }, { id: 'broken-provider', name: 'Broken' }]
+ctx.__services.llm.listProviders = () => [
+  { id: PROVIDER, name: 'Beichen' },
+  { id: 'buddy', name: 'CodeBuddy' },
+  { id: 'broken-provider', name: 'Broken' },
+]
 ctx.__services.llm.listModels = async provider => {
   if (provider === 'broken-provider') throw new Error('the host catalog never resolves keys')
+  if (provider === 'buddy') return [{ provider: 'buddy', id: 'hy3', name: 'Hy3' }]
   return provider === PROVIDER ? hostModels : []
 }
 ctx.__services.llm.resolveModelInfo = async () => ({
@@ -120,6 +125,7 @@ const summaryJson = (await summary()).json
 const byId = new Map(summaryJson.catalog.map(entry => [entry.id, entry]))
 const dshRow = byId.get(DSH_ID)
 checkThat('the DSH model joined the catalog', dshRow !== undefined, [...byId.keys()].join(', '))
+checkThat('a channel-pack provider is left to the chan lane', !byId.has('dsh:buddy/hy3'), [...byId.keys()].join(', '))
 checkThat('one failing host provider does not hide the others', ctx.__logs.some(line => line.includes('DSH provider listing failed')), ctx.__logs.slice(-6).join(' | '))
 check('the row is tagged with its lane', dshRow?.channel, 'dsh')
 check('the row keeps provider and model separate', [dshRow?.providerId, dshRow?.modelId], [PROVIDER, MODEL])
