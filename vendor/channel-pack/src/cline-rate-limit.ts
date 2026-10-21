@@ -46,7 +46,7 @@
  * 4. 都没有才退到 {@link RATE_LIMIT_FALLBACK_MS} 的**快照式**兜底。
  */
 
-import { formatResetIn, parseRateLimitError, RATE_LIMIT_FALLBACK_MS } from './llm-adapter.js'
+import { formatResetIn, parseRateLimitError, RATE_LIMIT_FALLBACK_MS } from './rate-limit.js'
 import { retryAfterMsFromResponse } from './retry-after.js'
 
 /** 一次 429 / 402 报文里能读出来的东西。 */
@@ -213,12 +213,6 @@ export function recordsClineRateLimit(status: number, _body: string): boolean {
  *
  * 后两类都由 429 下发，**只能靠文案区分** —— 这正是 cline/cline#10139
  * （`WAIT vs STOP not distinguished`）那类缺陷的同一个坑。
- *
- * ⚠️ **长度也是需求**（用户 2026-10-03 报障：「这个报告和其它的供应商比起来是不是
- * 太长了」）。原因不是话说得不对，而是**同一件事说了两遍**：先把上游英文整句复述进
- * `（HTTP 429 Error 429: Daily free limit reached on model … Try again in 19h 39m）`，
- * 再用中文解释一遍 ⇒ 消息长度变成其它 provider 的两三倍（对照 `codearts` 的
- * 额度文案 ≈ 100 字符、`lobsterai` 的「所有账号均不可用（明细）」≈ 60 字符）。三条规矩：
  *
  * 1. **识别出语义就不再复述原文**（免费额度 / 402 两种都识别得出来）：我们的文案
  *    已把「是什么 + 何时恢复 + 现在能做什么」说全，原文只在**没识别出语义**时才附上；

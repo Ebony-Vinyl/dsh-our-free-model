@@ -84,7 +84,7 @@ let accounts = [{ id: 'account', nickname: 'Fixture', enabled: true }]
 const rpcCalls = []
 let changed = 0
 const channelProps = {
-  t, channel: { id: 'codearts', name: 'CodeArts' }, status: {},
+  t, channel: { id: 'lobsterai', name: 'LobsterAI' }, status: {},
   onError: (_provider, error) => { throw error },
   onChanged: () => { changed++ },
   rpc: async (method, payload) => {

@@ -122,7 +122,7 @@ export function assertBackupPayload(value: unknown): asserts value is BackupPayl
     throw new BackupFormatError('备份内容不是对象')
   }
   const record = value as Record<string, unknown>
-  if (record.format !== BACKUP_FORMAT) {
+  if (typeof record.format !== 'string' || !/^[a-z][a-z0-9-]*\/backup$/i.test(record.format)) {
     throw new BackupFormatError(`不是 ${BACKUP_FORMAT} 备份文件（format=${String(record.format)}）`)
   }
   if (record.version !== BACKUP_VERSION) {

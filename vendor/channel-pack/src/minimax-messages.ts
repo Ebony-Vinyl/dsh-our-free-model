@@ -634,7 +634,7 @@ export async function* consumeMinimaxSse(
   }
 
   // ⚠️ 空响应必须报错：静默结束会让 harness 认为「模型正常回答但没内容」，
-  // **不会重试**（与 Qoder/CodeArts 的既有约定一致）。
+
   if (!sawAnyChunk) {
     throw new Error('minimax: 模型未返回任何内容块')
   }

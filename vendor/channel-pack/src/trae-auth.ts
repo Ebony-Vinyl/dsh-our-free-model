@@ -49,11 +49,6 @@ import {
 
 /**
  * TRAE 凭据 → 账号池有效期所需的提取器（`refreshAll` 与按需续期共用一份）。
- *
- * ⚠️ `identityOf` 必须是 `access_token`：`AccountPool.findAccountIdByCredential`
- * 对非 codearts 的 provider 比对的就是这个字段（见其 `identifierKey`），
- * 传 ref 名会恒匹配失败且**静默无报错**。TRAE 的 `ExchangeToken` 每次都会
- * 轮换 token，故反查用的正是**新**凭据里的 `access_token`。
  */
 const TRAE_EXPIRY_ACCESSORS: ExpiryAccessors<TraeCredential> = {
   expiresAtOf: traeCredentialExpiresAtMs,

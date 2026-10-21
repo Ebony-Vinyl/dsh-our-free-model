@@ -47,11 +47,6 @@ import {
 
 /**
  * LobsterAI 凭据 → 账号池有效期所需的提取器（`refreshAll` 与按需续期共用一份）。
- *
- * ⚠️ `identityOf` 必须是 `access_token`：`AccountPool.findAccountIdByCredential`
- * 对非 codearts 的 provider 比对的就是这个字段（见其 `identifierKey`），
- * 传 ref 名会恒匹配失败且**静默无报错**。`LobsteraiCredential` 的字段名
- * 本就是 `access_token`（`src/lobsterai.ts` 的结构注释即为此说明）。
  */
 const LOBSTERAI_EXPIRY_ACCESSORS: ExpiryAccessors<LobsteraiCredential> = {
   expiresAtOf: lobsteraiCredentialExpiresAtMs,
@@ -220,13 +215,6 @@ export class LobsteraiAuth extends Service {
 
   /**
    * **两步式登录**：起回调服务器并立即返回登录 URL，由调用方先打开窗口。
-   *
-   * 与 CodeArts 的 `CodeArtsAuth.startLogin` 同因（真实缺陷）：Channel Pack 的
-   * 「+ 新建账号」原先调用阻塞式 {@link login}，而浏览器只在用户点击后的
-   * 短暂窗口（transient activation，约 5 秒）内允许 `window.open`。
-   * 等阻塞调用返回时手势早已过期，`window.open` 被弹窗拦截器拒绝并返回
-   * `null`，前端兜底逻辑便执行 `window.location.href = loginUrl`，
-   * 把**整个设置页**跳转到登录页。
    *
    * 调用方拿到 `loginUrl` 后应当**立即** `window.open`，再 await `result`。
    */

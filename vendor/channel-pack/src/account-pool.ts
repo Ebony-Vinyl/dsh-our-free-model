@@ -6,7 +6,6 @@ import type { ChannelPackStore, ChannelPackState, ModelDisableMap, PermanentLock
 import { createPermanentLockStore } from './permanent-lock-store.js'
 import type { PermanentLockStore } from './permanent-lock-store.js'
 import type {
-  CodeArtsCredential,
   ProviderAccountEntry,
   ProviderAccountStatus,
 } from './types.js'
@@ -740,8 +739,7 @@ export class AccountPool {
   async findAccountIdByCredential(provider: string, identity: string): Promise<string> {
     if (identity.length === 0) return ''
 
-    // CodeArts 用 access_key_id。选错字段会导致匹配恒失败，限流记录无法归属账号。
-    const identifierKey = provider === 'codearts' ? 'access_key_id' : 'access_token'
+    const identifierKey = 'access_token'
     for (const entry of this.readAccounts()) {
       if (entry.provider !== provider || !entry.enabled) continue
       const resolved = await this.resolveCredentialByRef(entry.credentialRef)
@@ -767,11 +765,6 @@ export class AccountPool {
    * 按凭据里的**任意身份字段**查找同 provider 的已有账号。
    *
    * ## 与 {@link findAccountIdByCredential} 的区别
-   *
-   * 那个是**限流记录归属**专用，写死了「codearts 用 access_key_id、
-   * 其余用 access_token」两套字段名，且**只看已启用账号**。
-   * 本方法是**通用去重**用：调用方给字段名与值，且**不看 `enabled`** ——
-   * 停用的账号同样占着一个条目的位置，重复添加它仍是重复。
    *
    * ## 为什么必须容忍「字段缺失」
    *
@@ -856,12 +849,12 @@ export class AccountPool {
    */
   async resolveCredentialForAccount(
     id: string,
-  ): Promise<CodeArtsCredential | StoredTokenCredential | undefined> {
+  ): Promise<StoredTokenCredential | undefined> {
     const entry = this.findAccount(id)
     if (entry === undefined) return undefined
     const parsed = await this.resolveCredentialByRef(entry.credentialRef)
     if (parsed === undefined) return undefined
-    return parsed as unknown as CodeArtsCredential | StoredTokenCredential
+    return parsed as unknown as StoredTokenCredential
   }
 
   /**
@@ -929,7 +922,7 @@ export class AccountPool {
     provider: string,
     modelId: string,
     excludeAccountIds?: ReadonlySet<string>,
-  ): Promise<{ entry: ProviderAccountEntry; credential: CodeArtsCredential | StoredTokenCredential } | null> {
+  ): Promise<{ entry: ProviderAccountEntry; credential: StoredTokenCredential } | null> {
     const candidates = this.readAccounts()
       .filter(a => a.provider === provider && a.enabled)
       .filter(a => excludeAccountIds === undefined || !excludeAccountIds.has(a.id))
@@ -967,7 +960,7 @@ export class AccountPool {
         continue
       }
       try {
-        const credential = JSON.parse(resolved.value) as CodeArtsCredential | StoredTokenCredential
+        const credential = JSON.parse(resolved.value) as StoredTokenCredential
         if (failures.length > 0) {
           this.ctx.logger?.warn?.(
             `[channel-pack] ${failures.length} 个 ${provider} 账号不可用，已跳过：${failures.join('; ')}`,
@@ -1248,15 +1241,6 @@ export class AccountPool {
  * 仍能 `resolveModel` / 正常收发。
  *
  * ## 判定语义
- *
- * - **默认开启**（`DSH_HIDE_MODELS_WITHOUT_ACCOUNT=0` 可关）：与
- *   `DSH_TRAE_MAX_MODE` 同为「默认开、显式假值才关」的语义，故单列解析函数。
- * - `accountPool` 缺失（headless / CLI / 单测）或替身未实现
- *   `hasLoggedInAccount` 时**视为可见** —— 门控是**展示优化而非安全边界**，
- *   判定不可用时宁多勿少（否则会让整个 provider 的模型凭空消失）。
- * - **六个 provider 判据完全一致**：都只看账号池。早期 CodeArts 有一个「单凭据
- *   例外」（额外认固定 ref `CODEARTS_ACCESS_TOKEN`），该模式已移除，故
- *   `extraCredentialRefs` 参数也一并删除，避免留下无人使用的分支。
  *
  * @param accountPool - 适配器的账号池（可能为 undefined）。
  * @param provider - provider id。

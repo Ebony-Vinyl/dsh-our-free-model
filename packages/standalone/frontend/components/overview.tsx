@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { providers } from 'ofm-provider-list'
 import { Activity, ArrowRight, ArrowUpRight, Boxes, Check, CircleCheck, Copy, Handshake, Layers3, Network, RefreshCw, Terminal, Zap } from 'lucide-react'
 import { Badge, Button, Card } from './ui'
 import { t, numLocale } from '../i18n.mjs'
@@ -31,7 +32,7 @@ export function Overview({ summary, stats, host }: Snapshot & { host: Host }) {
   const failures = [...stats.samples].reverse().filter(row => row.ok === false).slice(0, 4)
   const sources = [
     { name: t('ov.sourceAnonymous'), sub: t('ov.sourceAnonymousSub'), icon: Zap, count: summary.catalog.filter(row => row.channel === 'anonymous' || row.channel === 'kilo').length, page: 'models' as const },
-    { name: t('ov.sourceChannels'), sub: t('ov.sourceChannelsSub'), icon: Network, count: summary.catalog.filter(row => !['anonymous', 'kilo', 'eac'].includes(row.channel)).length, page: 'channels' as const },
+    { name: t('ov.sourceChannels'), sub: t.format('ov.sourceChannelsSub', { n: providers.length }), icon: Network, count: summary.catalog.filter(row => !['anonymous', 'kilo', 'eac'].includes(row.channel)).length, page: 'channels' as const },
     { name: t('ov.sourceEac'), sub: summary.eacAuth?.local ? t('ov.sourceEacSaved') : t('ov.sourceEacEmpty'), icon: Handshake, count: summary.catalog.filter(row => row.channel === 'eac').length, page: 'eac' as const },
   ]
 

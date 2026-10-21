@@ -101,7 +101,7 @@ class FileLockStore implements PermanentLockStore {
   }
 }
 
-const SCHEMA = 'dsh-codearts-auth/permanent-locks/v1'
+const SCHEMA = 'channel-pack/permanent-locks/v1'
 
 /**
  * 取出文档里的锁定表字段，同时兼容**裸表**形态。

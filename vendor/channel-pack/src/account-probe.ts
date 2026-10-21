@@ -32,7 +32,7 @@ import { QoderAdapter } from './qoder-adapter.js'
 import { ClineAdapter } from './cline-adapter.js'
 import { ZcodeAdapter } from './zcode-adapter.js'
 import { TraeAdapter } from './trae-adapter.js'
-import { CodeArtsAdapter, isRateLimited, parseRateLimitError } from './llm-adapter.js'
+import { isRateLimited, parseRateLimitError } from './rate-limit.js'
 import { lobsteraiProductById } from './lobsterai-product.js'
 import { qoderProductById } from './qoder-product.js'
 import { clineProductById } from './cline-product.js'
@@ -46,7 +46,6 @@ import type { ZcodeCredential } from './zcode.js'
 import type { TraeCredential } from './trae.js'
 import type { GeminiCredential } from './gemini.js'
 import type {
-  CodeArtsCredential,
   ProbeAccountResult,
   ProbeModelResult,
   ProviderAccountEntry,
@@ -67,7 +66,6 @@ const TRAE_PROVIDER_ID = 'trae'
  * 避免签名与实现漂移（本文件已**四次**因「分派表没跟上新增 provider」出缺陷）。
  */
 type ProbeCredential =
-  | CodeArtsCredential
   | LobsteraiCredential
   | QoderCredential
   | ClineCredential
@@ -89,11 +87,6 @@ const PROBE_SYSTEM = 'You are a helpful assistant.'
 
 /**
  * 单次探测的超时（毫秒）。
- *
- * CodeArts 适配器在排队时会以 10 秒间隔重试 chat 请求、最长 30 分钟
- * （QUEUE_MAX_ATTEMPTS）。设置页按钮显然不能等那么久，因此这里用
- * AbortSignal 给每次探测设硬上限：超时即判定"未能确认恢复"，保留标记。
- * 宁可保守留标记，也不要因为等太久让 UI 卡死。
  */
 const PROBE_TIMEOUT_MS = 120_000
 
@@ -114,9 +107,6 @@ export interface ProbePool {
   clearModelRateLimits(accountId: string, modelIds?: readonly string[]): Promise<number>
   /**
    * 写入/更新某账号某模型的限流重置时刻。
-   *
-   * [patch-codearts-probe-ratelimit] 重测发现「仍受限」时需要它把上游给的
-   * **新**时刻写回，否则存储停在旧值、UI 不再显示限流。
    */
   updateModelRateLimit(accountId: string, modelId: string, resetAtMs: number): Promise<void>
 }
@@ -171,7 +161,7 @@ async function probeWithAdapter(
   // - Cline → ClineAdapter（WorkOS 凭据 + 自己的端点）；
   // - ZCode（智谱）→ ZcodeAdapter（Anthropic Messages 体 + 阿里云 captcha 参数）；
   // - TRAE → TraeAdapter（SOLO 格式请求体 + Cloud-IDE-JWT 头族）；
-  // - 其余（codearts）→ CodeArtsAdapter（华为云 HMAC 签名）。
+
   //
   // ⚠️ **这个分派表已四次因「新增 provider 没同步」而出缺陷**，改它前先读完：
   //
@@ -181,7 +171,7 @@ async function probeWithAdapter(
   //    缺陷时发现，实测 `productById('trae')` 与 `lobsteraiProductById('trae')`
   //    均为 undefined）；
   // 3. 加了 trae 分支后**仍漏掉 qoder / qodercn / cline** → 三者同样落入
-  //    else，被交给 CodeArtsAdapter 用华为云 HMAC 签名去发 Qoder / Cline
+
   //    凭据。它们的「重测 / 重置」按钮**确实会渲染**（`RATE_LIMIT_CAPABILITIES`
   //    对未登记的 provider 默认视为有限流，当时只有 loomy 显式登记为 false），
   //    且 Qoder 的额度受限**每次都会**写 `modelRateLimits`（按 UTC+8 当日
@@ -199,7 +189,6 @@ async function probeWithAdapter(
   //
   // 命中者（除 `account-pool.ts` 的定义与 `account-probe.ts` 自身的回写）的每个
 
-  // qodercn）/ cline / zcode / trae / codearts / **gemini**。反例：loomy 的
   // 积分耗尽时静默降级、**不写**标记，故它落 else 无害（`retestAccount`
   // 取不到 modelId 时根本不构造适配器）。新增 provider 时务必同步本分支，
   // 并补 `tests/unit/account-probe-adapter.spec.ts` 的对应用例。
@@ -214,7 +203,6 @@ async function probeWithAdapter(
     | ZcodeAdapter
     | TraeAdapter
     | GeminiAdapter
-    | CodeArtsAdapter
   if (lobsteraiProduct !== undefined) {
     adapter = new LobsteraiAdapter({
       credentialRef: ref,
@@ -250,8 +238,7 @@ async function probeWithAdapter(
     // 这一项），故**一旦上游索要验证**，这里的适配器就**自建**一个常驻浏览器
     // （上游不要验证时压根不 mint，也就不会拉）。若宿主里已有 `index.ts`
     // 注入的那台（`zcode.mintCaptcha`），短时会并存两台（约 200MB/台）。
-    // 这仍然远好于本缺陷的形态 —— 落 else 会被交给**华为云 HMAC 签名**的
-    // `CodeArtsAdapter` 去发 zcode 凭据，探测必然失败，而 zcode 的额度标记
+
     // （UTC+8 当日 24:00）会一直清不掉。
     // 后续若要消除这层浪费，应给 `ProbeDeps` 加一条 `mintCaptcha` 透传，
     // 与 `index.ts` 的 `zcode.mintCaptcha` 共用同一台常驻浏览器。
@@ -274,7 +261,7 @@ async function probeWithAdapter(
     //
     // ⚠️ 与 zcode 同因：GeminiAdapter 的限流/额度路径**会写** `modelRateLimits`
     //（见 `gemini-adapter.ts` 的 `updateModelRateLimit` 调用），故必须有分支。
-    // 落 else 会被交给**华为云 HMAC 签名**的 CodeArtsAdapter 去发 Google 凭据，
+
     // 探测必然失败，而账号卡片上的「重测」永远清不掉那个标记。
     //
     // 探测只发一次最小纯文本请求，不涉及图片/工具，故除 product 与 lane 外
@@ -298,11 +285,7 @@ async function probeWithAdapter(
       product: GEMINI,
     })
   } else {
-    adapter = new CodeArtsAdapter({
-      credentialRef: ref,
-      resolveCredential: async () => credential as CodeArtsCredential,
-      refresh: async () => {},
-    })
+    throw new Error(`Unsupported probe adapter: ${entry.provider}`)
   }
 
   try {
@@ -326,7 +309,7 @@ async function probeWithAdapter(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (isRateLimitFailure(error)) {
-      // [patch-codearts-probe-ratelimit] 上游的重置时刻是**滚动**的：每次撞限流都会
+
       // 把它往后推。这里必须把它解析出来一并回传，否则调用方只能保留存储里的旧值，
       // 旧值过期后 UI 就不再渲染「限额重置」（表现为"重测说仍受限、卡片却没有"）。
       // 解析失败（文案无时间）时不带该字段，调用方按「无法确认」处理、保留原标记。
@@ -388,7 +371,7 @@ export async function retestAccount(
   if (result.cleared.length > 0) {
     await pool.clearModelRateLimits(accountId, result.cleared)
   }
-  // [patch-codearts-probe-ratelimit] 对「仍受限且上游给出了新重置时刻」的模型，
+
   // 把**新时刻**写回存储。不写回的话，存储会一直停在第一次撞限流的旧时刻；
   // 旧时刻过期后 UI 不再渲染「限额重置」（卡片空白），而账号实际仍在受限，
   // 选号逻辑也会误判为可用。上游时刻是滚动的，每次重测都可能往后推。

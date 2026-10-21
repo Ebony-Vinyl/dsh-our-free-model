@@ -57,11 +57,6 @@ export const LOBSTERAI_VERSION_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 /**
  * 持久化的 LobsterAI 凭据。
  *
- * 字段名刻意保持 `snake_case`，与 `StoredTokenCredential` 一致 ——
- * `AccountPool.findAccountIdByCredential`（`src/account-pool.ts:352-364`）
- * 对非 codearts 的 provider 统一取 `access_token` 作身份标识，
- * 命名一致才能直接复用，无需改那个函数。
- *
  * ## 与 `StoredTokenCredential` 的关键结构差异
  *
  * LobsterAI 的 **refresh 请求体不是只带 refreshToken**，还要带

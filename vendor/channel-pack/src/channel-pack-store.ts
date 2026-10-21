@@ -333,14 +333,10 @@ class MemoryStore implements ChannelPackStore {
  * （那里是 `${provider.toUpperCase()}_ACCOUNT_${suffix}`）。**新增 provider 时
  * 漏加本表 = 该 provider 的账号在状态文档丢失后静默消失**。
  *
- * ⚠️ 单凭据回退 ref（如 `CODEARTS_ACCESS_TOKEN` / `ZCODE_CREDENTIAL`）不含
- * `_ACCOUNT_`，故不会被本表误吞 —— 这里只需登记账号 ref 前缀。
- *
  * ⚠️ 本表的顺序与客户端 `plugin-src/client/channel-pack.js` 的 `PROVIDERS` **保持一致** ——
  * 派生用例不校验顺序（恢复顺序由 refs 文件决定），但两者对齐后便于逐项核对。
  */
 const REF_PREFIX_TO_PROVIDER: ReadonlyArray<readonly [string, string]> = [
-  ['CODEARTS', 'codearts'],
   ['LOBSTERAI', 'lobsterai'],
   ['QODER', 'qoder'],
   ['QODERCN', 'qodercn'],

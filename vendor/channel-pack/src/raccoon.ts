@@ -70,10 +70,6 @@ export const RACCOON_QR_STATUS = {
 
 /**
  * raccoon 凭据。
- *
- * ⚠️ `access_token` 字段名**必须**是这个 ——
- * `AccountPool.findAccountIdByCredential` 对非 `codearts` 的 provider
- * 统一取该字段作身份标识。
  */
 export interface RaccoonCredential {
   /** JWT（服务端下发）。 */

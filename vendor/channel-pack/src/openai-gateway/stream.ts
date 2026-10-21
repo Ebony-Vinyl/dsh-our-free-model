@@ -169,7 +169,7 @@ export async function* toOpenAiSse(
         // 但它是确定性失败 —— 翻成 404 让客户端提示用户改配置。
         const normalized = normalizeUpstreamFailure({
           // 上游自带状态码（如 gemini 拒绝未知模型名时的 404）优先，否则才退化成 502。
-          // ⚠️ 门禁（400–599）不能省：codearts 会用 `{ status: 200 }` 表示业务失败，
+
           // 原样透出会让「额度用尽」在客户端眼里读成成功。另两处出口已有同一门禁。
           status: upstreamStatusOrFallback(error.status),
           type: typeof error.type === 'string' ? error.type : 'server_error',

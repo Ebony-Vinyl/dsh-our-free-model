@@ -64,7 +64,7 @@ import type { RpcCreditsClaimAllResponse, RpcUsageAutoCheckinState } from './typ
 /** 独立文档的文件名（与 state.json / ui-preferences.json 同目录）。 */
 export const AUTO_CHECKIN_FILE = 'auto-checkin.json'
 
-const SCHEMA = 'dsh-codearts-auth/auto-checkin/v1'
+const SCHEMA = 'channel-pack/auto-checkin/v1'
 
 /**
  * 文档内容。

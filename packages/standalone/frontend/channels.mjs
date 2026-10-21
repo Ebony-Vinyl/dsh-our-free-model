@@ -35,7 +35,7 @@ async function rpc(method, payload = {}) {
 const lockedProviders = new Set(['loomy'])
 
 function ChannelTools({ summary }) {
-  const [provider, setProvider] = React.useState('codearts')
+  const [provider, setProvider] = React.useState('lobsterai')
   const [status, setStatus] = React.useState()
   const [lock, setLock] = React.useState()
   const [busy, setBusy] = React.useState(false)

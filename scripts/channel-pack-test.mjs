@@ -61,8 +61,6 @@ process.env.QODER_RUNTIME_INFO = path.join(scratch, 'missing-runtime-info.exe')
 const savedFetch = globalThis.fetch
 const fetched = []
 let auditFetch
-let signedLane
-let savedSignedFetch
 const offlineFetch = async (url, init) => {
   if (auditFetch) return auditFetch(url, init)
   if (sourceMode && globalThis.fetch !== offlineFetch) return globalThis.fetch(url, init)
@@ -118,14 +116,12 @@ fs.writeFileSync(path.join(scratch, 'channel-pack/state.json'), JSON.stringify(s
 try {
   const pack = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
   const { apply } = pack
-  signedLane = pack.directLane
-  if (signedLane) { savedSignedFetch = signedLane.fetch; signedLane.fetch = offlineFetch }
   apply(ctx, { disableOpencode: true })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
-  assert.equal(adapters.size, 11, 'all other account providers remain registered')
+  assert.equal(adapters.size, 10, 'all other account providers remain registered')
   verifyChannelImagePricing(adapters)
-  console.log('ok  十一渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
+  console.log('ok  十渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
   assert.equal(writes.length, 0, 'mount neither creates nor deletes credentials')
   assert.equal(fetched.some(url => url.includes('opencode') || url.includes('models.dev')), false, 'no OpenCode capability/catalog warmup')
   assert.deepEqual(ctx.accountPool.listAccountsByProvider('opencode'), state.accounts.filter(entry => entry.provider === 'opencode'), 'historical account data survives')
@@ -192,7 +188,7 @@ try {
   ctx.loomyAuth.claimDailyQuota = savedClaim
   await ctx.accountPool.removeAccount('automatic-loomy')
   creds.delete('AUTO_LOOMY_FIXTURE')
-  console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 11 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
+  console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 10 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
   if (sourceMode) await verifySourceRegressions({ ctx, adapters, call, creds })
   await verifyChannelCreditsRpc({ ctx, call, creds })
   console.log('ok  实际渠道 RPC：七渠道仅账号池凭据即可查余额，ZCode 账号池回退及缺凭据反馈')
@@ -272,13 +268,13 @@ try {
     visit(node.children)
   }
   visit(tree)
-  assert.equal(cards.length, 11)
+  assert.equal(cards.length, 10)
   for (const provider of ['opencode', 'unsupported-alpha', 'unsupported-beta']) assert.equal(cards.includes(provider), false)
   assert.deepEqual([...cards].sort(), [...adapters.keys()].sort(), 'UI and mounted account providers agree')
-  console.log('ok  actual channel page: 11 account cards, OpenCode and unsupported providers removed')
+  console.log('ok  actual channel page: 10 account cards, OpenCode and unsupported providers removed')
   await verifyChannelModelActions()
   await verifyChannelCreditsUi()
-  console.log('ok  共享渠道余额：十一渠道能力、失败原因、重试、签到反馈和请求交错')
+  console.log('ok  共享渠道余额：十渠道能力、失败原因、重试、签到反馈和请求交错')
   console.log('ok  共享渠道卡片：批量开关、单次请求、重复点击保护和失败恢复')
 
   // The retained OFM anonymous lane still enumerates and streams without any
@@ -314,7 +310,6 @@ try {
 } finally {
   for (const cleanup of dispose.reverse()) await cleanup()
   globalThis.fetch = savedFetch
-  if (signedLane) signedLane.fetch = savedSignedFetch
   hooks.deregister()
   fs.rmSync(scratch, { recursive: true, force: true })
 }
@@ -349,7 +344,7 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const shared = await import('../vendor/channel-pack/src/openai-compat.ts')
   for (const [file, provider] of [
     ['openai-compat', 'shared'], ['lobsterai-adapter', 'lobsterai'],
-    ['trae-adapter', 'trae'], ['llm-adapter', 'codearts'],
+    ['trae-adapter', 'trae'],
   ]) {
     const module = await import(new URL(`../vendor/channel-pack/src/${file}.ts`, import.meta.url))
     const serialize = module.serializeMessages
@@ -376,7 +371,7 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
       history[0],
     ])
     assert.deepEqual(poison.map(row => row.role), ['user'], `${provider}: old unnamed calls are not replayed`)
-    if (provider !== 'codearts') {
+    {
       const image = serialize([{ role: 'user', content: [{ type: 'image', attachment: { attachmentId: 'image-1' } }] }], new Map())
       assert.ok(JSON.stringify(image).includes('[image unavailable]'), provider)
       const images = ['image-1', 'image-2']

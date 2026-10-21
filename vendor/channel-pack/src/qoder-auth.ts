@@ -42,13 +42,6 @@ import {
  *
  * `QoderAuth` 一个类服务两个产品（`qoder` / `qodercn`），故调用处的 tag 取
  * `this.product.id`，日志里能区分是哪个面板。
- *
- * ⚠️ `identityOf` 用 `access_token` 而**不是** `security_oauth_token`：
- * `AccountPool.findAccountIdByCredential` 对非 codearts 的 provider 比对的就是
- * `access_token`（见其 `identifierKey`），选错字段会恒匹配失败且静默。
- * Qoder 凭据里这两个字段是**双写同值**的（见 `QoderCredential` 注释），
- * 故取 `access_token` 与客户端的取用顺序（`security_oauth_token ?? access_token`）
- * 并不冲突。
  */
 const QODER_EXPIRY_ACCESSORS: ExpiryAccessors<QoderCredential> = {
   expiresAtOf: qoderCredentialExpiresAtMs,
@@ -204,13 +197,6 @@ export class QoderAuth extends Service {
 
   /**
    * **两步式登录**：立即返回登录 URL，由调用方先打开窗口。
-   *
-   * 与 CodeArts 的 `CodeArtsAuth.startLogin` / LobsterAI 的同名方法同因
-   * （真实缺陷）：Channel Pack 的「+ 新建账号」原先调用阻塞式 {@link login}，
-   * 而浏览器只在用户点击后的短暂窗口（transient activation，约 5 秒）内
-   * 允许 `window.open`。等阻塞调用返回时手势早已过期，`window.open` 被
-   * 弹窗拦截器拒绝并返回 `null`，前端兜底逻辑便执行
-   * `window.location.href = loginUrl`，把**整个设置页**跳转到登录页。
    *
    * 调用方拿到 `loginUrl` 后应当**立即** `window.open`，再 await `result`。
    */

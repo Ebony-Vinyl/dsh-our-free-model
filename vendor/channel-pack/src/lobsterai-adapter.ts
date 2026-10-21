@@ -17,7 +17,7 @@ import type { GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelIn
 import { AccountPool, providerCatalogVisible } from './account-pool.js'
 import { RemoteCatalogGate } from './remote-catalog-gate.js'
 import { settingsNamespaceFor } from './settings-compat.js'
-import { parseRateLimitError } from './llm-adapter.js'
+import { parseRateLimitError } from './rate-limit.js'
 import {
   LOBSTERAI_CHAT_PATH,
   LOBSTERAI_MODELS_PATH,

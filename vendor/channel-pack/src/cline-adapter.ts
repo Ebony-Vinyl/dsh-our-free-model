@@ -22,9 +22,6 @@
  * composer 的模型切换菜单只渲染 `name`（`dsh-client-ui-model-selection` 的
  * ModelSelect 里只有 `title: model.name` 与 `children: model.name`）。
  * 这是被用户报障纠正过的结论。
- *
- * ⚠️ 免费资格是**服务端动态下发**的（`recommended-models` 的 `free` 数组），
- * 故本适配器**不硬编码任何免费模型名** —— 与 CodeArts benefit 集合同约定。
  */
 
 import type { Context } from '@deepseek-ai/cordis'

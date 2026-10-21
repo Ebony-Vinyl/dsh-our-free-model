@@ -512,10 +512,6 @@ export class ZcodeAuth extends Service {
     result: Promise<{ refName: string; credential: ZcodeCredential }>
   }> {
     /**
-     * ⚠ 授权 URL 必须**立刻**拿到并返回：前端的 `window.open` 只在
-     * 用户手势窗口内有效（等用户授权完再返回必被弹窗拦截 ——
-     * `AGENTS.md` 记过 CodeArts 早期这个缺陷）。
-     *
      * 故这里手工编排「发起 → 回调 URL → 后台轮询」，而不是直接
      * `await runZcodeLogin()`（那会阻塞到授权完成）。
      */
@@ -1702,11 +1698,6 @@ export class ZcodeAuth extends Service {
    * 「这个账号此前成功过几次 / 是否突然开始被拦」正靠这一项。
    *
    * ## ⚠ 用 `findAccountIdByIdentityField` 而**不是** `findAccountIdByCredential`
-   *
-   * 后者写死了「codearts 用 `access_key_id`、其余用 `access_token`」
-   * （见 `account-pool.ts` 的方法注释），而 zcode 凭据里**没有** `access_token`
-   * 字段（它用 `zcode_jwt` / `user_id`）⇒ 拿它查 zcode 恒回空串，
-   * 诊断会静默退化成「所有账号都是 #1」。
    *
    * ## 处处容错（非关键路径）
    *

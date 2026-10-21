@@ -495,9 +495,6 @@ export function createReasoningLoopDetector(
    * `cutAt = 0` → **把回答截成空**；更糟的是会误伤「早期自愈」负样本
    * （它正是「零误报」结论的关键）。实测粒度 3000 时自愈样本被误触发。
    *
-   * 真实流式帧极小（实测 1379 万帧：p99=10、max=95 字符），故逐帧调用的适配器
-   * 不可达；但 `llm-adapter.ts`（codearts）是累积后一次性调用 → **真实可达**。
-   *
    * ⚠️ **`cutAt === 0` 在默认参数下不可达、调参可复现**（等价说法：默认参数下
    * `cutAt > 0` 必然成立）。它依赖 `minLines` 与 `sliceChars` 的大小关系
    * （下述论证**不依赖调用方粒度**）：进入 looping 至少需 `minLines=40`

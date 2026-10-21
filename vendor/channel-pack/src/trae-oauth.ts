@@ -522,9 +522,6 @@ function listenOrReject(
  * 监听到的端口重算 URL）。而固定的 18080 极易被别的程序占用（用户报障即是
  * 此因），直接失败会让「新建账号」功能在那种机器上完全不可用。
  *
- * 与 CodeArts 的 `listenOnCallbackPort` 同思路：能拿到首选端口就用它
- * （对齐参考实现的默认值，行为可预期），拿不到就退到随机端口保证功能可用。
- *
  * @returns 实际端口与（用该端口重算的）回调地址
  */
 async function listenWithFallback(

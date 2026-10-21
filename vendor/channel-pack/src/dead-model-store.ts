@@ -57,7 +57,7 @@ import { resolveChannelPackHome } from './channel-pack-store.js'
 export const DEAD_MODELS_FILE = 'dead-models.json'
 
 /** 文档 schema 标记（与本仓库其它状态文档同惯例）。 */
-const SCHEMA = 'dsh-codearts-auth/dead-models/v1'
+const SCHEMA = 'channel-pack/dead-models/v1'
 
 /** 默认保留天数；可用 `DSH_DEAD_MODEL_TTL_DAYS` 覆盖（0 = 永不过期）。 */
 const DEFAULT_TTL_DAYS = 30
