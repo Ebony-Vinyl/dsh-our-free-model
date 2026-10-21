@@ -32,6 +32,7 @@ import { isQoderExpired, type QoderCredential } from './qoder.js'
 import { QoderEncryptedInfer, type QoderInferMessage, type QoderInferRequest, type QoderInferTool, type QoderInferToolCall } from './qoder-wasm.js'
 import { unwrapQoderEnvelopeStream } from './qoder-envelope.js'
 import { QODER, type QoderFallbackModel, type QoderModelPromotion, type QoderProduct } from './qoder-product.js'
+import { reasoningRankOf } from './reasoning-ladder.js'
 import { projectRequestImage, type ImageRequestTarget } from './image-budget.js'
 import {
   registerAdapterIdempotent,
@@ -136,15 +137,54 @@ const QODER_EFFORT_NAMES: Readonly<Record<string, string>> = {
   max: '最大',
 }
 
+/** 未登记档位 id 的排序权重（大于任何已知强度，使它们统一落到末尾）。 */
+const UNKNOWN_EFFORT_RANK = 100
+
 /**
- * 该模型在 UI 上可选的思考档位（复刻客户端 `gU()` 的行为）。
+ * 把档位 id 列表按**强度**稳定排序（由弱到强，「关闭思考」在最左）。
+ *
+ * 强度序来自 `src/reasoning-ladder.ts` 的 `REASONING_EFFORT_RANK`（跨 provider 权威表），
+ * 不另立一份 —— 两份必然漂移，而漂移的症状是「同一个档位在两处算出不同位置」。
+ * 未登记的 id 排在末尾、彼此保持原相对顺序（与官方客户端 `?? ORDER.length` 同义）。
+ */
+export function sortEffortsByStrength(efforts: readonly string[]): string[] {
+  return efforts
+    .map((id, index) => ({ id, index, rank: reasoningRankOf(id) ?? UNKNOWN_EFFORT_RANK }))
+    .sort((a, b) => (a.rank - b.rank) || (a.index - b.index))
+    .map(({ id }) => id)
+}
+
+/**
+ * 该模型在 UI 上可选的思考档位（复刻客户端 `gU()` + `displayReasoningEfforts()`）。
  *
  * 三条口径：
- * 1. `efforts` 原样取用（目录顺序保持 —— 官方客户端也按对象键序渲染）；
+ * 1. `efforts` 取目录的 `thinking_config.enabled.efforts` 键，再**按强度序重排**（见下）；
  * 2. `supportsDisable` 为真时**追加** `none`（即「关闭思考」）；
  *    客户端 `gU()`：`… || e.includes('none') ? e : [...e, 'none']`。
  * 3. 两者皆无 → 返回空数组，调用方**不声明 `reasoning`**
  *    （UI 显示「当前模型未提供推理等级」，对应 IDE 的「不支持」）。
+ *
+ * ⚠️ **必须重排，不能原样透传目录键序**（2026-10-20 修正，此前这里写的是
+ * 「目录顺序保持 —— 官方客户端也按对象键序渲染」，那句话**是错的**）。
+ * 官方客户端拿到键序后还会再排一遍，取证是 CN 0.4.8 asar
+ * `out/renderer/assets/index-DDa3WwIe.js`：
+ * ```
+ * REASONING_EFFORT_DISPLAY_ORDER = ["none","minimal","low","medium","high","xhigh","max"]
+ * function displayReasoningEfforts(model){
+ *   return availableReasoningEfforts(model)          // 这里才把 none 追加到末尾
+ *     .map((e,i)=>({effort:e,index:i}))
+ *     .sort((a,b)=> (RANK.get(a.effort) ?? ORDER.length) - (RANK.get(b.effort) ?? ORDER.length)
+ *                   || a.index - b.index)            // 同排名 / 未登记 → 保持原序
+ *     .map(({effort})=>effort)
+ * }
+ * ```
+ * 即**按强度稳定排序、未登记排末尾**。`EffortControl` 与设置面板都只渲染这个结果。
+ *
+ * 不排的后果（实测，`dfmodel` 的真实键序 `high/max/low`）：DSH 侧拿到
+ * `高 → 最大 → 低 → 关闭思考`，而依赖「位置 = 强度」的 UI（如
+ * `dsh-codex-effort-slider` 的滑条）会把 `最大` 画在 `高` 左边、把
+ * `关闭思考` 画到最右并点亮满格能量 —— 越往右越弱、关掉思考反而最亮。
+ * 排序后是 `关闭思考 → 低 → 高 → 最大`，与 Qoder IDE 自己显示的顺序一致。
  *
  * ⚠️ **`qmodel` / `qmodel_latest` 这类「有 `disabled` 但无 `efforts`」的模型
  * 会得到 `['none']`** —— 即只提供「关闭思考」一项。这是**远端事实**
@@ -154,7 +194,7 @@ const QODER_EFFORT_NAMES: Readonly<Record<string, string>> = {
 export function qoderEffortsFor(model: QoderFallbackModel): string[] {
   const efforts = [...(model.efforts ?? [])]
   if (model.supportsDisable === true && !efforts.includes('none')) efforts.push('none')
-  return efforts
+  return sortEffortsByStrength(efforts)
 }
 
 /**

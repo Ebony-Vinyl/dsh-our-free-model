@@ -12,6 +12,7 @@ import { settingsNamespaceFor } from './settings-compat.js'
 import { nextUtc8DayStartMs } from './model-queue.js'
 import { isCodeArtsBenefitModel } from './models.js'
 import { normalizeHarnessMessages } from './message-shape.js'
+import { directFetch } from './direct-fetch.js'
 import { signRequestHuawei } from './sign.js'
 import { createBlankReasoningSuppressor, createReasoningLoopDetector, hasUsableToolName, isReasoningLoopGuardEnabled, isTruncatedArguments, normalizeToolArguments, readWithIdleTimeout, reasoningLoopFailure, resolveEmptyResponseReason, resolveToolPairing, stripCourseLeakFromHistoryContent, stripCourseLeakIfEnabled } from './sse.js'
 import type { CodeArtsCredential } from './types.js'
@@ -897,7 +898,7 @@ export class CodeArtsAdapter extends LlmAdapter {
 
   constructor(private readonly options: CodeArtsAdapterOptions) {
     super()
-    this.fetchImpl = options.fetchImpl ?? fetch
+    this.fetchImpl = options.fetchImpl ?? directFetch
     this.chatId = options.chatId ?? crypto.randomUUID().replace(/-/g, '')
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, '')
   }
@@ -1620,7 +1621,7 @@ export class CodeArtsAdapter extends LlmAdapter {
             break
           }
           let data: {
-            error_code?: string
+            error_code?: string | number
             error_msg?: string
             choices?: Array<{
               delta?: {
@@ -1643,23 +1644,24 @@ export class CodeArtsAdapter extends LlmAdapter {
           }
           // SSE 内嵌错误检测：CodeArts 以 HTTP 200 + error_code/error_msg
           // 返回排队/限流（如 InferHub.ModelArts.81111.429 TPM 超限）。
-          if (typeof data.error_code === 'string' && data.error_code.length > 0) {
+          if ((typeof data.error_code === 'string' && data.error_code.length > 0) || data.error_code === 4004) {
+            const errorCode = String(data.error_code)
             const message = typeof data.error_msg === 'string' && data.error_msg.length > 0
               ? data.error_msg
-              : data.error_code
+              : errorCode
             // ⚠️ 顺序不可颠倒：额度耗尽（InferHub.4291.200）必须**先**于排队判据
             // 检查。历史上它们混淆过一次 —— `4291` 被 `429` 的裸子串匹配吃掉，
             // 额度错误因此被当成「可重试的排队」，进入 30 分钟静默重试循环，
             // 界面零输出（用户报障「没反应」的直接原因）。
             // 现在两个判据已互斥（裸 `429` 已锚定为独立数字），这里的先后仍保留：
             // 它把「额度优先」表达成代码结构，防止后续再有人放宽 `429` 判据。
-            if (isSseQuotaExhaustedErrorCode(data.error_code, message)) {
-              throw new SseQuotaExhaustedError(data.error_code, message)
+            if (isSseQuotaExhaustedErrorCode(errorCode, message)) {
+              throw new SseQuotaExhaustedError(errorCode, message)
             }
-            if (isSseQueueErrorCode(data.error_code)) {
-              throw new SseQueueRetryError(data.error_code, message)
+            if (isSseQueueErrorCode(errorCode)) {
+              throw new SseQueueRetryError(errorCode, message)
             }
-            if (data.error_code === CODEARTS_BENEFIT_NOT_FOUND_ERROR_CODE) {
+            if (errorCode === CODEARTS_BENEFIT_NOT_FOUND_ERROR_CODE || errorCode === '4004') {
               // 账号没有 benefit 包（积分制账户）：交给 stream() 去掉该头重试
               throw new LlmError(`codearts: ${message}`, BENEFIT_NOT_FOUND_CODE, { status: 200 })
             }

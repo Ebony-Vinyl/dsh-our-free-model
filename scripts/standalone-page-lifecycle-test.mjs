@@ -11,7 +11,8 @@ const require = createRequire(import.meta.url)
 // symlink check. Locally, where the devDependency is installed, it runs.
 let transformSync
 try {
-  ({ transformSync } = require('esbuild'))
+  const standaloneRequire = createRequire(new URL('../packages/standalone/package.json', import.meta.url))
+  ;({ transformSync } = standaloneRequire('esbuild'))
 } catch {
   console.log('ok  standalone-page-lifecycle skipped: esbuild is not installed (the offline job installs nothing)')
   process.exit(0)
@@ -31,7 +32,7 @@ const settings = { enabled: true }
 const summary = { settings, catalog: [], networkMode: 'fixture' }
 const context = {
   ...react, h: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }), Fragment: 'fragment',
-  Sidebar: 'Sidebar', Topbar: 'Topbar', Overview: 'Overview', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle',
+  Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle',
   pageNames: ['overview', 'models', 'usage', 'channels', 'eac', 'settings', 'connection'], API: '/api/management',
   messageOf: error => error.message, AbortSignal, URLSearchParams, location: { hash: '' }, history: {},
   window: { scrollTo() {}, addEventListener() {}, removeEventListener() {}, setInterval() { return 1 }, clearInterval() {} },

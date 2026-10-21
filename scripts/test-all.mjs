@@ -113,6 +113,12 @@ const suites = [
   ['anthropic', 'anthropic-test.mjs', []],
   ['aggregate', 'aggregate-test.mjs', []],
   ['aggregate-wiring', 'aggregate-wiring-test.mjs', []],
+  ['model-test', 'model-test-test.mjs', []],
+  ['model-test-probe-race', 'model-test-probe-race-test.mjs', []],
+  ['model-test-finish-integration', 'model-test-finish-integration-test.mjs', []],
+  ['bench-integration', 'bench-integration-test.mjs', []],
+  ['plugin-bench-ui', 'plugin-bench-ui-test.mjs', []],
+  ['codearts-direct-fetch', 'codearts-direct-fetch-test.mjs', []],
   ['gateway-source', 'gateway-source-test.mjs', []],
 ].filter(([name]) => (mode === 'contributor' ? !['manifest', 'release'].includes(name)
   : mode === 'release' ? releaseSuites.has(name) : true)

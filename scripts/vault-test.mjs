@@ -935,7 +935,7 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
       check('with the model name under the channel tag', sealed?.name, 'EAC DeepSeek V4.1 Flash')
       const summary = await callRoute(api(), 'GET', '/api/our-free-model/summary')
       const summaryRow = (summary.json.catalog ?? []).find(entry => entry.id === 'moonshotai/kimi-k3')
-      check('the settings page row is marked available with the channel field', [summaryRow?.availability, summaryRow?.channel], ['available', 'eac'])
+      check('the settings page identifies an EAC listing without claiming a completed test', [summaryRow?.availabilitySource, summaryRow?.availability, summaryRow?.channel], ['listing', 'unknown', 'eac'])
       check('the settings page row carries the tag prefix in its name', summaryRow?.name, 'EAC Kimi K3')
       check('the settings API exposes no credential material anywhere', JSON.stringify(summary.json).includes('sk-'), false)
       const rosterIdsShown = (summary.json.catalog ?? []).filter(entry => entry.channel === 'eac').map(entry => entry.id)

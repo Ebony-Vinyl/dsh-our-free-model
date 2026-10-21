@@ -1,3 +1,4 @@
+import { modelAvailability } from '../../src/model-test.js'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { buildStats } from '../../src/core/stats.js'
@@ -143,16 +144,17 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       settings: managementSettings(stores.settings.get()),
       catalogSyncedAt: stores.settings.get().catalogSyncedAt ?? 0,
       probedAt: available.at ?? 0,
-      catalog: state.catalog.map(entry => ({
+      catalog: state.catalog.map(entry => {
+        const measured = modelAvailability(entry.id, available, Boolean(entry.channel))
+        return ({
         id: entry.id, name: entry.name, channel: entry.channel ?? 'anonymous',
         vision: entry.vision === true, reasoning: entry.reasoning === true || (entry.reasoning !== null && typeof entry.reasoning === 'object'),
         contextWindow: entry.contextWindow ?? entry.context_window, maxOutput: entry.maxOutput ?? entry.max_tokens,
         routable: routable.has(entry.id),
         hiddenByUser: isModelHidden(entry, state.settings),
         hiddenByGroup: isModelHidden(entry, { ...state.settings, hiddenModelIds: [] }),
-        availability: entry.channel ? 'listed' : available.results?.[entry.id]?.state ?? 'unknown',
-        ttftMs: available.results?.[entry.id]?.ttftMs ?? null,
-      })),
+        ...measured, availability: measured.availabilitySource === 'listing' ? 'listed' : measured.availability,
+      }) }),
     }
   }
 
@@ -277,18 +279,12 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       const controller = new AbortController()
       const abort = () => controller.abort()
       res.once('close', abort)
-      const deadline = setTimeout(abort, 60_000)
-      deadline.unref?.()
-      const started = Date.now()
       try {
-        const outcome = await runtime.complete({
-          model: body.model, signal: controller.signal,
-          openAi: { messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 64 },
-        })
-        if (outcome.error) throw fail(502, outcome.error)
-        json(res, 200, { ok: true, text: outcome.text.slice(0, 2000), latencyMs: Date.now() - started })
+        const result = await runtime.testModel(body.model, undefined, { signal: controller.signal })
+        if (!controller.signal.aborted) json(res, 200, result)
+      } catch (error) {
+        if (!controller.signal.aborted) throw fail(error.status === 404 ? 404 : error.code === 'TIMEOUT' ? 504 : 502, String(error.message ?? '模型测试失败'))
       } finally {
-        clearTimeout(deadline)
         res.removeListener('close', abort)
       }
     } else throw fail(404, '管理接口不存在')

@@ -629,7 +629,9 @@ export class FreeModelAdapter {
         record(true, outcome, recovering ? { recovered: reason.kind === 'stop' } : {})
         finishTurn(true, recovering && reason.kind === 'stop', attempt + 1)
         yield { type: 'usage', usage: totalUsage }
-        yield { type: 'finish', reason }
+        // Keep the provider token when the harness fallback maps an abnormal
+        // ending to stop. Strict consumers (manual tests) must not certify it.
+        yield { type: 'finish', reason, ...(reason.kind === 'stop' && !normalEnding ? { upstreamFinish: outcome.finish } : {}) }
         if (warnings.length > 0) this.deps.warn?.(`our-free-model: dropped unsupported content for ${entry.id}: ${warnings.join(', ')}`)
         return { advance: false, verdict: null, ok: true, recovered: recovering && reason.kind === 'stop' }
       } catch (error) {

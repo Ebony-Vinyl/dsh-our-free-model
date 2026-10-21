@@ -101,17 +101,24 @@ export function egressActive() {
  * origin-form the loopback relay serves. Call sites keep `redirect: 'error'` in
  * `init`, so a 3xx is a response, never a second hop that would dodge the outlet.
  */
-export async function egressFetch(url, init) {
+export async function egressFetch(url, init, send = fetch) {
   const relay = activeRelay
-  if (relay === null) return fetch(url, init)
-  const target = new URL(String(url))
+  if (relay === null) return send(url, init)
+  // The signed CodeArts lane supplies its own sender so the local relay hop
+  // cannot re-enter a third-party global fetch wrapper and change signed bytes.
+  const request = url instanceof Request ? new Request(url, init) : null
+  const target = new URL(request ? request.url : String(url))
   if (target.protocol !== 'http:' && target.protocol !== 'https:') {
     throw new Error(`the egress relay only carries http(s) targets, got "${target.protocol}"`)
   }
-  const headers = new Headers(init?.headers ?? {})
+  const headers = new Headers(request?.headers ?? init?.headers ?? {})
   headers.set(TARGET_HEADER, target.href)
   headers.set(KEY_HEADER, relay.key)
-  return fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...init, headers })
+  const outgoing = request ? {
+    ...init, method: request.method, body: request.body, signal: request.signal,
+    redirect: request.redirect, ...(request.body ? { duplex: 'half' } : {}),
+  } : init
+  return send(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...outgoing, headers })
 }
 
 /**

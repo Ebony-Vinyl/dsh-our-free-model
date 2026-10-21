@@ -61,6 +61,7 @@
  * 漏掉会让积分停在「待确认」而不入账。
  */
 
+import { directFetch } from './direct-fetch.js'
 import { signRequestHuawei } from './sign.js'
 import type { CodeArtsCredential } from './types.js'
 import type { ClaimOutcome, CreditBalance, CreditPackage } from './credits.js'
@@ -440,7 +441,7 @@ function parseCreditBalance(metrics: unknown): CreditBalance | undefined {
  */
 export async function fetchCodeArtsAccountInfo(
   credential: CodeArtsCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = directFetch,
 ): Promise<CodeArtsAccountInfo | null> {
   const result = await fetchCodeArtsAccountInfoDetailed(credential, fetcher)
   return result.ok ? result.info : null
@@ -460,7 +461,7 @@ export type CodeArtsAccountInfoResult =
  */
 export async function fetchCodeArtsAccountInfoDetailed(
   credential: CodeArtsCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = directFetch,
 ): Promise<CodeArtsAccountInfoResult> {
   const url = `${CODEARTS_SNAP_ENGINE_URL}${CODEARTS_PACKAGE_INFO_PATH}`
   const result = await signedSnapRequest('GET', url, credential, undefined, fetcher)
@@ -511,7 +512,7 @@ function parseActivity(item: Record<string, unknown>): CodeArtsOpsActivity {
  */
 export async function fetchCodeArtsOpsActivities(
   credential: CodeArtsCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = directFetch,
 ): Promise<CodeArtsOpsActivity[] | null> {
   const result = await fetchCodeArtsOpsActivitiesDetailed(credential, fetcher)
   return result.ok ? result.activities : null
@@ -525,7 +526,7 @@ export type CodeArtsActivitiesResult =
 /** 查询活动列表，失败时保留底层原因。 */
 export async function fetchCodeArtsOpsActivitiesDetailed(
   credential: CodeArtsCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = directFetch,
 ): Promise<CodeArtsActivitiesResult> {
   const url = `${CODEARTS_SNAP_ENGINE_URL}${CODEARTS_OPS_DELIVERY_PATH}?channel=${CODEARTS_OPS_CHANNEL}`
   const result = await signedSnapRequest('GET', url, credential, undefined, fetcher)
@@ -567,7 +568,7 @@ export function findDailyCheckinActivity(
  */
 export async function claimCodeArtsDailyCheckin(
   credential: CodeArtsCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = directFetch,
 ): Promise<ClaimOutcome> {
   const infoResult = await fetchCodeArtsAccountInfoDetailed(credential, fetcher)
   if (!infoResult.ok) {
