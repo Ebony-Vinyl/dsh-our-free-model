@@ -23,7 +23,7 @@
     "website": "https://agnes-ai.com/",
     "local": false,
     "source": "fcc",
-    "modelsUrl": "https://api.agnes-ai.cn/v1/models"
+    "modelsUrl": "https://apihub.agnes-ai.com/v1/models"
   },
   {
     "id": "alibaba_cloud",
