@@ -33,6 +33,7 @@ import {
   type RaccoonCredential,
 } from './raccoon.js'
 import { type RaccoonProduct } from './raccoon-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 扫码轮询的状态值。 */
 export type RaccoonQrStatus = 'pending' | 'logging' | 'canceled' | 'success'
@@ -140,7 +141,7 @@ export function buildQrImageUrl(product: RaccoonProduct, code: string): string {
 export async function pollRaccoonQrLogin(
   product: RaccoonProduct,
   code: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<RaccoonQrPollResult> {
   let envelope: RaccoonEnvelope
   try {
@@ -190,7 +191,7 @@ export async function sendRaccoonSmsCode(
   product: RaccoonProduct,
   phone: string,
   captchaParam: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<void> {
   const { envelope } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/send_sms`,
@@ -219,7 +220,7 @@ export async function loginRaccoonWithSmsCode(
   product: RaccoonProduct,
   phone: string,
   smsCode: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<RaccoonCredential> {
   const { envelope } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/login_with_sms`,
@@ -261,7 +262,7 @@ function credentialFromEnvelope(envelope: RaccoonEnvelope): RaccoonCredential {
 export async function exchangeRaccoonAuthorizationCode(
   product: RaccoonProduct,
   authorizationCode: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<RaccoonCredential> {
   const { envelope } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/login_with_authorization_code`,
@@ -289,7 +290,7 @@ export async function exchangeRaccoonAuthorizationCode(
 export async function refreshRaccoonCredential(
   product: RaccoonProduct,
   credential: RaccoonCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<RaccoonCredential> {
   const { envelope, status } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/refresh`,
@@ -330,7 +331,7 @@ export async function refreshRaccoonCredential(
 export async function fetchRaccoonUserInfo(
   product: RaccoonProduct,
   credential: RaccoonCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<{ userId?: string; nickname?: string; officeIdentity?: string; phone?: string }> {
   try {
     const response = await fetcher(`${product.apiBase}${product.authApiPrefix}/user_info`, {

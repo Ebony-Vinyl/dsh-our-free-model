@@ -9,6 +9,7 @@
 
 import { createHash, randomUUID, randomBytes } from 'node:crypto'
 import type { QoderProduct } from './qoder-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 单次 HTTP 请求超时（毫秒）。 */
 export const QODER_REQUEST_TIMEOUT_MS = 30_000
@@ -371,7 +372,7 @@ export function applyQoderRefresh(
 export async function fetchQoderUserNickname(
   credential: QoderCredential,
   product: QoderProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<string | undefined> {
   try {
     const response = await fetcher(`${product.openApiBase}${QODER_USERINFO_PATH}`, {

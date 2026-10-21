@@ -32,6 +32,7 @@ import {
   type RaccoonCredential,
 } from './raccoon.js'
 import { RACCOON, type RaccoonProduct } from './raccoon-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { ClaimOutcome, CreditBalance, CreditPackage } from './credits.js'
 
 /** 登录奖励的默认额度（服务端未在 popup 里给出时兜底）。 */
@@ -129,7 +130,7 @@ function makePackage(name: string, remaining: number): CreditPackage {
 export async function fetchRaccoonCreditBalance(
   product: RaccoonProduct,
   credential: RaccoonCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CreditBalance | null> {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_POINTS_PREFIX}/balance`,
@@ -176,7 +177,7 @@ export async function fetchRaccoonCreditBalance(
 export async function claimRaccoonLoginReward(
   product: RaccoonProduct,
   credential: RaccoonCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<ClaimOutcome> {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_DESKTOP_PREFIX}/login/points/grant`,
@@ -228,7 +229,7 @@ export async function claimRaccoonLoginReward(
 export async function fetchRaccoonOnboardingStatus(
   product: RaccoonProduct,
   credential: RaccoonCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<{ claimed: boolean; points: number }> {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_POINTS_PREFIX}/bills?paging.limit=50&paging.offset=0`,

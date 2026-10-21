@@ -43,6 +43,7 @@
  */
 
 import { clineAuthHeaders, type ClineCredential } from './cline.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { ClineProduct } from './cline-product.js'
 
 /** 单次额度请求超时（毫秒；与余额同档）。 */
@@ -177,7 +178,7 @@ export function parseClineUsageLimits(value: unknown): { windows: ClineQuotaWind
 export async function fetchClineUsageLimits(
   credential: ClineCredential,
   product: ClineProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<ClineQuotaResult> {
   const refusal = { ok: false, windows: [], error: '额度端点不可用' }

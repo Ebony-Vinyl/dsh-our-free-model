@@ -56,6 +56,7 @@
  */
 
 import { roundCredits, type CreditBalance, type CreditPackage } from './credits.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { clineAuthHeaders, type ClineCredential } from './cline.js'
 import type { ClineProduct } from './cline-product.js'
 
@@ -170,7 +171,7 @@ export function parseClineBalanceResponse(value: unknown): { rawBalance?: number
 export async function fetchClineCreditBalance(
   credential: ClineCredential,
   product: ClineProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   options: { signal?: AbortSignal } = {},
 ): Promise<ClineBalanceResult> {
   // ⚠️ 必须用 account_id（`usr-…`），不是 JWT 的 sub（`user_…`）。

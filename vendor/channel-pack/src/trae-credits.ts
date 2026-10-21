@@ -46,6 +46,7 @@ import {
   type TraeCredential,
 } from './trae.js'
 import type { TraeProduct } from './trae-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { CheckinStatus, ClaimOutcome, CreditBalance, CreditPackage } from './credits.js'
 
 // ── 错误分类与冷却时间（对齐 trae-mate `cooldown.rs`）──
@@ -186,7 +187,7 @@ async function postJson(
 export async function fetchTraeCheckinStatus(
   credential: TraeCredential,
   _product: TraeProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CheckinStatus | null> {
   const result = await postJson(TRAE_CHECKIN_STATUS_PATH, credential, '{}', fetcher, credential.uid)
   if (!result.ok) return null
@@ -226,7 +227,7 @@ export async function fetchTraeCheckinStatus(
 export async function claimTraeDailyCheckin(
   credential: TraeCredential,
   product: TraeProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   generation = 0,
   onRotate?: (nextGeneration: number) => void | Promise<void>,
   userId?: string,
@@ -316,7 +317,7 @@ export async function claimTraeDailyCheckin(
 export async function fetchTraeCreditBalance(
   credential: TraeCredential,
   _product: TraeProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CreditBalance | null> {
   const result = await postJson(
     TRAE_ENT_USAGE_PATH,

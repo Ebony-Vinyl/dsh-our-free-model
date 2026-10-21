@@ -35,6 +35,7 @@ import {
   type LoomyCredential,
 } from './loomy.js'
 import type { LoomyProduct } from './loomy-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /**
  * 任务 key → 积分。
@@ -162,7 +163,7 @@ async function requestLoomy<T>(
 export async function fetchLoomyOnboardingTasks(
   credential: LoomyCredential,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyOnboardingState> {
   const data = await requestLoomy<{ tasks?: unknown; total?: unknown }>(
     credential, product, '/onboarding/tasks', { method: 'GET' }, fetcher,
@@ -184,7 +185,7 @@ export async function completeLoomyTask(
   credential: LoomyCredential,
   key: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<{ alreadyCompleted: boolean; balance: number }> {
   if (!(key in LOOMY_TASK_POINTS)) {
     // 与官方客户端一致：未知 key 本地就拦掉，不发必然失败的请求。
@@ -209,7 +210,7 @@ export async function completeLoomyTask(
 export async function claimAllLoomyOnboardingTasks(
   credential: LoomyCredential,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyOnboardingResult> {
   const state = await fetchLoomyOnboardingTasks(credential, product, fetcher)
   const claimed: { key: string; points: number }[] = []

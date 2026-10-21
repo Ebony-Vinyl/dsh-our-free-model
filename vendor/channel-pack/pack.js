@@ -13425,7 +13425,7 @@ var require_agent = __commonJS({
     function defaultFactory(origin, opts) {
       return opts && opts.connections === 1 ? new Client(origin, opts) : new Pool2(origin, opts);
     }
-    var Agent3 = class extends DispatcherBase {
+    var Agent4 = class extends DispatcherBase {
       constructor({ factory: factory2 = defaultFactory, maxOrigins = Infinity, connect, tls, ...options } = {}) {
         if (typeof factory2 !== "function") {
           throw new InvalidArgumentError("factory must be a function.");
@@ -13542,7 +13542,7 @@ var require_agent = __commonJS({
         return allClientStats;
       }
     };
-    module.exports = Agent3;
+    module.exports = Agent4;
   }
 });
 
@@ -14413,7 +14413,7 @@ var require_proxy_agent = __commonJS({
   "node_modules/undici/lib/dispatcher/proxy-agent.js"(exports, module) {
     "use strict";
     var { kProxy, kClose, kDestroy, kDispatch } = require_symbols();
-    var Agent3 = require_agent();
+    var Agent4 = require_agent();
     var Pool2 = require_pool();
     var DispatcherBase = require_dispatcher_base();
     var { InvalidArgumentError, RequestAbortedError, SecureProxyConnectionError, ProxyConnectionError } = require_errors();
@@ -14567,7 +14567,7 @@ var require_proxy_agent = __commonJS({
         } else {
           this[kClient] = clientFactory(url, { connect });
         }
-        this[kAgent] = new Agent3({
+        this[kAgent] = new Agent4({
           ...opts,
           factory: factory2,
           connect: async (opts2, callback) => {
@@ -14737,7 +14737,7 @@ var require_env_http_proxy_agent = __commonJS({
     var DispatcherBase = require_dispatcher_base();
     var { kClose, kDestroy, kClosed, kDestroyed, kDispatch, kNoProxyAgent, kHttpProxyAgent, kHttpsProxyAgent } = require_symbols();
     var ProxyAgent2 = require_proxy_agent();
-    var Agent3 = require_agent();
+    var Agent4 = require_agent();
     var DEFAULT_PORTS = {
       "http:": 80,
       "https:": 443
@@ -14750,7 +14750,7 @@ var require_env_http_proxy_agent = __commonJS({
         super(opts);
         this.#opts = opts;
         const { httpProxy, httpsProxy, noProxy, ...agentOpts } = opts;
-        this[kNoProxyAgent] = new Agent3(agentOpts);
+        this[kNoProxyAgent] = new Agent4(agentOpts);
         const HTTP_PROXY = httpProxy ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
         if (HTTP_PROXY) {
           this[kHttpProxyAgent] = new ProxyAgent2({ ...agentOpts, uri: HTTP_PROXY });
@@ -17931,7 +17931,7 @@ var require_mock_agent = __commonJS({
   "node_modules/undici/lib/mock/mock-agent.js"(exports, module) {
     "use strict";
     var { kClients } = require_symbols();
-    var Agent3 = require_agent();
+    var Agent4 = require_agent();
     var {
       kAgent,
       kMockAgentSet,
@@ -17969,7 +17969,7 @@ var require_mock_agent = __commonJS({
         if (opts?.agent && typeof opts.agent.dispatch !== "function") {
           throw new InvalidArgumentError("Argument opts.agent must implement Agent");
         }
-        const agent2 = opts?.agent ? opts.agent : new Agent3(opts);
+        const agent2 = opts?.agent ? opts.agent : new Agent4(opts);
         this[kAgent] = agent2;
         this[kClients] = agent2[kClients];
         this[kOptions] = mockOptions;
@@ -18610,7 +18610,7 @@ var require_snapshot_recorder = __commonJS({
 var require_snapshot_agent = __commonJS({
   "node_modules/undici/lib/mock/snapshot-agent.js"(exports, module) {
     "use strict";
-    var Agent3 = require_agent();
+    var Agent4 = require_agent();
     var MockAgent = require_mock_agent();
     var { SnapshotRecorder } = require_snapshot_recorder();
     var { InvalidArgumentError, UndiciError } = require_errors();
@@ -18663,7 +18663,7 @@ var require_snapshot_agent = __commonJS({
         });
         this[kSnapshotLoaded] = false;
         if (this[kSnapshotMode] === "record" || this[kSnapshotMode] === "update" || this[kSnapshotMode] === "playback" && opts.excludeUrls && opts.excludeUrls.length > 0) {
-          this[kRealAgent] = new Agent3(opts);
+          this[kRealAgent] = new Agent4(opts);
         }
         if ((this[kSnapshotMode] === "playback" || this[kSnapshotMode] === "update") && this[kSnapshotPath]) {
           this.loadSnapshots().catch(() => {
@@ -18912,11 +18912,11 @@ var require_global2 = __commonJS({
     var globalDispatcher = /* @__PURE__ */ Symbol.for("undici.globalDispatcher.2");
     var legacyGlobalDispatcher = /* @__PURE__ */ Symbol.for("undici.globalDispatcher.1");
     var { InvalidArgumentError } = require_errors();
-    var Agent3 = require_agent();
+    var Agent4 = require_agent();
     var Dispatcher1Wrapper2 = require_dispatcher1_wrapper();
     var fallbackDispatcher;
     if (getGlobalDispatcher() === void 0) {
-      setGlobalDispatcher(new Agent3());
+      setGlobalDispatcher(new Agent4());
     }
     function setGlobalDispatcher(agent2) {
       if (!agent2 || typeof agent2.dispatch !== "function") {
@@ -30943,7 +30943,7 @@ var require_undici = __commonJS({
     var Pool2 = require_pool();
     var BalancedPool = require_balanced_pool();
     var RoundRobinPool = require_round_robin_pool();
-    var Agent3 = require_agent();
+    var Agent4 = require_agent();
     var Dispatcher1Wrapper2 = require_dispatcher1_wrapper();
     var ProxyAgent2 = require_proxy_agent();
     var Socks5ProxyAgent = require_socks5_proxy_agent();
@@ -30971,7 +30971,7 @@ var require_undici = __commonJS({
     module.exports.Pool = Pool2;
     module.exports.BalancedPool = BalancedPool;
     module.exports.RoundRobinPool = RoundRobinPool;
-    module.exports.Agent = Agent3;
+    module.exports.Agent = Agent4;
     module.exports.Dispatcher1Wrapper = Dispatcher1Wrapper2;
     module.exports.ProxyAgent = ProxyAgent2;
     module.exports.Socks5ProxyAgent = Socks5ProxyAgent;
@@ -31145,7 +31145,7 @@ function isDomesticUrl(input) {
 }
 async function resolveOverDoh(hostname) {
   const url = `${DOH_ENDPOINT}?name=${encodeURIComponent(hostname)}&type=A`;
-  const response = await (0, import_undici.fetch)(url, {
+  const response = await (0, import_undici2.fetch)(url, {
     headers: { accept: "application/dns-json" },
     signal: AbortSignal.timeout(DOH_TIMEOUT_MS)
   });
@@ -31158,38 +31158,38 @@ async function resolveOverDoh(hostname) {
 function domesticLookup(hostname, options, callback) {
   const done = typeof options === "function" ? options : callback;
   const opts = typeof options === "function" ? {} : options;
-  const fallback = () => defaultLookup(hostname, opts, done);
+  const fallback2 = () => defaultLookup(hostname, opts, done);
   if (!isDomesticHost(hostname)) {
-    fallback();
+    fallback2();
     return;
   }
   resolveOverDoh(hostname).then((address) => {
     if (opts.all === true || opts.verbatim === true) done(null, [{ address, family: 4 }]);
     else done(null, address, 4);
-  }).catch(fallback);
+  }).catch(fallback2);
 }
 function domesticDispatcher() {
-  agent ??= new import_undici.Agent({ connect: { lookup: domesticLookup } });
+  agent ??= new import_undici2.Agent({ connect: { lookup: domesticLookup } });
   return agent;
 }
 function domesticDirectEnabled() {
   const flag = (process.env.OFM_DOMESTIC_DIRECT ?? "").trim().toLowerCase();
   return !(flag === "0" || flag === "off" || flag === "false");
 }
-function createDomesticFetch(fallback) {
-  if (fallback !== void 0) return fallback;
+function createDomesticFetch(fallback2) {
+  if (fallback2 !== void 0) return fallback2;
   return ((input, init) => {
     const explicit = init?.dispatcher;
     const domestic = explicit === void 0 && domesticDirectEnabled() && isDomesticUrl(input instanceof Request ? input.url : String(input));
     if (!domestic) return globalThis.fetch(input, init);
-    return (0, import_undici.fetch)(input, { ...init, dispatcher: domesticDispatcher() });
+    return (0, import_undici2.fetch)(input, { ...init, dispatcher: domesticDispatcher() });
   });
 }
-var import_undici, DOMESTIC_HOST, DOH_TIMEOUT_MS, DOH_ENDPOINT, agent;
+var import_undici2, DOMESTIC_HOST, DOH_TIMEOUT_MS, DOH_ENDPOINT, agent;
 var init_domestic_direct = __esm({
   "vendor/channel-pack/src/domestic-direct.ts"() {
     "use strict";
-    import_undici = __toESM(require_undici(), 1);
+    import_undici2 = __toESM(require_undici(), 1);
     DOMESTIC_HOST = /(^|\.)(tencent\.com|codebuddy\.cn|qoder\.com\.cn|trae\.cn|trae\.com\.cn|huaweicloud\.com|sensenova\.cn|bigmodel\.cn|volces\.com|stepfun\.com|modelbest\.cn)$/i;
     DOH_TIMEOUT_MS = 8e3;
     DOH_ENDPOINT = "https://223.5.5.5/resolve";
@@ -31398,12 +31398,12 @@ async function prepareKey(entry, key, usage) {
     if (keyObject = key, keyObject.type === "secret")
       return keyObject.export();
   }
-  cache2 ||= /* @__PURE__ */ new WeakMap();
+  cache3 ||= /* @__PURE__ */ new WeakMap();
   const cacheKey = key;
-  let cached2 = cache2.get(cacheKey);
+  let cached2 = cache3.get(cacheKey);
   if (cached2?.[alg])
     return cached2[alg];
-  if (cached2 || cache2.set(cacheKey, cached2 = {}), keyObject && typeof keyObject.toCryptoKey == "function") {
+  if (cached2 || cache3.set(cacheKey, cached2 = {}), keyObject && typeof keyObject.toCryptoKey == "function") {
     const isPublic = keyObject.type === "public", crv = nist[keyObject.asymmetricKeyDetails?.namedCurve], params = entry.resolve?.({ crv, asymmetricKeyType: keyObject.asymmetricKeyType }) ?? entry.subtle;
     return cached2[alg] = keyObject.toCryptoKey(params, isPublic, entry.usages[isPublic ? 0 : 1]);
   }
@@ -31470,7 +31470,7 @@ async function jwkToKey(entry, jwk, extractable) {
 async function rawKey(key, expected, usage, extractable = false) {
   return key instanceof Uint8Array && (key = await crypto.subtle.importKey("raw", key, expected, extractable, [usage])), checkCryptoKey(key, expected, usage), key;
 }
-var tag, jwkMatchesOp, cache2, nist, isCryptoKey, isKeyObject, isKeyLike, invalidKeyInput, unusable;
+var tag, jwkMatchesOp, cache3, nist, isCryptoKey, isKeyObject, isKeyLike, invalidKeyInput, unusable;
 var init_key = __esm({
   "node_modules/jose/dist/webapi/lib/key.js"() {
     init_validate();
@@ -32000,10 +32000,10 @@ var init_webapi = __esm({
 });
 
 // vendor/channel-pack/src/oauth.ts
-import { createHash as createHash4, randomBytes as randomBytes3 } from "node:crypto";
+import { createHash as createHash5, randomBytes as randomBytes4 } from "node:crypto";
 function generatePkcePair() {
-  const codeVerifier = randomBytes3(48).toString("base64url");
-  const codeChallenge = createHash4("sha256").update(codeVerifier).digest("base64url");
+  const codeVerifier = randomBytes4(48).toString("base64url");
+  const codeChallenge = createHash5("sha256").update(codeVerifier).digest("base64url");
   return { codeVerifier, codeChallenge };
 }
 async function generateDpopKeyPair() {
@@ -32019,11 +32019,11 @@ async function signDpopJws(keyPair, htm, htu) {
     htm,
     htu,
     iat: Math.floor(Date.now() / 1e3),
-    jti: randomBytes3(32).toString("hex")
+    jti: randomBytes4(32).toString("hex")
   };
   return new SignJWT(payload).setProtectedHeader({ alg: "ES256", typ: "dpop+jwt", jwk: keyPair.publicKeyJwk }).sign(key);
 }
-async function requestToken(body, keyPair, fetcher = fetch) {
+async function requestToken(body, keyPair, fetcher = createDomesticFetch()) {
   const dpop = await signDpopJws(keyPair, "POST", STS_TOKEN_ENDPOINT);
   let response;
   try {
@@ -32055,7 +32055,7 @@ async function requestToken(body, keyPair, fetcher = fetch) {
   }
   return data;
 }
-async function exchangeAuthorizationCode(code, codeVerifier, port, keyPair, fetcher = fetch) {
+async function exchangeAuthorizationCode(code, codeVerifier, port, keyPair, fetcher = createDomesticFetch()) {
   return requestToken({
     client_id: CLIENT_ID,
     code,
@@ -32064,7 +32064,7 @@ async function exchangeAuthorizationCode(code, codeVerifier, port, keyPair, fetc
     redirect_uri: `http://127.0.0.1:${port}${REDIRECT_PATH}`
   }, keyPair, fetcher);
 }
-async function exchangeRefreshToken(refreshToken2, codeVerifier, keyPair, fetcher = fetch) {
+async function exchangeRefreshToken(refreshToken2, codeVerifier, keyPair, fetcher = createDomesticFetch()) {
   return requestToken({
     client_id: CLIENT_ID,
     code_verifier: codeVerifier,
@@ -32095,6 +32095,7 @@ var init_oauth = __esm({
   "vendor/channel-pack/src/oauth.ts"() {
     "use strict";
     init_webapi();
+    init_domestic_direct();
     CLIENT_ID = "codearts-agent";
     REDIRECT_PATH = "/oauth/callback";
     STS_TOKEN_ENDPOINT = "https://sts.cn-north-4.myhuaweicloud.com/v1/oauth2/tokens";
@@ -32138,7 +32139,7 @@ __export(login_exports, {
 });
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { getRandomValues, randomUUID as randomUUID2, randomBytes as randomBytes4 } from "node:crypto";
+import { getRandomValues, randomUUID as randomUUID2, randomBytes as randomBytes5 } from "node:crypto";
 function generateRandomSecret() {
   const bytes = getRandomValues(new Uint8Array(32));
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -32400,7 +32401,7 @@ function listenOnCallbackPort(server) {
   });
 }
 async function startOAuthFlow(options = {}) {
-  const ticketId = randomBytes4(32).toString("hex");
+  const ticketId = randomBytes5(32).toString("hex");
   const pkce = generatePkcePair();
   const keyPair = await generateDpopKeyPair();
   const { port, server, result } = await startOAuthCallbackServer(ticketId, pkce, keyPair, options);
@@ -34070,6 +34071,632 @@ function queueDelayMs(info) {
   return Math.min(Math.trunc(raw), QUEUE_MAX_DELAY_MS);
 }
 
+// vendor/channel-pack/src/direct-fetch.ts
+var import_undici4 = __toESM(require_undici(), 1);
+
+// vendor/channel-pack/src/channel-fetch.ts
+var import_undici3 = __toESM(require_undici(), 1);
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
+
+// vendor/channel-pack/src/opencode.ts
+import { createHash, randomBytes } from "node:crypto";
+
+// vendor/channel-pack/src/retry-after.ts
+function parseRetryAfterMs(raw, nowMs = Date.now()) {
+  if (raw === void 0 || raw === null || raw === "") return void 0;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return seconds >= 0 ? Math.ceil(seconds * 1e3) : void 0;
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - nowMs) : void 0;
+}
+function retryAfterMsFromResponse(headers, nowMs = Date.now()) {
+  if (headers === null || headers === void 0) return void 0;
+  return parseRetryAfterMs(headers.get("retry-after"), nowMs);
+}
+function retryAfterMsFromRecord(headers, nowMs = Date.now()) {
+  if (headers === void 0) return void 0;
+  return parseRetryAfterMs(headers["retry-after"] ?? headers["Retry-After"], nowMs);
+}
+
+// vendor/channel-pack/src/opencode-product.ts
+var OPENCODE = {
+  id: "opencode",
+  // ⚠️ 必须与客户端 `PROVIDERS` 里的 label 逐字一致（rail 宽度算式依赖它，
+  // 且 `opencode-client-panel.spec.ts` 有跨文件一致性断言）。
+  displayName: "OpenCode",
+  // 免费模型的新入口统一挂在 /inference/v1；/zen/v1 对匿名免费模型
+  // 会返回 FreeTierError。这里保留 v1 后缀拆分，便于复用下方路径字段。
+  baseUrl: "https://opencode.ai/inference",
+  chatPath: "/v1/chat/completions",
+  modelsPath: "/v1/models",
+  // ⚠️ 与本仓库其余 provider 的流式超时常量同档（保守值）。
+  chatHeaderTimeoutMs: 6e4,
+  chatChunkTimeoutMs: 12e4,
+  // ⚠️ 匿名凭证是**字面量** `public`：opencode 官方 CLI 在没有 key 时自己就用它
+  // （其 provider.ts 的 opencode 分支：`options: ok ? {} : { apiKey: 'public' }`）。
+  anonymousKey: "public",
+  // ⚠️ 兜底 UA。**v2 形状**（`opencode/<channel>/<version>/<client>`，major ≥ 2）：
+  // 旧的 `opencode/1.18.22` 自 2026-10-14 起被上游按名字拒掉（403 FreeTierError）。
+  // 接线层会用真机 `opencode --version` 的结果改写成同形状（`opencode.ts` 的
+  // `opencodeUserAgentForVersion`）。
+  defaultUserAgent: "opencode/latest/2.0.26/cli",
+  /**
+   * 模型能力元数据源（**远端**，能力的主来源）。
+   *
+   * ⚠️ 不是 `/zen/v1/models` —— 实测它只返回 `id`/`object`/`created`/
+   * `owned_by` 四个字段，**不含任何能力信息**（85 条全如此）。
+   * 能力在 **models.dev** 的 `opencode` 条目里，官方 CLI 自己就用它
+   * （`packages/core/src/models-dev.ts`）。见 `opencode-capability.ts`。
+   */
+  modelsDevUrl: "https://models.dev/api.json",
+  /** 能力表缓存 TTL（与官方 CLI 的 60 分钟同档）。 */
+  modelsDevTtlMs: 60 * 60 * 1e3
+};
+var OPENCODE_MODELS_DEV_URL = OPENCODE.modelsDevUrl;
+var OPENCODE_MODELS_DEV_TTL_MS = OPENCODE.modelsDevTtlMs;
+var OPENCODE_FALLBACK_MODELS = [
+  // ── 匿名可用（chat 端点，无需 key）──
+  { id: "big-pickle", name: "Big Pickle", isFree: true, contextWindow: 262144 },
+  { id: "space-bunny-free", name: "Space Bunny Free", isFree: true, contextWindow: 262144 },
+  { id: "longcat-2.5-preview-free", name: "LongCat 2.5 Preview Free", isFree: true, contextWindow: 262144 },
+  { id: "mimo-v2.6-flash-free", name: "MiMo-V2.6-Flash Free", isFree: true, contextWindow: 262144 },
+  { id: "mimo-v2.5-free", name: "MiMo-V2.5 Free", isFree: true, contextWindow: 262144 },
+  { id: "deepseek-v4.1-flash-free", name: "DeepSeek V4.1 Flash Free", isFree: true, contextWindow: 2e5 },
+  { id: "glm-5.3-flash-free", name: "GLM 5.3 Flash Free", isFree: true, contextWindow: 2e5 },
+  // ⚠️ 这两个官方 docs 标注走 `/v1/models/{id}`（Gemini 风格），但**实测
+  // chat 端点也通** ⇒ 按 chat 处理。**以实测为准，不以 docs 为准。**
+  { id: "nemotron-3-ultra-free", name: "Nemotron 3 Ultra Free", isFree: true, contextWindow: 262144 },
+  { id: "nemotron-3.5-lightning-free", name: "Nemotron 3.5 Lightning Free", isFree: true, contextWindow: 262144 },
+  // ── 需付费 key（chat 端点；实测匿名为 401）──
+  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", isFree: false, contextWindow: 262144 },
+  { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", isFree: false, contextWindow: 262144 },
+  { id: "glm-5.2", name: "GLM 5.2", isFree: false, contextWindow: 262144 },
+  { id: "kimi-k2.5", name: "Kimi K2.5", isFree: false, contextWindow: 262144 },
+  { id: "minimax-m2.7", name: "minimax M2.7", isFree: false, contextWindow: 262144 },
+  { id: "minimax-m3", name: "minimax M3", isFree: false, contextWindow: 262144 },
+  { id: "qwen3.8-max", name: "Qwen3.8 Max", isFree: false, contextWindow: 262144 }
+];
+var FREE_IDS = new Set(OPENCODE_FALLBACK_MODELS.filter((m) => m.isFree).map((m) => m.id));
+var REACHABLE_IDS = new Set(OPENCODE_FALLBACK_MODELS.map((m) => m.id));
+function isFreeOpencodeModel(id) {
+  return FREE_IDS.has(id);
+}
+function isReachableOpencodeModel(id) {
+  return REACHABLE_IDS.has(id);
+}
+function readableDetail(body) {
+  const text = body.trim();
+  if (text === "") return "\uFF08\u4E0A\u6E38\u672A\u8FD4\u56DE\u9519\u8BEF\u8BE6\u60C5\uFF09";
+  try {
+    const data = JSON.parse(text);
+    const nested = typeof data.error === "object" && data.error !== null ? data.error.message : data.error;
+    const parts = [data.message, nested, data.msg].filter((v) => typeof v === "string" && v.length > 0);
+    if (parts.length > 0) return parts.join(" ");
+  } catch {
+  }
+  return text.length > 500 ? `${text.slice(0, 500)}\u2026` : text;
+}
+function classifyOpencodeError(status, body, headers) {
+  const retryAfterMs = retryAfterMsFromRecord(headers);
+  const detail = readableDetail(body);
+  const lower = body.toLowerCase();
+  if (body.includes("FreeUsageLimitError")) {
+    return { kind: "free_usage_limit", ...retryAfterMs === void 0 ? {} : { retryAfterMs }, detail };
+  }
+  if (body.includes("GoUsageLimitError")) {
+    return { kind: "go_usage_limit", ...retryAfterMs === void 0 ? {} : { retryAfterMs }, detail };
+  }
+  if (body.includes("FreeTierError")) {
+    return { kind: "free_tier", detail };
+  }
+  if (status === 429 || lower.includes("too many requests") || lower.includes("rate limit")) {
+    return { kind: "rate_limit", ...retryAfterMs === void 0 ? {} : { retryAfterMs }, detail };
+  }
+  if (status === 0 || lower.includes("fetch failed") || lower.includes("terminated") || lower.includes("econnreset") || lower.includes("socket hang up") || lower.includes("getaddrinfo") || lower.includes("econnrefused")) {
+    return { kind: "transport", detail };
+  }
+  if (status === 402 || lower.includes("insufficient account funds") || lower.includes("insufficient funds") || lower.includes("insufficient balance")) {
+    return { kind: "quota", detail };
+  }
+  if (status === 401 || status === 403) return { kind: "auth", detail };
+  if (status >= 500) return { kind: "server", detail };
+  return { kind: "auth", detail };
+}
+
+// vendor/channel-pack/src/opencode.ts
+var BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+var SESSION_TAIL_LENGTH = 26;
+var SESSION_RANDOM_LENGTH = SESSION_TAIL_LENGTH - 12;
+function randomBase62(length) {
+  const bytes = randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) out += BASE62[bytes[i] % BASE62.length];
+  return out;
+}
+function deriveProjectId(identity, generation) {
+  const inner = createHash("sha256").update(`${identity} ${generation}`).digest("hex");
+  return createHash("sha1").update(`git-remote:opencode/${inner}`).digest("hex");
+}
+function deriveSessionId() {
+  const timestamp = Date.now();
+  if (timestamp !== lastSessionStamp) {
+    lastSessionStamp = timestamp;
+    sessionSequence = 0;
+  }
+  sessionSequence += 1;
+  const value = ~(BigInt(timestamp) * 0x1000n + BigInt(sessionSequence));
+  let hex = "";
+  for (let i = 0; i < 6; i += 1) {
+    hex += Number(value >> BigInt(40 - 8 * i) & 0xffn).toString(16).padStart(2, "0");
+  }
+  return `ses_${hex}${randomBase62(SESSION_RANDOM_LENGTH)}`;
+}
+var lastSessionStamp = 0;
+var sessionSequence = 0;
+var OPENCODE_V2_UA = /^opencode\/[a-z0-9-]+\/(\d+)\.\d+\.\d+\/[a-z0-9-]+$/i;
+function opencodeUserAgent(override) {
+  const value = override?.trim();
+  if (value !== void 0 && value.length > 0 && OPENCODE_V2_UA.test(value)) return value;
+  return OPENCODE.defaultUserAgent;
+}
+function opencodeUserAgentForVersion(version) {
+  const value = version?.trim();
+  if (value === void 0 || !/^\d+\.\d+\.\d+$/.test(value)) return void 0;
+  const [major] = value.split(".");
+  if (Number(major) < 2) return void 0;
+  return `opencode/latest/${value}/cli`;
+}
+function opencodeHeaders(fingerprint, sessionId, userAgent) {
+  return {
+    "x-opencode-project": fingerprint.projectId,
+    "x-opencode-session": sessionId,
+    // v2：这四个头同值，缺一即 403。
+    "x-opencode-session-id": sessionId,
+    "x-session-affinity": sessionId,
+    "x-session-id": sessionId,
+    "x-opencode-client": "cli",
+    "user-agent": userAgent
+  };
+}
+function maskLabel(url) {
+  return url.replace(/^(\w+:\/\/[^:@/]+):[^@/]*@/, "$1:***@");
+}
+function authorityOf(raw) {
+  const afterScheme = raw.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "");
+  const cut = afterScheme.search(/[/?#]/);
+  return cut === -1 ? afterScheme : afterScheme.slice(0, cut);
+}
+function hasExplicitPort(authority) {
+  const hostPart = authority.includes("@") ? authority.slice(authority.lastIndexOf("@") + 1) : authority;
+  return /:\d+$/.test(hostPart);
+}
+function normalizeProxy(input) {
+  const raw = input.trim();
+  if (raw.length === 0) return { ok: false, reason: "\u4EE3\u7406\u5730\u5740\u4E3A\u7A7A\uFF08\u5982\u9700\u6E05\u9664\uFF0C\u8BF7\u70B9\u300C\u6E05\u9664\u4EE3\u7406\u300D\uFF09" };
+  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : `http://${raw}`;
+  const url = withScheme.replace(/^socks5h:\/\//, "socks5://");
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { ok: false, reason: "\u65E0\u6CD5\u89E3\u6790\u4E3A URL\uFF08\u5F62\u5982 http://host:port\uFF09" };
+  }
+  const kind = parsed.protocol === "http:" || parsed.protocol === "https:" ? "http" : parsed.protocol === "socks5:" ? "socks5" : void 0;
+  if (kind === void 0) {
+    return { ok: false, reason: `\u4E0D\u652F\u6301\u7684\u534F\u8BAE ${parsed.protocol.replace(":", "")}\uFF08\u4EC5\u652F\u6301 http/https/socks5\uFF09` };
+  }
+  if (parsed.hostname.length === 0) return { ok: false, reason: "\u7F3A\u5C11\u4E3B\u673A\u540D" };
+  if (!hasExplicitPort(authorityOf(raw))) return { ok: false, reason: "\u7F3A\u5C11\u7AEF\u53E3\uFF08\u5982 http://127.0.0.1:7897\uFF09" };
+  const scheme = kind === "socks5" ? "socks5" : parsed.protocol.replace(":", "");
+  const auth = parsed.username.length > 0 ? `${parsed.username}${parsed.password.length > 0 ? `:${parsed.password}` : ""}@` : "";
+  const rawHostPort = authorityOf(raw);
+  const hostOnly = auth.length > 0 ? rawHostPort.slice(rawHostPort.lastIndexOf("@") + 1) : rawHostPort;
+  const portMatch = /:(\d+)$/.exec(hostOnly);
+  const port = portMatch?.[1] ?? parsed.port;
+  const normalized = `${scheme}://${auth}${parsed.hostname}:${port}`;
+  return { ok: true, proxy: { kind, url: normalized, label: maskLabel(normalized) } };
+}
+
+// vendor/channel-pack/src/opencode-proxy.ts
+var import_undici = __toESM(require_undici(), 1);
+import { connect as netConnect } from "node:net";
+import { URL as URL2 } from "node:url";
+var PROXY_CACHE_LIMIT = 16;
+var cache = /* @__PURE__ */ new Map();
+function buildProxyDispatcher(proxy) {
+  const existing = cache.get(proxy.url);
+  if (existing !== void 0) return existing;
+  const created = createProxyDispatcher(proxy);
+  cache.delete(proxy.url);
+  cache.set(proxy.url, created);
+  while (cache.size > PROXY_CACHE_LIMIT) {
+    const oldest = cache.keys().next();
+    if (oldest.done === true) break;
+    const victim = cache.get(oldest.value);
+    cache.delete(oldest.value);
+    if (victim !== void 0) {
+      void Promise.resolve(victim.close?.()).catch(() => {
+      });
+    }
+  }
+  return created;
+}
+function createProxyDispatcher(proxy) {
+  return proxy.kind === "http" ? buildHttpDispatcher(proxy.url) : buildSocksDispatcher(proxy);
+}
+async function closeAllProxyDispatchers() {
+  const all = [...cache.values()];
+  cache.clear();
+  await Promise.allSettled(all.map(async (d) => {
+    try {
+      await d.close();
+    } catch {
+    }
+  }));
+}
+function buildHttpDispatcher(url) {
+  return new import_undici.ProxyAgent({
+    uri: url,
+    // ⚠️ `pipelining: 0` 是必需的（见模块头）；`clientFactory` 由 undici 在
+    // 每次建连时调用，用它把默认 Pool 换成禁用复用的 Pool。
+    clientFactory: (origin, opts) => new import_undici.Pool(origin, { ...opts, pipelining: 0 })
+  });
+}
+function buildSocks5Handshake(proxy) {
+  const parsed = new URL2(proxy.url);
+  const wantsAuth = parsed.username.length > 0;
+  return wantsAuth ? new Uint8Array([5, 2, 0, 2]) : new Uint8Array([5, 1, 0]);
+}
+async function openSocks5Tunnel(proxy, host, port) {
+  const parsed = new URL2(proxy.url);
+  const socket = await new Promise((resolve2, reject) => {
+    const s = netConnect({ host: parsed.hostname, port: Number(parsed.port) });
+    s.once("connect", () => resolve2(s));
+    s.once("error", reject);
+  });
+  const fail = (error) => {
+    throw error;
+  };
+  const write = (bytes) => new Promise((resolve2, reject) => {
+    socket.write(Buffer.from(bytes), (err) => err ? reject(err) : resolve2());
+  });
+  let leftover = Buffer.alloc(0);
+  let pending;
+  const detach = () => {
+    socket.off("data", onData);
+    socket.off("error", onError);
+    socket.off("close", onClose);
+  };
+  const fulfill = () => {
+    if (pending === void 0 || leftover.length < pending.n) return;
+    const n = pending.n;
+    const target = pending;
+    pending = void 0;
+    const value = new Uint8Array(leftover.subarray(0, n));
+    leftover = leftover.subarray(n);
+    detach();
+    target.resolve(value);
+  };
+  const onData = (chunk) => {
+    leftover = leftover.length === 0 ? chunk : Buffer.concat([leftover, chunk]);
+    fulfill();
+  };
+  const onError = (error) => {
+    const target = pending;
+    pending = void 0;
+    detach();
+    target?.reject(error);
+  };
+  const onClose = () => {
+    const target = pending;
+    pending = void 0;
+    detach();
+    target?.reject(new Error("SOCKS5 \u4EE3\u7406\u5728\u63E1\u624B\u5B8C\u6210\u524D\u5173\u95ED\u4E86\u8FDE\u63A5"));
+  };
+  const read = (n) => new Promise((resolve2, reject) => {
+    if (n <= 0) {
+      resolve2(new Uint8Array(0));
+      return;
+    }
+    pending = { n, resolve: resolve2, reject };
+    socket.on("data", onData);
+    socket.once("error", onError);
+    socket.once("close", onClose);
+    fulfill();
+  });
+  try {
+    await write(buildSocks5Handshake(proxy));
+    const methodReply = await read(2);
+    const method = methodReply[1];
+    if (method === 2) {
+      const user = Buffer.from(decodeURIComponent(parsed.username), "utf8");
+      const pass = Buffer.from(decodeURIComponent(parsed.password), "utf8");
+      await write(new Uint8Array([1, user.length, ...user, pass.length, ...pass]));
+      const authReply = await read(2);
+      if (authReply[1] !== 0) fail(new Error("SOCKS5 \u7528\u6237\u540D/\u5BC6\u7801\u8BA4\u8BC1\u5931\u8D25"));
+    } else if (method !== 0) {
+      fail(new Error(`SOCKS5 \u670D\u52A1\u7AEF\u8981\u6C42\u672A\u77E5\u8BA4\u8BC1\u65B9\u5F0F 0x${(method ?? 0).toString(16)}`));
+    }
+    const target = Buffer.from(host, "utf8");
+    await write(new Uint8Array([
+      5,
+      1,
+      0,
+      3,
+      target.length,
+      ...target,
+      port >>> 8 & 255,
+      port & 255
+    ]));
+    const reply2 = await read(4);
+    if (reply2[1] !== 0) {
+      fail(new Error(`SOCKS5 CONNECT \u88AB\u62D2\u7EDD\uFF08\u5E94\u7B54\u7801 0x${(reply2[1] ?? 0).toString(16)}\uFF09`));
+    }
+    const atyp = reply2[3];
+    if (atyp === 1) await read(4 + 2);
+    else if (atyp === 4) await read(16 + 2);
+    else if (atyp === 3) await read(1).then((lenByte) => read((lenByte[0] ?? 0) + 2));
+    else fail(new Error(`SOCKS5 \u5E94\u7B54\u7684\u5730\u5740\u7C7B\u578B 0x${(atyp ?? 0).toString(16)} \u4E0D\u53D7\u652F\u6301`));
+    return socket;
+  } catch (error) {
+    socket.destroy();
+    throw error;
+  }
+}
+function buildSocksDispatcher(proxy) {
+  return new import_undici.Agent({
+    connect: ((opts, callback) => {
+      const host = String(opts.hostname ?? opts.host ?? "");
+      const port = Number(opts.port ?? 443);
+      if (host.length === 0) {
+        callback(new Error("SOCKS5 \u4EE3\u7406\uFF1A\u76EE\u6807 host \u4E3A\u7A7A"), void 0);
+        return;
+      }
+      openSocks5Tunnel(proxy, host, port).then((socket) => {
+        callback(null, socket);
+      }).catch((error) => {
+        callback(error, void 0);
+      });
+    })
+  });
+}
+
+// vendor/channel-pack/src/channel-fetch.ts
+init_domestic_direct();
+function parseWindowsProxy(output) {
+  const value = (name2) => new RegExp(`^\\s*${name2}\\s+REG_\\w+\\s+(.+)$`, "mi").exec(output)?.[1]?.trim() ?? "";
+  if (Number(value("ProxyEnable")) !== 1 || value("ProxyServer") === "") return void 0;
+  return { server: value("ProxyServer"), bypass: value("ProxyOverride") };
+}
+async function readWindowsProxy() {
+  const executable = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "reg.exe");
+  try {
+    const { stdout } = await promisify(execFile)(executable, [
+      "query",
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"
+    ], { windowsHide: true, timeout: 2e3, maxBuffer: 64 * 1024, encoding: "utf8" });
+    return stdout;
+  } catch {
+    return "";
+  }
+}
+function loopback(host) {
+  return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+function channelProxyBypassed(target, patterns, windows = false) {
+  const hostname = target.hostname.toLowerCase();
+  const port = target.port || (target.protocol === "https:" ? "443" : "80");
+  return patterns.split(/[;,\s]+/).filter(Boolean).some((raw) => {
+    let pattern = raw.toLowerCase();
+    if (pattern === "*") return true;
+    if (windows && pattern === "<local>") return !hostname.includes(".") && !hostname.includes(":");
+    const withPort = /^(.*):(\d+)$/.exec(pattern);
+    if (withPort) {
+      if (withPort[2] !== port) return false;
+      pattern = withPort[1];
+    }
+    if (pattern.includes("*")) {
+      const escaped = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+      return new RegExp(`^${escaped}$`, "i").test(hostname);
+    }
+    const domain = pattern.replace(/^\./, "");
+    return hostname === domain || !windows && hostname.endsWith(`.${domain}`);
+  });
+}
+function windowsProxyFor(target, config) {
+  if (channelProxyBypassed(target, config.bypass, true)) return void 0;
+  if (!config.server.includes("=")) return config.server;
+  const entries = new Map(config.server.split(";").map((row) => {
+    const at = row.indexOf("=");
+    return [row.slice(0, at).trim().toLowerCase(), row.slice(at + 1).trim()];
+  }));
+  const selected = entries.get(target.protocol.slice(0, -1));
+  if (selected) return selected;
+  const socks = entries.get("socks");
+  return socks ? `socks5://${socks.replace(/^socks5h?:\/\//, "")}` : void 0;
+}
+var ChannelNetworkError = class extends Error {
+  name = "ChannelNetworkError";
+};
+function networkFailure(error, route) {
+  if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) return error;
+  const codes = /* @__PURE__ */ new Set();
+  let current = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
+    const record = current;
+    if (typeof record.code === "string" && /^[A-Z][A-Z0-9_]{1,80}$/.test(record.code)) codes.add(record.code);
+    current = record.cause;
+  }
+  return new ChannelNetworkError(`\u6E20\u9053\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF08${route}${codes.size ? `\uFF1B${[...codes].join("\u3001")}` : ""}\uFF09\uFF1A\u8BF7\u68C0\u67E5\u4EE3\u7406\u8FDE\u901A\u6027\u540E\u91CD\u8BD5`, { cause: error });
+}
+function createChannelFetch(options = {}) {
+  const dispatchers = /* @__PURE__ */ new Map();
+  let system;
+  let systemAt = 0;
+  let closed = false;
+  const fetchImpl = (input, init) => (options.fetchImpl ?? globalThis.fetch)(input, init);
+  const domesticFetch = createDomesticFetch(fetchImpl);
+  const fetcher = async (input, init) => {
+    if (closed) throw new Error("\u6E20\u9053\u51FA\u7F51\u670D\u52A1\u5DF2\u505C\u6B62");
+    const target = new URL(input instanceof Request ? input.url : String(input));
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : void 0);
+    signal?.throwIfAborted();
+    let route = "\u76F4\u8FDE";
+    try {
+      if (init?.dispatcher !== void 0) {
+        route = "\u8C03\u7528\u65B9\u6307\u5B9A\u4EE3\u7406";
+        return await fetchImpl(input, init);
+      }
+      if (loopback(target.hostname)) {
+        return await fetchImpl(input, init);
+      }
+      if (options.outlet?.active()) {
+        route = "\u63D2\u4EF6\u51FA\u53E3\u4EE3\u7406";
+        return await options.outlet.fetch(input, { ...init, redirect: "error" });
+      }
+      if (isDomesticHost(target.hostname)) {
+        route = "\u56FD\u5185\u76F4\u8FDE\uFF08fake-ip \u7ED5\u884C\uFF09";
+        return await domesticFetch(input, init);
+      }
+      const env = options.environment ?? process.env;
+      const envValue = (name2) => env[name2.toLowerCase()] ?? env[name2];
+      const proxy = (target.protocol === "https:" ? envValue("HTTPS_PROXY") : envValue("HTTP_PROXY")) || envValue("ALL_PROXY");
+      let address;
+      if (proxy) {
+        route = "\u73AF\u5883\u4EE3\u7406";
+        if (!channelProxyBypassed(target, envValue("NO_PROXY") ?? "")) address = proxy;
+      } else if ((options.platform ?? process.platform) === "win32") {
+        if (!system || Date.now() - systemAt >= 3e4) {
+          systemAt = Date.now();
+          system = (options.readSystemProxy ?? readWindowsProxy)().then(parseWindowsProxy);
+        }
+        const config = await system;
+        signal?.throwIfAborted();
+        if (closed) throw new Error("\u6E20\u9053\u51FA\u7F51\u670D\u52A1\u5DF2\u505C\u6B62");
+        if (config) {
+          address = windowsProxyFor(target, config);
+          route = "Windows \u7CFB\u7EDF\u4EE3\u7406";
+        }
+      }
+      if (!address) {
+        if (route !== "\u76F4\u8FDE") route = "\u76F4\u8FDE\uFF0C\u4EE3\u7406\u4F8B\u5916\u6216\u5F53\u524D\u534F\u8BAE\u65E0\u4EE3\u7406";
+        return await fetchImpl(input, init);
+      }
+      const proxyUrl = new URL(address.includes("://") ? address : `http://${address}`);
+      const authority = `${proxyUrl.hostname}:${proxyUrl.port || (proxyUrl.protocol === "https:" ? "443" : proxyUrl.protocol.startsWith("socks") ? "1080" : "80")}`;
+      const auth = proxyUrl.username ? `${proxyUrl.username}${proxyUrl.password ? `:${proxyUrl.password}` : ""}@` : "";
+      const parsed = normalizeProxy(`${proxyUrl.protocol}//${auth}${authority}`);
+      if (!parsed.ok) throw new Error("\u4EE3\u7406\u5730\u5740\u65E0\u6548");
+      let dispatcher = dispatchers.get(parsed.proxy.url);
+      if (!dispatcher) {
+        dispatcher = options.dispatcherFor ? options.dispatcherFor(parsed.proxy) : new import_undici3.Dispatcher1Wrapper(createProxyDispatcher(parsed.proxy));
+        dispatchers.set(parsed.proxy.url, dispatcher);
+      }
+      return await fetchImpl(input, { ...init, dispatcher });
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason;
+      throw networkFailure(error, route);
+    }
+  };
+  return {
+    fetch: fetcher,
+    async close() {
+      closed = true;
+      const all = [...dispatchers.values()];
+      dispatchers.clear();
+      await Promise.allSettled(all.map((dispatcher) => dispatcher.destroy()));
+    }
+  };
+}
+
+// vendor/channel-pack/src/direct-fetch.ts
+var directLane = { fetch: null };
+function createDirectFetch(options = {}) {
+  const agent2 = new import_undici4.Agent();
+  const lifetime = new AbortController();
+  let closing;
+  const send = async (input, init) => {
+    const injected = options.fetchImpl ?? directLane.fetch;
+    if (injected) return injected(input, init);
+    const dispatcher = init?.dispatcher ?? agent2;
+    let target = input;
+    let requestInit = init;
+    if (input instanceof Request) {
+      const request2 = new Request(input, init);
+      target = request2.url;
+      requestInit = {
+        method: request2.method,
+        headers: request2.headers,
+        body: request2.body,
+        signal: request2.signal,
+        redirect: request2.redirect,
+        credentials: request2.credentials,
+        cache: request2.cache,
+        integrity: request2.integrity,
+        keepalive: request2.keepalive,
+        mode: request2.mode,
+        referrer: request2.referrer,
+        referrerPolicy: request2.referrerPolicy,
+        ...request2.body ? { duplex: "half" } : {}
+      };
+    }
+    return (0, import_undici4.fetch)(target, { ...requestInit, dispatcher });
+  };
+  const outlet = options.outlet;
+  const network = createChannelFetch({
+    ...options,
+    fetchImpl: send,
+    outlet: outlet && {
+      active: () => outlet.active(),
+      fetch: (input, init) => {
+        if (!outlet.fetchSigned) {
+          throw new Error("\u6240\u9009\u63D2\u4EF6\u51FA\u53E3\u5C1A\u672A\u63A5\u5165\u7B7E\u540D\u4F20\u8F93\uFF0C\u8BF7\u5347\u7EA7\u51FA\u53E3\u9002\u914D\uFF1B\u8BF7\u6C42\u672A\u7ED5\u8FC7\u8BE5\u51FA\u53E3");
+        }
+        return outlet.fetchSigned(input, init, send);
+      }
+    }
+  });
+  return {
+    fetch: async (input, init) => {
+      lifetime.signal.throwIfAborted();
+      const signal = init?.signal ?? (input instanceof Request ? input.signal : void 0);
+      const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
+      combined.throwIfAborted();
+      return network.fetch(input, { ...init, signal: combined });
+    },
+    close() {
+      if (!closing) {
+        lifetime.abort(new DOMException("CodeArts \u7B7E\u540D\u4F20\u8F93\u5DF2\u505C\u6B62", "AbortError"));
+        closing = Promise.allSettled([network.close(), agent2.destroy()]).then(() => {
+        });
+      }
+      return closing;
+    }
+  };
+}
+var mounted = /* @__PURE__ */ new Set();
+function attachDirectFetch(fetcher) {
+  const binding = { fetch: fetcher };
+  mounted.add(binding);
+  return () => {
+    mounted.delete(binding);
+  };
+}
+var fallback;
+var directFetch = (input, init) => {
+  const injected = directLane.fetch ?? [...mounted].at(-1)?.fetch;
+  if (injected) return injected(input, init);
+  fallback ??= createDirectFetch();
+  return fallback.fetch(input, init);
+};
+async function closeDirectFetch() {
+  const previous = fallback;
+  fallback = void 0;
+  await previous?.close();
+}
+
 // vendor/channel-pack/src/models.ts
 import { existsSync as existsSync3, mkdirSync as mkdirSync3, readFileSync as readFileSync3, renameSync as renameSync3, writeFileSync as writeFileSync3 } from "node:fs";
 
@@ -34182,7 +34809,7 @@ async function fetchSignedGet(fetcher, url, ak, sk, st, extraUnsignedHeaders) {
     return void 0;
   }
 }
-async function fetchCodeArtsRemoteModels(credential, fetcher = fetch) {
+async function fetchCodeArtsRemoteModels(credential, fetcher = directFetch) {
   const { access_key_id: ak, secret_access_key: sk, security_token: st } = credential;
   if (!ak || !sk) return [];
   const models = [];
@@ -34790,7 +35417,7 @@ var FileDeadModelStore = class {
   }
 };
 var store;
-var cache;
+var cache2;
 var logger;
 var injectedCtx;
 function ensureStore() {
@@ -34807,16 +35434,16 @@ function ensureStore() {
 function configureDeadModelStore(ctx) {
   logger = ctx.logger;
   injectedCtx = ctx;
-  if (cache !== void 0 && Object.keys(cache).length > 0 && tryPersist()) {
+  if (cache2 !== void 0 && Object.keys(cache2).length > 0 && tryPersist()) {
     store = void 0;
-    cache = void 0;
+    cache2 = void 0;
     return;
   }
   store = void 0;
 }
 function tryPersist(prunedCount = 0) {
   try {
-    ensureStore().save(cache ?? {});
+    ensureStore().save(cache2 ?? {});
     if (prunedCount > 0) {
       logger?.warn(`[channel-pack] \u5DF2\u5931\u6548\u6A21\u578B\u8BB0\u5F55\u6E05\u7406 ${prunedCount} \u6761\uFF08\u8D85\u8FC7 TTL\uFF09`);
     }
@@ -34830,7 +35457,7 @@ function persist(prunedCount = 0) {
   tryPersist(prunedCount);
 }
 function loadRecords() {
-  if (cache !== void 0) return cache;
+  if (cache2 !== void 0) return cache2;
   const raw = ensureStore().load();
   const ttl = ttlMs();
   const now = Date.now();
@@ -34850,7 +35477,7 @@ function loadRecords() {
     }
     if (Object.keys(keep).length > 0) out[provider] = keep;
   }
-  cache = out;
+  cache2 = out;
   if (pruned > 0) persist(pruned);
   return out;
 }
@@ -35859,7 +36486,7 @@ var CodeArtsAdapter = class extends LlmAdapter {
   constructor(options) {
     super();
     this.options = options;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? directFetch;
     this.chatId = options.chatId ?? crypto.randomUUID().replace(/-/g, "");
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, "");
   }
@@ -36296,15 +36923,16 @@ var CodeArtsAdapter = class extends LlmAdapter {
           } catch {
             continue;
           }
-          if (typeof data.error_code === "string" && data.error_code.length > 0) {
-            const message2 = typeof data.error_msg === "string" && data.error_msg.length > 0 ? data.error_msg : data.error_code;
-            if (isSseQuotaExhaustedErrorCode(data.error_code, message2)) {
-              throw new SseQuotaExhaustedError(data.error_code, message2);
+          if (typeof data.error_code === "string" && data.error_code.length > 0 || data.error_code === 4004) {
+            const errorCode = String(data.error_code);
+            const message2 = typeof data.error_msg === "string" && data.error_msg.length > 0 ? data.error_msg : errorCode;
+            if (isSseQuotaExhaustedErrorCode(errorCode, message2)) {
+              throw new SseQuotaExhaustedError(errorCode, message2);
             }
-            if (isSseQueueErrorCode(data.error_code)) {
-              throw new SseQueueRetryError(data.error_code, message2);
+            if (isSseQueueErrorCode(errorCode)) {
+              throw new SseQueueRetryError(errorCode, message2);
             }
-            if (data.error_code === CODEARTS_BENEFIT_NOT_FOUND_ERROR_CODE) {
+            if (errorCode === CODEARTS_BENEFIT_NOT_FOUND_ERROR_CODE || errorCode === "4004") {
               throw new LlmError2(`codearts: ${message2}`, BENEFIT_NOT_FOUND_CODE, { status: 200 });
             }
             throw new LlmError2(`codearts: ${message2}`, "INVALID_REQUEST", { status: 200 });
@@ -36567,7 +37195,7 @@ function isRateLimited(body, status) {
 var RESET_TIME_PATTERN = /(?:将在|reset at)\s+([\d-]+\s+[\d:]+)\s+(UTC[+-]\d+(?::\d+)?)/i;
 var RATE_LIMIT_FALLBACK_MS = 36e5;
 function parseRateLimitError(body, currentModel, status) {
-  const fallback = () => ({
+  const fallback2 = () => ({
     modelId: currentModel,
     resetTimeMs: Date.now() + RATE_LIMIT_FALLBACK_MS
   });
@@ -36582,11 +37210,11 @@ function parseRateLimitError(body, currentModel, status) {
       }
     }
     if (isRateLimited(body, status)) {
-      return fallback();
+      return fallback2();
     }
     return null;
   } catch {
-    return status === 429 ? fallback() : null;
+    return status === 429 ? fallback2() : null;
   }
 }
 
@@ -37763,10 +38391,10 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
     this.product = options.product ?? CODEBUDDY;
     this.fetchImpl = options.fetchImpl ?? createDomesticFetch();
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, "");
-    const fallback = this.product.fallbackModels ?? [];
-    this.productFallbackIndex = new Map(fallback.map((model) => [model.id, model]));
+    const fallback2 = this.product.fallbackModels ?? [];
+    this.productFallbackIndex = new Map(fallback2.map((model) => [model.id, model]));
     this.productFallbackContextWindows = new Map(
-      fallback.filter((model) => model.contextWindow !== void 0).map((model) => [model.id, model.contextWindow])
+      fallback2.filter((model) => model.contextWindow !== void 0).map((model) => [model.id, model.contextWindow])
     );
   }
   options;
@@ -37919,10 +38547,10 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter2 {
    * 不可用的模型。未标记的内部别名（如 `default`）不会被误留。
    */
   reconcileWithFallback(models) {
-    const fallback = this.product.fallbackModels;
-    if (fallback === void 0 || fallback.length === 0) return [...models];
+    const fallback2 = this.product.fallbackModels;
+    if (fallback2 === void 0 || fallback2.length === 0) return [...models];
     const remoteById = new Map(models.map((model) => [model.id, model]));
-    const reconciled = fallback.map((entry) => {
+    const reconciled = fallback2.map((entry) => {
       const remote = remoteById.get(entry.id);
       return {
         id: entry.id,
@@ -38751,7 +39379,7 @@ import {
 import { ToolCallId as ToolCallId3 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/lobsterai.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 init_domestic_direct();
 var LOBSTERAI_EXCHANGE_PATH = "/api/auth/exchange";
 var LOBSTERAI_REFRESH_PATH = "/api/auth/refresh";
@@ -38872,7 +39500,7 @@ function resolveLobsteraiUid(payload) {
   for (const candidate of [payload.userId, payload.accountUserId, payload.yid]) {
     if (candidate !== void 0 && candidate.length > 0) return candidate;
   }
-  return createHash("sha256").update(payload.accessToken).digest("hex").slice(0, 16);
+  return createHash2("sha256").update(payload.accessToken).digest("hex").slice(0, 16);
 }
 function buildLobsteraiCredential(payload, session) {
   const expiresAt = payload.expiresIn !== void 0 && payload.expiresIn > 0 ? String(Date.now() + payload.expiresIn * 1e3) : (() => {
@@ -40044,7 +40672,8 @@ function buildLobsteraiModelsUrl(product, credential, clientVersion) {
 import { LlmAdapter as LlmAdapter4, LlmError as LlmError7, ReasoningEffortId as ReasoningEffortId4 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/qoder.ts
-import { createHash as createHash2, randomUUID, randomBytes } from "node:crypto";
+init_domestic_direct();
+import { createHash as createHash3, randomUUID, randomBytes as randomBytes2 } from "node:crypto";
 var QODER_REQUEST_TIMEOUT_MS = 3e4;
 var QODER_LOGIN_TIMEOUT_MS = 3e5;
 var QODER_POLL_INTERVAL_MS = 1e3;
@@ -40056,12 +40685,12 @@ var QODER_USERINFO_PATH = "/api/v1/userinfo";
 var PKCE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 function createQoderPkce() {
   const length = 43 + Math.floor(86 * Math.random());
-  const bytes = randomBytes(length);
+  const bytes = randomBytes2(length);
   let verifier = "";
   for (let i = 0; i < length; i++) {
     verifier += PKCE_ALPHABET[bytes[i] % PKCE_ALPHABET.length];
   }
-  const challenge = createHash2("sha256").update(verifier).digest().toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const challenge = createHash3("sha256").update(verifier).digest().toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return { verifier, challenge };
 }
 function createQoderDeviceSession(machineId) {
@@ -40175,7 +40804,7 @@ function applyQoderRefresh(credential, payload) {
   }
   return next;
 }
-async function fetchQoderUserNickname(credential, product, fetcher = fetch) {
+async function fetchQoderUserNickname(credential, product, fetcher = createDomesticFetch()) {
   try {
     const response = await fetcher(`${product.openApiBase}${QODER_USERINFO_PATH}`, {
       method: "GET",
@@ -41700,7 +42329,7 @@ var QoderAdapter = class extends LlmAdapter4 {
     if (entry !== void 0) {
       const efforts = qoderEffortsFor(entry);
       if (efforts.length > 0) {
-        const fallback = entry.defaultEffort;
+        const fallback2 = entry.defaultEffort;
         resolved.reasoning = {
           efforts: efforts.map((id) => ({
             id: ReasoningEffortId4(id),
@@ -41709,7 +42338,7 @@ var QoderAdapter = class extends LlmAdapter4 {
           // ⚠️ `defaultEffort` 必须落在 `efforts` 内 —— DSH 会直接拿它发请求，
           // 给一个不存在的档位会抛 `UNSUPPORTED_REASONING_EFFORT`
           // （同 `trae-adapter.ts` 的教训）。
-          ...fallback !== void 0 && efforts.includes(fallback) ? { defaultEffort: ReasoningEffortId4(fallback) } : {}
+          ...fallback2 !== void 0 && efforts.includes(fallback2) ? { defaultEffort: ReasoningEffortId4(fallback2) } : {}
         };
       }
     }
@@ -41773,7 +42402,7 @@ var QoderAdapter = class extends LlmAdapter4 {
     const userText = typeof lastUser?.content === "string" ? lastUser.content : Array.isArray(lastUser?.content) ? lastUser.content.filter((block) => block.type === "text").map((block) => String(block.text ?? "")).join("") : "";
     const history2 = buildQoderHistory(messages);
     const tools = buildQoderTools(options.tools);
-    const fallback = this.fallbackIndex.get(options.model);
+    const fallback2 = this.fallbackIndex.get(options.model);
     const buildRequest = async (c) => {
       const client = await QoderEncryptedInfer.create({
         user: {
@@ -41788,17 +42417,17 @@ var QoderAdapter = class extends LlmAdapter4 {
         modelKey: options.model,
         userText,
         ...systemText !== void 0 ? { systemText } : {},
-        isReasoning: fallback?.supportsThinking ?? false,
+        isReasoning: fallback2?.supportsThinking ?? false,
         history: history2,
         // 工具定义：这是模型**唯一**能学到函数 schema 的通道，
         // 缺了它模型只能用正文 XML 臆造调用（真实缺陷）。
         tools,
         ...options.maxTokens !== void 0 ? { maxTokens: options.maxTokens } : {},
         ...options.reasoningEffort !== void 0 ? { reasoningEffort: options.reasoningEffort } : {},
-        ...fallback?.supportsImage !== void 0 ? { isVl: fallback.supportsImage } : {},
+        ...fallback2?.supportsImage !== void 0 ? { isVl: fallback2.supportsImage } : {},
         // 官方 `model_config` 的 display_name / max_input_tokens 必须带上。
-        ...fallback?.name !== void 0 ? { displayName: fallback.name } : {},
-        ...fallback?.contextWindow !== void 0 ? { maxInputTokens: fallback.contextWindow } : {},
+        ...fallback2?.name !== void 0 ? { displayName: fallback2.name } : {},
+        ...fallback2?.contextWindow !== void 0 ? { maxInputTokens: fallback2.contextWindow } : {},
         // ⚠️ **`business` 必填**，否则服务端把请求路由到错误的后端节点。
         //
         // 实测（2026-09-20）：不带 `business` 时 `qfmodel`（Qwen3.8-Flash）
@@ -42115,7 +42744,7 @@ function canonicalReasoningEffortFor(effort) {
 }
 
 // vendor/channel-pack/src/trae.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 
 // vendor/channel-pack/src/trae-product.ts
 var TRAE_AGENT_HOST = "https://trae-api-cn.mchost.guru";
@@ -42160,7 +42789,7 @@ var TRAE_CHANNELS = resolveChannelList(
   process.env.DSH_TRAE_CHANNELS
 );
 function resolveChannelList(raw) {
-  const fallback = [
+  const fallback2 = [
     // ── 通用通道（顺序即优先级）──
     "solo_agent",
     "solo_work_lite",
@@ -42179,9 +42808,9 @@ function resolveChannelList(raw) {
     "multimodal",
     "system_diagnosis"
   ];
-  if (raw === void 0) return fallback;
+  if (raw === void 0) return fallback2;
   const parsed = raw.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
-  return parsed.length > 0 ? parsed : fallback;
+  return parsed.length > 0 ? parsed : fallback2;
 }
 function isTruthyFlag(raw) {
   if (raw === void 0) return false;
@@ -42282,7 +42911,7 @@ function traeSOLOHeaders(credential, product, stream, machineIdGeneration = 0) {
 function traeCheckinHeaders(credential, product, userId) {
   const deviceId = deriveDeviceId15(userId);
   const marketUserId = deriveMarketUserId(userId);
-  const sessionId = deriveSessionId(userId);
+  const sessionId = deriveSessionId2(userId);
   const traceId = `00-${randomHex(16)}-01`;
   const requestId = uuidV4();
   return {
@@ -42319,7 +42948,7 @@ function deriveMarketUserId(userId) {
   const hex = bs.map((b) => b.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
-function deriveSessionId(userId) {
+function deriveSessionId2(userId) {
   const bytes = seededStream(userId, "sess", 32);
   return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -42333,7 +42962,7 @@ function seededStream(seed, salt, nbytes) {
     counterBuf[1] = counter >> 16 & 255;
     counterBuf[2] = counter >> 8 & 255;
     counterBuf[3] = counter & 255;
-    const h = createHash3("sha256");
+    const h = createHash4("sha256");
     h.update(prefix, "utf8");
     h.update(counterBuf);
     for (const b of h.digest()) {
@@ -42674,7 +43303,7 @@ function generateDeviceId() {
 }
 function deriveRotatingMachineId(baseMachineId, generation) {
   if (!Number.isFinite(generation) || generation <= 0) return baseMachineId;
-  return createHash3("sha256").update(`${baseMachineId}#machine${Math.floor(generation)}`, "utf8").digest("hex").slice(0, 32);
+  return createHash4("sha256").update(`${baseMachineId}#machine${Math.floor(generation)}`, "utf8").digest("hex").slice(0, 32);
 }
 var TRAE_DEFAULT_MAX_COMPLETION_TOKENS = 64e3;
 function resolveTraeMaxCompletionTokens() {
@@ -42963,12 +43592,12 @@ function strongestTraeEffort(options) {
   }
   return best ?? options[options.length - 1];
 }
-function defaultTraeEffort(config, fallback) {
+function defaultTraeEffort(config, fallback2) {
   const declared = config.defaultLevel;
   if (declared !== void 0 && declared.length > 0 && config.options.includes(declared)) {
     return declared;
   }
-  return fallback;
+  return fallback2;
 }
 function resolveFirstTokenTimeoutMs5() {
   return Number.parseInt(process.env.DSH_TRAE_SSE_FIRST_TOKEN_TIMEOUT_MS ?? "", 10) || 12e4;
@@ -43309,8 +43938,8 @@ var TraeAdapter = class extends LlmAdapter5 {
       id: ReasoningEffortId5(option),
       name: TRAE_EFFORT_NAMES[option] ?? option
     }));
-    const fallback = strongestTraeEffort(config.options);
-    const chosen = defaultTraeEffort(config, fallback);
+    const fallback2 = strongestTraeEffort(config.options);
+    const chosen = defaultTraeEffort(config, fallback2);
     return {
       efforts,
       ...chosen !== void 0 ? { defaultEffort: ReasoningEffortId5(chosen) } : {}
@@ -43932,23 +44561,6 @@ function registerTraeLlm(ctx, options) {
 // vendor/channel-pack/src/cline-adapter.ts
 import { LlmAdapter as LlmAdapter6, LlmError as LlmError9, ReasoningEffortId as ReasoningEffortId6 } from "@deepseek-ai/dsh-llm";
 
-// vendor/channel-pack/src/retry-after.ts
-function parseRetryAfterMs(raw, nowMs = Date.now()) {
-  if (raw === void 0 || raw === null || raw === "") return void 0;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds)) return seconds >= 0 ? Math.ceil(seconds * 1e3) : void 0;
-  const at = Date.parse(raw);
-  return Number.isFinite(at) ? Math.max(0, at - nowMs) : void 0;
-}
-function retryAfterMsFromResponse(headers, nowMs = Date.now()) {
-  if (headers === null || headers === void 0) return void 0;
-  return parseRetryAfterMs(headers.get("retry-after"), nowMs);
-}
-function retryAfterMsFromRecord(headers, nowMs = Date.now()) {
-  if (headers === void 0) return void 0;
-  return parseRetryAfterMs(headers["retry-after"] ?? headers["Retry-After"], nowMs);
-}
-
 // vendor/channel-pack/src/cline-rate-limit.ts
 var CLINE_WAIT_PATTERN = /try again in\s+([^.;\n]*)/i;
 var CLINE_DURATION_TOKEN = /(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)(?![a-z])/gi;
@@ -44078,9 +44690,9 @@ function clineBearerValue(accessToken, product) {
   if (token.length === 0) return "";
   return token.startsWith(product.tokenPrefix) ? token : `${product.tokenPrefix}${token}`;
 }
-function buildClineCredential(payload, product, fallback = {}) {
-  const accountId = payload.accountId ?? fallback.accountId;
-  const email = payload.email ?? fallback.email;
+function buildClineCredential(payload, product, fallback2 = {}) {
+  const accountId = payload.accountId ?? fallback2.accountId;
+  const email = payload.email ?? fallback2.email;
   const nickname = email ?? (payload.displayName !== void 0 && payload.displayName.length > 0 ? payload.displayName : accountId);
   return {
     access_token: clineBearerValue(payload.accessToken, product),
@@ -44211,11 +44823,11 @@ var CLINE_RECOMMENDED_MODELS_PATH = "/api/v1/ai/cline/recommended-models";
 var CLINE_MODELS_TIMEOUT_MS = 2e4;
 var FREE_ID_SUFFIX = ":free";
 var FREE_ID_PREFIX = "cline-free/";
-function isClineFreeModel(id, remoteFreeIds = /* @__PURE__ */ new Set(), fallback) {
+function isClineFreeModel(id, remoteFreeIds = /* @__PURE__ */ new Set(), fallback2) {
   if (remoteFreeIds.has(id)) return true;
   if (id.endsWith(FREE_ID_SUFFIX)) return true;
   if (id.startsWith(FREE_ID_PREFIX)) return true;
-  return fallback?.isFree === true;
+  return fallback2?.isFree === true;
 }
 function clineDisplayName(model) {
   return model.isFree ? `${model.name} \xB7 \u514D\u8D39` : model.name;
@@ -44269,17 +44881,17 @@ function mergeClineModels(product, remote) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   const build = (id) => {
-    const fallback = fallbackIndex.get(id);
+    const fallback2 = fallbackIndex.get(id);
     const entry = entryIndex.get(id);
-    const name2 = fallback?.name ?? entry?.name ?? nameFromId(id);
-    const description = entry?.description ?? fallback?.description;
+    const name2 = fallback2?.name ?? entry?.name ?? nameFromId(id);
+    const description = entry?.description ?? fallback2?.description;
     return {
       id,
       name: name2,
-      isFree: isClineFreeModel(id, remoteFreeIds, fallback),
-      ...fallback?.contextWindow === void 0 ? {} : { contextWindow: fallback.contextWindow },
-      ...fallback?.maxTokens === void 0 ? {} : { maxTokens: fallback.maxTokens },
-      ...fallback?.supportsImage === void 0 ? {} : { supportsImage: fallback.supportsImage },
+      isFree: isClineFreeModel(id, remoteFreeIds, fallback2),
+      ...fallback2?.contextWindow === void 0 ? {} : { contextWindow: fallback2.contextWindow },
+      ...fallback2?.maxTokens === void 0 ? {} : { maxTokens: fallback2.maxTokens },
+      ...fallback2?.supportsImage === void 0 ? {} : { supportsImage: fallback2.supportsImage },
       ...description === void 0 ? {} : { description }
     };
   };
@@ -45410,19 +46022,19 @@ var LoomyAdapter = class extends LlmAdapter7 {
   async resolveModel(provider, model, _signal) {
     const all = await this.loadModels();
     const entry = all.find((item) => item.id === model);
-    const fallback = this.fallbackIndex.get(model);
-    const bareName = fallback !== void 0 ? splitLoomyRate(fallback.name).name : model;
+    const fallback2 = this.fallbackIndex.get(model);
+    const bareName = fallback2 !== void 0 ? splitLoomyRate(fallback2.name).name : model;
     const resolved = {
       provider,
       id: model,
       name: entry !== void 0 ? splitLoomyRate(entry.name).name : bareName,
       inputModalities: this.inputModalitiesFor(entry)
     };
-    const contextWindow = entry?.contextWindow ?? fallback?.contextWindow;
+    const contextWindow = entry?.contextWindow ?? fallback2?.contextWindow;
     if (contextWindow !== void 0 && contextWindow > 0) {
       resolved.context = { contextWindow };
     }
-    const reasoning = this.reasoningFor(entry, fallback);
+    const reasoning = this.reasoningFor(entry, fallback2);
     if (reasoning !== void 0) resolved.reasoning = reasoning;
     return resolved;
   }
@@ -45440,8 +46052,8 @@ var LoomyAdapter = class extends LlmAdapter7 {
    *    给一个不存在的档位会抛 `UNSUPPORTED_REASONING_EFFORT`，比不给更糟；
    * 3. 远端未下发档位时不声明 `reasoning`（UI 显示「当前模型未提供推理等级」）。
    */
-  reasoningFor(entry, fallback) {
-    const efforts = entry?.efforts ?? fallback?.efforts;
+  reasoningFor(entry, fallback2) {
+    const efforts = entry?.efforts ?? fallback2?.efforts;
     if (efforts === void 0 || efforts.length === 0) return void 0;
     const defaultEffort = LOOMY_PREFERRED_DEFAULT_EFFORT;
     const hasDefault = efforts.includes(defaultEffort);
@@ -45617,7 +46229,7 @@ function registerLoomyLlm(ctx, options) {
 import { LlmAdapter as LlmAdapter8, LlmError as LlmError11, ReasoningEffortId as ReasoningEffortId8 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/raccoon.ts
-import { createCipheriv, randomBytes as randomBytes2 } from "node:crypto";
+import { createCipheriv, randomBytes as randomBytes3 } from "node:crypto";
 var RACCOON_API_BASE = "https://xiaohuanxiong.com";
 var RACCOON_POINTS_PREFIX = "/api/web/points/v1";
 var RACCOON_DESKTOP_PREFIX = "/api/web/desktop/v1";
@@ -45661,7 +46273,7 @@ function isRaccoonRefreshable(credential) {
 }
 function encryptRaccoonPhone(phone, iv) {
   const key = Buffer.from(RACCOON_PHONE_CIPHER_SECRET, "utf8");
-  const nonce = iv ?? randomBytes2(16);
+  const nonce = iv ?? randomBytes3(16);
   const cipher = createCipheriv("aes-128-cfb", key, nonce);
   cipher.setAutoPadding(false);
   const ciphertext = Buffer.concat([cipher.update(Buffer.from(phone, "utf8")), cipher.final()]);
@@ -45909,19 +46521,19 @@ var RaccoonAdapter = class extends LlmAdapter8 {
   async resolveModel(provider, model, _signal) {
     const all = await this.loadModels();
     const entry = all.find((item) => item.id === model);
-    const fallback = this.fallbackIndex.get(model);
-    const bareName = fallback !== void 0 ? fallback.name.replace(/ · .*$/, "") : model;
+    const fallback2 = this.fallbackIndex.get(model);
+    const bareName = fallback2 !== void 0 ? fallback2.name.replace(/ · .*$/, "") : model;
     const resolved = {
       provider,
       id: model,
       name: entry !== void 0 ? entry.name.replace(/ · .*$/, "") : bareName,
       inputModalities: this.inputModalitiesFor(entry)
     };
-    const contextWindow = entry?.contextWindow ?? fallback?.contextWindow;
+    const contextWindow = entry?.contextWindow ?? fallback2?.contextWindow;
     if (contextWindow !== void 0 && contextWindow > 0) {
       resolved.context = { contextWindow };
     }
-    const maxTokens = positiveMaxTokens2(entry?.maxTokens ?? fallback?.maxTokens);
+    const maxTokens = positiveMaxTokens2(entry?.maxTokens ?? fallback2?.maxTokens);
     if (maxTokens !== void 0) resolved.defaultMaxTokens = maxTokens;
     resolved.reasoning = raccoonReasoningInfo();
     return resolved;
@@ -46362,8 +46974,8 @@ function parseCredential(value) {
 var CodeArtsAuth = class extends Service {
   /** 登录会话是否仍处于活跃状态；stop() 置 false，防止在途刷新回写已登出凭据。 */
   active = true;
-  /** 用于测试的可注入 fetch；默认为全局 fetch。 */
-  fetchImpl = fetch;
+  /** 可注入 fetch；默认使用保留代理路由的独立签名传输。 */
+  fetchImpl = directFetch;
   /**
    * 按凭据 ref 分的**续期互斥队列**（进程内）。
    *
@@ -47422,7 +48034,7 @@ function buildLobsteraiLoginUrl(port, state, product) {
   });
   return `${product.portalBase}/portal#/login?${query.toString()}`;
 }
-async function exchangeLobsteraiAuthCode(code, session, clientVersion, product, fetcher = fetch, signal) {
+async function exchangeLobsteraiAuthCode(code, session, clientVersion, product, fetcher = createDomesticFetch(), signal) {
   const body = {
     authCode: code,
     firstKeyfrom: session.firstKeyfrom,
@@ -48562,6 +49174,7 @@ init_domestic_direct();
 
 // vendor/channel-pack/src/trae-oauth.ts
 import { createServer as createServer3 } from "node:http";
+init_domestic_direct();
 var TRAE_CALLBACK_PORT = 18080;
 function machineTraceId(machineId, deviceId) {
   const joined = machineId + deviceId;
@@ -48683,7 +49296,7 @@ function parseTraeCallbackDetailed(rawUrl) {
   }
   return { ok: true, info };
 }
-async function exchangeTraeCallback(callback, session, product, fetcher = fetch, nowMs = Date.now()) {
+async function exchangeTraeCallback(callback, session, product, fetcher = createDomesticFetch(), nowMs = Date.now()) {
   let exchange;
   if (callback.refreshToken.length > 0) {
     const exchangeBody = {
@@ -50062,12 +50675,13 @@ init_domestic_direct();
 
 // vendor/channel-pack/src/loomy-oauth.ts
 import { randomUUID as randomUUID5 } from "node:crypto";
+init_domestic_direct();
 
 // vendor/channel-pack/src/loomy-sign.ts
-import { createHash as createHash5, createHmac, randomUUID as randomUUID4 } from "node:crypto";
+import { createHash as createHash6, createHmac, randomUUID as randomUUID4 } from "node:crypto";
 function loomyContentMd5(body) {
   if (body.length === 0) return "";
-  return createHash5("md5").update(body, "utf8").digest("base64");
+  return createHash6("md5").update(body, "utf8").digest("base64");
 }
 function escapeRfc3986(value) {
   return encodeURIComponent(value).replace(/!/g, "%21").replace(/'/g, "%27").replace(/\(/g, "%28").replace(/\)/g, "%29").replace(/\*/g, "%2A");
@@ -50174,7 +50788,7 @@ async function postLoomyAccount(path2, body, product, fetcher) {
   }
   return envelope.data;
 }
-async function sendLoomySmsCode(phone, product, fetcher = fetch) {
+async function sendLoomySmsCode(phone, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     ccode: "86",
     phone,
@@ -50187,7 +50801,7 @@ async function sendLoomySmsCode(phone, product, fetcher = fetch) {
   }
   return msgid;
 }
-async function loginLoomyBySmsCode(phone, code, msgid, product, fetcher = fetch) {
+async function loginLoomyBySmsCode(phone, code, msgid, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     ccode: "86",
     phone,
@@ -50203,7 +50817,7 @@ async function loginLoomyBySmsCode(phone, code, msgid, product, fetcher = fetch)
   if (userid.length === 0) throw new Error("\u767B\u5F55\u54CD\u5E94\u7F3A\u5C11 userid");
   return { session, userid };
 }
-async function bindLoomyThirdAccount(code, product, fetcher = fetch) {
+async function bindLoomyThirdAccount(code, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     tcode: { code },
     type: "wx"
@@ -50223,7 +50837,7 @@ async function bindLoomyThirdAccount(code, product, fetcher = fetch) {
     ...typeof record.headpic === "string" && record.headpic.length > 0 ? { headpic: record.headpic } : {}
   };
 }
-async function bindLoomySendMsg(rcode, phone, product, fetcher = fetch) {
+async function bindLoomySendMsg(rcode, phone, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     rcode,
     phone,
@@ -50235,7 +50849,7 @@ async function bindLoomySendMsg(rcode, phone, product, fetcher = fetch) {
   if (msgid.length === 0) throw new Error("\u7ED1\u5B9A\u624B\u673A\u53F7\u54CD\u5E94\u7F3A\u5C11 msgid");
   return msgid;
 }
-async function bindLoomyCheckCode(rcode, mcode, msgid, product, fetcher = fetch) {
+async function bindLoomyCheckCode(rcode, mcode, msgid, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     rcode,
     mcode,
@@ -50251,7 +50865,7 @@ async function bindLoomyCheckCode(rcode, mcode, msgid, product, fetcher = fetch)
   if (userid.length === 0) throw new Error("\u7ED1\u5B9A\u767B\u5F55\u54CD\u5E94\u7F3A\u5C11 userid");
   return { session, userid, phone };
 }
-async function bindLoomySkip(rcode, product, fetcher = fetch) {
+async function bindLoomySkip(rcode, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     rcode,
     expire: LOOMY_SESSION_TTL_SECONDS
@@ -50271,6 +50885,7 @@ import { createServer as createServer4 } from "node:http";
 import { randomUUID as randomUUID6 } from "node:crypto";
 
 // vendor/channel-pack/src/loomy-wechat.ts
+init_domestic_direct();
 var LOOMY_WECHAT_APP_ID = "wx18d60be432287cf8";
 var LOOMY_WECHAT_REDIRECT_URI = "https://loomy.xunfei.cn/oauth/wechat/callback";
 var LOOMY_WECHAT_POLL_TIMEOUT_MS = 4e4;
@@ -50310,7 +50925,7 @@ function extractLoomyWechatUuid(html) {
 function buildLoomyWechatQrImageUrl(uuid) {
   return `https://open.weixin.qq.com/connect/qrcode/${encodeURIComponent(uuid)}`;
 }
-async function fetchLoomyWechatUuid(state, fetcher = fetch) {
+async function fetchLoomyWechatUuid(state, fetcher = createDomesticFetch()) {
   const authUrl = buildLoomyWechatAuthUrl(state);
   let response;
   try {
@@ -50331,7 +50946,7 @@ async function fetchLoomyWechatUuid(state, fetcher = fetch) {
   }
   return uuid;
 }
-async function fetchLoomyWechatQrImage(uuid, fetcher = fetch) {
+async function fetchLoomyWechatQrImage(uuid, fetcher = createDomesticFetch()) {
   const url = buildLoomyWechatQrImageUrl(uuid);
   let response;
   try {
@@ -50358,7 +50973,7 @@ function detectImageMime(bytes) {
   if (bytes.length >= 3 && bytes[0] === 71 && bytes[1] === 73 && bytes[2] === 70) return "image/gif";
   return "";
 }
-async function pollLoomyWechatOnce(uuid, lastErrcode, fetcher = fetch) {
+async function pollLoomyWechatOnce(uuid, lastErrcode, fetcher = createDomesticFetch()) {
   const query = `uuid=${encodeURIComponent(uuid)}` + (lastErrcode.length > 0 ? `&last=${encodeURIComponent(lastErrcode)}` : "") + `&_=${Date.now()}`;
   const url = `https://long.open.weixin.qq.com/connect/l/qrconnect?${query}`;
   let body;
@@ -50729,6 +51344,7 @@ function renderQrPage(qrDataUrl) {
 }
 
 // vendor/channel-pack/src/loomy-credits.ts
+init_domestic_direct();
 async function tryRequestLoomy(credential, product, path2, init, fetcher) {
   const headers = { Accept: "application/json", token: credential.access_token };
   let payload;
@@ -50763,7 +51379,7 @@ function readNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : void 0;
 }
-async function fetchLoomyCreditDetail(credential, product, fetcher = fetch) {
+async function fetchLoomyCreditDetail(credential, product, fetcher = createDomesticFetch()) {
   const result = await tryRequestLoomy(
     credential,
     product,
@@ -50799,7 +51415,7 @@ function makePackage(name2, remaining) {
     expiredTime: ""
   };
 }
-async function fetchLoomyCreditBalance(credential, product, fetcher = fetch) {
+async function fetchLoomyCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   const detail = await fetchLoomyCreditDetail(credential, product, fetcher);
   if (detail === null) return null;
   return {
@@ -50812,7 +51428,7 @@ async function fetchLoomyCreditBalance(credential, product, fetcher = fetch) {
     expiredTotal: 0
   };
 }
-async function claimLoomyDailyQuota(credential, product, fetcher = fetch) {
+async function claimLoomyDailyQuota(credential, product, fetcher = createDomesticFetch()) {
   const result = await tryRequestLoomy(
     credential,
     product,
@@ -50838,6 +51454,7 @@ async function claimLoomyDailyQuota(credential, product, fetcher = fetch) {
 }
 
 // vendor/channel-pack/src/loomy-onboarding.ts
+init_domestic_direct();
 var LOOMY_TASK_POINTS = Object.freeze({
   first_message: 500,
   pick_skill: 1e3,
@@ -50903,7 +51520,7 @@ async function requestLoomy(credential, product, path2, init, fetcher) {
   }
   return envelope.data;
 }
-async function fetchLoomyOnboardingTasks(credential, product, fetcher = fetch) {
+async function fetchLoomyOnboardingTasks(credential, product, fetcher = createDomesticFetch()) {
   const data = await requestLoomy(
     credential,
     product,
@@ -50918,7 +51535,7 @@ async function fetchLoomyOnboardingTasks(credential, product, fetcher = fetch) {
     total: Number.isFinite(Number(data?.total)) ? Number(data?.total) : LOOMY_ONBOARDING_TOTAL
   };
 }
-async function completeLoomyTask(credential, key, product, fetcher = fetch) {
+async function completeLoomyTask(credential, key, product, fetcher = createDomesticFetch()) {
   if (!(key in LOOMY_TASK_POINTS)) {
     throw new Error(`loomy: \u672A\u77E5\u7684 task key: ${key}`);
   }
@@ -50934,7 +51551,7 @@ async function completeLoomyTask(credential, key, product, fetcher = fetch) {
     balance: Number.isFinite(Number(data?.balance)) ? Number(data?.balance) : 0
   };
 }
-async function claimAllLoomyOnboardingTasks(credential, product, fetcher = fetch) {
+async function claimAllLoomyOnboardingTasks(credential, product, fetcher = createDomesticFetch()) {
   const state = await fetchLoomyOnboardingTasks(credential, product, fetcher);
   const claimed = [];
   const skipped = [];
@@ -51316,6 +51933,7 @@ import { Service as Service8 } from "@deepseek-ai/cordis";
 import { credentialRef as credentialRef9 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/raccoon-credits.ts
+init_domestic_direct();
 var RACCOON_LOGIN_REWARD_POINTS = 3e3;
 var RACCOON_LOGIN_REWARD_EVENT_NAME = "\u684C\u9762\u7AEF\u767B\u5F55\u5956\u52B1";
 function parseEnvelope(payload, status) {
@@ -51363,7 +51981,7 @@ function makePackage2(name2, remaining) {
     expiredTime: ""
   };
 }
-async function fetchRaccoonCreditBalance(product, credential, fetcher = fetch) {
+async function fetchRaccoonCreditBalance(product, credential, fetcher = createDomesticFetch()) {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_POINTS_PREFIX}/balance`,
     credential,
@@ -51390,7 +52008,7 @@ async function fetchRaccoonCreditBalance(product, credential, fetcher = fetch) {
     expiredTotal: 0
   };
 }
-async function claimRaccoonLoginReward(product, credential, fetcher = fetch) {
+async function claimRaccoonLoginReward(product, credential, fetcher = createDomesticFetch()) {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_DESKTOP_PREFIX}/login/points/grant`,
     credential,
@@ -51415,7 +52033,7 @@ async function claimRaccoonLoginReward(product, credential, fetcher = fetch) {
   const points = readNumber2(popup?.points) ?? RACCOON_LOGIN_REWARD_POINTS;
   return { kind: "claimed", credit: points, streakDays: 0, isStreakDay: false };
 }
-async function fetchRaccoonOnboardingStatus(product, credential, fetcher = fetch) {
+async function fetchRaccoonOnboardingStatus(product, credential, fetcher = createDomesticFetch()) {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_POINTS_PREFIX}/bills?paging.limit=50&paging.offset=0`,
     credential,
@@ -51443,7 +52061,8 @@ async function fetchRaccoonOnboardingStatus(product, credential, fetcher = fetch
 }
 
 // vendor/channel-pack/src/raccoon-oauth.ts
-import { randomBytes as randomBytes5 } from "node:crypto";
+import { randomBytes as randomBytes6 } from "node:crypto";
+init_domestic_direct();
 function parseEnvelope2(payload, status) {
   const record = typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload : {};
   const code = typeof record.code === "number" ? record.code : status >= 400 ? status : 0;
@@ -51452,9 +52071,9 @@ function parseEnvelope2(payload, status) {
   const data = typeof record.data === "object" && record.data !== null && !Array.isArray(record.data) ? record.data : void 0;
   return { code, message: message2, details, data };
 }
-function envelopeError(envelope, fallback) {
+function envelopeError(envelope, fallback2) {
   const parts = [envelope.message, envelope.details].filter((s) => s.length > 0);
-  const text = parts.length > 0 ? parts.join(": ") : fallback;
+  const text = parts.length > 0 ? parts.join(": ") : fallback2;
   return new Error(`raccoon: ${text}`);
 }
 async function postJson(url, body, fetcher, headers = {}) {
@@ -51480,13 +52099,13 @@ async function postJson(url, body, fetcher, headers = {}) {
   return { envelope: parseEnvelope2(parsed, response.status), status: response.status };
 }
 function generateQrCode() {
-  return randomBytes5(16).toString("hex");
+  return randomBytes6(16).toString("hex");
 }
 function buildQrImageUrl(product, code) {
   const params = new URLSearchParams({ code, appname: "\u5546\u6C64\u5C0F\u6D63\u718A\u5B98\u7F51" });
   return `${product.apiBase}/login/mp?${params.toString()}`;
 }
-async function pollRaccoonQrLogin(product, code, fetcher = fetch) {
+async function pollRaccoonQrLogin(product, code, fetcher = createDomesticFetch()) {
   let envelope;
   try {
     const result = await postJson(
@@ -51520,7 +52139,7 @@ async function pollRaccoonQrLogin(product, code, fetcher = fetch) {
   }
   return { status: "pending" };
 }
-async function sendRaccoonSmsCode(product, phone, captchaParam, fetcher = fetch) {
+async function sendRaccoonSmsCode(product, phone, captchaParam, fetcher = createDomesticFetch()) {
   const { envelope } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/send_sms`,
     {
@@ -51537,7 +52156,7 @@ async function sendRaccoonSmsCode(product, phone, captchaParam, fetcher = fetch)
     throw envelopeError(envelope, "\u4E0B\u53D1\u77ED\u4FE1\u9A8C\u8BC1\u7801\u5931\u8D25");
   }
 }
-async function loginRaccoonWithSmsCode(product, phone, smsCode, fetcher = fetch) {
+async function loginRaccoonWithSmsCode(product, phone, smsCode, fetcher = createDomesticFetch()) {
   const { envelope } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/login_with_sms`,
     {
@@ -51566,7 +52185,7 @@ function credentialFromEnvelope(envelope) {
     ...officeIdentity.length > 0 ? { office_identity: officeIdentity } : {}
   };
 }
-async function refreshRaccoonCredential(product, credential, fetcher = fetch) {
+async function refreshRaccoonCredential(product, credential, fetcher = createDomesticFetch()) {
   const { envelope, status } = await postJson(
     `${product.apiBase}${product.authApiPrefix}/refresh`,
     { refresh_token: credential.refresh_token },
@@ -51590,7 +52209,7 @@ async function refreshRaccoonCredential(product, credential, fetcher = fetch) {
     ...expMs !== void 0 ? { expires_at: String(expMs) } : {}
   };
 }
-async function fetchRaccoonUserInfo(product, credential, fetcher = fetch) {
+async function fetchRaccoonUserInfo(product, credential, fetcher = createDomesticFetch()) {
   try {
     const response = await fetcher(`${product.apiBase}${product.authApiPrefix}/user_info`, {
       method: "GET",
@@ -54795,7 +55414,7 @@ function buildCarrierPageHtml(config) {
 }
 
 // vendor/channel-pack/src/zcode-login.ts
-import { randomBytes as randomBytes6, randomUUID as randomUUID7 } from "node:crypto";
+import { randomBytes as randomBytes7, randomUUID as randomUUID7 } from "node:crypto";
 var ZCODE_ORIGIN = "https://zcode.z.ai";
 var ZCODE_OAUTH_CLI_INIT_URL = `${ZCODE_ORIGIN}/api/v1/oauth/cli/init`;
 var zcodeOauthCliPollUrl = (flowId) => `${ZCODE_ORIGIN}/api/v1/oauth/cli/poll/${encodeURIComponent(flowId)}`;
@@ -54809,7 +55428,7 @@ var ZcodeLoginError = class extends Error {
   kind;
 };
 function generateFlowSecret() {
-  return randomBytes6(32).toString("hex");
+  return randomBytes7(32).toString("hex");
 }
 function generateDeviceMid() {
   return randomUUID7();
@@ -57732,22 +58351,22 @@ var ZcodeAdapter = class extends LlmAdapter9 {
   async resolveModel(provider, model, _signal) {
     const all = await this.loadModels();
     const entry = all.find((item) => item.id === model);
-    const fallback = this.fallbackIndex.get(model);
+    const fallback2 = this.fallbackIndex.get(model);
     const resolved = {
       provider,
       id: model,
-      name: entry?.name ?? fallback?.name ?? model,
+      name: entry?.name ?? fallback2?.name ?? model,
       inputModalities: this.inputModalitiesFor(entry)
     };
-    const contextWindow = entry?.contextWindow ?? fallback?.contextWindow;
+    const contextWindow = entry?.contextWindow ?? fallback2?.contextWindow;
     if (contextWindow !== void 0 && contextWindow > 0) {
       resolved.context = { contextWindow };
     }
-    const maxTokens = positiveMaxTokens3(entry?.maxTokens ?? fallback?.maxTokens);
+    const maxTokens = positiveMaxTokens3(entry?.maxTokens ?? fallback2?.maxTokens);
     if (maxTokens !== void 0) resolved.defaultMaxTokens = maxTokens;
-    const levels = entry?.reasoningLevels ?? fallback?.reasoningLevels;
+    const levels = entry?.reasoningLevels ?? fallback2?.reasoningLevels;
     if (levels !== void 0 && levels.length > 0) {
-      const defaultLevel = entry?.defaultReasoningLevel ?? fallback?.defaultReasoningLevel;
+      const defaultLevel = entry?.defaultReasoningLevel ?? fallback2?.defaultReasoningLevel;
       resolved.reasoning = {
         /**
          * ⚠ **`id` 必须保持小写**（`low`/`high`/`max`）—— 它是要发给上游的
@@ -58422,11 +59041,11 @@ function effortView(efforts, defaultEffort) {
     }
   }
   if (rows.length === 0) return void 0;
-  const fallback = effortIdOf(defaultEffort);
+  const fallback2 = effortIdOf(defaultEffort);
   return {
     efforts: rows,
     // ⚠️ 默认档必须是模型真声明过的 id，否则客户端照着它填就会 400。
-    ...fallback === void 0 || !rows.some((row) => row.id === fallback) ? {} : { default: fallback },
+    ...fallback2 === void 0 || !rows.some((row) => row.id === fallback2) ? {} : { default: fallback2 },
     openai_efforts: openaiEfforts
   };
 }
@@ -58815,7 +59434,11 @@ function minimaxFallbackEntries(product = MINIMAX) {
   return product.fallbackModels.map(fallbackToEntry);
 }
 
+// vendor/channel-pack/src/minimax-credits.ts
+init_domestic_direct();
+
 // vendor/channel-pack/src/credits.ts
+init_domestic_direct();
 var CHECKIN_ACTIVITY_STATUS_PATH = "/v2/billing/meter/checkin-activity-status";
 var DAILY_CHECKIN_PATH = "/v2/billing/meter/daily-checkin";
 var USER_RESOURCE_PATH = "/v2/billing/meter/get-user-resource";
@@ -58888,7 +59511,7 @@ function describeNonJsonResponse(status, text) {
   const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
   return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
 }
-async function fetchCheckinStatus(credential, product, fetcher = fetch) {
+async function fetchCheckinStatus(credential, product, fetcher = createDomesticFetch()) {
   const result = await postJson2(CHECKIN_ACTIVITY_STATUS_PATH, credential, product, fetcher);
   if (!result.ok) return null;
   const body = result.body;
@@ -58910,7 +59533,7 @@ async function fetchCheckinStatus(credential, product, fetcher = fetch) {
     endTime: readString3(record, "end_time")
   };
 }
-async function claimDailyCheckin(credential, product, fetcher = fetch) {
+async function claimDailyCheckin(credential, product, fetcher = createDomesticFetch()) {
   const result = await postJson2(DAILY_CHECKIN_PATH, credential, product, fetcher);
   if (!result.ok) {
     return { kind: "failed", code: -1, message: result.message };
@@ -58972,7 +59595,7 @@ function parseCreditPackage(entry) {
     ...deductionEndTime > 0 ? { deductionEndTime } : {}
   };
 }
-async function fetchCreditBalance(credential, product, fetcher = fetch) {
+async function fetchCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   const result = await postJson2(USER_RESOURCE_PATH, credential, product, fetcher);
   if (!result.ok) return null;
   const body = result.body;
@@ -59207,7 +59830,7 @@ function withTimezone(base, path2, timezoneId) {
   url.searchParams.set("timezone_id", timezoneId);
   return url.toString();
 }
-async function fetchMinimaxSigninStatus(credential, fetcher = fetch, product = MINIMAX) {
+async function fetchMinimaxSigninStatus(credential, fetcher = createDomesticFetch(), product = MINIMAX) {
   const url = withTimezone(
     product.apiHost,
     MINIMAX_SIGNIN_STATUS_PATH,
@@ -59218,7 +59841,7 @@ async function fetchMinimaxSigninStatus(credential, fetcher = fetch, product = M
   const panel = parseMinimaxSigninPanel(unwrapEnvelopeData(result.payload));
   return panel === void 0 ? null : minimaxPanelToCheckinStatus(panel);
 }
-async function claimMinimaxDailyCheckin(credential, fetcher = fetch, product = MINIMAX) {
+async function claimMinimaxDailyCheckin(credential, fetcher = createDomesticFetch(), product = MINIMAX) {
   const url = withTimezone(
     product.apiHost,
     MINIMAX_SIGNIN_CLAIM_PATH,
@@ -59246,7 +59869,7 @@ async function claimMinimaxDailyCheckin(credential, fetcher = fetch, product = M
     isStreakDay: status?.isStreakDay ?? false
   };
 }
-async function fetchMinimaxCreditBalance(credential, fetcher = fetch, product = MINIMAX) {
+async function fetchMinimaxCreditBalance(credential, fetcher = createDomesticFetch(), product = MINIMAX) {
   const url = `${product.apiHost}${MINIMAX_CREDIT_DETAILS_PATH}`;
   const result = await requestEnvelope(url, credential, { method: "GET" }, fetcher);
   if (!result.ok) return null;
@@ -59263,7 +59886,7 @@ async function fetchMinimaxCreditBalance(credential, fetcher = fetch, product = 
 }
 
 // vendor/channel-pack/src/gemini.ts
-import { randomBytes as randomBytes7 } from "node:crypto";
+import { randomBytes as randomBytes8 } from "node:crypto";
 import { LlmError as LlmError14, ReasoningEffortId as ReasoningEffortId10 } from "@deepseek-ai/dsh-llm";
 var GEMINI_ENDPOINT_DAILY = "https://daily-cloudcode-pa.googleapis.com";
 var GEMINI_ENDPOINT_SANDBOX = "https://daily-cloudcode-pa.sandbox.googleapis.com";
@@ -59374,7 +59997,7 @@ function marshalAlphabetical(value) {
   return sortedStringify(value);
 }
 function newGeminiRequestId(nowMs = Date.now()) {
-  return `agent/${nowMs}/${randomBytes7(4).toString("hex")}`;
+  return `agent/${nowMs}/${randomBytes8(4).toString("hex")}`;
 }
 var GEMINI_UPSTREAM_FLASH = "gemini-3.8-flash";
 var GEMINI_BUDGET_LOW = 1e3;
@@ -59562,7 +60185,7 @@ function parseGeminiAccountTier(payload) {
   if (tier === void 0) return void 0;
   return { id: tier.id, name: tier.name, label: tierLabel(tier.id, tier.name) };
 }
-var cache3 = /* @__PURE__ */ new Map();
+var cache4 = /* @__PURE__ */ new Map();
 function parseGeminiQuotaWindow(raw) {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return void 0;
   const record = raw;
@@ -59632,11 +60255,11 @@ async function fetchGeminiCreditBalance(credential, _product = GEMINI, options =
   if (token === "") return { balance: null, error: GEMINI_UNAUTHORIZED_MESSAGE };
   const now = options.now?.() ?? Date.now();
   if (options.force !== true) {
-    const cached2 = cache3.get(token);
+    const cached2 = cache4.get(token);
     if (cached2 !== void 0 && now - cached2.at < GEMINI_QUOTA_CACHE_TTL_MS) return cached2.result;
   }
   const result = await requestQuota(credential, options.fetcher ?? createDomesticFetch());
-  cache3.set(token, { at: now, result });
+  cache4.set(token, { at: now, result });
   return result;
 }
 async function requestQuota(credential, fetcher) {
@@ -59721,6 +60344,9 @@ function quotaRejectionHint(text) {
   }
   return text === "" ? "" : `\uFF1A${text.slice(0, 160)}`;
 }
+
+// vendor/channel-pack/src/qoder-credits.ts
+init_domestic_direct();
 
 // vendor/channel-pack/src/qoder-machine.ts
 import { execFileSync, spawn as spawn3 } from "node:child_process";
@@ -59906,7 +60532,7 @@ function isQoderNotActivated(campaigns, usageBody) {
   const record = usage;
   return record.addOnQuota === void 0;
 }
-async function fetchQoderUsageRaw(credential, product, fetcher = fetch) {
+async function fetchQoderUsageRaw(credential, product, fetcher = createDomesticFetch()) {
   try {
     const response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
       method: "GET",
@@ -59966,7 +60592,7 @@ function toPackage(name2, quota, options = {}) {
     ...Number.isFinite(expMs) ? { deductionEndTime: expMs } : {}
   };
 }
-async function fetchQoderCreditBalance(credential, product, fetcher = fetch) {
+async function fetchQoderCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   let response;
   try {
     response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
@@ -60071,7 +60697,7 @@ function parseClaimResult(body) {
     ...benefitAmount(root) !== void 0 ? { amount: benefitAmount(root) } : {}
   };
 }
-async function claimQoderCampaign(credential, product, campaignId, fetcher = fetch) {
+async function claimQoderCampaign(credential, product, campaignId, fetcher = createDomesticFetch()) {
   const url = `${product.openApiBase}${QODER_CAMPAIGNS_PATH}/${encodeURIComponent(campaignId)}/claim`;
   let response;
   try {
@@ -60108,7 +60734,7 @@ function describeNonJson(status, text) {
   const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
   return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
 }
-async function claimQoderDailyCheckin(credential, product, fetcher = fetch, nowMs = Date.now()) {
+async function claimQoderDailyCheckin(credential, product, fetcher = createDomesticFetch(), nowMs = Date.now()) {
   const parsed = await loadCampaigns(credential, product, fetcher);
   if (parsed === void 0) {
     return { kind: "failed", code: -1, message: "\u6D3B\u52A8\u5217\u8868\u67E5\u8BE2\u5931\u8D25" };
@@ -60143,6 +60769,7 @@ async function claimQoderDailyCheckin(credential, product, fetcher = fetch, nowM
 }
 
 // vendor/channel-pack/src/cline-credits.ts
+init_domestic_direct();
 var CLINE_CREDITS_TIMEOUT_MS = 3e4;
 var CLINE_BALANCE_SCALE = 1e5;
 function readNumber5(source, key) {
@@ -60184,7 +60811,7 @@ function parseClineBalanceResponse(value) {
   if (rawBalance === void 0) return { error: "\u54CD\u5E94\u7F3A\u5C11 balance \u5B57\u6BB5" };
   return { rawBalance };
 }
-async function fetchClineCreditBalance(credential, product, fetcher = fetch, options = {}) {
+async function fetchClineCreditBalance(credential, product, fetcher = createDomesticFetch(), options = {}) {
   const userId = credential.account_id;
   if (typeof userId !== "string" || userId.trim().length === 0) {
     return { balance: null, error: "\u51ED\u636E\u7F3A\u5C11\u8D26\u53F7 id\uFF0C\u65E0\u6CD5\u67E5\u8BE2\u4F59\u989D" };
@@ -60224,6 +60851,7 @@ async function fetchClineCreditBalance(credential, product, fetcher = fetch, opt
 }
 
 // vendor/channel-pack/src/cline-quota.ts
+init_domestic_direct();
 var CLINE_QUOTA_TIMEOUT_MS = 3e4;
 var CLINE_USAGE_LIMITS_PATH = "/api/v1/users/me/plan/usage-limits";
 function readNumber6(source, key) {
@@ -60292,7 +60920,7 @@ function parseClineUsageLimits(value) {
   }
   return { windows, error: serverError === "" ? void 0 : serverError };
 }
-async function fetchClineUsageLimits(credential, product, fetcher = fetch, options = {}) {
+async function fetchClineUsageLimits(credential, product, fetcher = createDomesticFetch(), options = {}) {
   const refusal = { ok: false, windows: [], error: "\u989D\u5EA6\u7AEF\u70B9\u4E0D\u53EF\u7528" };
   const url = `${product.apiBase}${CLINE_USAGE_LIMITS_PATH}`;
   let response;
@@ -60338,6 +60966,7 @@ async function fetchClineUsageLimits(credential, product, fetcher = fetch, optio
 
 // vendor/channel-pack/src/lobsterai-credits.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
+init_domestic_direct();
 var LOBSTERAI_ACTIVITY_SLOT_PATH = "/api/client-activities/slot";
 var LOBSTERAI_ACTIVITY_CONTEXT_PATH = "/api/client-activities";
 var LOBSTERAI_PROFILE_SUMMARY_PATH = "/api/user/profile-summary";
@@ -60389,7 +61018,7 @@ function readActions(source, key) {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => typeof item === "string");
 }
-async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher = fetch) {
+async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher = createDomesticFetch()) {
   const query = new URLSearchParams({
     placement: LOBSTERAI_SLOT_PLACEMENT,
     clientVersion,
@@ -60413,7 +61042,7 @@ async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fe
     configRevision: readNumber7(activity, "configRevision")
   };
 }
-async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher = fetch) {
+async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher = createDomesticFetch()) {
   const query = new URLSearchParams({ configRevision: String(slot2.configRevision) });
   const url = `${product.apiBase}${LOBSTERAI_ACTIVITY_CONTEXT_PATH}/${encodeURIComponent(slot2.activityCode)}/context?${query.toString()}`;
   const result = await requestJson2(url, credential, product, fetcher);
@@ -60426,7 +61055,7 @@ async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher
     actions: readActions(envelope.data, "actions")
   };
 }
-async function claimLobsteraiDailyCheckin(credential, product, clientVersion, fetcher = fetch) {
+async function claimLobsteraiDailyCheckin(credential, product, clientVersion, fetcher = createDomesticFetch()) {
   const slot2 = await fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher);
   if (slot2 === null) {
     return { kind: "failed", code: -1, message: "\u6D3B\u52A8\u69FD\u4F4D\u67E5\u8BE2\u5931\u8D25" };
@@ -60473,7 +61102,7 @@ async function claimLobsteraiDailyCheckin(credential, product, clientVersion, fe
     ...message2.length > 0 ? { delayedMessage: message2 } : {}
   };
 }
-async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch) {
+async function fetchLobsteraiCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   const result = await requestJson2(
     `${product.apiBase}${LOBSTERAI_PROFILE_SUMMARY_PATH}`,
     credential,
@@ -60697,7 +61326,7 @@ function parseCreditBalance(metrics) {
   );
   return { total, packages, expiredTotal: 0 };
 }
-async function fetchCodeArtsAccountInfoDetailed(credential, fetcher = fetch) {
+async function fetchCodeArtsAccountInfoDetailed(credential, fetcher = directFetch) {
   const url = `${CODEARTS_SNAP_ENGINE_URL}${CODEARTS_PACKAGE_INFO_PATH}`;
   const result = await signedSnapRequest("GET", url, credential, void 0, fetcher);
   if (!result.ok) return { ok: false, message: result.message };
@@ -60730,7 +61359,7 @@ function parseActivity(item) {
     amount: readNumber8(item, "benefitAmount") || readNumber8(item, "amount") || readNumber8(item, "creditAmount")
   };
 }
-async function fetchCodeArtsOpsActivitiesDetailed(credential, fetcher = fetch) {
+async function fetchCodeArtsOpsActivitiesDetailed(credential, fetcher = directFetch) {
   const url = `${CODEARTS_SNAP_ENGINE_URL}${CODEARTS_OPS_DELIVERY_PATH}?channel=${CODEARTS_OPS_CHANNEL}`;
   const result = await signedSnapRequest("GET", url, credential, void 0, fetcher);
   if (!result.ok) return { ok: false, message: result.message };
@@ -60744,7 +61373,7 @@ async function fetchCodeArtsOpsActivitiesDetailed(credential, fetcher = fetch) {
 function findDailyCheckinActivity(activities) {
   return activities.find((activity) => activity.type === CODEARTS_DAILY_LOGIN_TYPE);
 }
-async function claimCodeArtsDailyCheckin(credential, fetcher = fetch) {
+async function claimCodeArtsDailyCheckin(credential, fetcher = directFetch) {
   const infoResult = await fetchCodeArtsAccountInfoDetailed(credential, fetcher);
   if (!infoResult.ok) {
     return { kind: "failed", code: -1, message: `\u8D26\u6237\u4FE1\u606F\u67E5\u8BE2\u5931\u8D25\uFF1A${infoResult.message}` };
@@ -60804,6 +61433,7 @@ function roundCredits3(value) {
 }
 
 // vendor/channel-pack/src/trae-credits.ts
+init_domestic_direct();
 function classifyTraeCheckinError(httpStatus, code) {
   if (httpStatus === 200 && code === 1005) {
     return { type: "PlanLimit", cooldownSecs: 43200 };
@@ -60874,7 +61504,7 @@ async function postJson3(path2, credential, body, fetcher, userId) {
     return { ok: false, message: error instanceof Error ? error.message : String(error), httpStatus: 0 };
   }
 }
-async function fetchTraeCheckinStatus(credential, _product, fetcher = fetch) {
+async function fetchTraeCheckinStatus(credential, _product, fetcher = createDomesticFetch()) {
   const result = await postJson3(TRAE_CHECKIN_STATUS_PATH, credential, "{}", fetcher, credential.uid);
   if (!result.ok) return null;
   const body = result.body;
@@ -60894,7 +61524,7 @@ async function fetchTraeCheckinStatus(credential, _product, fetcher = fetch) {
     endTime: ""
   };
 }
-async function claimTraeDailyCheckin(credential, product, fetcher = fetch, generation = 0, onRotate, userId, retryCount = 3) {
+async function claimTraeDailyCheckin(credential, product, fetcher = createDomesticFetch(), generation = 0, onRotate, userId, retryCount = 3) {
   const uid = userId ?? credential.uid;
   const doClaim = async () => {
     let lastError = { ok: false, httpStatus: 0, message: "", code: 0 };
@@ -60948,7 +61578,7 @@ async function claimTraeDailyCheckin(credential, product, fetcher = fetch, gener
     cooldownSecs
   };
 }
-async function fetchTraeCreditBalance(credential, _product, fetcher = fetch) {
+async function fetchTraeCreditBalance(credential, _product, fetcher = createDomesticFetch()) {
   const result = await postJson3(
     TRAE_ENT_USAGE_PATH,
     credential,
@@ -62201,210 +62831,8 @@ async function importBackup(credentials, pool, raw) {
 import { credentialRef as credentialRef12 } from "@deepseek-ai/dsh-credentials";
 import { randomBytes as randomBytes10 } from "node:crypto";
 
-// vendor/channel-pack/src/opencode-product.ts
-var OPENCODE = {
-  id: "opencode",
-  // ⚠️ 必须与客户端 `PROVIDERS` 里的 label 逐字一致（rail 宽度算式依赖它，
-  // 且 `opencode-client-panel.spec.ts` 有跨文件一致性断言）。
-  displayName: "OpenCode",
-  // 免费模型的新入口统一挂在 /inference/v1；/zen/v1 对匿名免费模型
-  // 会返回 FreeTierError。这里保留 v1 后缀拆分，便于复用下方路径字段。
-  baseUrl: "https://opencode.ai/inference",
-  chatPath: "/v1/chat/completions",
-  modelsPath: "/v1/models",
-  // ⚠️ 与本仓库其余 provider 的流式超时常量同档（保守值）。
-  chatHeaderTimeoutMs: 6e4,
-  chatChunkTimeoutMs: 12e4,
-  // ⚠️ 匿名凭证是**字面量** `public`：opencode 官方 CLI 在没有 key 时自己就用它
-  // （其 provider.ts 的 opencode 分支：`options: ok ? {} : { apiKey: 'public' }`）。
-  anonymousKey: "public",
-  // ⚠️ 兜底 UA。**v2 形状**（`opencode/<channel>/<version>/<client>`，major ≥ 2）：
-  // 旧的 `opencode/1.18.22` 自 2026-10-14 起被上游按名字拒掉（403 FreeTierError）。
-  // 接线层会用真机 `opencode --version` 的结果改写成同形状（`opencode.ts` 的
-  // `opencodeUserAgentForVersion`）。
-  defaultUserAgent: "opencode/latest/2.0.26/cli",
-  /**
-   * 模型能力元数据源（**远端**，能力的主来源）。
-   *
-   * ⚠️ 不是 `/zen/v1/models` —— 实测它只返回 `id`/`object`/`created`/
-   * `owned_by` 四个字段，**不含任何能力信息**（85 条全如此）。
-   * 能力在 **models.dev** 的 `opencode` 条目里，官方 CLI 自己就用它
-   * （`packages/core/src/models-dev.ts`）。见 `opencode-capability.ts`。
-   */
-  modelsDevUrl: "https://models.dev/api.json",
-  /** 能力表缓存 TTL（与官方 CLI 的 60 分钟同档）。 */
-  modelsDevTtlMs: 60 * 60 * 1e3
-};
-var OPENCODE_MODELS_DEV_URL = OPENCODE.modelsDevUrl;
-var OPENCODE_MODELS_DEV_TTL_MS = OPENCODE.modelsDevTtlMs;
-var OPENCODE_FALLBACK_MODELS = [
-  // ── 匿名可用（chat 端点，无需 key）──
-  { id: "big-pickle", name: "Big Pickle", isFree: true, contextWindow: 262144 },
-  { id: "space-bunny-free", name: "Space Bunny Free", isFree: true, contextWindow: 262144 },
-  { id: "longcat-2.5-preview-free", name: "LongCat 2.5 Preview Free", isFree: true, contextWindow: 262144 },
-  { id: "mimo-v2.6-flash-free", name: "MiMo-V2.6-Flash Free", isFree: true, contextWindow: 262144 },
-  { id: "mimo-v2.5-free", name: "MiMo-V2.5 Free", isFree: true, contextWindow: 262144 },
-  { id: "deepseek-v4.1-flash-free", name: "DeepSeek V4.1 Flash Free", isFree: true, contextWindow: 2e5 },
-  { id: "glm-5.3-flash-free", name: "GLM 5.3 Flash Free", isFree: true, contextWindow: 2e5 },
-  // ⚠️ 这两个官方 docs 标注走 `/v1/models/{id}`（Gemini 风格），但**实测
-  // chat 端点也通** ⇒ 按 chat 处理。**以实测为准，不以 docs 为准。**
-  { id: "nemotron-3-ultra-free", name: "Nemotron 3 Ultra Free", isFree: true, contextWindow: 262144 },
-  { id: "nemotron-3.5-lightning-free", name: "Nemotron 3.5 Lightning Free", isFree: true, contextWindow: 262144 },
-  // ── 需付费 key（chat 端点；实测匿名为 401）──
-  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", isFree: false, contextWindow: 262144 },
-  { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", isFree: false, contextWindow: 262144 },
-  { id: "glm-5.2", name: "GLM 5.2", isFree: false, contextWindow: 262144 },
-  { id: "kimi-k2.5", name: "Kimi K2.5", isFree: false, contextWindow: 262144 },
-  { id: "minimax-m2.7", name: "minimax M2.7", isFree: false, contextWindow: 262144 },
-  { id: "minimax-m3", name: "minimax M3", isFree: false, contextWindow: 262144 },
-  { id: "qwen3.8-max", name: "Qwen3.8 Max", isFree: false, contextWindow: 262144 }
-];
-var FREE_IDS = new Set(OPENCODE_FALLBACK_MODELS.filter((m) => m.isFree).map((m) => m.id));
-var REACHABLE_IDS = new Set(OPENCODE_FALLBACK_MODELS.map((m) => m.id));
-function isFreeOpencodeModel(id) {
-  return FREE_IDS.has(id);
-}
-function isReachableOpencodeModel(id) {
-  return REACHABLE_IDS.has(id);
-}
-function readableDetail(body) {
-  const text = body.trim();
-  if (text === "") return "\uFF08\u4E0A\u6E38\u672A\u8FD4\u56DE\u9519\u8BEF\u8BE6\u60C5\uFF09";
-  try {
-    const data = JSON.parse(text);
-    const nested = typeof data.error === "object" && data.error !== null ? data.error.message : data.error;
-    const parts = [data.message, nested, data.msg].filter((v) => typeof v === "string" && v.length > 0);
-    if (parts.length > 0) return parts.join(" ");
-  } catch {
-  }
-  return text.length > 500 ? `${text.slice(0, 500)}\u2026` : text;
-}
-function classifyOpencodeError(status, body, headers) {
-  const retryAfterMs = retryAfterMsFromRecord(headers);
-  const detail = readableDetail(body);
-  const lower = body.toLowerCase();
-  if (body.includes("FreeUsageLimitError")) {
-    return { kind: "free_usage_limit", ...retryAfterMs === void 0 ? {} : { retryAfterMs }, detail };
-  }
-  if (body.includes("GoUsageLimitError")) {
-    return { kind: "go_usage_limit", ...retryAfterMs === void 0 ? {} : { retryAfterMs }, detail };
-  }
-  if (body.includes("FreeTierError")) {
-    return { kind: "free_tier", detail };
-  }
-  if (status === 429 || lower.includes("too many requests") || lower.includes("rate limit")) {
-    return { kind: "rate_limit", ...retryAfterMs === void 0 ? {} : { retryAfterMs }, detail };
-  }
-  if (status === 0 || lower.includes("fetch failed") || lower.includes("terminated") || lower.includes("econnreset") || lower.includes("socket hang up") || lower.includes("getaddrinfo") || lower.includes("econnrefused")) {
-    return { kind: "transport", detail };
-  }
-  if (status === 402 || lower.includes("insufficient account funds") || lower.includes("insufficient funds") || lower.includes("insufficient balance")) {
-    return { kind: "quota", detail };
-  }
-  if (status === 401 || status === 403) return { kind: "auth", detail };
-  if (status >= 500) return { kind: "server", detail };
-  return { kind: "auth", detail };
-}
-
 // vendor/channel-pack/src/opencode-auth.ts
 import { randomBytes as randomBytes9 } from "node:crypto";
-
-// vendor/channel-pack/src/opencode.ts
-import { createHash as createHash6, randomBytes as randomBytes8 } from "node:crypto";
-var BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-var SESSION_TAIL_LENGTH = 26;
-var SESSION_RANDOM_LENGTH = SESSION_TAIL_LENGTH - 12;
-function randomBase62(length) {
-  const bytes = randomBytes8(length);
-  let out = "";
-  for (let i = 0; i < length; i++) out += BASE62[bytes[i] % BASE62.length];
-  return out;
-}
-function deriveProjectId(identity, generation) {
-  const inner = createHash6("sha256").update(`${identity} ${generation}`).digest("hex");
-  return createHash6("sha1").update(`git-remote:opencode/${inner}`).digest("hex");
-}
-function deriveSessionId2() {
-  const timestamp = Date.now();
-  if (timestamp !== lastSessionStamp) {
-    lastSessionStamp = timestamp;
-    sessionSequence = 0;
-  }
-  sessionSequence += 1;
-  const value = ~(BigInt(timestamp) * 0x1000n + BigInt(sessionSequence));
-  let hex = "";
-  for (let i = 0; i < 6; i += 1) {
-    hex += Number(value >> BigInt(40 - 8 * i) & 0xffn).toString(16).padStart(2, "0");
-  }
-  return `ses_${hex}${randomBase62(SESSION_RANDOM_LENGTH)}`;
-}
-var lastSessionStamp = 0;
-var sessionSequence = 0;
-var OPENCODE_V2_UA = /^opencode\/[a-z0-9-]+\/(\d+)\.\d+\.\d+\/[a-z0-9-]+$/i;
-function opencodeUserAgent(override) {
-  const value = override?.trim();
-  if (value !== void 0 && value.length > 0 && OPENCODE_V2_UA.test(value)) return value;
-  return OPENCODE.defaultUserAgent;
-}
-function opencodeUserAgentForVersion(version) {
-  const value = version?.trim();
-  if (value === void 0 || !/^\d+\.\d+\.\d+$/.test(value)) return void 0;
-  const [major] = value.split(".");
-  if (Number(major) < 2) return void 0;
-  return `opencode/latest/${value}/cli`;
-}
-function opencodeHeaders(fingerprint, sessionId, userAgent) {
-  return {
-    "x-opencode-project": fingerprint.projectId,
-    "x-opencode-session": sessionId,
-    // v2：这四个头同值，缺一即 403。
-    "x-opencode-session-id": sessionId,
-    "x-session-affinity": sessionId,
-    "x-session-id": sessionId,
-    "x-opencode-client": "cli",
-    "user-agent": userAgent
-  };
-}
-function maskLabel(url) {
-  return url.replace(/^(\w+:\/\/[^:@/]+):[^@/]*@/, "$1:***@");
-}
-function authorityOf(raw) {
-  const afterScheme = raw.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "");
-  const cut = afterScheme.search(/[/?#]/);
-  return cut === -1 ? afterScheme : afterScheme.slice(0, cut);
-}
-function hasExplicitPort(authority) {
-  const hostPart = authority.includes("@") ? authority.slice(authority.lastIndexOf("@") + 1) : authority;
-  return /:\d+$/.test(hostPart);
-}
-function normalizeProxy(input) {
-  const raw = input.trim();
-  if (raw.length === 0) return { ok: false, reason: "\u4EE3\u7406\u5730\u5740\u4E3A\u7A7A\uFF08\u5982\u9700\u6E05\u9664\uFF0C\u8BF7\u70B9\u300C\u6E05\u9664\u4EE3\u7406\u300D\uFF09" };
-  const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : `http://${raw}`;
-  const url = withScheme.replace(/^socks5h:\/\//, "socks5://");
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return { ok: false, reason: "\u65E0\u6CD5\u89E3\u6790\u4E3A URL\uFF08\u5F62\u5982 http://host:port\uFF09" };
-  }
-  const kind = parsed.protocol === "http:" || parsed.protocol === "https:" ? "http" : parsed.protocol === "socks5:" ? "socks5" : void 0;
-  if (kind === void 0) {
-    return { ok: false, reason: `\u4E0D\u652F\u6301\u7684\u534F\u8BAE ${parsed.protocol.replace(":", "")}\uFF08\u4EC5\u652F\u6301 http/https/socks5\uFF09` };
-  }
-  if (parsed.hostname.length === 0) return { ok: false, reason: "\u7F3A\u5C11\u4E3B\u673A\u540D" };
-  if (!hasExplicitPort(authorityOf(raw))) return { ok: false, reason: "\u7F3A\u5C11\u7AEF\u53E3\uFF08\u5982 http://127.0.0.1:7897\uFF09" };
-  const scheme = kind === "socks5" ? "socks5" : parsed.protocol.replace(":", "");
-  const auth = parsed.username.length > 0 ? `${parsed.username}${parsed.password.length > 0 ? `:${parsed.password}` : ""}@` : "";
-  const rawHostPort = authorityOf(raw);
-  const hostOnly = auth.length > 0 ? rawHostPort.slice(rawHostPort.lastIndexOf("@") + 1) : rawHostPort;
-  const portMatch = /:(\d+)$/.exec(hostOnly);
-  const port = portMatch?.[1] ?? parsed.port;
-  const normalized = `${scheme}://${auth}${parsed.hostname}:${port}`;
-  return { ok: true, proxy: { kind, url: normalized, label: maskLabel(normalized) } };
-}
-
-// vendor/channel-pack/src/opencode-auth.ts
 function newAccountFingerprint(apiKey) {
   return { projectId: deriveProjectId(apiKey, 0), generation: 0 };
 }
@@ -62456,170 +62884,6 @@ async function ensureDefaultAnonymousSlot(addEntry, writeCredential, listEntries
   } catch {
     return "";
   }
-}
-
-// vendor/channel-pack/src/opencode-proxy.ts
-var import_undici2 = __toESM(require_undici(), 1);
-import { connect as netConnect } from "node:net";
-import { URL as URL2 } from "node:url";
-var PROXY_CACHE_LIMIT = 16;
-var cache4 = /* @__PURE__ */ new Map();
-function buildProxyDispatcher(proxy) {
-  const existing = cache4.get(proxy.url);
-  if (existing !== void 0) return existing;
-  const created = createProxyDispatcher(proxy);
-  cache4.delete(proxy.url);
-  cache4.set(proxy.url, created);
-  while (cache4.size > PROXY_CACHE_LIMIT) {
-    const oldest = cache4.keys().next();
-    if (oldest.done === true) break;
-    const victim = cache4.get(oldest.value);
-    cache4.delete(oldest.value);
-    if (victim !== void 0) {
-      void Promise.resolve(victim.close?.()).catch(() => {
-      });
-    }
-  }
-  return created;
-}
-function createProxyDispatcher(proxy) {
-  return proxy.kind === "http" ? buildHttpDispatcher(proxy.url) : buildSocksDispatcher(proxy);
-}
-async function closeAllProxyDispatchers() {
-  const all = [...cache4.values()];
-  cache4.clear();
-  await Promise.allSettled(all.map(async (d) => {
-    try {
-      await d.close();
-    } catch {
-    }
-  }));
-}
-function buildHttpDispatcher(url) {
-  return new import_undici2.ProxyAgent({
-    uri: url,
-    // ⚠️ `pipelining: 0` 是必需的（见模块头）；`clientFactory` 由 undici 在
-    // 每次建连时调用，用它把默认 Pool 换成禁用复用的 Pool。
-    clientFactory: (origin, opts) => new import_undici2.Pool(origin, { ...opts, pipelining: 0 })
-  });
-}
-function buildSocks5Handshake(proxy) {
-  const parsed = new URL2(proxy.url);
-  const wantsAuth = parsed.username.length > 0;
-  return wantsAuth ? new Uint8Array([5, 2, 0, 2]) : new Uint8Array([5, 1, 0]);
-}
-async function openSocks5Tunnel(proxy, host, port) {
-  const parsed = new URL2(proxy.url);
-  const socket = await new Promise((resolve2, reject) => {
-    const s = netConnect({ host: parsed.hostname, port: Number(parsed.port) });
-    s.once("connect", () => resolve2(s));
-    s.once("error", reject);
-  });
-  const fail = (error) => {
-    throw error;
-  };
-  const write = (bytes) => new Promise((resolve2, reject) => {
-    socket.write(Buffer.from(bytes), (err) => err ? reject(err) : resolve2());
-  });
-  let leftover = Buffer.alloc(0);
-  let pending;
-  const detach = () => {
-    socket.off("data", onData);
-    socket.off("error", onError);
-    socket.off("close", onClose);
-  };
-  const fulfill = () => {
-    if (pending === void 0 || leftover.length < pending.n) return;
-    const n = pending.n;
-    const target = pending;
-    pending = void 0;
-    const value = new Uint8Array(leftover.subarray(0, n));
-    leftover = leftover.subarray(n);
-    detach();
-    target.resolve(value);
-  };
-  const onData = (chunk) => {
-    leftover = leftover.length === 0 ? chunk : Buffer.concat([leftover, chunk]);
-    fulfill();
-  };
-  const onError = (error) => {
-    const target = pending;
-    pending = void 0;
-    detach();
-    target?.reject(error);
-  };
-  const onClose = () => {
-    const target = pending;
-    pending = void 0;
-    detach();
-    target?.reject(new Error("SOCKS5 \u4EE3\u7406\u5728\u63E1\u624B\u5B8C\u6210\u524D\u5173\u95ED\u4E86\u8FDE\u63A5"));
-  };
-  const read = (n) => new Promise((resolve2, reject) => {
-    if (n <= 0) {
-      resolve2(new Uint8Array(0));
-      return;
-    }
-    pending = { n, resolve: resolve2, reject };
-    socket.on("data", onData);
-    socket.once("error", onError);
-    socket.once("close", onClose);
-    fulfill();
-  });
-  try {
-    await write(buildSocks5Handshake(proxy));
-    const methodReply = await read(2);
-    const method = methodReply[1];
-    if (method === 2) {
-      const user = Buffer.from(decodeURIComponent(parsed.username), "utf8");
-      const pass = Buffer.from(decodeURIComponent(parsed.password), "utf8");
-      await write(new Uint8Array([1, user.length, ...user, pass.length, ...pass]));
-      const authReply = await read(2);
-      if (authReply[1] !== 0) fail(new Error("SOCKS5 \u7528\u6237\u540D/\u5BC6\u7801\u8BA4\u8BC1\u5931\u8D25"));
-    } else if (method !== 0) {
-      fail(new Error(`SOCKS5 \u670D\u52A1\u7AEF\u8981\u6C42\u672A\u77E5\u8BA4\u8BC1\u65B9\u5F0F 0x${(method ?? 0).toString(16)}`));
-    }
-    const target = Buffer.from(host, "utf8");
-    await write(new Uint8Array([
-      5,
-      1,
-      0,
-      3,
-      target.length,
-      ...target,
-      port >>> 8 & 255,
-      port & 255
-    ]));
-    const reply2 = await read(4);
-    if (reply2[1] !== 0) {
-      fail(new Error(`SOCKS5 CONNECT \u88AB\u62D2\u7EDD\uFF08\u5E94\u7B54\u7801 0x${(reply2[1] ?? 0).toString(16)}\uFF09`));
-    }
-    const atyp = reply2[3];
-    if (atyp === 1) await read(4 + 2);
-    else if (atyp === 4) await read(16 + 2);
-    else if (atyp === 3) await read(1).then((lenByte) => read((lenByte[0] ?? 0) + 2));
-    else fail(new Error(`SOCKS5 \u5E94\u7B54\u7684\u5730\u5740\u7C7B\u578B 0x${(atyp ?? 0).toString(16)} \u4E0D\u53D7\u652F\u6301`));
-    return socket;
-  } catch (error) {
-    socket.destroy();
-    throw error;
-  }
-}
-function buildSocksDispatcher(proxy) {
-  return new import_undici2.Agent({
-    connect: ((opts, callback) => {
-      const host = String(opts.hostname ?? opts.host ?? "");
-      const port = Number(opts.port ?? 443);
-      if (host.length === 0) {
-        callback(new Error("SOCKS5 \u4EE3\u7406\uFF1A\u76EE\u6807 host \u4E3A\u7A7A"), void 0);
-        return;
-      }
-      openSocks5Tunnel(proxy, host, port).then((socket) => {
-        callback(null, socket);
-      }).catch((error) => {
-        callback(error, void 0);
-      });
-    })
-  });
 }
 
 // vendor/channel-pack/src/opencode-rpc.ts
@@ -62871,10 +63135,10 @@ function badgeTtlMs(env = process.env) {
 function badgeFailureTtlMs(env = process.env) {
   return nonNegativeMs(env[DSH_CHANNEL_PACK_BADGE_TTL_MS], BADGE_FAILURE_TTL_MS);
 }
-function nonNegativeMs(raw, fallback) {
-  if (typeof raw !== "string" || raw.trim().length === 0) return fallback;
+function nonNegativeMs(raw, fallback2) {
+  if (typeof raw !== "string" || raw.trim().length === 0) return fallback2;
   const parsed = Number(raw.trim());
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback2;
 }
 var BadgeRpcFailure = class extends Error {
   constructor(detail) {
@@ -63765,7 +64029,16 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
       packages
     };
   }
-  async function handleMethod(method, payload, _signal) {
+  async function handleMethod(method, payload, signal) {
+    const codeartsFetcher = (input, init) => {
+      const fetcher = config.codeartsFetcher ?? directFetch;
+      if (!signal) return fetcher(input, init);
+      const upstreamSignal = init?.signal ?? (input instanceof Request ? input.signal : void 0);
+      return fetcher(input, {
+        ...init,
+        signal: upstreamSignal ? AbortSignal.any([signal, upstreamSignal]) : signal
+      });
+    };
     if (method.startsWith("opencode.")) {
       if (config.disableOpencode === true) {
         return { ok: false, error: { code: "provider-disabled", message: "OpenCode account integration is disabled in this host" } };
@@ -64695,7 +64968,7 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
         if (req.provider === "codearts") {
           const value2 = await collectClaimResults(accounts, void 0, {
             resolve: (ref) => ctx.credentials.resolve(ref),
-            claim: (credential) => claimCodeArtsDailyCheckin(credential),
+            claim: (credential) => claimCodeArtsDailyCheckin(credential, codeartsFetcher),
             precheckStatus: false,
             warn: (msg) => ctx.logger?.warn?.(msg)
           });
@@ -64860,7 +65133,7 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
           const values2 = await collectCreditBalances(accounts, void 0, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             fetchBalanceDetailed: async (credential) => {
-              const result = await fetchCodeArtsAccountInfoDetailed(credential);
+              const result = await fetchCodeArtsAccountInfoDetailed(credential, codeartsFetcher);
               if (!result.ok) return { balance: null, error: `\u8D26\u6237\u4FE1\u606F\u67E5\u8BE2\u5931\u8D25\uFF1A${result.message}` };
               const info = result.info;
               if (!info.isCreditPackage) {
@@ -65626,14 +65899,14 @@ function registerChannelPackEndpoints(ctx, pool, codearts, buddy, workbuddy, lob
       }
       // ── 本机 OpenAI 网关（`src/openai-gateway/`）──
       case "gateway.getEnabled": {
-        const degrade = async (step, run, fallback) => {
+        const degrade = async (step, run, fallback2) => {
           try {
             return await run();
           } catch (error) {
             ctx.logger.warn(
               `[channel-pack] gateway.getEnabled \u7684\u300C${step}\u300D\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BE5\u5B57\u6BB5\u964D\u7EA7\u4E3A\u9ED8\u8BA4\u503C\uFF1A${String(error)}`
             );
-            return fallback;
+            return fallback2;
           }
         };
         const blockedByEnv = await degrade("env \u5F00\u5173", () => !isGatewayEnabled(process.env), true);
@@ -68430,7 +68703,7 @@ function createMinimaxPkce() {
   const codeChallenge = createHash8("sha256").update(codeVerifier, "ascii").digest("base64url");
   return { codeVerifier, codeChallenge };
 }
-async function startMinimaxDeviceAuthorization(fetcher = fetch, product = MINIMAX) {
+async function startMinimaxDeviceAuthorization(fetcher = createDomesticFetch(), product = MINIMAX) {
   const pkce = createMinimaxPkce();
   const response = await fetcher(`${product.accountHost}${MINIMAX_DEVICE_CODE_PATH}`, {
     method: "POST",
@@ -68499,7 +68772,7 @@ async function pollMinimaxDeviceToken(auth, options = {}) {
   }
   throw new MinimaxLoginExpiredError();
 }
-async function refreshMinimaxCredential(refreshToken2, fetcher = fetch, product = MINIMAX) {
+async function refreshMinimaxCredential(refreshToken2, fetcher = createDomesticFetch(), product = MINIMAX) {
   const response = await fetcher(`${product.accountHost}${MINIMAX_TOKEN_PATH}`, {
     method: "POST",
     headers: {
@@ -69410,158 +69683,6 @@ function registerMinimaxLlm(ctx, options) {
 // vendor/channel-pack/src/gemini-auth.ts
 import { Service as Service11 } from "@deepseek-ai/cordis";
 import { credentialRef as credentialRef15 } from "@deepseek-ai/dsh-credentials";
-
-// vendor/channel-pack/src/channel-fetch.ts
-var import_undici3 = __toESM(require_undici(), 1);
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import path from "node:path";
-init_domestic_direct();
-function parseWindowsProxy(output) {
-  const value = (name2) => new RegExp(`^\\s*${name2}\\s+REG_\\w+\\s+(.+)$`, "mi").exec(output)?.[1]?.trim() ?? "";
-  if (Number(value("ProxyEnable")) !== 1 || value("ProxyServer") === "") return void 0;
-  return { server: value("ProxyServer"), bypass: value("ProxyOverride") };
-}
-async function readWindowsProxy() {
-  const executable = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "reg.exe");
-  try {
-    const { stdout } = await promisify(execFile)(executable, [
-      "query",
-      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"
-    ], { windowsHide: true, timeout: 2e3, maxBuffer: 64 * 1024, encoding: "utf8" });
-    return stdout;
-  } catch {
-    return "";
-  }
-}
-function loopback(host) {
-  return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(host);
-}
-function channelProxyBypassed(target, patterns, windows = false) {
-  const hostname = target.hostname.toLowerCase();
-  const port = target.port || (target.protocol === "https:" ? "443" : "80");
-  return patterns.split(/[;,\s]+/).filter(Boolean).some((raw) => {
-    let pattern = raw.toLowerCase();
-    if (pattern === "*") return true;
-    if (windows && pattern === "<local>") return !hostname.includes(".") && !hostname.includes(":");
-    const withPort = /^(.*):(\d+)$/.exec(pattern);
-    if (withPort) {
-      if (withPort[2] !== port) return false;
-      pattern = withPort[1];
-    }
-    if (pattern.includes("*")) {
-      const escaped = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
-      return new RegExp(`^${escaped}$`, "i").test(hostname);
-    }
-    const domain = pattern.replace(/^\./, "");
-    return hostname === domain || !windows && hostname.endsWith(`.${domain}`);
-  });
-}
-function windowsProxyFor(target, config) {
-  if (channelProxyBypassed(target, config.bypass, true)) return void 0;
-  if (!config.server.includes("=")) return config.server;
-  const entries = new Map(config.server.split(";").map((row) => {
-    const at = row.indexOf("=");
-    return [row.slice(0, at).trim().toLowerCase(), row.slice(at + 1).trim()];
-  }));
-  const selected = entries.get(target.protocol.slice(0, -1));
-  if (selected) return selected;
-  const socks = entries.get("socks");
-  return socks ? `socks5://${socks.replace(/^socks5h?:\/\//, "")}` : void 0;
-}
-var ChannelNetworkError = class extends Error {
-  name = "ChannelNetworkError";
-};
-function networkFailure(error, route) {
-  if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) return error;
-  const codes = /* @__PURE__ */ new Set();
-  let current = error;
-  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
-    const record = current;
-    if (typeof record.code === "string" && /^[A-Z][A-Z0-9_]{1,80}$/.test(record.code)) codes.add(record.code);
-    current = record.cause;
-  }
-  return new ChannelNetworkError(`\u6E20\u9053\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25\uFF08${route}${codes.size ? `\uFF1B${[...codes].join("\u3001")}` : ""}\uFF09\uFF1A\u8BF7\u68C0\u67E5\u4EE3\u7406\u8FDE\u901A\u6027\u540E\u91CD\u8BD5`, { cause: error });
-}
-function createChannelFetch(options = {}) {
-  const dispatchers = /* @__PURE__ */ new Map();
-  let system;
-  let systemAt = 0;
-  let closed = false;
-  const fetchImpl = (input, init) => (options.fetchImpl ?? globalThis.fetch)(input, init);
-  const domesticFetch = createDomesticFetch(fetchImpl);
-  const fetcher = async (input, init) => {
-    if (closed) throw new Error("\u6E20\u9053\u51FA\u7F51\u670D\u52A1\u5DF2\u505C\u6B62");
-    const target = new URL(input instanceof Request ? input.url : String(input));
-    const signal = init?.signal ?? (input instanceof Request ? input.signal : void 0);
-    signal?.throwIfAborted();
-    let route = "\u76F4\u8FDE";
-    try {
-      if (init?.dispatcher !== void 0) {
-        route = "\u8C03\u7528\u65B9\u6307\u5B9A\u4EE3\u7406";
-        return await fetchImpl(input, init);
-      }
-      if (loopback(target.hostname)) {
-        return await fetchImpl(input, init);
-      }
-      if (options.outlet?.active()) {
-        route = "\u63D2\u4EF6\u51FA\u53E3\u4EE3\u7406";
-        return await options.outlet.fetch(input, { ...init, redirect: "error" });
-      }
-      if (isDomesticHost(target.hostname)) {
-        route = "\u56FD\u5185\u76F4\u8FDE\uFF08fake-ip \u7ED5\u884C\uFF09";
-        return await domesticFetch(input, init);
-      }
-      const env = options.environment ?? process.env;
-      const envValue = (name2) => env[name2.toLowerCase()] ?? env[name2];
-      const proxy = (target.protocol === "https:" ? envValue("HTTPS_PROXY") : envValue("HTTP_PROXY")) || envValue("ALL_PROXY");
-      let address;
-      if (proxy) {
-        route = "\u73AF\u5883\u4EE3\u7406";
-        if (!channelProxyBypassed(target, envValue("NO_PROXY") ?? "")) address = proxy;
-      } else if ((options.platform ?? process.platform) === "win32") {
-        if (!system || Date.now() - systemAt >= 3e4) {
-          systemAt = Date.now();
-          system = (options.readSystemProxy ?? readWindowsProxy)().then(parseWindowsProxy);
-        }
-        const config = await system;
-        signal?.throwIfAborted();
-        if (closed) throw new Error("\u6E20\u9053\u51FA\u7F51\u670D\u52A1\u5DF2\u505C\u6B62");
-        if (config) {
-          address = windowsProxyFor(target, config);
-          route = "Windows \u7CFB\u7EDF\u4EE3\u7406";
-        }
-      }
-      if (!address) {
-        if (route !== "\u76F4\u8FDE") route = "\u76F4\u8FDE\uFF0C\u4EE3\u7406\u4F8B\u5916\u6216\u5F53\u524D\u534F\u8BAE\u65E0\u4EE3\u7406";
-        return await fetchImpl(input, init);
-      }
-      const proxyUrl = new URL(address.includes("://") ? address : `http://${address}`);
-      const authority = `${proxyUrl.hostname}:${proxyUrl.port || (proxyUrl.protocol === "https:" ? "443" : proxyUrl.protocol.startsWith("socks") ? "1080" : "80")}`;
-      const auth = proxyUrl.username ? `${proxyUrl.username}${proxyUrl.password ? `:${proxyUrl.password}` : ""}@` : "";
-      const parsed = normalizeProxy(`${proxyUrl.protocol}//${auth}${authority}`);
-      if (!parsed.ok) throw new Error("\u4EE3\u7406\u5730\u5740\u65E0\u6548");
-      let dispatcher = dispatchers.get(parsed.proxy.url);
-      if (!dispatcher) {
-        dispatcher = options.dispatcherFor ? options.dispatcherFor(parsed.proxy) : new import_undici3.Dispatcher1Wrapper(createProxyDispatcher(parsed.proxy));
-        dispatchers.set(parsed.proxy.url, dispatcher);
-      }
-      return await fetchImpl(input, { ...init, dispatcher });
-    } catch (error) {
-      if (signal?.aborted) throw signal.reason;
-      throw networkFailure(error, route);
-    }
-  };
-  return {
-    fetch: fetcher,
-    async close() {
-      closed = true;
-      const all = [...dispatchers.values()];
-      dispatchers.clear();
-      await Promise.allSettled(all.map((dispatcher) => dispatcher.destroy()));
-    }
-  };
-}
 
 // vendor/channel-pack/src/gemini-oauth.ts
 init_domestic_direct();
@@ -71079,10 +71200,10 @@ function classifyOpencodeFailure(error) {
 var sessionIds = /* @__PURE__ */ new WeakMap();
 function sessionIdOf(options) {
   const key = options.messages;
-  if (typeof key !== "object" || key === null) return deriveSessionId2();
+  if (typeof key !== "object" || key === null) return deriveSessionId();
   const existing = sessionIds.get(key);
   if (existing !== void 0) return existing;
-  const created = deriveSessionId2();
+  const created = deriveSessionId();
   sessionIds.set(key, created);
   return created;
 }
@@ -71174,6 +71295,12 @@ function makeReadImageRequest(ctx) {
 }
 function apply(ctx, config = {}) {
   const network = createChannelFetch({ outlet: config.outlet });
+  const signedNetwork = createDirectFetch({ outlet: config.outlet });
+  const detachSignedNetwork = attachDirectFetch(signedNetwork.fetch);
+  ctx.effect(() => () => {
+    detachSignedNetwork();
+    void signedNetwork.close();
+  });
   ctx.effect(() => () => {
     void network.close();
   });
@@ -71194,7 +71321,7 @@ function apply(ctx, config = {}) {
     "llm-zcode",
     "llm-gemini"
   );
-  const service = new CodeArtsAuth(ctx);
+  const service = new CodeArtsAuth(ctx, { fetcher: signedNetwork.fetch });
   const pool = new AccountPool(ctx);
   configureDeadModelStore(ctx);
   const tokenLedgerStore = createTokenLedgerStore(ctx);
@@ -71216,6 +71343,7 @@ function apply(ctx, config = {}) {
     ctx.logger.warn(`[channel-pack] \u6E05\u7406 WorkBuddy \u65E7\u7248\u8D26\u53F7\u5931\u8D25\uFF1A${String(error)}`);
   });
   const codearts = registerCodeArtsLlm(ctx, {
+    fetchImpl: signedNetwork.fetch,
     credentialRef: credentialRef16(CODEARTS_CREDENTIAL_REF),
     resolveCredential: async () => {
       const available2 = await pool.getAvailableAccount("codearts", "");
@@ -72142,7 +72270,10 @@ function apply(ctx, config = {}) {
     void geminiSigStore.flush().catch(() => {
     });
   });
-  registerChannelPackRpc(ctx, pool, service, buddy, workbuddy, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config);
+  registerChannelPackRpc(ctx, pool, service, buddy, workbuddy, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, {
+    ...config,
+    codeartsFetcher: signedNetwork.fetch
+  });
   mountOpenAiGateway(ctx, pool);
   installLoopResume(ctx);
   ctx.provide("accountPool", pool);
@@ -72151,8 +72282,12 @@ export {
   Config,
   apply,
   channelProxyBypassed,
+  closeDirectFetch,
   createChannelFetch,
+  createDirectFetch,
   createDomesticFetch,
+  directFetch,
+  directLane,
   inject,
   isDomesticHost,
   isDomesticUrl,

@@ -38,6 +38,7 @@
  */
 
 import type { ClaimOutcome, CreditBalance, CreditPackage } from './credits.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import {
   LOOMY_AUTH_ERROR_CODE,
   LOOMY_REQUEST_TIMEOUT_MS,
@@ -123,7 +124,7 @@ function readNumber(value: unknown): number | undefined {
 export async function fetchLoomyCreditDetail(
   credential: LoomyCredential,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyCreditDetail | null> {
   const result = await tryRequestLoomy<Record<string, unknown>>(
     credential, product,
@@ -177,7 +178,7 @@ function makePackage(name: string, remaining: number): CreditPackage {
 export async function fetchLoomyCreditBalance(
   credential: LoomyCredential,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CreditBalance | null> {
   const detail = await fetchLoomyCreditDetail(credential, product, fetcher)
   if (detail === null) return null
@@ -208,7 +209,7 @@ export async function fetchLoomyCreditBalance(
 export async function claimLoomyDailyQuota(
   credential: LoomyCredential,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<ClaimOutcome> {
   const result = await tryRequestLoomy<Record<string, unknown>>(
     credential, product, '/points/first-login', { method: 'POST', body: {} }, fetcher,

@@ -133,7 +133,7 @@ export async function exchangeLobsteraiAuthCode(
   session: LobsteraiLoginSession,
   clientVersion: string,
   product: LobsteraiProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
 ): Promise<LobsteraiCredential> {
   const body = {

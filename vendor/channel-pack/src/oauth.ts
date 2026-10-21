@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose'
 import type { CodeArtsCredential } from './types.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** CodeArts Agent 的 OAuth client_id（即其 URI scheme，来自 product.json）。 */
 export const CLIENT_ID = 'codearts-agent'
@@ -96,7 +97,7 @@ export class RefreshTokenExpiredError extends Error {
 export async function requestToken(
   body: Record<string, string>,
   keyPair: DpopKeyPair,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<TokenResponse> {
   const dpop = await signDpopJws(keyPair, 'POST', STS_TOKEN_ENDPOINT)
   let response: Response
@@ -149,7 +150,7 @@ export async function exchangeAuthorizationCode(
   codeVerifier: string,
   port: number,
   keyPair: DpopKeyPair,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<TokenResponse> {
   return requestToken({
     client_id: CLIENT_ID,
@@ -165,7 +166,7 @@ export async function exchangeRefreshToken(
   refreshToken: string,
   codeVerifier: string,
   keyPair: DpopKeyPair,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<TokenResponse> {
   return requestToken({
     client_id: CLIENT_ID,

@@ -23,6 +23,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { LOOMY_REQUEST_TIMEOUT_MS, parseLoomyEnvelope } from './loomy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { loomyAuthHeaders } from './loomy-sign.js'
 import type { LoomyProduct } from './loomy-product.js'
 
@@ -131,7 +132,7 @@ async function postLoomyAccount(
 export async function sendLoomySmsCode(
   phone: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<string> {
   const body = buildLoomyAccountBody(product, {
     ccode: '86',
@@ -161,7 +162,7 @@ export async function loginLoomyBySmsCode(
   code: string,
   msgid: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyLoginResult> {
   const body = buildLoomyAccountBody(product, {
     ccode: '86',
@@ -214,7 +215,7 @@ export interface LoomyWechatBindAuth {
 export async function bindLoomyThirdAccount(
   code: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyWechatBindAuth> {
   const body = buildLoomyAccountBody(product, {
     tcode: { code },
@@ -250,7 +251,7 @@ export async function bindLoomySendMsg(
   rcode: string,
   phone: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<string> {
   const body = buildLoomyAccountBody(product, {
     rcode,
@@ -276,7 +277,7 @@ export async function bindLoomyCheckCode(
   mcode: string,
   msgid: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyLoginResult & { phone: string }> {
   const body = buildLoomyAccountBody(product, {
     rcode,
@@ -303,7 +304,7 @@ export async function bindLoomyCheckCode(
 export async function bindLoomySkip(
   rcode: string,
   product: LoomyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyLoginResult> {
   const body = buildLoomyAccountBody(product, {
     rcode,

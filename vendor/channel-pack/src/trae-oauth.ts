@@ -19,6 +19,7 @@
 
 import { createServer, type Server } from 'node:http'
 import { credentialExpiresAtMs, jwtExpiresAtMs } from './buddy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import {
   TRAE_EXCHANGE_PATH,
   TRAE_LOGIN_TIMEOUT_MS,
@@ -366,7 +367,7 @@ export async function exchangeTraeCallback(
   callback: TraeCallbackInfo,
   session: { machineId: string; deviceId: string },
   product: TraeProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   nowMs: number = Date.now(),
 ): Promise<TraeCredential> {
   let exchange: TraeExchangeResult

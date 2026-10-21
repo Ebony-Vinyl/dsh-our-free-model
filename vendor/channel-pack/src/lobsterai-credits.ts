@@ -28,6 +28,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { LOBSTERAI_REQUEST_TIMEOUT_MS, parseLobsteraiEnvelope } from './lobsterai.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { lobsteraiAuthHeaders, type LobsteraiCredential } from './lobsterai.js'
 import type { LobsteraiProduct } from './lobsterai-product.js'
 import type { ClaimOutcome, CreditBalance, CreditPackage } from './credits.js'
@@ -164,7 +165,7 @@ export async function fetchLobsteraiActivitySlot(
   credential: LobsteraiCredential,
   product: LobsteraiProduct,
   clientVersion: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LobsteraiActivitySlot | null> {
   const query = new URLSearchParams({
     placement: LOBSTERAI_SLOT_PLACEMENT,
@@ -199,7 +200,7 @@ export async function fetchLobsteraiActivityContext(
   credential: LobsteraiCredential,
   product: LobsteraiProduct,
   slot: LobsteraiActivitySlot,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LobsteraiActivityContext | null> {
   const query = new URLSearchParams({ configRevision: String(slot.configRevision) })
   const url = `${product.apiBase}${LOBSTERAI_ACTIVITY_CONTEXT_PATH}/${encodeURIComponent(slot.activityCode)}/context?${query.toString()}`
@@ -235,7 +236,7 @@ export async function claimLobsteraiDailyCheckin(
   credential: LobsteraiCredential,
   product: LobsteraiProduct,
   clientVersion: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<ClaimOutcome> {
   const slot = await fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher)
   if (slot === null) {
@@ -310,7 +311,7 @@ export async function claimLobsteraiDailyCheckin(
 export async function fetchLobsteraiCreditBalance(
   credential: LobsteraiCredential,
   product: LobsteraiProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CreditBalance | null> {
   const result = await requestJson(
     `${product.apiBase}${LOBSTERAI_PROFILE_SUMMARY_PATH}`, credential, product, fetcher,

@@ -27,6 +27,7 @@ import {
   HTTP_HEADER_PRODUCT_CODE,
 } from './buddy.js'
 import type { BuddyCredential } from './buddy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { BuddyProduct } from './product.js'
 
 /** 签到状态查询端点（权威状态源）。 */
@@ -393,7 +394,7 @@ function describeNonJsonResponse(status: number, text: string): string {
 export async function fetchCheckinStatus(
   credential: BuddyCredential,
   product: BuddyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CheckinStatus | null> {
   const result = await postJson(CHECKIN_ACTIVITY_STATUS_PATH, credential, product, fetcher)
   if (!result.ok) return null
@@ -427,7 +428,7 @@ export async function fetchCheckinStatus(
 export async function claimDailyCheckin(
   credential: BuddyCredential,
   product: BuddyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<ClaimOutcome> {
   const result = await postJson(DAILY_CHECKIN_PATH, credential, product, fetcher)
   if (!result.ok) {
@@ -539,7 +540,7 @@ function parseCreditPackage(entry: Record<string, unknown>): CreditPackage {
 export async function fetchCreditBalance(
   credential: BuddyCredential,
   product: BuddyProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CreditBalance | null> {
   const result = await postJson(USER_RESOURCE_PATH, credential, product, fetcher)
   if (!result.ok) return null

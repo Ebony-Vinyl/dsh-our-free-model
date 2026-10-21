@@ -203,7 +203,7 @@ export function createMinimaxPkce(): { codeVerifier: string; codeChallenge: stri
 
 /** 申请设备码。 */
 export async function startMinimaxDeviceAuthorization(
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<MinimaxDeviceAuthorization> {
   const pkce = createMinimaxPkce()
@@ -304,7 +304,7 @@ export async function pollMinimaxDeviceToken(
 /** 续期。 */
 export async function refreshMinimaxCredential(
   refreshToken: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<MinimaxCredential> {
   const response = await fetcher(`${product.accountHost}${MINIMAX_TOKEN_PATH}`, {

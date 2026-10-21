@@ -30,6 +30,8 @@
  */
 
 /** 微信开放平台「网站应用」AppID（取自客户端 `.env.prod` 的 `LOOMY_WECHAT_APP_ID`）。 */
+import { createDomesticFetch } from './domestic-direct.js'
+
 export const LOOMY_WECHAT_APP_ID = 'wx18d60be432287cf8'
 
 /**
@@ -163,7 +165,7 @@ export function buildLoomyWechatQrImageUrl(uuid: string): string {
  */
 export async function fetchLoomyWechatUuid(
   state: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<string> {
   const authUrl = buildLoomyWechatAuthUrl(state)
   let response: Response
@@ -197,7 +199,7 @@ export async function fetchLoomyWechatUuid(
  */
 export async function fetchLoomyWechatQrImage(
   uuid: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<string> {
   const url = buildLoomyWechatQrImageUrl(uuid)
   let response: Response
@@ -255,7 +257,7 @@ function detectImageMime(bytes: Uint8Array): string {
 export async function pollLoomyWechatOnce(
   uuid: string,
   lastErrcode: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<LoomyWechatPollResult> {
   const query = `uuid=${encodeURIComponent(uuid)}`
     + (lastErrcode.length > 0 ? `&last=${encodeURIComponent(lastErrcode)}` : '')

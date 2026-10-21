@@ -68,6 +68,7 @@
  */
 
 import { roundCredits, type CheckinStatus, type ClaimOutcome, type CreditBalance, type CreditPackage } from './credits.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { QODER_BILLING_UTC_OFFSET_MS } from './model-queue.js'
 import { withQoderMachineHeadersAsync } from './qoder-machine.js'
 import { qoderBearerToken, type QoderCredential } from './qoder.js'
@@ -181,7 +182,7 @@ export function isQoderNotActivated(
 export async function fetchQoderUsageRaw(
   credential: QoderCredential,
   product: QoderProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<unknown> {
   try {
     const response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
@@ -322,7 +323,7 @@ function toPackage(
 export async function fetchQoderCreditBalance(
   credential: QoderCredential,
   product: QoderProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<CreditBalance | null> {
   let response: Response
   try {
@@ -522,7 +523,7 @@ async function loadCampaigns(
 export async function fetchQoderCheckinStatus(
   credential: QoderCredential,
   product: QoderProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   nowMs: number = Date.now(),
 ): Promise<CheckinStatus | null> {
   const parsed = await loadCampaigns(credential, product, fetcher)
@@ -605,7 +606,7 @@ export async function claimQoderCampaign(
   credential: QoderCredential,
   product: QoderProduct,
   campaignId: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
 ): Promise<ClaimOutcome> {
   const url = `${product.openApiBase}${QODER_CAMPAIGNS_PATH}/${encodeURIComponent(campaignId)}/claim`
   let response: Response
@@ -669,7 +670,7 @@ function describeNonJson(status: number, text: string): string {
 export async function claimQoderDailyCheckin(
   credential: QoderCredential,
   product: QoderProduct,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   nowMs: number = Date.now(),
 ): Promise<ClaimOutcome> {
   const parsed = await loadCampaigns(credential, product, fetcher)
