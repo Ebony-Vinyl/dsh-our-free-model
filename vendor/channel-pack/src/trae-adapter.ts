@@ -1,17 +1,7 @@
 /**
  * TRAE（字节跳动 TRAE IDE）LLM 适配器。
  *
- * 骨架取自 `src/lobsterai-adapter.ts` / `src/buddy-adapter.ts`，但**载荷转换与 SSE 解析全部重写**。
- *
  * ## 与现有适配器的关键差异
- *
- * | 项 | TRAE | Buddy / LobsterAI |
- * |---|---|---|
- * | 请求体 | OpenAI → SOLO 转换（function/config_name/tools 归一化） | 透传 OpenAI 格式 |
- * | SSE 格式 | SOLO 自定义事件（output/token_usage/done/error）→ 转 OpenAI | 标准 OpenAI SSE |
- * | 请求头 | `Cloud-IDE-JWT <token>` + X-* 系列 | Bearer / X-LobsterAI-Client-* |
- * | 图片 | 不支持 | Buddy / LobsterAI 支持 |
- * | prompt_cache_key | 不发 | Buddy 发（腾讯前缀缓存） |
  *
  * 复用的是 `src/sse.ts` 的三个工具函数（`readWithIdleTimeout` / `resolveToolPairing` /
  * `normalizeToolArguments` / `isTruncatedArguments`）——它们处理的是 OpenAI 协议层的通用陷阱。
@@ -264,7 +254,6 @@ function contentToText(content: unknown): string {
     .join('')
 }
 
-/** 工具结果内嵌图片的载体文本（与 buddy / lobsterai 适配器同名同义）。 */
 const TOOL_RESULT_IMAGE_TEXT = 'Attached image(s) from tool result:'
 
 /**
@@ -366,11 +355,6 @@ function collectImages(content: readonly unknown[], refs: Map<string, unknown>):
  *    工具返回值**，于是反复请求同一个工具，或凭空编造结果；
  * 3. `reasoning` 块被当作正文喂回，污染上下文。
  *
- * 三个兄弟适配器（`llm-adapter.ts` / `buddy-adapter.ts` /
- * `lobsterai-adapter.ts`）**都有**这一步 `serializeMessages`，只有 TRAE
- * 漏了 —— 本文件顶部甚至 already `import` 了 `resolveToolPairing` 却从未使用，
- * 说明当初就是打算写、但没接上。
- *
  * 序列化后的形状与 Go 端（`payload.go:PrepareBody`）的输入**完全一致**：
  * assistant 带 `tool_calls`（`function` 形态），工具结果展开为独立
  * `{role:'tool', tool_call_id}` 消息。随后 `transformToSOLOBody` 再按 SOLO
@@ -399,7 +383,7 @@ function serializeTraeMessages(
 
   // 工具结果内嵌图片（`read_image` 等）不能并入 `role:'tool'` 消息：该角色的
   // content 只能是字符串，且必须紧跟其 assistant tool_call，中间插消息会 400。
-  // 故挂起到其后的独立 user 消息统一发出（与 buddy / lobsterai 同款处理）。
+
   let pendingToolImages: Array<Record<string, unknown>> = []
   const flushToolImages = (): void => {
     if (pendingToolImages.length === 0) return
@@ -1274,10 +1258,6 @@ export class TraeAdapter extends LlmAdapter {
     /**
      * 思考死循环检测（见 `createReasoningLoopDetector`）。命中后丢弃后续
      * reasoning 增量，收尾时发截断后的 block，并让 finish 报 max-tokens。
-     *
-     * 与 buddy 同因：`reasoning_tokens` **计入** `completion_tokens`，思考陷入
-     * 病态重复就把输出额度烧光、正文零产出，而 `finish` 若是 `stop`，UI 上
-     * 完全看不出错误。
      */
     const loopGuard = isReasoningLoopGuardEnabled() ? createReasoningLoopDetector() : undefined
     let loopDetected = false
@@ -1472,7 +1452,7 @@ export class TraeAdapter extends LlmAdapter {
                         const fragment = fn !== undefined && typeof fn.arguments === 'string' ? fn.arguments : ''
                         block.text += fragment
                         // ⚠️ **名称为空前不发射任何 chunk**（与 `openai-compat.ts` /
-                        // `buddy-adapter.ts` 同因同修）。只跳过收尾的 `block-end`
+
                         // 不够 —— `BlockAssembler` 会把没有 block-end 的 partial
                         // 也组装成 `name:''`，污染会话后让下游端点以 400 拒绝请求。
                         if (!block.announced) {
@@ -1733,11 +1713,6 @@ export class TraeAdapter extends LlmAdapter {
       && isProseTruncatedByStopString(emittedProse)
     /**
      * 思考死循环是否**是唯一的产出**（无正文、无工具调用）。
-     *
-     * ⚠️ 与 `buddy-adapter.ts` / `openai-compat.ts` 同因同修（Gitee !IKIZNK）：
-     * 只有该步没有可见产出时才报 `error` —— `error` 路径**不落
-     * `assistant/message`**（实测 219 会话里 222 例），有正文/工具调用时报它会把
-     * 用户可见内容整块丢掉。实测守卫命中的 25 例全部只有思考。
      */
     const reasoningLoopIsSoleOutput = loopDetected
       && emittedProse === ''

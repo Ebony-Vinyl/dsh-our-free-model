@@ -420,26 +420,43 @@ try {
     })
   }
 
-  await check('EAC no-progress limit defaults to 60 seconds even when recovery is disabled', () => {
-    for (const value of [undefined, false, { enabled: false }, { progressTimeoutMs: 120000 }]) {
-      assert.equal(recoveryPolicy(value).progressTimeoutMs, 60000)
+  await check('EAC no longer has an independent no-progress deadline, including legacy settings', () => {
+    for (const value of [undefined, false, { enabled: false }, { progressTimeoutMs: 200 }]) {
+      assert.equal(Object.hasOwn(recoveryPolicy(value), 'progressTimeoutMs'), false)
     }
   })
 
   for (const [label, answer] of [
-    ['held headers', { holdHeaders: true }],
-    ['heartbeats', { pieces: Array(8).fill(': heartbeat\n\n'), intervalMs: 80, hold: true }],
-    ['empty deltas and usage', { pieces: Array(8).fill(sse({ choices: [{ delta: { content: '' } }], usage: { prompt_tokens: 1, completion_tokens: 0 } })), intervalMs: 80, hold: true }],
-  ]) await check(`EAC ${label} cannot extend the no-progress deadline`, async () => {
+    ['held headers', { delayMs: 400, body: deltas('chat', { text: ANSWER }) + terminal('chat') }],
+    ['heartbeats', { pieces: [...Array(6).fill(': heartbeat\n\n'), deltas('chat', { text: ANSWER }) + terminal('chat')], intervalMs: 80 }],
+    ['empty deltas and usage', { pieces: [...Array(6).fill(sse({ choices: [{ delta: { content: '' } }], usage: { prompt_tokens: 1, completion_tokens: 0 } })), deltas('chat', { text: ANSWER }) + terminal('chat')], intervalMs: 80 }],
+  ]) await check(`EAC ${label} can wait for an answer beyond the former progress deadline`, async () => {
     const run = await drive('union-alpha', [answer], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { enabled: false, progressTimeoutMs: 200 } } })
-    checkFinal(run, 'error', 1)
-    assert.equal(run.finish.failure.code, 'NO_PROGRESS')
-    assert.match(run.finish.failure.message, /EAC.*0\.2s.*stopped.*will not be retried automatically/)
-    assert.equal(run.adapter.providerRetryPolicy().retryableCodes.includes('NO_PROGRESS'), false)
-    assert.ok(run.elapsedMs < 2000)
+    checkFinal(run, 'stop', 1)
+    assert.ok(run.elapsedMs > 200)
+    assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
   })
 
-  for (const kind of ['text', 'reasoning', 'tool']) await check(`EAC actual ${kind} progress keeps a longer stream alive`, async () => {
+  for (const recovery of [true, false]) await check(`EAC does not schedule the former 60-second cutoff (recovery=${recovery})`, async () => {
+    const originalTimer = globalThis.setTimeout
+    let cutoffTimers = 0
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      if (delay === 60000) {
+        cutoffTimers++
+        return originalTimer(callback, 10, ...args)
+      }
+      return originalTimer(callback, delay, ...args)
+    }
+    try {
+      const run = await drive('union-alpha', [{
+        delayMs: 80, body: deltas('chat', { text: ANSWER }) + terminal('chat'),
+      }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: recovery } })
+      checkFinal(run, 'stop', 1)
+      assert.equal(cutoffTimers, 0)
+    } finally { globalThis.setTimeout = originalTimer }
+  })
+
+  for (const kind of ['text', 'reasoning', 'tool']) await check(`EAC preserves ${kind} across a longer stream`, async () => {
     const pieces = Array.from({ length: 7 }, (_, index) => kind === 'tool'
       ? deltas('chat', { ...(index === 0 ? { toolName: 'test_tool' } : {}), toolArgs: index === 0 ? '{"x":"' : index === 6 ? '"}' : 'x' })
       : deltas('chat', { [kind]: 'progress' }))
@@ -450,7 +467,7 @@ try {
     assert.ok(run.elapsedMs > 200)
   })
 
-  for (const emptyArguments of [false, true]) await check(`EAC named tool start renews progress before ${emptyArguments ? 'zero' : 'delayed'} arguments`, async () => {
+  for (const emptyArguments of [false, true]) await check(`EAC named tool start accepts ${emptyArguments ? 'zero' : 'delayed'} arguments after waiting`, async () => {
     const pieces = [
       ': waiting\n\n',
       deltas('chat', { toolName: TOOL.name }),
@@ -465,21 +482,20 @@ try {
     assert.ok(run.chunks.some(chunk => chunk.type === 'block-end' && chunk.block?.type === 'tool-call' && chunk.block.name === TOOL.name))
   })
 
-  await check('EAC stops after partial text when only heartbeats follow', async () => {
-    const run = await drive('union-alpha', [{ pieces: [deltas('chat', { text: ANSWER }), ...Array(8).fill(': heartbeat\n\n')], intervalMs: 80, hold: true }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { progressTimeoutMs: 200 } } })
-    checkFinal(run, 'error', 1)
-    assert.equal(run.finish.failure.code, 'NO_PROGRESS')
+  await check('EAC waits through a heartbeat-only gap after partial text', async () => {
+    const run = await drive('union-alpha', [{ pieces: [deltas('chat', { text: ANSWER }), ...Array(6).fill(': heartbeat\n\n'), terminal('chat')], intervalMs: 80 }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { progressTimeoutMs: 200 } } })
+    checkFinal(run, 'stop', 1)
+    assert.ok(run.elapsedMs > 200)
     assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
   })
 
-  await check('EAC no-progress failure stops a combo without advancing or continuing', async () => {
+  await check('EAC silent waiting does not advance a combo or duplicate the request', async () => {
     const run = await drive('union-alpha', [
-      { pieces: Array(8).fill(': heartbeat\n\n'), intervalMs: 80, hold: true },
-      { body: deltas('chat', { text: ANSWER }) + terminal('chat') },
+      { pieces: [...Array(6).fill(': heartbeat\n\n'), deltas('chat', { text: ANSWER }) + terminal('chat')], intervalMs: 80 },
     ], { combo: true, entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { enabled: false, progressTimeoutMs: 200 } } })
-    checkFinal(run, 'error', 1)
-    assert.equal(run.finish.failure.code, 'NO_PROGRESS')
-    assert.ok(run.chunks.every(chunk => chunk.type !== 'text-delta'))
+    checkFinal(run, 'stop', 1)
+    assert.ok(run.elapsedMs > 200)
+    assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
   })
 
   await check('caller cancellation stops a combo before its next candidate', async () => {

@@ -3,9 +3,6 @@
  *
  * ## 与其它 provider 的共同点
  *
- * 「读凭据 → 直发远端」—— 这一点与 CodeArts / Buddy / Qoder 等**相同**。
- * 用户在 Channel Pack 面板点「添加账号」走插件自己的授权流即可，**不需要安装任何客户端**。
- *
  * ## 与其它 provider 的差异（全部实测）
  *
  * | 维度 | ZCode | 对照 |
@@ -178,9 +175,6 @@ const ZCODE_STREAM_IDLE_RETRY_STEP_MS = 30_000
 
 /**
  * 解析「流式读取空闲超时」，可用 `DSH_ZCODE_SSE_IDLE_TIMEOUT_MS` 覆盖。
- *
- * ⚠ **每次 `stream()` 调用时读取**（与 buddy/cline/trae/qoder 同一约定），
- * 单测靠它注入短超时。
  *
  * ⚠ 不能写成 `parseInt(…) || 默认值`：`0` 是合法值（显式关闭空闲超时），
  * 而 `0` 是 falsy 会被 `||` 静默换回 10 分钟。故用 `??` + 显式比较。

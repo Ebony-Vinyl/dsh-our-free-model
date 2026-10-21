@@ -191,7 +191,7 @@ function toLoginFlowResult(
 ): LobsteraiLoginFlowResult {
   return {
     access: JSON.stringify(credential),
-    // 与 Buddy 侧一致：无法解析过期时间时报告 0，而不是抛错 ——
+
     // 凭据本身可用（只是有效期未知），不该因为展示层的缺失而登录失败。
     expires: lobsteraiCredentialExpiresAtMs(credential) ?? 0,
     loginUrl,

@@ -3,12 +3,6 @@
  *
  * ## 为什么新建 `LoomyProduct` 而不复用既有类型
  *
- * `BuddyProduct` / `LobsteraiProduct` / `QoderProduct` 的字段全部围绕各自
- * 协议设计（归属头、refresh 载荷、WASM 签名参数…），对 Loomy 无一有意义。
- * Loomy 需要的是：两个 base URL（账号 vs 业务）、讯飞 AccessKey、
- * 以及一张兜底模型表。故定义**平行**的接口 —— 共用的是架构**模式**
- * （产品差异收敛到单一真相源），不是那个类型。
- *
  * ## 数据来源
  *
  * - base URL / AccessKey / appId：`C:\Program Files\Loomy\resources\.env.prod`
@@ -133,9 +127,6 @@ export const ALL_LOOMY_PRODUCTS: readonly LoomyProduct[] = [LOOMY]
 
 /**
  * 按 provider id 取 Loomy 产品配置；未知 id 返回 undefined。
- *
- * 与 `productById`（CodeBuddy 系）/ `lobsteraiProductById` 等分开：
- * 各自返回**不同类型**，合并会让调用方拿到联合类型后再也不得不做类型收窄。
  */
 export function loomyProductById(id: string): LoomyProduct | undefined {
   return ALL_LOOMY_PRODUCTS.find((product) => product.id === id)

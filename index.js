@@ -30,7 +30,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { externalUrl, openExternal } from './src/open-external.js'
 import { ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
-import { DATA_DIR_NAME, decodeWindow, resolveDshHome, publicModelVisibility, validateModelVisibility, isModelHidden } from './src/store.js'
+import { DATA_DIR_NAME, resolveDshHome, publicModelVisibility, validateModelVisibility, isModelHidden } from './src/store.js'
 import { isEacEntry, isKiloEntry } from './src/catalog.js'
 import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
@@ -42,7 +42,7 @@ import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
 import { unlockSealedLane } from './src/vault.js'
 import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort.js'
-import { windowTokens } from './src/stream.js'
+import { modelAvailability } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
 import { PluginUpdater } from './src/updater.js'
@@ -997,7 +997,7 @@ export function apply(ctx, config) {
   const fenceConnection = connectionAdmissionView(() => optional('connection'))
   // ── the absorbed free-channel pack ──────────────────────────────────────────
   /**
-   * The 白嫖 channels — CodeArts (华为云), CodeBuddy / WorkBuddy (腾讯), LobsterAI
+   * The 白嫖 channels — CodeArts (华为云), LobsterAI
    * (有道), Qoder / Qoder CN (阿里系), TRAE (字节), Cline, Loomy (讯飞), Raccoon
    * (商汤), MiniMax Code, ZCode (智谱) and Gemini (Google) — are
    * carried with local integration adaptations from the plugin that shipped them, vendored under
@@ -1026,10 +1026,10 @@ export function apply(ctx, config) {
       if (stopped) return
       pack.apply(scoped, {
         disableOpencode: true,
-        outlet: { active: egressActive, fetch: egressFetch },
+        outlet: { active: egressActive, fetch: egressFetch, fetchSigned: (input, init, send) => egressFetch(input, init, send) },
       })
       channelPack = { state: 'ready', error: '' }
-      logger.info?.('our-free-model: free-channel pack mounted (CodeArts, CodeBuddy, and 11 more)')
+      logger.info?.('our-free-model: free-channel pack mounted (CodeArts and 10 more)')
     }).catch(error => {
       if (stopped) return
       channelPack = { state: 'failed', error: String(error?.message ?? error).slice(0, 300) }
@@ -1293,45 +1293,7 @@ export function apply(ctx, config) {
       settings.flush()
       return minted
     },
-    testModel: async (id, effort) => {
-      const entry = modelRuntime.catalog.find(candidate => candidate.id === id)
-      if (entry === undefined) throw new UpstreamError(`unknown model "${id}"`, CODE.server)
-      const started = Date.now()
-      let firstFrame
-      let sawReasoning = false
-      let text = ''
-      let usage
-      for await (const chunk of adapter.stream({
-        provider: ROUTE_MAIN,
-        model: entry.id,
-        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-        reasoningEffort: effort === undefined || effort === '' ? DEFAULT_LEVEL : effort,
-        sessionId: `bench:${entry.id}:${effort ?? DEFAULT_LEVEL}`,
-      }, entry, state())) {
-        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-call-delta') {
-          if (firstFrame === undefined) firstFrame = Date.now()
-          if (chunk.type === 'reasoning-delta') sawReasoning = true
-          if (chunk.type === 'text-delta') text += chunk.text
-        }
-        if (chunk.type === 'usage') usage = chunk.usage
-        if (chunk.type === 'finish' && chunk.reason.kind !== 'stop' && chunk.reason.kind !== 'tool-calls') {
-          throw new UpstreamError(chunk.reason.failure?.message ?? chunk.reason.kind, chunk.reason.failure?.code ?? CODE.server)
-        }
-      }
-      const ms = Date.now() - started
-      // Same rule as the recorded calls: the rate divides only by a window that
-      // actually covers the tokens in its numerator.
-      const measured = decodeWindow(firstFrame === undefined ? 0 : ms - firstFrame, windowTokens(usage, sawReasoning), true)
-      return {
-        model: entry.id, effort: effort ?? DEFAULT_LEVEL, ok: true,
-        totalMs: ms,
-        ttftMs: firstFrame === undefined ? ms : firstFrame - started,
-        outputTokens: usage?.outputTokens ?? 0,
-        reasoningTokens: usage?.reasoningTokens ?? 0,
-        tokensPerSecond: measured.tps,
-        sample: text.slice(0, 60),
-      }
-    },
+    testModel: (id, effort, options) => modelRuntime.testModel(id, effort, options),
     meta: () => ({
       version: packageVersion,
       distribution,
@@ -1989,8 +1951,17 @@ export function createApiRoutes(deps) {
       }
       if (method === 'POST' && routePath === '/bench') {
         const body = await readJson(req)
-        const result = await deps.testModel(String(body.model ?? ''), body.effort === undefined ? undefined : String(body.effort))
-        return send(200, result)
+        const controller = new AbortController()
+        const abort = () => controller.abort(new UpstreamError('Text test cancelled', CODE.aborted))
+        res.once?.('close', abort)
+        try {
+          const result = await deps.testModel(String(body.model ?? ''), body.effort === undefined ? undefined : String(body.effort), { signal: controller.signal })
+          if (!controller.signal.aborted) return send(200, result)
+          return
+        } catch (error) {
+          if (!controller.signal.aborted) throw httpError(error.status === 404 ? 404 : error.code === CODE.timeout ? 504 : 502, String(error.message ?? error))
+          return
+        } finally { res.removeListener?.('close', abort) }
       }
       return send(404, { error: 'not found' })
     } catch (error) {
@@ -2319,18 +2290,14 @@ function buildSummary(deps) {
   // Lanes that carry no availability verdict of their own. The absorbed channels
   // and the aggregate lane are named by a listing round that already succeeded,
   // and a combo is a view over rows that were themselves named — none of them is
-  // pinged, so "no verdict" must not render as "unknown".
+  // pinged. A listing is not an inference verdict; explicit tests add their own samples.
   const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
       hiddenByUser: isModelHidden(entry, state.settings),
       hiddenByGroup: isModelHidden(entry, { ...state.settings, hiddenModelIds: [] }),
-      availability: unprobed(entry) ? STATE.available : (snapshot.results?.[entry.id]?.state ?? STATE.unknown),
-      detail: unprobed(entry) ? '' : (snapshot.results?.[entry.id]?.detail ?? ''),
-      probedAt: unprobed(entry) ? 0 : (snapshot.results?.[entry.id]?.at ?? 0),
-      ttftMs: unprobed(entry) ? undefined : snapshot.results?.[entry.id]?.ttftMs,
-      latencyMs: unprobed(entry) ? undefined : snapshot.results?.[entry.id]?.latencyMs,
+      ...modelAvailability(entry.id, snapshot, unprobed(entry)),
       // What each rung of the effort menu will really put on the wire for this
       // model, so the page never shows a 32K "output ceiling" beside a call that
       // was cut off at 8K. A model with no effort menu has no ladder to show;

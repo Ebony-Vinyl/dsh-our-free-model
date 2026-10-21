@@ -1,9 +1,8 @@
 # vendor/channel-pack — 上游免费渠道包的来源与再构建
 
 本目录是 **[dsh-codearts-auth](https://gitee.com/iJetLi/deepseek-harness-codearts)**
-的完整拷贝，由 `dsh-our-free-model` 的 Host 半身在独立 fiber 上挂载，
-使 CodeArts、CodeBuddy、WorkBuddy、LobsterAI、Qoder、Qoder 中国版、TRAE、
-Cline、Loomy、Raccoon、MiniMax Code、ZCode、Gemini 这十三个账号渠道的
+吸收并裁剪的渠道实现，由 `dsh-our-free-model` 的 Host 半身在独立 fiber 上挂载，
+提供 CodeArts、LobsterAI、Qoder、Qoder 中国版、TRAE、Cline、Loomy、Raccoon、MiniMax Code、ZCode、Gemini 十一个账号渠道的
 登录流程、账号池、积分领取、模型黑名单与本地 OpenAI 网关可用。OFM 挂载时关闭上游 OpenCode 账号接入，原有匿名免费车道保持独立。
 目录名与内部标识符在本插件的再构建中统一改为 channel-pack；出处与许可证不变。
 
@@ -31,14 +30,12 @@ Cline、Loomy、Raccoon、MiniMax Code、ZCode、Gemini 这十三个账号渠道
 直接从受版本管理的 `src/` 打包，不使用未入库的 `lib/`：
 
 ```bash
-# 在仓库外准备构建依赖，保持插件零运行依赖
-npm install --prefix /tmp/ofm-channel-build --no-package-lock --ignore-scripts esbuild@0.24.2 jose@6.2.9 undici@8.11.2
-mkdir -p vendor/channel-pack/node_modules
-cp -R /tmp/ofm-channel-build/node_modules/jose /tmp/ofm-channel-build/node_modules/undici vendor/channel-pack/node_modules/
+# 从锁文件安装再构建依赖，不执行生命周期脚本
+npm ci --ignore-scripts
+# esbuild 放在仓库外，不引入插件运行依赖
+npm install --prefix /tmp/ofm-channel-build --no-package-lock --ignore-scripts esbuild@0.25.12
 OFM_ESBUILD_DIR=/tmp/ofm-channel-build npm run channel-pack
 # qoder-auth-wasm.wasm 沿用上游已有文件，须与 pack.js 同目录
-# 清理本次创建的构建依赖；这些目录不入库、不随插件发布
-rm -rf vendor/channel-pack/node_modules
 ```
 
 ## OFM 本地适配
@@ -46,7 +43,8 @@ rm -rf vendor/channel-pack/node_modules
 - `src/index.ts`：增加可选 `disableOpencode` 挂载配置；OFM 开启它时跳过重复 OpenCode adapter、默认匿名账号和能力表预热，保留历史账号及凭据。省略时维持上游行为。
 - `src/channel-pack-rpc.ts`：追加同一配置，关闭时拒绝 `opencode.*` 与通用 `account.create(provider=opencode)`。
 - 打包入口改为 `src/index.ts`；宿主模块仍保持外部，jose/undici 内联。
-- 构建依赖固定为 esbuild 0.24.2、jose 6.2.9、undici 8.11.2；本次重构建核对了原包的依赖代码，未借此升级运行依赖。
+- 再构建使用 esbuild 0.25.12，jose 6.1.3 与 undici 8.11.2 沿用根目录锁文件，未借此升级运行依赖。
+- `src/credential-expiry.ts` 与 `src/credit-expiry-window.ts` 提供渠道间共享的纯函数。积分临时窗口默认 15 天，可通过 `DSH_CREDIT_EXPIRING_WINDOW_DAYS` 显式设置为非负天数。
 
 本目录**不含**上游的浏览器半身（`plugin-src/client`）与其设置页——
 界面由 `dsh-our-free-model` 自己的三页界面取代，渠道操作经上游的

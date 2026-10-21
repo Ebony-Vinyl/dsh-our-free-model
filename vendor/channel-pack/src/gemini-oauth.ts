@@ -179,10 +179,6 @@ export function parseGeminiTokenGrant(payload: unknown, previousRefreshToken?: s
 
 /**
  * 从 `id_token` 解出身份（`sub` / `email`）。
- *
- * ⚠️ **不验签**：该值只用于展示名与稳定标识，不作为鉴权依据（与
- * `src/buddy.ts` 的 `jwtExpiresAtMs` 同口径）；令牌端点的响应本身已由 TLS 保护。
- * 任何解析失败返回 `{}` 而不抛错 —— 身份不该让授权失败。
  */
 export function geminiIdentityFromIdToken(idToken: string): GeminiUserInfo {
   if (typeof idToken !== 'string' || idToken === '') return {}

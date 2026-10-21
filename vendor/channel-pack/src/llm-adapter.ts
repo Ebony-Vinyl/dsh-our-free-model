@@ -12,6 +12,7 @@ import { settingsNamespaceFor } from './settings-compat.js'
 import { nextUtc8DayStartMs } from './model-queue.js'
 import { isCodeArtsBenefitModel } from './models.js'
 import { normalizeHarnessMessages } from './message-shape.js'
+import { directFetch } from './direct-fetch.js'
 import { signRequestHuawei } from './sign.js'
 import { createBlankReasoningSuppressor, createReasoningLoopDetector, hasUsableToolName, isReasoningLoopGuardEnabled, isTruncatedArguments, normalizeToolArguments, readWithIdleTimeout, reasoningLoopFailure, resolveEmptyResponseReason, resolveToolPairing, stripCourseLeakFromHistoryContent, stripCourseLeakIfEnabled } from './sse.js'
 import type { CodeArtsCredential } from './types.js'
@@ -368,13 +369,6 @@ class SseQuotaExhaustedError extends Error {
 
 /**
  * 把「距重置还有多久」格式化成中文短句。
- *
- * 用户需求（2026-10-02）：「其它渠道限额到了会提示多少时间后会解除限额，
- * 这个 codearts 的也加上吧」—— 其它渠道（buddy / workbuddy）由**服务端**
- * 在错误文案里给出重置时刻，故 `parseRateLimitError` 能解析；CodeArts 的
- * benefit 额度报文里**没有**任何时间字段（实测 `InferHub.4291.200` 的
- * `details` 只有 requestId / timestamps / modelId / traceId），因此按
- * **UTC+8 自然日**自行推算（见 {@link codeartsQuotaExhaustedMessage}）。
  *
  * @param resetAtMs - 解禁时刻（UTC 毫秒）。
  * @param nowMs - 当前时刻（注入以便单测）。
@@ -897,18 +891,13 @@ export class CodeArtsAdapter extends LlmAdapter {
 
   constructor(private readonly options: CodeArtsAdapterOptions) {
     super()
-    this.fetchImpl = options.fetchImpl ?? fetch
+    this.fetchImpl = options.fetchImpl ?? directFetch
     this.chatId = options.chatId ?? crypto.randomUUID().replace(/-/g, '')
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, '')
   }
 
   /**
    * 描述本适配器拥有的 provider 路由。
-   *
-   * 与 BuddyAdapter 同款防御：DSH 校验 `info.id === provider`，且模型设置页
-   * 会用该 id 计算 `deriveKeyRef(provider)`（内部 `provider.toUpperCase()`）。
-   * 入参异常时回退到 PROVIDER 常量，避免客户端抛
-   * `undefined.toUpperCase is not a function`。
    */
   providerInfo(provider: string): LlmProviderInfo {
     const id = typeof provider === 'string' && provider.length > 0 ? provider : PROVIDER
@@ -1412,10 +1401,6 @@ export class CodeArtsAdapter extends LlmAdapter {
      * 空 id 同样过不了 `SessionFormatError`（它判 `length === 0`），故判据必须是
      * 「非空字符串」而不是「!== undefined」。
      *
-     * 兄弟适配器（`openai-compat.ts` / `buddy-adapter.ts` / `lobsterai-adapter.ts` /
-     * `trae-adapter.ts`）**都**有这层 `toolIds` 兜底，只有本文件漏了 —— 这正是
-     * 该缺陷只在 `codearts` provider 复现的原因。
-     *
      * ⚠️ 兜底 id 用 `call_${wireIndex}` 而非随机值：同一次响应内 index 唯一，
      * 且它必须是**稳定**的 —— 后续分片每片都要得到同一个 id。
      */
@@ -1444,13 +1429,6 @@ export class CodeArtsAdapter extends LlmAdapter {
      *
      * ⚠️ 语义差异：实测正文循环的工具调用在循环正文**之后**到达且有效，
      * 故正文守卫**只截断文本**，绝不 `reader.cancel()`、绝不改 finish reason。
-     *
-     * ⚠️ **本适配器刻意不做 `</think:hex>` 归位**（与其余四个适配器不同）：
-     * 实测那 28 处标签**全部出自 `workbuddy`**（`hy4-preview-f` 25 处、
-     * `workbuddy/deepseek-v4.1-flash` 3 处），codearts 一条都没有。
-     * 更关键的是，本适配器的正文出口带 **`visible` 回退**（正文为空且无工具
-     * 调用时用推理文本回填可见区）—— 若在此处把正文归位成空串，回退会立刻
-     * 把整段思考**复制回正文**，等于归位失效并放大问题。故此处只加守卫。
      */
     const proseLoopGuard = isReasoningLoopGuardEnabled() ? createReasoningLoopDetector() : undefined
     let proseLoopDetected = false
@@ -1620,7 +1598,7 @@ export class CodeArtsAdapter extends LlmAdapter {
             break
           }
           let data: {
-            error_code?: string
+            error_code?: string | number
             error_msg?: string
             choices?: Array<{
               delta?: {
@@ -1643,23 +1621,24 @@ export class CodeArtsAdapter extends LlmAdapter {
           }
           // SSE 内嵌错误检测：CodeArts 以 HTTP 200 + error_code/error_msg
           // 返回排队/限流（如 InferHub.ModelArts.81111.429 TPM 超限）。
-          if (typeof data.error_code === 'string' && data.error_code.length > 0) {
+          if ((typeof data.error_code === 'string' && data.error_code.length > 0) || data.error_code === 4004) {
+            const errorCode = String(data.error_code)
             const message = typeof data.error_msg === 'string' && data.error_msg.length > 0
               ? data.error_msg
-              : data.error_code
+              : errorCode
             // ⚠️ 顺序不可颠倒：额度耗尽（InferHub.4291.200）必须**先**于排队判据
             // 检查。历史上它们混淆过一次 —— `4291` 被 `429` 的裸子串匹配吃掉，
             // 额度错误因此被当成「可重试的排队」，进入 30 分钟静默重试循环，
             // 界面零输出（用户报障「没反应」的直接原因）。
             // 现在两个判据已互斥（裸 `429` 已锚定为独立数字），这里的先后仍保留：
             // 它把「额度优先」表达成代码结构，防止后续再有人放宽 `429` 判据。
-            if (isSseQuotaExhaustedErrorCode(data.error_code, message)) {
-              throw new SseQuotaExhaustedError(data.error_code, message)
+            if (isSseQuotaExhaustedErrorCode(errorCode, message)) {
+              throw new SseQuotaExhaustedError(errorCode, message)
             }
-            if (isSseQueueErrorCode(data.error_code)) {
-              throw new SseQueueRetryError(data.error_code, message)
+            if (isSseQueueErrorCode(errorCode)) {
+              throw new SseQueueRetryError(errorCode, message)
             }
-            if (data.error_code === CODEARTS_BENEFIT_NOT_FOUND_ERROR_CODE) {
+            if (errorCode === CODEARTS_BENEFIT_NOT_FOUND_ERROR_CODE || errorCode === '4004') {
               // 账号没有 benefit 包（积分制账户）：交给 stream() 去掉该头重试
               throw new LlmError(`codearts: ${message}`, BENEFIT_NOT_FOUND_CODE, { status: 200 })
             }
@@ -1763,10 +1742,10 @@ export class CodeArtsAdapter extends LlmAdapter {
             }
             const fragment = call.function?.arguments ?? ''
             block.text += fragment
-            // ⚠️ **名称为空前不发射任何 chunk**（与 `openai-compat.ts` / `buddy-adapter.ts`
+
             // 同因同修）。只跳过收尾的 `block-end` 不够 —— `BlockAssembler`
             // 会把没有 block-end 的 partial 也组装成 `name:''`，污染会话后让
-            // 腾讯系端点以 400 code 11133 拒绝之后每一次请求。
+
             if (!block.announced) {
               if (!hasUsableToolName(block.name)) continue
               block.announced = true
@@ -1882,7 +1861,7 @@ export class CodeArtsAdapter extends LlmAdapter {
     // reasoning 回退。初版只对 reasoning 侧调了 `stripCourseLeakIfEnabled`，
     // 正文侧直接取 `textBlock.text` 原值 —— 于是「正文块里带行首泄漏」这一路径
     // 完全没被覆盖，`block-end` 发出去的仍是脏文本（同型缺陷见
-    // `buddy-adapter.ts` / `lobsterai-adapter.ts` / `trae-adapter.ts` 的
+
     // text 出口，那几处均已清洗）。
     //
     // 清洗放在**取值处**而非 `block-end` 处：`visible` 同时供 text `block-end`
@@ -1974,11 +1953,6 @@ export class CodeArtsAdapter extends LlmAdapter {
     const droppedUnnamedCalls = [...toolCalls.values()].some(block => !block.announced)
     /**
      * 思考死循环是否**是唯一的产出**（无可见正文、无工具调用）。
-     *
-     * ⚠️ 与 `buddy-adapter.ts` / `openai-compat.ts` 同因同修（Gitee !IKIZNK）：
-     * 只有该步没有可见产出时才报 `error` —— `error` 路径**不落
-     * `assistant/message`**（实测 219 会话里 222 例），有可见内容时报它会把内容
-     * 整块丢掉。
      *
      * ⚠️ 判据用 `visible`（＝真正会发出去的正文块文本）而**不是** `textBlock`：
      * 本适配器有「正文为空且无工具调用时用推理文本回填正文」的回退（见下方
@@ -2075,170 +2049,23 @@ export function registerCodeArtsLlm(ctx: Context, options: CodeArtsAdapterOption
 }
 
 /**
- * CodeBuddy 系（buddy / workbuddy）表示「用量超出频率限制」的业务码。
- *
- * 判据优先用结构化业务码而非文案：**它与语言无关**，且不受服务端改文案影响。
- * 国际版与国内版用的是同一个码（实测均为 6004），只有 msg 文案分中英文。
- */
-const RATE_LIMIT_BUSINESS_CODE = 6004
-
-/**
  * 限流文案的**自然语言兜底**判据。
  *
  * 为什么需要兜底：并非所有限流错误都带得上结构化 code —— SSE 流内错误、
  * 网关返回的裸文本、以及 CodeArts（华为云）的中文错误都只有文案可判。
  *
- * ⚠️ **中英文都必须列全**。历史缺陷（用户报障，仅国际版暴露）：此处早期只有
- * 中文词（频率限制 / 使用量已超出 / 频率超出 / 重置），而国际版 WorkBuddy
- * （www.workbuddy.ai）返回的是英文
- * `usage exceeds frequency limit ... your usage will reset at <时间> UTC+8`。
- * 结果 `isRateLimited` 恒为 false → 适配器**跳过整个账号切换分支**，直接抛出
- * 原始 6004 JSON；错误码也因 HTTP 400 退化成 INVALID_REQUEST 而非
- * QUOTA_EXCEEDED。国内版返回中文文案，所以该缺陷只在国际版复现。
- *
  * `too many requests` 是标准 OpenAI 429 措辞，一并纳入。
  */
 const RATE_LIMIT_PATTERN =
   /频率限制|频率超出|使用量已超出|重置|rate.?limit|frequency limit|usage exceeds|too many requests/i
-
-/**
- * 腾讯网关「**模型饱和**」业务码（HTTP 429）。
- *
- * ## 它必须与额度限流（6004）分开（真实报障，2026-10-05）
- *
- * 用户第一次用 `buddy/space-bunny` 就报「模型 space-bunny 所有账号均受限」。
- * 直连实测（`scripts/probe-buddy-error-catalog.mjs`）逼出了服务端原话：
- * ```json
- * {"code":14003,"msg":"too many requests",
- *  "displayMsg":{"zh":"模型繁忙，请换模型或稍后重试"},
- *  "displayTips":{"zh":"这个模型当前请求量饱和，与你的网络无关。请换个模型，或稍等一会儿再重试。"},
- *  "actions":["SWITCH_MODEL","SUBMIT_FEEDBACK","RETRY"]}
- * ```
- *
- * ⚠️ **它自己就说明了「这不是账号问题」**（注意 `actions` 里根本没有换号的选项，
- * 只有 `SWITCH_MODEL`）。但 `isRateLimited` 对 **429 无条件返回 true** ⇒
- * 适配器把每个账号都写上「1 小时限流」标记（报文无「将在…重置」，
- * 故取 `RATE_LIMIT_FALLBACK_MS` 兜底）⇒ 4 个独立账号在 20 秒内**全部**被锁
- * ⇒ 用户等到 1 小时也不能用，且**期间连别的模型都受影响**（同一个账号池）。
- *
- * 实测证据（同型缺陷的判据来源）：
- * | 观测 | 结果 |
- * |---|---|
- * | 4 个不同腾讯 uid 的账号 | 20 秒内**全部**被标记 `space-bunny` |
- * | 标记解禁时刻 | 全部等于「写入 + 整 1 小时」= 兜底值，**非**服务端给的时刻 |
- * | 4 MB 输入 | 稳定逼出 `429 / 14003`（46~111 秒才返回） |
- * | 小请求 30 发 | 全 200，但耗时 841ms ~ 216s —— 上游是**时变**背压 |
- *
- * ⇒ 「4 个互不相干的账号同时中招」在账号级限流下无法解释，**只能**是模型级。
- * 与 zcode `3009 model concurrency limit exceeded` 同型（那边结论同样是
- * 「退避重试，**不换号、不标记**」）。
- *
- * ⚠️ **不许把 14003 并进 `RATE_LIMIT_BUSINESS_CODE`**：两者的正确动作相反 ——
- * 6004 是「这个账号在这模型上的额度用完了」（换号有效、必须标记）；
- * 14003 是「这个模型此刻整体饱和」（换号**无益**、**不许**标记）。
- */
-export const MODEL_SATURATION_BUSINESS_CODE = 14003
-
-/**
- * 「模型饱和」的**自然语言兜底**判据。
- *
- * 与额度限流同理：码值由服务端下发，本地产物里没有硬编码
- * （实测搜 `14003` 在本仓库源码中零命中才敢新增），上游可能改用别的码值表达
- * 同一语义，故需要文案兜底。
- *
- * ⚠️ **关键词必须窄**：`busy` / `saturated` 这种泛词若不加限定，
- * 模型正文里恰好讨论「服务器繁忙」就会被误判。这里只认腾讯原话里的组合，
- * 且判据本身**要求 HTTP 状态码 ≥ 400**（见 {@link isModelSaturationError}）。
- */
-const MODEL_SATURATION_PATTERN = /模型繁忙|请求量饱和|model\s+busy|currently\s+saturated/i
-
-/**
- * 判断一次失败是否为**模型饱和**（上游背压），而非账号级额度限流。
- *
- * ## 为什么这个区分是**行为分叉**而不是措辞问题
- *
- * | | 额度限流 `6004` | 模型饱和 `14003` |
- * |---|---|---|
- * | 语义 | 该**账号**在该模型上额度用完 | 该**模型**此刻整体饱和 |
- * | 换号 | **有效**（别的账号有独立额度） | **无益**（所有账号撞同一堵墙） |
- * | 写限流标记 | **必须**（否则每轮重撞） | **绝对不许**（会把整池锁 1 小时） |
- * | 建议 | 等解禁 / 换账号 | **换模型** / 稍后重试 |
- *
- * 实测 `actions` 字段本身就写着 `SWITCH_MODEL` 而**没有**换号选项 ——
- * 服务端与我们的结论一致。
- *
- * ⚠️ **必须先于 `status === 429` 的无条件判定**：14003 恰恰是 429，
- * 若先判状态码就永远走不到这里（这正是缺陷的成因，见常量注释）。
- *
- * @param status - HTTP 状态码。为 `undefined`（只有文案可判）时仍检查业务码；
- *   但**文案分支要求状态码 ≥ 400** —— 否则一段正常正文里出现「模型繁忙」
- *   就会被判成错误。
- * @param body - 响应体（可能为空串）。
- */
-export function isModelSaturationError(status: number | undefined, body: string): boolean {
-  // 状态码已知且 < 400 ⇒ 这是正常响应，正文里的字样不算错误。
-  if (typeof status === 'number' && status < 400) return false
-  if (body.length === 0) return false
-  try {
-    const code = (JSON.parse(body) as Record<string, unknown>).code
-    if (code === MODEL_SATURATION_BUSINESS_CODE
-      || code === String(MODEL_SATURATION_BUSINESS_CODE)) return true
-  } catch {
-    // 非 JSON：交给文案兜底。
-  }
-  return MODEL_SATURATION_PATTERN.test(body)
-}
-
-/**
- * 结构化判定：响应体是可解析 JSON 且 `code` 为该业务码。
- *
- * 不采用「全文包含 6004」的写法：`requestId` 是 UUID，任意数字子串都可能
- * 偶然出现，文本匹配会产生假阳性；这里只认 JSON 顶层的 `code` 字段。
- * 兼容 `"6004"`（字符串）与 `6004`（数字）两种编码。
- */
-function hasRateLimitBusinessCode(body: string): boolean {
-  try {
-    const data = JSON.parse(body) as Record<string, unknown>
-    const code = data.code
-    return code === RATE_LIMIT_BUSINESS_CODE || code === String(RATE_LIMIT_BUSINESS_CODE)
-  } catch {
-    // 非 JSON：交给文案兜底
-    return false
-  }
-}
-
-/**
- * 判断错误文本是否为频率限制错误。
- *
- * @param body - 响应体（可能为空串）
- * @param status - HTTP 状态码（可选，但**手里有 Response 就必须传**）。为 `429`
- *   时无条件判为限流，即使响应体为空、不含任何可识别文案。
- *
- * ⚠️ **`status` 判据是真实缺陷的修复，不是可选便利**：本函数原先只接收响应体，
- * 而服务端（网关 / CDN / 限流中间件）完全可能返回**空体**的 429 —— 此时
- * `hasRateLimitBusinessCode` 与 `RATE_LIMIT_PATTERN` **双双不命中**，函数返回
- * `false`，于是适配器里整段「记录重置时间 + 切换账号」逻辑被**整体跳过**，
- * 把一个本可自愈的限流直接抛给用户（表现为「账号池里明明还有可用账号，插件却
- * 报错且不换号」）。
- *
- * 判据顺序刻意是「状态码优先」：429 是 HTTP 语义上**唯一**的限流信号，无需也不应
- * 再去猜文案；下面的文案 / 业务码兜底只服务于「状态码不是 429、但正文表达了限流」
- * 的场景（业务码 6004、SSE 流内错误、网关包装过的 200/400）。
- *
- * ⚠️ 反向的约束同样重要：**非 429 绝不能因为「有状态码」就判为限流** ——
- * 404「模型不存在」这类换号无益的错误若被识别成限流，会被吞成「所有账号均受限」，
- * 用户既看不到真实原因、插件还会白试一遍全池账号。
- */
+/** HTTP 429 或明确的限流文案才判为限流；不识别其他产品的专属业务码。 */
 export function isRateLimited(body: string, status?: number): boolean {
   if (status === 429) return true
-  return hasRateLimitBusinessCode(body) || RATE_LIMIT_PATTERN.test(body)
+  return RATE_LIMIT_PATTERN.test(body)
 }
 
 /**
  * 重置时间的两种句式（中文 / 英文），并**捕获实际时区**而非硬编码 UTC+8。
- *
- * 中文（buddy 国内版）："您的使用量已超出频率限制，将在 2026-09-11 18:08:17 UTC+8 重置"
- * 英文（workbuddy 国际版）："... your usage will reset at 2026-09-17 09:09:36 UTC+8, alternatively, ..."
  *
  * 早期只列了中文句式，导致国际版即使判定为限流也只能走「1 小时后重试」的
  * 兜底，丢掉服务端给出的真实重置时刻（UI 限流徽章因此显示错误时间）。
@@ -2251,13 +2078,6 @@ const RESET_TIME_PATTERN = /(?:将在|reset at)\s+([\d-]+\s+[\d:]+)\s+(UTC[+-]\d
  * 为什么需要兜底而不是「解析不到就不记标记」：网关 / CDN 返回的 429 常常既没有
  * 重置时间、甚至**没有响应体**，而标记是 UI「限额重置」徽章与「重测 / 重置」
  * 两条人工解禁路径的**唯一**依据 —— 静默跳过记录会让用户既看不到限流、也无从操作。
- *
- * ⚠️ 1 小时是**快照式**兜底（标记可被重测刷新），与 `BUDDY_POLICY_BLOCK_COOLDOWN_MS`
- * 的 30 分钟**语义不同**（那是「安全策略拦截」的本地冷却，报文里根本没有时间字段），
- * 也与 Qoder「按自然日 24:00」不同（那是按日的额度结算）。三者不要合并成一个常量。
- *
- * 导出是给 `buddy-adapter` 用的：它需要在**没拿到可解析体**时也能写出标记，
- * 且必须与这里 `parseRateLimitError` 的兜底**同值**，否则两处口径会漂。
  */
 export const RATE_LIMIT_FALLBACK_MS = 3_600_000
 

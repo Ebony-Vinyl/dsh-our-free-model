@@ -411,6 +411,22 @@ async function main() {
   check(echoJson.headers?.['x-ofm-egress-key'] === undefined, 'the relay key stops at the relay too')
   check(socks5a.server.lastTarget.host === '127.0.0.1' && socks5a.server.lastTarget.port === targetPort, 'socks5 dialed the real target')
 
+  // Signed traffic must preserve the selected outlet without re-entering a global fetch wrapper.
+  const originalFetch = globalThis.fetch
+  let wrapperCalls = 0
+  globalThis.fetch = async () => { wrapperCalls++; throw new Error('a request-rewriting plugin must not see signed bytes') }
+  try {
+    const body = '{ "signed": true, "spacing": "preserved" }'
+    const isolated = await egressFetch(`${base}/signed`, { method: 'POST', body, headers: { authorization: 'SDK-HMAC-SHA256 fixture' } }, originalFetch)
+    const isolatedJson = await isolated.json()
+    check(isolatedJson.body === body && isolatedJson.headers.authorization === 'SDK-HMAC-SHA256 fixture', 'isolated sender keeps signed body bytes and Authorization through the selected outlet')
+    const request = new Request(`${base}/signed-request`, { method: 'POST', body, headers: { authorization: 'SDK-HMAC-SHA256 request-fixture' } })
+    const viaRequest = await egressFetch(request, undefined, originalFetch)
+    const requestJson = await viaRequest.json()
+    check(requestJson.body === body && requestJson.url === '/signed-request', 'native Request keeps its body and URL through isolated relay sending')
+    check(wrapperCalls === 0, 'signed relay hops never call the mutable global fetch')
+  } finally { globalThis.fetch = originalFetch }
+
   // 5 — 429 and its retry-after are responses, not errors.
   stage = 'socks5-auth 429'
   const limited = await egressFetch(`${base}/limited`)

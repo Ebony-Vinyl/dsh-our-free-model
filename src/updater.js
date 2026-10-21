@@ -436,7 +436,7 @@ function sha256File(file) {
 
 /**
  * Download and hash-verify the whole release into `stageDir`.
- * @returns {Promise<{bytes: number, files: number}>}
+ * @returns {Promise<{bytes: number, files: number, reused: boolean}>}
  */
 const STAGE_ATTEMPTS = 3
 const STAGE_BACKOFF_MS = 700
@@ -467,6 +467,21 @@ function stagedFileSources(manifestUrl, manifest, relativePath) {
 }
 
 export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl = fetch, concurrency = 4, onProgress = () => {}, timeoutMs = 30000 }) {
+  // A retry after a failure in a later phase — the backup rename, the swap —
+  // would otherwise wipe a staging copy that already verified and re-download
+  // the whole release. On a slow CN egress that turns one transient refusal into
+  // minutes of spinner, which is what "the update is stuck on loading" looks like
+  // from the settings page. An existing copy is only kept when it hashes clean
+  // against *this* manifest, so a stage left over from another release is wiped.
+  try {
+    verifyStaged(stageDir, manifest)
+    onProgress({ phase: 'download', reused: true, done: manifest.files.length, total: manifest.files.length })
+    return {
+      bytes: manifest.files.reduce((sum, file) => sum + file.size, 0),
+      files: manifest.files.length,
+      reused: true,
+    }
+  } catch { /* nothing to reuse; stage from scratch below */ }
   fs.rmSync(stageDir, { recursive: true, force: true })
   fs.mkdirSync(stageDir, { recursive: true })
   let done = 0
@@ -518,10 +533,12 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
   })
   await Promise.all(workers)
   if (failures.length > 0) {
+    // A half-written stage must never be the one a later retry hashes clean
+    // against, so it is removed here rather than left for reuse.
     fs.rmSync(stageDir, { recursive: true, force: true })
     throw new Error(`staging failed: ${failures.join('; ')}`)
   }
-  return { bytes, files: done }
+  return { bytes, files: done, reused: false }
 }
 
 /** The staged copy is checked against the manifest before install touches anything. */
@@ -546,7 +563,7 @@ export function verifyStaged(stageDir, manifest) {
  * the new release dropped" would delete the pack's readiness records out from
  * under the harness's bundle validation on the first in-app upgrade.
  */
-const REPOSITORY_SCAFFOLDING = ['feed', 'scripts', 'docs', 'promo', 'node_modules', 'catalog', 'worker', 'vendor', 'tsconfig.json']
+const REPOSITORY_SCAFFOLDING = ['feed', 'scripts', 'docs', 'promo', 'node_modules', 'catalog', 'worker', 'vendor', 'packages', 'tsconfig.json']
 // Actual published runtime assets must participate in backup and rollback,
 // including when an upgrade crosses the 1.x/2.x boundary. Keep vendor source
 // trees protected; package.json is overwritten during installation, so it
@@ -588,9 +605,14 @@ export function listPackageFiles(dir) {
 
 /**
  * Copy the current package aside so a failed swap can be undone.
- * @returns {number} files backed up
+ *
+ * The two directory renames move a tree that was just written, which is exactly
+ * what a real-time scanner or indexer holds open on Windows: they go through
+ * `renameWithRetry`, the same seam the file swap uses, so one transient EPERM
+ * does not abort a transaction that has not touched the installed package yet.
+ * @returns {Promise<number>} files backed up
  */
-export function backupPackage(pkgDir, backupDir) {
+export async function backupPackage(pkgDir, backupDir) {
   const snapshot = packageSnapshot(pkgDir)
   const pending = `${backupDir}.pending-${crypto.randomUUID()}`
   const previous = `${backupDir}.previous-${crypto.randomUUID()}`
@@ -608,13 +630,13 @@ export function backupPackage(pkgDir, backupDir) {
     verifySnapshot(pkgDir, snapshot)
     fs.writeFileSync(path.join(pending, '.ofm-backup.json'), JSON.stringify(snapshot))
     if (fs.existsSync(backupDir)) {
-      fs.renameSync(backupDir, previous)
+      await renameWithRetry(backupDir, previous)
       movedPrevious = true
     }
     try {
-      fs.renameSync(pending, backupDir)
+      await renameWithRetry(pending, backupDir)
     } catch (error) {
-      if (movedPrevious) fs.renameSync(previous, backupDir)
+      if (movedPrevious) await renameWithRetry(previous, backupDir)
       throw error
     }
     // Failure to clean an older copy does not invalidate the new verified copy.
@@ -669,8 +691,11 @@ function backupSnapshot(backupDir) {
     || new Set(snapshot.files.map(file => file.path)).size !== snapshot.files.length) {
     throw new Error('invalid rollback receipt')
   }
-  verifySnapshot(backupDir, snapshot)
-  return snapshot
+  // Older development-install receipts also covered standalone products and
+  // compiler caches. Keep those bytes retained, but never restore that tree.
+  const runtimeSnapshot = { files: snapshot.files.filter(file => file.path.split('/')[0] !== 'packages') }
+  verifySnapshot(backupDir, runtimeSnapshot)
+  return runtimeSnapshot
 }
 
 /** Put a backed-up copy back in place (used when a swap or reload fails). */
@@ -964,7 +989,7 @@ export class PluginUpdater {
       verifyStaged(this.stageDir, manifest)
 
       onProgress({ phase: 'install' })
-      const backedUp = backupPackage(this.deps.pkgDir, this.backupDir)
+      const backedUp = await backupPackage(this.deps.pkgDir, this.backupDir)
       state = { from: previous, to: manifest.version, at: Date.now(), phase: 'installing' }
       // Persist the intent before the first installed byte changes.
       this.saveUpgradeState(state)
@@ -1006,7 +1031,7 @@ export class PluginUpdater {
       }
       this.saveUpgradeState({ ...state, phase: 'complete', activated })
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
-      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated }
+      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused }
       this.recordHistory(record)
       this.checkedAt = Date.now()
       this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)

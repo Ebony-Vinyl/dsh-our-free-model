@@ -120,7 +120,7 @@ console.log('ok  client probe isolation/retry, account action labels, hidden sta
 const catalog = [
   { id: 'free' }, { id: 'region' }, { id: 'kilo', channel: 'kilo' },
   { id: 'eac', channel: 'eac' }, { id: 'aggregate', channel: 'aggregate' },
-  { id: 'combo', channel: 'combo' }, { id: 'account', channel: 'buddy' },
+  { id: 'combo', channel: 'combo' }, { id: 'account', channel: 'lobsterai' },
 ]
 const refused = { results: { free: { state: 'unavailable' }, region: { state: 'unavailable' } } }
 const membership = settings => Object.values(computeMembership(catalog, refused, settings)).flat()
@@ -196,13 +196,13 @@ console.log('ok  combo picker capacities, saved card and live server intersectio
 // Compile the actual standalone page in memory, without rebuilding web output.
 const require = createRequire(import.meta.url)
 let transformSync
-try { ({ transformSync } = require('esbuild')) } catch {}
+try { ({ transformSync } = createRequire(new URL('../packages/standalone/package.json', import.meta.url))('esbuild')) } catch {}
 if (transformSync) {
 const modelsSource = fs.readFileSync(new URL('../packages/standalone/frontend/models.tsx', import.meta.url), 'utf8')
 const modelsBody = modelsSource.slice(modelsSource.indexOf('const availabilityNames')).replace('export function Models', 'function Models')
 cells.length = 0
 const standaloneSummary = { settings: { enabled: true, hiddenModelIds: [], hideFreeModels: false, hideEacModels: false },
-  catalog: [{ id: 'free', name: 'Free', channel: 'anonymous', routable: true }, { id: 'account', name: 'Account', channel: 'buddy', routable: true }] }
+  catalog: [{ id: 'free', name: 'Free', channel: 'anonymous', routable: true }, { id: 'account', name: 'Account', channel: 'lobsterai', routable: true }] }
 const savedPatches = []
 const context = {
   ...react, h: react.createElement, Fragment: 'fragment', providers: [], filterModels, visibilityCopy,

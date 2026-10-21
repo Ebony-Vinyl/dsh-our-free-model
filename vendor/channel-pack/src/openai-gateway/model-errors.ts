@@ -122,12 +122,6 @@ export function normalizeUpstreamFailure(failure: {
  * **既大小写不同、又少了一截后缀**，只做「大小写全等」根本救不了它。所以第二级
  * 用「忽略大小写的前缀匹配」。
  *
- * ⚠️ 三条约束，缺一个就会给出误导性建议：
- * - **provider 段也参与比较**：`codearts/x` 与 `buddy/x` 是两个不同的模型，
- *   换 provider 不是拼写错误；
- * - **候选必须唯一**：有多个前缀候选说明用户少打的那截有歧义，不猜；
- * - **精确命中时不给建议**（那不是拼写错误）。
- *
  * @param requested 用户实际提交的完整 ID
  * @param catalog 目录里的完整 ID 列表
  * @returns 建议改成的正确 ID；没有把握时不返回

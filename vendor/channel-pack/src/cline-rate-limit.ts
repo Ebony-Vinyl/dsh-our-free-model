@@ -40,8 +40,6 @@
  * 那里的「⚠️ 不要建议改用 cline-pass」才是结论，本段曾与之矛盾（凭直觉推荐了一个
  * 没验证过的动作，用户照做只会再撞一次墙）。
  *
- * ## 取值优先级（与 buddy / lobsterai 同序，只是多了一层 Cline 专属解析）
- *
  * 1. `retry-after` 响应头（秒数或 HTTP 日期）—— 有就是最权威；
  * 2. 报文里的 `Try again in 19h 39m`（本模块新增）；
  * 3. `parseRateLimitError` 的通用句式（绝对时刻 + 时区）；
@@ -174,10 +172,6 @@ export function parseClineRateLimitHint(body: string): ClineRateLimitHint {
 
 /**
  * 本次限流**服务端要求等多久**（毫秒），拿不到时才兜底。
- *
- * ⚠️ 不注入「当前时刻」：与 buddy / lobsterai / codearts 的同名取值口径一致，
- * 时刻一律取**调用当下**。单测用 `before`/`after` 窗口断言（本仓库既有惯例），
- * 而不是给这个函数加一个只有测试会用到的形参。
  */
 export function clineRateLimitResetAt(
   response: Response,

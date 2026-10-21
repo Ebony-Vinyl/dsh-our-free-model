@@ -111,11 +111,6 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /**
      * Cline 的认证服务实例。
-     *
-     * 与 `buddyAuth` / `workbuddyAuth` / `codeartsAuth` / `lobsteraiAuth` /
-     * `qoderAuth` / `traeAuth` 并列：cordis 的 `Service` 构造时按名称注册，
-     * 同名第二次注册会抛 `service "..." has been registered`，
-     * 故每个 provider 各占一个服务名。
      */
     clineAuth: ClineAuth
   }
@@ -437,11 +432,6 @@ export class ClineAuth extends Service {
 
   /**
    * 批量续期本产品的所有账号。
-   *
-   * **包含已停用账号**（只按 `refreshable` 过滤）：停用只应影响账号池的自动
-   * 选号，不该让凭据烂掉 —— 否则用户重新启用时只能重新登录。
-   * 详见 `BuddyAuth.refreshAll` 的注释（同一缺陷）。
-   * 单账号失败不影响其他账号（与 `BuddyAuth.refreshAll` 同语义）。
    *
    * ⚠️ **lead-time 过滤**（issue !IKIRTT）：早先这里是**无条件全量续期** ——
    * 定时器每 30 分钟就把每个账号的 refresh_token 轮换一次，与「凭据还剩 719 小时」

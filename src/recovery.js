@@ -1,13 +1,11 @@
 /** 恢复缺终帧的纯推理断流，或正常收尾却只有思考的空停；所有模型共用同一策略。
  *
  * 总时限覆盖首段与续写段；传输层另有按字节刷新的空闲截止。
- * EAC 还限制无有效输出的等待：仅正文、思考和工具增量可刷新 progressTimeoutMs，
- * SSE 心跳与用量帧不能续期。关闭自动恢复不会关闭此等待上限。数值只允许向下调整。
+ * 不再为 EAC 增加独立的有效输出截止，允许排队、静默思考和只有心跳的等待。
  */
 export const RECOVERY_DEFAULTS = Object.freeze({
   maxContinuationMs: 1800000,
   totalTimeoutMs: 1800000,
-  progressTimeoutMs: 60000,
   checkpointLimit: 131072,
   maxOutputTokens: 8192,
 })

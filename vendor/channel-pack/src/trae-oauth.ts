@@ -18,7 +18,7 @@
  */
 
 import { createServer, type Server } from 'node:http'
-import { credentialExpiresAtMs, jwtExpiresAtMs } from './buddy.js'
+import { credentialExpiresAtMs, jwtExpiresAtMs } from './credential-expiry.js'
 import {
   TRAE_EXCHANGE_PATH,
   TRAE_LOGIN_TIMEOUT_MS,

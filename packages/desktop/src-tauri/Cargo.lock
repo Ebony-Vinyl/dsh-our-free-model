@@ -2376,7 +2376,7 @@ dependencies = [
 
 [[package]]
 name = "ofm-desktop"
-version = "2.5.2"
+version = "2.5.4"
 dependencies = [
  "dirs 5.0.1",
  "serde",

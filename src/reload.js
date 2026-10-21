@@ -36,10 +36,18 @@ const reloadHooks = globalThis[hooksKey] ??= new Map()
 /** Carry the entry's generation into its dependencies when the host hides its cache. */
 function enableFreshDependencies(packageUrl) {
   if (reloadHooks.has(packageUrl)) return
+  const packagePath = fs.realpathSync(fileURLToPath(packageUrl))
   const hook = registerHooks({
     resolve(specifier, context, nextResolve) {
       const resolved = nextResolve(specifier, context)
-      if (!context.parentURL?.startsWith(packageUrl) || !resolved.url.startsWith(packageUrl)) return resolved
+      const parentPath = context.parentURL?.startsWith('file:')
+        ? fs.realpathSync(fileURLToPath(new URL(context.parentURL)))
+        : null
+      const resolvedPath = resolved.url.startsWith('file:')
+        ? fs.realpathSync(fileURLToPath(new URL(resolved.url)))
+        : null
+      if (parentPath === null || resolvedPath === null
+        || !parentPath.startsWith(packagePath) || !resolvedPath.startsWith(packagePath)) return resolved
       const generation = new URL(context.parentURL).searchParams.get('ofm-reload')
       if (generation === null) return resolved
       const target = new URL(resolved.url)

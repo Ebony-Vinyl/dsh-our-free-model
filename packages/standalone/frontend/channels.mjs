@@ -32,10 +32,10 @@ async function rpc(method, payload = {}) {
   if (!result.ok) throw new Error(result.error?.message ?? t('ct.rpcError'))
   return result.value
 }
-const lockedProviders = new Set(['buddy', 'workbuddy', 'loomy'])
+const lockedProviders = new Set(['loomy'])
 
 function ChannelTools({ summary }) {
-  const [provider, setProvider] = React.useState('buddy')
+  const [provider, setProvider] = React.useState('codearts')
   const [status, setStatus] = React.useState()
   const [lock, setLock] = React.useState()
   const [busy, setBusy] = React.useState(false)

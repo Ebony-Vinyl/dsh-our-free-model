@@ -338,16 +338,9 @@ class MemoryStore implements ChannelPackStore {
  *
  * ⚠️ 本表的顺序与客户端 `plugin-src/client/channel-pack.js` 的 `PROVIDERS` **保持一致** ——
  * 派生用例不校验顺序（恢复顺序由 refs 文件决定），但两者对齐后便于逐项核对。
- *
- * 依据 `src/product.ts` 与各 `*-product.ts` 的 `id` 字段：
- * `codearts` / `buddy` / `workbuddy` / `lobsterai` / `qoder` / `qodercn`
- * / `trae` / `cline` / `loomy` / `raccoon` / `minimax` / `zcode`
- * / `opencode` / `gemini`。
  */
 const REF_PREFIX_TO_PROVIDER: ReadonlyArray<readonly [string, string]> = [
   ['CODEARTS', 'codearts'],
-  ['BUDDY', 'buddy'],
-  ['WORKBUDDY', 'workbuddy'],
   ['LOBSTERAI', 'lobsterai'],
   ['QODER', 'qoder'],
   ['QODERCN', 'qodercn'],
@@ -369,6 +362,11 @@ const REF_PREFIX_TO_PROVIDER: ReadonlyArray<readonly [string, string]> = [
   // provider（从真实清单派生）」用例锁死 —— 合并新增 provider 前**先跑它**。
   ['GEMINI', 'gemini'],
 ]
+
+/** 已实现渠道的统一判定，拒绝未知渠道且不依赖旧产品黑名单。 */
+export function isSupportedProvider(provider: unknown): provider is string {
+  return typeof provider === 'string' && REF_PREFIX_TO_PROVIDER.some(([, id]) => id === provider)
+}
 
 /** 账号凭据 ref 形态：`{PREFIX}_ACCOUNT_{HEX}`（前缀由单一真相源派生）。 */
 const ACCOUNT_REF_RE = new RegExp(

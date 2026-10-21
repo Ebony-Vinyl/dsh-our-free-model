@@ -42,12 +42,6 @@
  *
  * ## ⚠ configurable provider 声明已**刻意停用**（2026-10-01，用户要求）
  *
- * **现象**：「设置 → 模型 → 提供商」里常驻十二行本插件的 provider（codearts /
- * buddy / workbuddy / lobsterai / qoder / qodercn / trae / cline / loomy /
- * raccoon / minimax / zcode），每行都带 API 密钥、baseURL 与模型目录编辑框，
- * 但这些对本插件**没有意义** —— 凭据由 Channel Pack 账号池 + `ctx.credentials` 注入，
- * 模型开关与模型目录也都在 Channel Pack 设置页管理。
- *
  * **机制**（依据 `dsh-client-ui-settings-models` 的产物源码）：
  * - 该页的行**只**来自 `ctx.llm.registerConfigurableProviders()` 声明的目录
  *   （`joinProviderDirectory()`：声明过的进目录行，未声明的存活路由只进模型选择器）；

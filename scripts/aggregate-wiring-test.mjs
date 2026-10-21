@@ -152,7 +152,7 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   checkThat('an aggregate row reached the catalog', aggregate !== undefined, [...byId.keys()].join(', '))
   check('the aggregate row names its lane', aggregate?.channel, 'aggregate')
   check('and carries its provider and model separately', [aggregate?.providerId, aggregate?.modelId], ['open_router', 'alpha-model'])
-  check('an aggregate row is not reported as unprobed-unknown', aggregate?.availability, 'available')
+  check('a listed aggregate row is not presented as verified', [aggregate?.availabilitySource, aggregate?.availability], ['listing', 'unknown'])
 
   const keyless = byId.get('groq/llama-3.3-70b-versatile')
   checkThat('a provider with no key contributes no row', keyless === undefined, 'a keyless apiKey provider was advertised')
@@ -165,7 +165,7 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   // the aggregate row 131072, so the chain must advertise the smaller of the two.
   check('the combo advertises the intersection window, not the largest', combo?.contextWindow, 128000)
   check('a combo whose links lack vision advertises no vision', combo?.vision, false)
-  check('a combo is not reported as unprobed-unknown', combo?.availability, 'available')
+  check('a listed combo is not presented as verified', [combo?.availabilitySource, combo?.availability], ['listing', 'unknown'])
   checkThat('the combo detail line names the chain', String(byId.get('combo:never-fails')?.detail ?? '').includes('chain') === false || true, '')
 }
 
@@ -188,12 +188,13 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   checkThat('the turn answered through the adapter', answer.includes('answered by the free lane'), JSON.stringify(chunks).slice(0, 300))
 
   await until(() => freeLane.requests.length > before, { what: 'the upstream request', timeoutMs: 5000 })
-  const sent = freeLane.requests[freeLane.requests.length - 1]
-  const toolRow = sent.body.messages.find(message => message.role === 'tool')
+  const sent = freeLane.requests.slice(before).find(request => request.body?.messages?.some(message => message.role === 'tool'))
+  checkThat('the captured request carries this turn’s tool result', sent !== undefined)
+  const toolRow = sent?.body.messages.find(message => message.role === 'tool')
   checkThat('the tool result was compacted on the wire', String(toolRow?.content ?? '').length < BIG_DIFF.length,
     `sent ${String(toolRow?.content ?? '').length} bytes of ${BIG_DIFF.length}`)
   checkThat('and the compaction kept the file header', String(toolRow?.content ?? '').includes('src/app.js'), String(toolRow?.content ?? '').slice(0, 200))
-  const system = sent.body.messages.find(message => message.role === 'system')
+  const system = sent?.body.messages.find(message => message.role === 'system')
   checkThat('the prompt saver injected a system instruction', String(system?.content ?? '').includes('<!-- ofm-token-saver -->'),
     String(system?.content ?? '').slice(0, 200))
 

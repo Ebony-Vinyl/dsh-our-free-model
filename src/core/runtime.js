@@ -6,7 +6,9 @@ import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
-import { CODE, getJson } from '../http.js'
+import { CODE, UpstreamError, getJson } from '../http.js'
+import { runModelTest, modelAvailability } from '../model-test.js'
+import { DEFAULT_LEVEL } from '../effort.js'
 import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
 import { sessionForConversation } from '../upstream.js'
@@ -280,7 +282,7 @@ export function createModelRuntime({
             state: result.state,
             ...result.detail === undefined ? {} : { detail: result.detail },
             ...result.ttftMs === undefined ? {} : { ttftMs: result.ttftMs },
-            latencyMs: result.latencyMs, at: Date.now(),
+            latencyMs: result.latencyMs, startedAt: result.startedAt, at: Date.now(),
           },
         },
       }))
@@ -328,8 +330,45 @@ export function createModelRuntime({
     return true
   }
 
+  const latestTests = new Map()
+  async function testModel(id, effort = DEFAULT_LEVEL, { signal } = {}) {
+    if (disposed) throw new UpstreamError('Model runtime stopped', CODE.aborted)
+    if (settings.get().enabled === false) throw new UpstreamError('Inference is paused', CODE.client)
+    const entry = catalog.find(candidate => candidate.id === id)
+    if (!entry) throw new UpstreamError('Unknown model "' + id + '"', CODE.client, { status: 404 })
+    const token = {}
+    latestTests.set(id, token)
+    const selectedEffort = effort === undefined || effort === '' ? DEFAULT_LEVEL : effort
+    const linkedSignal = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal
+    const persist = row => {
+      if (disposed || linkedSignal.aborted || latestTests.get(id) !== token) return false
+      availability.edit(value => ({ ...value, manualResults: { ...value.manualResults, [id]: row } }))
+      availability.flush()
+      emitTopology()
+      return !availability.writeFailed
+    }
+    try {
+      const measured = await runModelTest(testSignal => adapter.stream({
+        provider: ROUTE_MAIN, model: entry.id,
+        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+        reasoningEffort: selectedEffort, sessionId: 'bench:' + entry.id + ':' + selectedEffort,
+        signal: testSignal,
+      }, entry, state()), { signal: linkedSignal })
+      if (linkedSignal.aborted || disposed) throw new UpstreamError('Text test cancelled', CODE.aborted)
+      const persisted = persist({ state: STATE.available, source: 'manual', at: Date.now(), ttftMs: measured.ttftMs, latencyMs: measured.totalMs })
+      return { model: entry.id, effort: selectedEffort, ok: true, ...measured, persisted }
+    } catch (error) {
+      // Cancellation is a user action, not a fresh availability verdict. Other failures
+      // remain unknown instead of silently banning a paid/region-gated route.
+      if (error?.code !== CODE.aborted) persist({ state: STATE.unknown, source: 'manual', at: Date.now(), detail: String(error?.message ?? error).slice(0, 200) })
+      throw error
+    } finally {
+      if (latestTests.get(id) === token) latestTests.delete(id)
+    }
+  }
+
   return {
-    state, adapter, refreshCatalog, refreshSealedLane, refreshAvailability, watchEgress, fetchListing,
+    testModel, state, adapter, refreshCatalog, refreshSealedLane, refreshAvailability, watchEgress, fetchListing,
     complete: createForwardCompletion({
       adapter, signal: lifetime.signal,
       state: () => {
@@ -369,9 +408,8 @@ function materializeCatalog(ids) {
 }
 
 export function computeMembership(catalog, availabilitySnapshot, settings) {
-  const results = availabilitySnapshot?.results ?? {}
   const expose = settings?.exposeRegionModels !== false
-  const verdictOf = entry => results[entry.id]?.state
+  const verdictOf = entry => modelAvailability(entry.id, availabilitySnapshot, Boolean(entry.channel)).availability
   const probeable = catalog.filter(entry => !entry.channel)
   const refusedAll = probeable.length > 0 && probeable.every(entry => verdictOf(entry) === STATE.unavailable)
   let usable = catalog.filter(entry => verdictOf(entry) !== STATE.unavailable)

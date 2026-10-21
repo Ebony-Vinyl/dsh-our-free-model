@@ -1,13 +1,6 @@
 /**
  * TRAE（字节跳动 TRAE IDE）协议常量、凭据结构与请求转换。
  *
- * 本模块只放**常量与纯函数**，与 `src/buddy.ts` / `src/lobsterai.ts` 的角色一致。
- * 网络流程见：
- * - `src/trae-oauth.ts` —— 登录（ExchangeToken + GetUserInfo）
- * - `src/trae-auth.ts` —— 凭据服务（续期 / 状态）
- * - `src/trae-adapter.ts` —— chat 转发 + SSE 转换
- * - `src/trae-credits.ts` —— 签到与余额
- *
  * ## 协议速览（来源：trae2api 逆向分析）
  *
  * | 用途 | 方法 | 路径 | Host | 认证 |
@@ -35,7 +28,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { jwtExpiresAtMs } from './buddy.js'
+import { jwtExpiresAtMs } from './credential-expiry.js'
 import { TRAE_CHANNELS, type TraeProduct } from './trae-product.js'
 
 // ── 端点路径 ──
@@ -75,7 +68,7 @@ export const TRAE_LOGIN_TIMEOUT_MS = 10 * 60 * 1000
  * 持久化的 TRAE 凭据。
  *
  * 与 `TraeCredential` 的字段名与 Go 端 `auth.Auth` 结构对齐，
- * 但这里用 `snake_case` 保持与 `BuddyCredential` / `LobsteraiCredential` 一致。
+ * 但这里用 `snake_case` 保持与 `StoredTokenCredential` / `LobsteraiCredential` 一致。
  *
  * ## 关键持久化字段
  *
@@ -94,7 +87,7 @@ export interface TraeCredential {
   /**
    * 过期时间（**毫秒时间戳字符串**）。
    *
-   * 统一存毫秒字符串而非秒/ISO：与 `BuddyCredential.expires_at` 的存储约定
+   * 统一存毫秒字符串而非秒/ISO：与 `StoredTokenCredential.expires_at` 的存储约定
    * 保持一致，`credentialExpiresAtMs` 一套解析逻辑可通用于两者。
    * Go 端存储的是 Unix 秒（`int64`），这里转换时需 `expiresAt * 1000`。
    */
@@ -158,9 +151,6 @@ export interface TraeCredential {
 
 /**
  * 从凭据的 `expires_at` 解析毫秒时间戳。
- *
- * 兼容毫秒时间戳 / 秒级时间戳 / ISO 8601 三种形态，与
- * `src/buddy.ts:credentialExpiresAtMs` 的解析口径一致。
  *
  * 后备来源：`expires_at` 为空时回退解析 `access_token` 这个 JWT 的 `exp`。
  */
@@ -690,10 +680,6 @@ export interface TraeRemoteModel {
    *
    * ⚠️ `display_contact_config` 是**一个 JSON 字符串**（不是对象），必须二次
    * `JSON.parse` —— 直接读 `.consumption_rate` 会得到 undefined。
-   *
-   * 实测形态是**裸数字**（如 `0.08`），既不是 buddy 的字符串 `"x0.29"`，
-   * 也不是 LobsterAI 的 `costMultiplier` 字段名。**`enable: false` 视为无倍率**
-   * （不显示，而不是当成 0）。
    */
   creditsRate?: number
   /**
@@ -1307,10 +1293,6 @@ export function generateMachineId(): string {
  *
  * 对齐 `login.sh:34`：`DEVICE_ID="$(openssl rand -hex 16)"` —— **hex32**，
  * 与 `machine_id` 同格式。
- *
- * ⚠️ 早期实现错误地生成了「16 位纯数字」（那是 CodeBuddy 的签到设备号格式），
- * 与 TRAE 协议不符：该值会随登录 URL 的 `device_id` / `x_device_id` 一起下发，
- * 也会写进凭据并用于签到请求的 `X-Device-Id` 头。
  *
  * 每个账号必须互不相同 —— 同一天两个账号共用会被「该设备已签到」拦截。
  */

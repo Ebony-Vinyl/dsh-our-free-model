@@ -1,12 +1,6 @@
 /**
  * TRAE（字节跳动 TRAE IDE）认证服务。
  *
- * 结构与 `src/lobsterai-auth.ts` / `src/buddy-auth.ts` 一致：
- * 同样的 `RefreshScheduler` 续期语义、同样的登出竞态保护、同样的
- * `refreshAll(pool)` 批量续期。这是本插件已被多个产品验证过的模式。
- *
- * ## 与 Buddy 侧的关键差异
- *
  * 1. **续期是用 ExchangeToken（轮换 refreshToken）**，不是直接换新的 access_token。
  *    ExchangeToken 返回新 token + 新 refreshToken，旧 refreshToken 即刻失效。
  * 2. **凭据必须保留 machine_id / device_id**：续期时只改 token/expiresAt，
@@ -35,7 +29,7 @@ import {
   type TraeCredential,
   type TraeRemoteModel,
 } from './trae.js'
-import { jwtExpiresAtMs } from './buddy.js'
+import { jwtExpiresAtMs } from './credential-expiry.js'
 import { TRAE, type TraeProduct } from './trae-product.js'
 import {
   buildTraeLoginURL,
@@ -326,11 +320,6 @@ export class TraeAuth extends Service {
 
   /**
    * 按凭据 ref 续期指定账号的凭据。
-   *
-   * 与 {@link refresh} 的区别（与 `BuddyAuth.refreshAccountCredential` 同因）：
-   * `refresh()` 读写本实例的默认单凭据 ref（`TRAE_ACCESS_TOKEN`），
-   * 而 Channel Pack 账号卡片对应的是 `TRAE_ACCOUNT_XXX` ——
-   * 用 `refresh()` 刷账号池里的账号，实际刷的是另一个凭据。
    *
    * 同样**不触碰** `refreshTokenInvalid` / `lastRefreshError` / 调度器：
    * 那些状态属于单凭据路径，被多账号操作污染会让 UI 显示错误的失效提示。

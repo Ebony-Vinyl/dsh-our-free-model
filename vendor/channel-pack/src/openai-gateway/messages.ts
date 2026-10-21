@@ -9,7 +9,6 @@ import {
   type ImageLimits,
 } from './images.js'
 import { isThinkingOffEffort, translateReasoningEffort } from '../reasoning-ladder.js'
-import { rewriteTencentContentFingerprints } from './tencent-fingerprint.js'
 
 export class OpenAiGatewayError extends Error {
   constructor(
@@ -34,6 +33,10 @@ export interface OpenAiChatMessage {
   content?: unknown
   tool_calls?: unknown
   tool_call_id?: unknown
+  /** DeepSeek / Qoder 思考回传。思考模式的工具轮次缺了它，上游会 400。 */
+  reasoning_content?: unknown
+  /** Cline 等客户端用的另一个思考字段名。 */
+  reasoning?: unknown
 }
 
 /**
@@ -273,6 +276,20 @@ export function createGatewayMessage(
   return { id: randomUUID() as Message['id'], role, content, source }
 }
 
+/**
+ * Chat 入站的思考文本。优先 `reasoning_content`，否则认 `reasoning`。
+ * 不 trim：`" "` 是 DeepSeek V4 接受的占位，trim 掉就又变成没回传。
+ */
+function inboundReasoning(value: OpenAiChatMessage): string | undefined {
+  const raw = typeof value.reasoning_content === 'string'
+    ? value.reasoning_content
+    : typeof value.reasoning === 'string'
+      ? value.reasoning
+      : undefined
+  if (raw === undefined || raw.length === 0) return undefined
+  return raw
+}
+
 function convertToolCalls(raw: unknown): Message['content'] {
   if (!Array.isArray(raw)) throw new OpenAiGatewayError('assistant.tool_calls must be an array')
   return raw.map((value) => {
@@ -305,12 +322,9 @@ async function convertMessage(
   const value = raw as OpenAiChatMessage
   const role = value.role
   if (role === 'system') {
-    // ⚠️ 腾讯系（`buddy` / `workbuddy`）后端有**内容级**风控：客户端自带的
-    // 模板句（如 ZCode 的 gitStatus 注入）会让整轮请求 400 + 11128。
-    // 改写只作用于 system、且只改腾讯系 —— 依据见 ./tencent-fingerprint.ts。
     return createGatewayMessage('system', [{
       type: 'text',
-      text: rewriteTencentContentFingerprints(textFromContent(value.content), provider),
+      text: textFromContent(value.content),
     }], gatewaySource())
   }
   if (role === 'user') {
@@ -319,7 +333,14 @@ async function convertMessage(
   }
   if (role === 'assistant') {
     const text = textFromContent(value.content)
-    const content: Message['content'] = text.length > 0 ? [{ type: 'text', text }] : []
+    const content: Message['content'] = []
+    // 思考模式（DeepSeek V4 等）要求：带 tool_calls 的历史助手消息必须把
+    // 当时的 reasoning_content 原样带回。丢掉它，下一跳就是
+    // 「The reasoning_content in the thinking mode must be passed back」。
+    // 空串不算（上游把空串也当成没回传）；单个空格是客户端用来占位的合法值，保留。
+    const reasoning = inboundReasoning(value)
+    if (reasoning !== undefined) content.push({ type: 'reasoning', text: reasoning })
+    if (text.length > 0) content.push({ type: 'text', text })
     if (value.tool_calls !== undefined) content.push(...convertToolCalls(value.tool_calls))
     return createGatewayMessage('assistant', content, { kind: 'model', provider, model })
   }

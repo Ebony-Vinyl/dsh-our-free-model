@@ -202,7 +202,7 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
         {test.state === 'pending' ? <Button variant="outline" onClick={cancel}><Square size={14} />t('mdl.testCancel')</Button>
           : <Button variant="ghost" aria-label={t('mdl.closeTest')} title={t('mdl.closeTest')} onClick={() => setTest(undefined)}><X size={15} /></Button>}
       </div>
-      {test.state === 'success' && <pre>{test.result?.text || t('mdl.testEmptyBody')}</pre>}
+      {test.state === 'success' && <><pre>{test.result?.text}</pre>{test.result?.persisted === false && <p role="status">{t('mdl.testNotPersisted')}</p>}</>}
       {test.state === 'error' && <p>{test.error}</p>}
     </section>}
     {models.length ? <div className="model-table" role="table" aria-label={t('mdl.listAria')} aria-rowcount={models.length + 1} aria-colcount={5}>
@@ -218,7 +218,10 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
         <div className="model-virtual-content" style={{ height: virtual.getTotalSize() }}>
           {virtual.getVirtualItems().map(item => {
             const model = models[item.index]
-            const state = model.availability ?? 'unknown'
+            const state = model.availabilitySource === 'listing' ? 'listed' : model.availability ?? 'unknown'
+            const manual = model.availabilitySource === 'manual'
+            const failed = manual && state === 'unknown'
+            const availabilityName = failed ? t('mdl.status.manualFailed') : manual && state === 'available' ? t('mdl.status.manualOk') : availabilityNames[state] ?? t('mdl.status.unknownState')
             const disabledReason = !summary.settings.enabled ? t('mdl.pausedReason') : !model.routable && !model.hiddenByUser ? t('mdl.notPublicReason') : operation ? t('mdl.waitReason') : ''
             return <div role="row" aria-rowindex={item.index + 2} key={item.key} data-index={item.index} data-model-id={model.id}
               className="model-table-row" ref={virtual.measureElement} style={{ transform: `translateY(${item.start}px)` }}
@@ -230,8 +233,11 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
                 <Badge>{model.vision ? t('mdl.badgeVision') : t('mdl.badgeText')}</Badge>{model.reasoning && <Badge tone="blue">{t('mdl.badgeThinking')}</Badge>}</div></div>
               <div role="cell" className="model-limits"><span title={model.contextWindow ? `${model.contextWindow} Token` : undefined}>{capacity(model.contextWindow)} <small>{t('mdl.context')}</small></span>
                 <span title={model.maxOutput ? `${model.maxOutput} Token` : undefined}>{capacity(model.maxOutput)} <small>{t('mdl.output')}</small></span></div>
-              <div role="cell" className="model-state"><Badge tone={state === 'available' ? 'success' : ['unavailable', 'throttled', 'region-blocked'].includes(state) ? 'warning' : 'neutral'}>
-                {availabilityNames[state] ?? t('mdl.status.unknownState')}</Badge>{!model.routable && <small>{model.hiddenByUser ? visibility.hidden : t('mdl.accessHidden')}</small>}
+              <div role="cell" className="model-state"><Badge tone={state === 'available' ? 'success' : failed || ['unavailable', 'throttled', 'region-blocked'].includes(state) ? 'warning' : 'neutral'}>
+                {availabilityName}</Badge>
+                {manual && state !== 'available' && model.detail && <small title={model.detail}
+                  style={{ maxWidth: '100%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{model.detail}</small>}
+                {!model.routable && <small>{model.hiddenByUser ? visibility.hidden : t('mdl.accessHidden')}</small>}
                 {model.ttftMs != null && <small>{t.format('mdl.ttft', { ms: number(model.ttftMs) })}</small>}</div>
               <div role="cell" className="model-row-actions">
                 {['anonymous', 'kilo', 'eac', 'aggregate', 'combo'].includes(model.channel) && <Button variant="ghost"
