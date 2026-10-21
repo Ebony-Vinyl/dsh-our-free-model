@@ -64,6 +64,37 @@ export const lazy = () => import('./lazy.js')
     assert.equal(registered.apply(), 'newest')
     console.log(`ok ${++checks} repeated ${identity} reload never returns the original cached entry`)
   }
+  // Issue #427: a host that cannot evict hands back the module already running.
+  // That must be distinguishable from a genuinely broken replacement, because
+  // the caller keeps a verified install for a restart in the first case and
+  // rolls the disk back in the second.
+  const previousModule = { version: '1.0.0', apply() {} }
+  const staleCandidate = { version: '9.9.9', apply() {} }
+  for (const [label, loaderFor, expected] of [
+    ['a host that can only return the cached module', () => previousModule, true],
+    ['a replacement that imports but is not the old code', () => staleCandidate, false],
+  ]) {
+    const directory = path.join(scratch, 'stale-module')
+    fs.mkdirSync(directory, { recursive: true })
+    fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}')
+    let registered
+    const fiber = { uid: 1, _config: {}, await: async () => {}, inject: {},
+      parent: { registry: { plugin(module) { registered = module; return { ctx: { fiber: { await: async () => {} } } } } } } }
+    const context = {
+      fiber: { runtime: { callback: previousModule } },
+      registry: { get: () => ({ fibers: [fiber] }), delete() {} },
+      loader: { internal: { loadCache: new Map() }, unwrapExports: value => value, import: async () => loaderFor() },
+    }
+    const result = await selfReload(context, {
+      packageUrl: pathToFileURL(`${directory}${path.sep}`).href, entryUrl: pathToFileURL(path.join(directory, 'index.js')).href,
+      expectedVersion: '2.0.0', logger: {},
+    })
+    assert.equal(result.ok, false, label)
+    assert.equal(result.staleModule === true, expected, `${label}: staleModule must be ${expected}`)
+    assert.equal(registered, undefined, 'a refused swap registers nothing')
+    console.log(`ok ${++checks} reload reports whether the old module was simply not evictable (${label})`)
+  }
+
   const root = new Context()
   try {
     class Llm extends Service {

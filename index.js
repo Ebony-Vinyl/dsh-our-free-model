@@ -937,13 +937,22 @@ export function apply(ctx, config) {
         activate: async installed => {
           pending = { version: installed.version }
           globalThis[pendingKey] = pending
-          return selfReload(ctx, { logger, packageUrl: PKG_URL.href, entryUrl: ENTRY_URL, expectedVersion: installed.version })
+          const reload = await selfReload(ctx, { logger, packageUrl: PKG_URL.href, entryUrl: ENTRY_URL, expectedVersion: installed.version })
+          // This host handed back the module it had already evaluated, so the
+          // running process cannot report the new version. The files are on disk
+          // and verified by the updater; report the activation as deferred so the
+          // upgrade is kept for the next boot instead of being rolled back.
+          if (reload.ok !== true && reload.staleModule === true) {
+            logger.warn?.(`our-free-model: this host cannot evict the loaded module; the upgrade takes effect on restart (${reload.error})`)
+            return { ok: true, version: installed.version, deferred: true }
+          }
+          return reload
         },
       })
       // Notification uses the successor's stores and hub. The predecessor's
       // effects have already been disposed by the swap.
       try { pending?.notify?.() } catch (error) { logger.warn?.(`our-free-model: upgrade notification failed (${error?.message ?? error})`) }
-      return { ...result, reloaded: true }
+      return { ...result, reloaded: result.restartRequired !== true }
     } finally {
       if (globalThis[pendingKey] === pending) globalThis[pendingKey] = undefined
     }

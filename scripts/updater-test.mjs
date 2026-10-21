@@ -1144,6 +1144,65 @@ for (const returnedVersion of [OLD, undefined]) {
   })
 }
 
+await checkAsync('a host that cannot evict the old module keeps the verified install and defers to a restart (issue #427)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const updater = fixtureUpdater(pkg, data)
+  // `stale-cache` is the reported host: every import hands back the module that
+  // was already evaluated, so the running version can never become the new one.
+  const host = reloadHost('stale-cache')
+  try {
+    const result = await updater.apply({ activate: async installed => {
+      // Mirrors what index.js does around the real selfReload.
+      const reload = await selfReload(host.ctx, { logger: {}, expectedVersion: installed.version })
+      return reload.ok !== true && reload.staleModule === true
+        ? { ok: true, version: installed.version, deferred: true }
+        : reload
+    } })
+    assert.equal(result.version, NEW)
+    assert.equal(result.restartRequired, true, 'the caller must be told a restart is what activates this')
+    assert.equal(host.running().version, OLD, 'the running code is still the old one — that is why this defers')
+    // The install survives: this is the whole point of the issue — a mismatch
+    // the next boot resolves on its own must not destroy a verified upgrade.
+    assert.equal(updaterVersion(pkg), NEW)
+    assert.equal(fs.readFileSync(path.join(pkg, 'index.js'), 'utf8'), newFiles['index.js'])
+    const status = updater.status()
+    assert.equal(status.restartRequired, true)
+    assert.equal(status.phase, 'complete')
+    assert.equal(status.recoveryRequired, false, 'a deferred activation is not a recovery case')
+    assert.equal(status.installedVersion, NEW)
+    assert.equal(status.lastApplied.ok, true)
+    // The user is running OLD but already has NEW on disk: re-offering NEW is
+    // the "upgrade keeps coming back" loop the report describes.
+    assert.equal(status.available, false, 'the version already written must not be offered again')
+    // Once a process actually runs the installed bytes, the pending restart is
+    // over and nothing keeps asking for another one.
+    assert.equal(fixtureUpdater(pkg, data, NEW).status().restartRequired, false)
+  } finally {
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
+await checkAsync('a replacement that imports but fails to start still rolls back (issue #427)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const updater = fixtureUpdater(pkg, data)
+  const host = reloadHost('startup-failure')
+  try {
+    // Deferring must stay narrow. A release whose code boots into a failure is
+    // a bad release, and the disk belongs back on the version that still runs.
+    await assert.rejects(() => updater.apply({ activate: () => selfReload(host.ctx, { logger: {}, expectedVersion: NEW }) }),
+      /previous files restored/)
+    assert.equal(updaterVersion(pkg), OLD, 'a broken replacement is still rolled back')
+    assert.ok(updater.status().restartRequired !== true, 'a rollback never leaves a restart pending')
+    assert.equal(updater.status().lastApplied.ok, false)
+  } finally {
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
 await checkAsync('reload and rollback failures remain visible across instances and restarts', async () => {
   const pkg = makePackage(OLD)
   const data = makeDataDir()

@@ -209,15 +209,33 @@ export function selfReload(ctx, options = {}) {
         }
         if (replacement === previous || replacement.apply === previous
           || (typeof previous.apply === 'function' && replacement.apply === previous.apply)) {
-          throw new Error('replacement is still the previous plugin after cache invalidation')
+          throw Object.assign(new Error('replacement is still the previous plugin after cache invalidation'), { staleModule: true })
         }
       }
       if (options.expectedVersion !== undefined && replacement.version !== options.expectedVersion) {
-        throw new Error(`activation version mismatch: expected ${options.expectedVersion}, got ${String(replacement.version ?? '(missing)')}`)
+        // A re-import that reports the version already running means the host
+        // handed back the module it had cached, not the code now on disk. That
+        // is a host that cannot evict, not a bad install: the bytes on disk were
+        // verified against the signed manifest before this call. Reporting it
+        // separately lets the caller keep the install and defer to a restart
+        // instead of destroying a good upgrade.
+        const runningVersion = typeof previous === 'object' ? previous.version : undefined
+        const sameModule = replacement === previous || replacement.apply === previous
+          || (typeof previous.apply === 'function' && replacement.apply === previous.apply)
+        const staleModule = sameModule || (runningVersion !== undefined && replacement.version === runningVersion)
+        throw Object.assign(
+          new Error(`activation version mismatch: expected ${options.expectedVersion}, got ${String(replacement.version ?? '(missing)')}`),
+          { staleModule },
+        )
       }
     } catch (error) {
       restoreCaches(internal, backup)
-      return { ok: false, error: `re-import failed, old code still running (${error?.message ?? error})`, restored: true }
+      return {
+        ok: false,
+        error: `re-import failed, old code still running (${error?.message ?? error})`,
+        restored: true,
+        ...(error?.staleModule === true ? { staleModule: true } : {}),
+      }
     }
     globalThis[Symbol.for('our-free-model.last-reload')] = { at: Date.now(), purged: backup.esm.size, busted }
 

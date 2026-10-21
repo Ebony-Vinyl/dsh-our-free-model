@@ -224,6 +224,30 @@ for (const succeeds of [true, false]) {
   })
 }
 
+await check('a deferred activation says restart, not hot-reloaded, and shows the notice (issue #427)', async () => {
+  // The host could not evict the loaded module, so the files are on disk but
+  // the running code is still the old one: the install is complete, the
+  // activation is not.
+  const awaitingRestart = { ...baseline, current: '1.4.5', installedVersion: '1.4.6', available: false, restartRequired: true }
+  const app = await mount()
+  // The apply button only exists while an update is offered, so the panel
+  // starts from the offered state and the status endpoint reports the
+  // pending restart once the install has landed.
+  app.setStatusLoader(() => response(awaitingRestart))
+  app.setAction(() => response({ version: '1.4.6', previous: '1.4.5', files: 4, bytes: 10, reloaded: false, restartRequired: true }))
+  await app.button('upgrade.apply').props.onClick()
+  await app.flush()
+  // Claiming a hot reload here would be a claim the running process cannot
+  // back up: it is still serving the old module.
+  assert.ok(app.draw().includes('upgrade.restartRequired'), 'the message must ask for a restart')
+  assert.ok(!app.draw().includes('upgrade.doneRefresh'), 'a deferred activation is not a completed hot reload')
+  assert.ok(app.draw().includes('upgrade.restartNotice'), 'the panel keeps saying a restart is pending')
+  // A pending restart must not read as "up to date" either — the running code
+  // is still the old version until the user quits.
+  assert.ok(!app.draw().includes('upgrade.upToDate'))
+  app.dispose()
+})
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-reload-isolation-'))
 const pkgDir = path.join(root, 'package')
 const home = path.join(root, 'home')
