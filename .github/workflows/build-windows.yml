@@ -1,7 +1,7 @@
 name: build-windows
 
 # 在 Windows 上构建 Our Free Model 桌面壳的 .exe 安装包（未签名，需绕过 SmartScreen）。
-# 手动触发，或在打 v* 标签时自动构建并发布为 vX.Y.Z-windows-unofficial。
+# 手动触发，或在打 v* 标签时自动构建，并作为构件挂到作者发布的主 release（vX.Y.Z）。
 on:
   workflow_dispatch:
   push:
@@ -40,13 +40,13 @@ jobs:
           installer=$(ls packages/desktop/src-tauri/target/release/bundle/nsis/*.exe | head -1)
           sha=$(sha256sum "$installer" | awk '{print $1}')
           version=$(node -p "require('./packages/desktop/package.json').version")
-          release_tag="${GITHUB_REF_NAME}-windows-unofficial"
+          release_tag="${GITHUB_REF_NAME}"
           cat > release-notes.md <<NOTES
-          ## 非官方社区构建 / Unofficial community build (Windows)
+          ## Windows 社区构建 / Windows community build
 
-          这不是仓库作者发布的官方安装包；本 .exe 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现。安装包未经 Authenticode 签名，Windows SmartScreen 可能拦截，并非文件损坏。
+          本 .exe 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现，未经 Authenticode 签名。它直接挂到作者发布的主 release（vX.Y.Z），与 macOS dmg、插件同处一个 release，不再单独开「非官方」release。
 
-          This is NOT an official release. The .exe is built by GitHub Actions from public, auditable source. It is not Authenticode-signed, so SmartScreen may block first launch — the file is NOT damaged.
+          This .exe is built by GitHub Actions from the public, auditable source of this repository and is not Authenticode-signed. It is attached to the same release as the author's macOS dmg and plugin (no separate "unofficial" release).
 
           | 项 / Item | 值 / Value |
           |---|---|
@@ -72,7 +72,19 @@ jobs:
             echo "- 构建记录 / CI run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "- SHA256: $sha"
           } >> release-notes.md
-          gh release create "$release_tag" "$installer" \
-            --title "${version} Windows (x64) — 非官方社区构建 / unofficial community build" \
-            --notes-file release-notes.md \
-            --target "$GITHUB_SHA" || gh release upload "$release_tag" "$installer" --clobber
+          # 直接挂到作者创建的主 release（vX.Y.Z）；若主 release 尚未生成则等待（最多约 6 分钟）再上传，
+          # 避免并发创建重复 release，也消除「非官方社区构建」的独立条目。
+          for i in $(seq 1 30); do
+            if gh release view "$release_tag" >/dev/null 2>&1; then break; fi
+            echo "等待主 release $release_tag 出现… ($i/30)"; sleep 12
+          done
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" "$installer" --clobber
+            echo "已将 installer 上传到主 release $release_tag"
+          else
+            # 兜底：主 release 迟迟未出现时自行创建（不再标「非官方」）
+            gh release create "$release_tag" "$installer" \
+              --title "Our Free Model ${version} Windows (x64) 社区构建 / community build" \
+              --notes-file release-notes.md \
+              --target "$GITHUB_SHA"
+          fi
