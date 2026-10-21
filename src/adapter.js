@@ -730,7 +730,11 @@ function buildPayload(wire, modelId, messages, options, budget, resolveImage, wa
       ...shaped.system === undefined ? {} : { system: shaped.system },
     }
   }
-  const chat = toChatMessages(messages, resolveImage, warnings)
+  // `modelId` reaches the projector because one wall needs it: DeepSeek's chat
+  // wire refuses a tool-carrying follow-up whose history omits
+  // `reasoning_content`, and this lane always carries tools (the fingerprint
+  // gate injects them). See `toChatMessages`.
+  const chat = toChatMessages(messages, resolveImage, warnings, { model: modelId })
   return {
     model: modelId,
     messages: typeof options.system === 'string' && options.system !== ''
