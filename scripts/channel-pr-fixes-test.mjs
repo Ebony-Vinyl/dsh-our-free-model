@@ -27,6 +27,76 @@ export async function verifyChannelPrFixes() {
   await verifyChannelStorageCompatibility()
   await verifySystemPrompts()
   await verifyGatewayTeardown()
+  await verifyGatewayLongLivedConnections()
+}
+
+/**
+ * 网关要能被「会保留空闲连接的客户端」安全复用，并要把超限请求回成 413。
+ *
+ * 真实故障：CC Switch 用 reqwest 转发，reqwest 默认保留空闲连接 90 秒，而
+ * Node 默认 5 秒就关闭；复用时刻撞上已关闭的 socket，用户看到 502 和
+ * `Connection reset by peer`。请求体超过上限时也一样：旧代码直接销毁连接，
+ * 客户端同样只看到连接重置，读不到 413 的原因。
+ */
+async function verifyGatewayLongLivedConnections() {
+  const { createOpenAiGateway } = await import('../vendor/channel-pack/src/openai-gateway/server.ts')
+  const reserve = net.createServer()
+  await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve))
+  const port = reserve.address().port
+  await new Promise(resolve => reserve.close(resolve))
+
+  const gateway = createOpenAiGateway({
+    env: { DSH_OPENAI_GATEWAY_PORT: String(port), DSH_OPENAI_GATEWAY_API_KEY: 'fixture-local-key' },
+    logger: { info() {}, warn() {}, error() {} },
+    llm: {
+      listProviders: () => [{ id: 'fixture' }],
+      listModels: async () => [],
+      resolveModelInfo: async () => ({}),
+      async *stream() { yield { type: 'text-delta', index: 0, text: 'fixture' } },
+    },
+  })
+  try {
+    await gateway.start()
+
+    // 服务端声明的空闲上限必须长于 reqwest 的 90 秒，客户端才不会复用已关闭的连接。
+    const headers = await new Promise((resolve, reject) => {
+      const request = http.request({
+        host: '127.0.0.1', port, path: '/v1/models', method: 'GET',
+        headers: { authorization: 'Bearer fixture-local-key' },
+      }, response => { response.resume(); resolve(response.headers) })
+      request.on('error', reject)
+      request.end()
+    })
+    const keepAlive = String(headers['keep-alive'] ?? '')
+    const timeoutSeconds = Number.parseInt(/timeout=(\d+)/.exec(keepAlive)?.[1] ?? '', 10)
+    assert.ok(timeoutSeconds > 90, `keep-alive timeout must outlast reqwest's 90s: ${keepAlive}`)
+
+    // 超过上限的请求必须得到可读的 413，而不是连接重置。
+    const tooLarge = 'x'.repeat(64 * 1024 * 1024 + 1)
+    const reply = await new Promise((resolve, reject) => {
+      const request = http.request({
+        host: '127.0.0.1', port, path: '/v1/responses', method: 'POST',
+        headers: {
+          authorization: 'Bearer fixture-local-key',
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(tooLarge),
+        },
+      }, response => {
+        let body = ''
+        response.setEncoding('utf8')
+        response.on('data', chunk => { body += chunk })
+        response.on('end', () => resolve({ status: response.statusCode, body }))
+        response.on('error', reject)
+      })
+      request.on('error', reject)
+      request.end(tooLarge)
+    })
+    assert.equal(reply.status, 413, 'oversized body is refused with 413')
+    assert.match(reply.body, /request body is too large/, '413 carries a readable reason')
+  } finally {
+    await within(gateway.close(), 'gateway long-lived connections: cleanup')
+  }
+  console.log('ok  gateway keeps idle connections past the client timeout and answers oversized bodies with 413')
 }
 
 async function verifySystemPrompts() {

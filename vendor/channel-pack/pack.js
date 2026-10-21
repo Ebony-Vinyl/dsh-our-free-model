@@ -57272,7 +57272,8 @@ data: ${JSON.stringify({ type, sequence_number: sequence++, ...payload })}
 }
 
 // vendor/channel-pack/src/openai-gateway/server.ts
-var BODY_LIMIT = 16 * 1024 * 1024;
+var BODY_LIMIT = 64 * 1024 * 1024;
+var KEEP_ALIVE_TIMEOUT_MS = 12e4;
 var defaultLogger = {
   info: (message) => console.info(message),
   warn: (message) => console.warn(message),
@@ -57292,20 +57293,27 @@ function readJson(request, signal) {
   return new Promise((resolve2, reject) => {
     const chunks = [];
     let size = 0;
+    let overflowed = false;
     const abort = () => reject(new OpenAiGatewayError("request was aborted", 499, "aborted", "aborted"));
     signal.addEventListener("abort", abort, { once: true });
     request.on("data", (chunk) => {
+      if (overflowed) return;
       const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       size += data.length;
       if (size > BODY_LIMIT) {
-        reject(new OpenAiGatewayError("request body is too large", 413, "invalid_request_error", "request_too_large"));
-        request.destroy();
+        overflowed = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(data);
     });
     request.on("error", reject);
     request.on("end", () => {
+      if (overflowed) {
+        signal.removeEventListener("abort", abort);
+        reject(new OpenAiGatewayError("request body is too large", 413, "invalid_request_error", "request_too_large"));
+        return;
+      }
       signal.removeEventListener("abort", abort);
       try {
         const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -57552,6 +57560,8 @@ function createOpenAiGateway(options) {
       if (server !== void 0) return;
       const current = createServer6(requestHandler);
       server = current;
+      current.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+      current.headersTimeout = KEEP_ALIVE_TIMEOUT_MS + 5e3;
       await new Promise((resolve2, reject) => {
         const onError = (error) => {
           current.off("listening", onListening);
