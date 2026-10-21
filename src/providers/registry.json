@@ -1074,7 +1074,7 @@
     "website": "https://www.kimi.com/",
     "local": false,
     "source": "fcc",
-    "modelsUrl": "https://api.moonshot.cn/v1/models"
+    "modelsUrl": "https://api.moonshot.ai/v1/models"
   },
   {
     "id": "kimi_code",
