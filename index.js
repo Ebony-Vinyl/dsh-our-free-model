@@ -35,6 +35,8 @@ import { isEacEntry, isKiloEntry } from './src/catalog.js'
 import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
+import { buildChannelCatalog, CHANNEL_PACK_PROVIDERS, fetchChannelListing, isChannelEntry } from './src/chan-lane.js'
+import { buildDshCatalog, isDshEntry } from './src/dsh-lane.js'
 import { CODE, UpstreamError } from './src/http.js'
 import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
 import { directFetch } from './src/eac.js'
@@ -51,7 +53,7 @@ import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
 import { buildAggregateCatalog, fetchProviderModels, isAggregateEntry, testProvider } from './src/aggregate.js'
-import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
+import { blacklistedUntilOf, buildComboCatalog, failureCount, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
 import { getProvider, listProviders } from './src/providers/index.js'
 import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPercent } from './src/token-saver/index.js'
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver/prompts.js'
@@ -412,11 +414,96 @@ export function apply(ctx, config) {
     attributionUserAgent: 'deepseek-harness',
     resolveImage: imageResolver(ctx, logger),
     sealedCredential: sealedCredentialOf,
+    chanGateway: chanGatewayDialTarget,
+    hostStream: options => ctx.llm.stream(options),
+    hostResolveModel: (provider, model, signal) => ctx.llm.resolveModelInfo(provider, model, signal),
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
   })
-  const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
+  const { state, adapter, refreshCatalog: coreRefreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
   const runForwarded = modelRuntime.complete
+
+  /**
+   * Every refresh round carries the chan lane too: the same triggers that
+   * re-read the free/sealed/Kilo listings re-read the pack's gateway listing,
+   * so the roster is on one cadence and one button (`POST /refresh`) reaches
+   * all of it. The lane's own sync never throws — a failing round keeps its
+   * previous rows.
+   *
+   * The lane syncs AFTER the round, and the first chan sync waits for the
+   * first round to finish: a chan row that lands before the free listing
+   * would rebuild every chain's links against a catalog that does not yet
+   * carry a listing-only free model, and the chain would read back with a
+   * link missing. The round's own listings come first; then the lane's rows
+   * join them, and every chain is rebuilt against the full set.
+   */
+  let firstCatalogRoundDone = false
+  const firstCatalogRoundWaiters = []
+  const firstCatalogRoundFinished = () => {
+    firstCatalogRoundDone = true
+    for (const resolve of firstCatalogRoundWaiters.splice(0)) resolve()
+  }
+  const afterFirstCatalogRound = () => firstCatalogRoundDone
+    ? undefined
+    : new Promise(resolve => firstCatalogRoundWaiters.push(resolve))
+  const refreshCatalog = async opts => {
+    let result
+    try {
+      result = await coreRefreshCatalog(opts)
+    } finally {
+      firstCatalogRoundFinished()
+    }
+    await syncChannelLane()
+    await syncDshLane()
+    return result
+  }
+
+  /**
+   * 读取 DSH 设置页添加的模型。宿主目录是唯一来源；插件自身两个路由被排除，
+   * 防止组合链把自己重新加入为成员。
+   */
+  let dshLaneSync = null
+  async function syncDshLane() {
+    if (disposed) return false
+    if (dshLaneSync !== null) return dshLaneSync
+    const run = (async () => {
+      const providers = ctx.llm.listProviders?.() ?? []
+      const hostProviders = providers
+        .map(provider => typeof provider?.id === 'string' ? provider.id : '')
+        .filter(id => id !== '' && id !== ROUTE_MAIN && id !== ROUTE_REGION && !CHANNEL_PACK_PROVIDERS.includes(id))
+      const models = []
+      const resolved = new Map()
+      const rounds = await Promise.allSettled(hostProviders.map(async providerId => {
+        const listed = await ctx.llm.listModels?.(providerId)
+        const rows = []
+        for (const model of Array.isArray(listed) ? listed : []) {
+          const info = await ctx.llm.resolveModelInfo?.(providerId, model.id)
+          rows.push({ model, info })
+        }
+        return { providerId, rows }
+      }))
+      for (const round of rounds) {
+        if (round.status === 'rejected') {
+          // 一个提供方失败不能清空其他提供方的模型；宿主自己的模型目录也按
+          // 提供方隔离失败，这里保持同一语义，并把原因留在日志里。
+          if (!disposed) logger.warn?.(`our-free-model: DSH provider listing failed (${round.reason?.message ?? round.reason}); keeping its models out of this round`)
+          continue
+        }
+        for (const { model, info } of round.value.rows) {
+          models.push(model)
+          if (info !== undefined) resolved.set(`${round.value.providerId}/${model.id}`, info)
+        }
+      }
+      if (disposed) return false
+      modelRuntime.syncDshCatalog(buildDshCatalog(models, resolved))
+      return true
+    })().catch(error => {
+      if (!disposed) logger.warn?.(`our-free-model: DSH model listing failed (${error?.message ?? error}); keeping the lane's previous roster`)
+      return false
+    })
+    dshLaneSync = run
+    try { return await run } finally { if (dshLaneSync === run) dshLaneSync = null }
+  }
 
   // ── registration ────────────────────────────────────────────────────────────
   const routes = () => Object.keys(state().membership)
@@ -445,6 +532,11 @@ export function apply(ctx, config) {
 
   ctx.on?.('loader/volatile-update', () => {
     registration.replace(routes())
+    void syncDshLane()
+  })
+
+  ctx.on?.('llm/adapters-updated', () => {
+    void syncDshLane()
   })
 
   /**
@@ -696,6 +788,17 @@ export function apply(ctx, config) {
     }
   }
 
+  /**
+   * The gateway's dialable address for the plugin's own lane: `{ port, key }`,
+   * or null when there is no credential (or the gateway is switched off by
+   * env). Read fresh per use — the key rotates and the port moves.
+   */
+  function chanGatewayDialTarget() {
+    const target = chanGatewayTarget()
+    const key = target.enabledByEnv ? target.credential?.key : null
+    return typeof key === 'string' && key !== '' ? { port: target.port, key } : null
+  }
+
   async function syncChanRelay() {
     while (chanRelaySyncInFlight !== null) await chanRelaySyncInFlight.catch(() => {})
     const run = syncChanRelayOnce()
@@ -772,6 +875,67 @@ export function apply(ctx, config) {
     }
   }
 
+  // ── the 白嫖 lane's roster (routing-only) ────────────────────────────────────
+  /**
+   * The pack's gateway serves models the harness's own routes do not name:
+   * they join the merged catalog so a fallback chain can reference them, and
+   * are never advertised as standalone routes (`computeMembership` drops
+   * them). One listing round per refresh; a round that fails keeps the
+   * previous rows and warns once, so a gateway that restarts or a key that is
+   * being re-minted never empties a chain mid-day.
+   */
+  let chanLaneSync = null
+  let chanLaneWarned = false
+  async function syncChannelLane() {
+    while (chanLaneSync !== null) await chanLaneSync.catch(() => {})
+    const run = syncChannelLaneOnce()
+    chanLaneSync = run
+    try { return await run } finally { if (chanLaneSync === run) chanLaneSync = null }
+  }
+  async function syncChannelLaneOnce() {
+    if (disposed) return false
+    await afterFirstCatalogRound()
+    if (disposed) return false
+    const target = chanGatewayDialTarget()
+    if (target === null) {
+      warnChanLane("the channel gateway has no credential yet (or is switched off); keeping the lane's previous roster")
+      return false
+    }
+    try {
+      const rows = await fetchChannelListing({ port: target.port, key: target.key })
+      if (disposed) return false
+      modelRuntime.syncChannelCatalog(buildChannelCatalog(rows))
+      chanLaneWarned = false
+      return true
+    } catch (error) {
+      if (!disposed) warnChanLane(`channel gateway listing failed (${error?.message ?? error}); keeping the lane's previous roster`)
+      return false
+    }
+  }
+  function warnChanLane(message) {
+    if (chanLaneWarned) return
+    chanLaneWarned = true
+    logger.warn?.(`our-free-model: ${message}`)
+  }
+
+  /**
+   * A freshly mounted pack answers its port only after the gateway's own async
+   * start converges, so a single read at mount time can see ECONNREFUSED and
+   * leave the lane empty until the next periodic round. Retry a few times,
+   * stopping as soon as a listing lands; the sync's own warn-once flag keeps
+   * this from becoming a log loop.
+   */
+  async function settleChanLane() {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (disposed) return
+      if (attempt > 0) await new Promise(resolve => {
+        const timer = setTimeout(resolve, 2500)
+        timer.unref?.()
+      })
+      if (disposed) return
+      if (await syncChannelLane()) return
+    }
+  }
 
   // ── egress outlet ───────────────────────────────────────────────────────────
   /** One gateway round trip at a time; the panel polls, the throttle decides. */
@@ -1030,6 +1194,9 @@ export function apply(ctx, config) {
       })
       channelPack = { state: 'ready', error: '' }
       logger.info?.('our-free-model: free-channel pack mounted (10 account providers)')
+      // The pack's own gateway is the lane's endpoint; its models become
+      // routing destinations as soon as the listing answers.
+      void settleChanLane()
     }).catch(error => {
       if (stopped) return
       channelPack = { state: 'failed', error: String(error?.message ?? error).slice(0, 300) }
@@ -1131,12 +1298,23 @@ export function apply(ctx, config) {
         combos: normalizeCombos(settings.get().combos),
         // Every id a chain may reference, with the display name the picker uses —
         // the editor offers a searchable list instead of a free-text field, so a
-        // typo cannot become a chain link that silently never resolves.
+        // typo cannot become a chain link that silently never resolves. The two
+        // capacities ride along so the editor can show what a member brings.
         models: state().catalog.map(entry => ({
           id: entry.id, name: entry.name, channel: entry.channel ?? 'free', vision: entry.vision === true,
           contextWindow: entry.contextWindow, maxOutput: entry.maxOutput,
         })),
+        // The built virtual rows: a stored chain's effective capacity is one of
+        // these, already folding the chain's own override over the intersection.
         usable: state().catalog.filter(isComboEntry).map(publicCombo),
+        // Live health per chain member: the editor shows "benched for Xm" and
+        // "3/5 consecutive failures" without a second round trip. Process state,
+        // so a restart resets it along with the counters themselves.
+        health: Object.fromEntries(normalizeCombos(settings.get().combos).map(combo => [combo.id,
+          Object.fromEntries(combo.models.map(id => {
+            const until = blacklistedUntilOf(combo.id, id)
+            return [id, { failures: failureCount(combo.id, id), until }]
+          }))])),
         strategies: ['fallback', 'round-robin'],
       }),
       preview: patch => {
@@ -1144,7 +1322,15 @@ export function apply(ctx, config) {
           || patch.models.length > 1000 || patch.models.some(id => typeof id !== 'string' || id.length > 300)) {
           throw httpError(400, 'models must be an array of model ids')
         }
-        const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models }]), state().catalog)
+        // The editor previews the draft it is editing, typed overrides included:
+        // the capacity line must show what saving this draft would produce.
+        const overrides = {}
+        for (const key of ['contextWindow', 'maxOutput']) {
+          const value = Number(patch[key])
+          const whole = Math.trunc(value)
+          if (Number.isFinite(value) && whole > 0) overrides[key] = whole
+        }
+        const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models, ...overrides }]), state().catalog)
         return { capacity: entries.length ? publicCombo(entries[0]) : null }
       },
       save: async patch => {
@@ -2240,6 +2426,10 @@ function publicSettings(settings, forwardInfo, egressInfo) {
       strategy: combo.strategy,
       stickyLimit: combo.stickyLimit,
       enabled: combo.enabled,
+      contextWindow: combo.contextWindow,
+      maxOutput: combo.maxOutput,
+      failureThreshold: combo.failureThreshold,
+      blackoutMinutes: combo.blackoutMinutes,
     })),
     forward: {
       ...(settings.forward ?? {}),
@@ -2288,10 +2478,11 @@ function buildSummary(deps) {
   const feedView = deps.announcements.view()
   const defaultMaxTokens = deps.settings.get().defaultMaxTokens
   // Lanes that carry no availability verdict of their own. The absorbed channels
-  // and the aggregate lane are named by a listing round that already succeeded,
-  // and a combo is a view over rows that were themselves named — none of them is
-  // pinged. A listing is not an inference verdict; explicit tests add their own samples.
-  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry)
+  // (EAC, Kilo, the pack's chan lane and the DSH host catalog) and the aggregate
+  // lane are named by a listing round that already succeeded, and a combo is a
+  // view over rows that were themselves named — none of them is pinged. A
+  // listing is not an inference verdict; explicit tests add their own samples.
+  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isChannelEntry(entry) || isDshEntry(entry) || isComboEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
