@@ -40,9 +40,9 @@
 ## Community
 
 <div align="center">
-  <img src="docs/images/qq-group-1128964440.png" alt="QR code for ai技术交流群5 (QQ group: 1128964440)" width="300">
+  <img src="docs/images/qq-group-756199839.png" alt="QR code for ai技术交流群6 (QQ group: 756199839)" width="300">
   <br>
-  <b>QQ group: 1128964440 (ai技术交流群5)</b>
+  <b>QQ group: 756199839 (ai技术交流群6)</b>
   <br>
   Scan the QR code or search for the group number to join, discuss the plugin, report issues and share tips.
 </div>
@@ -70,6 +70,7 @@
 - **Token savers** — three things: tool-output compaction (RTK) rewrites `tool_result` content in place before the request is sent (git diff / status / log, grep, find, ls, tree, build logs, numbered file dumps, search listings, duplicate log lines) — measured live, a 40 KB `git diff` lost 90% of its bytes and the model still answered about it; prompt shaping offers the caveman and ponytail families, every level off by default; and five local answers that never call a provider. The settings page reports bytes before/after, percent saved, blocks compacted and calls measured, from the same stats rows the usage charts read.
 - **Routing (fallback chains)** — chain models from any lane into one named chain that appears in the picker and on the gateway as the virtual model `combo:<name>`. `fallback` always starts at the head; `round-robin` rotates the starting point and stays there for N turns. A link that fails *before any answer delta* is discarded whole, so the switch is invisible to the caller — and reasoning deltas deliberately do not count as content, so "thought for a minute, then hit a quota wall" is the case failover exists for.
 - **The local gateway speaks Anthropic natively** — new `POST /v1/messages` (streaming and non-streaming, with `thinking`/`tool_use` blocks, a real `stop_reason` and an in-stream `error` event when a turn fails after the headers went out) and `POST /v1/messages/count_tokens` (a local estimate — the plugin ships no tokenizer); `/v1/models` now advertises every lane, the aggregate rows and the chains included. The gateway page's new *Connect a client* section generates copy-ready recipes — Claude Code, Codex `config.toml`, the OpenAI and Anthropic SDKs, curl, and a LAN variant when the relay is up — from the port that actually bound and the key that is actually required.
+- **Optional visual effects** — The settings header has a Visual effects switch, off by default. The aquarium and model features stay available; enabling it restores background glows, glass blur and decorative motion. The preference stays in the current browser.
 - **Eleven tabs beside the old six** — Aggregate, Token savers, Routing, Plugin upgrade and Recommended projects join Free models, EAC models, Free channels, Dashboard, Request log and Gateway; the motion pass (card rise on mount, page fade on tab switch, an animated savings meter, hover lifts) respects `prefers-reduced-motion` and collapses to one column at panel width. The Recommended-projects page carries the three companion repositories — EAC-Desktop, EAC-Pack and EAC-design-world — with a description, a direct link and a star button each, and their live star, fork and last-push numbers read from GitHub (absent, never invented, when GitHub cannot be reached).
 - **Clean names in the UI** — no mojibake, no upstream vendor strings leaking into your model picker.
 
@@ -137,7 +138,7 @@ and installation contract rather than assuming every desktop shell shares this g
 To install manually as a real directory, use a trusted local tarball:
 
 1. Create `<DSH_HOME>/profiles/<profile>/vendor/`. From the reviewed repository, run `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`, or place an official same-version release tarball from this repository there. Local packing does not publish to npm.
-2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.8.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
+2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.9.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
 3. Append `"dsh-our-free-model"` to `dsh.profile.bundles`.
 
 When the package manager owns the installed bytes, set `distribution: 'managed'` in the bundle config or plugin `settings.json`. The package manager then handles updates; in-app upgrades, announcement polling and hot reload stand down while model access remains available. For later updates, replace the trusted tarball and update its dependency path so the old lockfile cannot restore an older copy.

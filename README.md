@@ -39,9 +39,9 @@
 ## 交流群
 
 <div align="center">
-  <img src="docs/images/qq-group-1128964440.png" alt="ai技术交流群5 入群二维码（群号：1128964440）" width="300">
+  <img src="docs/images/qq-group-756199839.png" alt="ai技术交流群6 入群二维码（群号：756199839）" width="300">
   <br>
-  <b>QQ 群：1128964440（ai技术交流群5）</b>
+  <b>QQ 群：756199839（ai技术交流群6）</b>
   <br>
   扫码或搜索群号加入群聊，一起交流插件使用心得、反馈问题与分享玩法。
 </div>
@@ -70,6 +70,7 @@
 - **本地网关原生说 Anthropic**——新增 `POST /v1/messages`（流式与非流式，含 thinking / tool_use 块、真实 stop_reason 与流内 error 事件）与 `POST /v1/messages/count_tokens`（本地估算）；`/v1/models` 广播全部车道，含聚合行与链路。网关页新增「接入客户端」分区，按实际绑定的端口与真实要求的密钥生成 Claude Code、Codex、OpenAI SDK、Anthropic SDK、curl 与局域网的可复制配方。
 - **接口具备鉴权围栏**——插件 HTTP 路由优先级高于内核 `/api`，因此内置与内核一致的信任检查（优先复用 composition 的 connection 服务，缺失时退回结构化围栏）。
 - **十个账号渠道，一体接入**——LobsterAI（有道）、Qoder / Qoder 中国版（阿里系）、TRAE（字节）、Cline、Loomy（讯飞）、Raccoon（商汤）、MiniMax Code、ZCode（智谱）、Gemini（Google Code Assist）十个账号渠道开箱即用，外加 Kilo 免费车道与原匿名免费通道；OpenCode 账号渠道在本插件中默认停用。各渠道的登录流程、账号池、每日积分领取、模型黑名单与其本地 OpenAI 网关（Chat Completions + Responses，默认 `127.0.0.1:8326`）原样挂载与运行；凭据只写入宿主凭据库，浏览器永远拿不到明文。
+- **视觉特效按需开启**——设置页顶部“视觉特效”开关默认关闭，鱼缸和业务功能始终保留；开启后恢复背景光晕、毛玻璃与装饰动画，选择仅保存在当前浏览器。
 - **十一页毛玻璃界面**——设置页顶部导航扩为十一个页面：原有六页（**免费模型**（鱼缸水位 = 可用模型占比）、**EAC 模型**（鱼缸水位 = 协付池压力）、**白嫖模型接入**（十张渠道卡：登录、账号、模型开关、一键领取积分）、**数据看板**（今日/全部 Token 消耗、平均生成速度、缓存命中率、成功率，账号透视与模型性能表、最近请求总览）、**运行日志**（逐请求明细：结果、耗时、首字、速度、Token 细分，失败原因悬停可见）与**网关设置**（网关开关/端点/密钥；局域网转发中继：监听地址、端口与独立中继密钥）），新增**聚合渠道**（提供商注册表、Key、测试、发现模型、Base URL 与模型清单覆盖）、**省 Token**（压缩开关、两族提示词档位、五个本地应答与节省统计）、**路由**（降级链编辑器）、**插件升级**（版本检查、一键升级与热重载）与**推荐项目**（EAC-Desktop / EAC-Pack / EAC-design-world 三张卡片：简介、直达链接与 Star 按钮，Star / Fork / 最近提交数实时取自 GitHub，取不到就整块不显示）五页；网关设置页另增「接入客户端」分区。页面切换与卡片入场为 150–250 ms 短动效，`prefers-reduced-motion` 下整体关闭。每页都有直达 GitHub 仓库的 Star 按钮。
 - **局域网转发中继**——渠道网关本身只监听本机（上游的安全选择）；本插件提供自己的转发门：调用方用插件签发与轮换的中继密钥，转发跳由宿主换用网关凭据（凭据不出宿主进程），仅放行 `/v1/*` 模型接口并带环路保护。
 
@@ -147,7 +148,7 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 以真实目录手工安装时，使用可信源码打出的本地 tarball：
 
 1. 创建 `<DSH_HOME>/profiles/<profile>/vendor/`，在审核过的本仓库目录运行 `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`，或将本仓库正式发布的同版本 tarball 放入该目录。本地打包不执行 npm 发布。
-2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.8.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
+2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.9.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
 3. 在 dsh.profile.bundles 末尾追加 `"dsh-our-free-model"`。
 
 包管理器拥有这份安装的字节时，同时将 bundle config 或插件 `settings.json` 的 `distribution` 设为 `managed`，由包管理器统一更新；应用内升级、公告 feed 与热重载会停用，模型功能保留。以后更新时替换可信 tarball 并同步依赖路径，避免包管理器按旧锁文件恢复旧版本。

@@ -2,6 +2,18 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-22-v2.5.9-plugin-release",
+      "title": "v2.5.9：精简账号渠道、清理遗留资源并同步交流群信息",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-22T02:12:12Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.9",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.9 更新 DSH 插件端。</b>清理不再提供的账号渠道及其登录、请求、页面入口、依赖和文档，保留 10 个账号渠道、匿名免费通道与 EAC。同步桌面端渠道资源并删除遗留前端文件；共享存储和备份保留历史格式兼容。README 更新交流群 5 的二维码及群号。</p>"
+    },
+    {
       "id": "2026-10-21-v2.5.8-plugin-release",
       "title": "v2.5.8：修复更新重试、Qoder 思考档位与工具轮次推理回传",
       "level": "update",

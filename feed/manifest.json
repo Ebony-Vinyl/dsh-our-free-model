@@ -1,8 +1,8 @@
 {
-  "version": "2.5.8",
+  "version": "2.5.9",
   "base": "../",
-  "publishedAt": "2026-10-21T15:45:42.729Z",
-  "notes": "",
+  "publishedAt": "2026-10-22T03:36:10.088Z",
+  "notes": "精简账号渠道至 10 个，清理遗留实现、依赖与桌面端资源，保留历史存储和备份兼容；同步交流群 5 的二维码与群号。",
   "files": [
     {
       "path": "adapter/dsh-llm.d.ts",
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 504512,
-      "sha256": "487abaae4c62c1ecded7650fff363447b055b311b6c7d513cdc46b4f7977adac"
+      "size": 508469,
+      "sha256": "5c71baca0a655d5b71cba1529725d5d44acec93c0ee440f3af31ad74b02f5ca2"
     },
     {
       "path": "cordis.patch.yml",
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 2927,
-      "sha256": "f21a1d30ef907fe6a7d77c3722f71f8b86140fb53fb93ebc67a1bca3f5b5970e"
+      "sha256": "fc101b03acbb819b0e47c7b81537f122470902d553746746ed41824f1c4d8113"
     },
     {
       "path": "src/adapter.js",
@@ -405,5 +405,5 @@
       "sha256": "6419471effa631519def7797d76d7ede38b9fcfa9a83c2148c8ef5d43355b43d"
     }
   ],
-  "signature": "a6xhjT7PIB5gK8TPXj69/pr9fScA/ZFZYozUL/naUvIijjmTXR+/INnr99YANxO9u5IkbCtnbZ2O0cD02qN+Ag=="
+  "signature": "2jLmGobPUDs+Jm07SXYGLcjUezjNHTTPRs8Yg66XUzyOQeltI6c22bYmUj+lsMoIOzt+1yvjvg/DlvPnitQ/DQ=="
 }

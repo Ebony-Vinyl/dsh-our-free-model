@@ -48,6 +48,8 @@ window.__ModuleLoader__.load({
         loading: '正在加载…',
         loadFailed: '无法连接插件后端',
         retry: '重试',
+        'effects.enabled': '视觉特效',
+        'effects.hint': '控制背景光晕、毛玻璃和装饰动画；鱼缸和模型功能始终保留。',
         'state.available': '可用',
         'state.region-blocked': '地区受限',
         'state.unavailable': '暂不可用',
@@ -782,6 +784,8 @@ window.__ModuleLoader__.load({
         loading: 'Loading…',
         loadFailed: 'Cannot reach the plugin backend',
         retry: 'Retry',
+        'effects.enabled': 'Visual effects',
+        'effects.hint': 'Toggle background glow, glass blur and decorative motion. The aquarium and model features stay available.',
         'state.available': 'Available',
         'state.region-blocked': 'Region-limited',
         'state.unavailable': 'Unavailable',
@@ -1831,7 +1835,6 @@ window.__ModuleLoader__.load({
 .ofm_tab[data-on="true"]{color:var(--dsw-alias-label-primary)}
 .ofm_tab:hover{color:var(--dsw-alias-label-primary)}
 .ofm_tab .ofm_tabnum{font-variant-numeric:tabular-nums;font-weight:600;color:var(--dsw-alias-label-tertiary);margin-left:6px;font-size:11px}
-.ofm_navspacer{display:none}
 /* The star belongs beside the brand: grid auto-placement would push it below
    the tabs row (they come first in the DOM) and stretch it across the row. */
 .ofm_nav .ofm_starbtn{grid-column:2;grid-row:1;justify-self:end}
@@ -2446,6 +2449,31 @@ window.__ModuleLoader__.load({
 .ofm_reconote{margin:0;font-size:11px;line-height:1.6;color:var(--dsw-alias-label-tertiary)}
 @media (max-width:600px){.ofm_recogrid{grid-template-columns:1fr}.ofm_recoacts{width:100%;margin-left:0}}
 @media (prefers-reduced-motion:reduce){.ofm_recocard,.ofm_recostar,.ofm_recogo,.ofm_recochip,.ofm_recomark{animation:none;transition:border-color .12s ease,background .12s ease,box-shadow .12s ease,opacity .12s ease,color .12s ease}.ofm_recocard:hover,.ofm_recostar:hover,.ofm_recostar:active,.ofm_recogo:hover,.ofm_recochip:hover,.ofm_recocard:hover .ofm_recomark{transform:none}.ofm_recostar::after,.ofm_recostarring,.ofm_recoglow{display:none}}
+
+/* 装饰特效默认关闭；鱼缸独立保留。布局用的 transform 不受影响。 */
+.ofm_navtools{grid-column:2;grid-row:1;display:flex;align-items:center;justify-self:end;gap:12px;flex-wrap:wrap}
+.ofm_root[data-ofm-effects="off"]::before{content:none}
+.ofm_root[data-ofm-effects="off"],
+.ofm_root[data-ofm-effects="off"] :not(.ofm_tank):not(.ofm_tank *){
+ backdrop-filter:none!important;-webkit-backdrop-filter:none!important;filter:none!important;
+ animation:none!important;transition:none!important;will-change:auto!important;
+}
+.ofm_root[data-ofm-effects="off"] :not(.ofm_tank):not(.ofm_tank *)::before,
+.ofm_root[data-ofm-effects="off"] :not(.ofm_tank):not(.ofm_tank *)::after{
+ animation:none!important;transition:none!important;filter:none!important;
+}
+.ofm_root[data-ofm-effects="off"] :is(.ofm_nav,.ofm_panel,.ofm_hero,.ofm_glass){background:var(--dsw-alias-bg-layer-2)!important}
+.ofm_root[data-ofm-effects="off"] :is(.ofm_recoglow,.ofm_recostarring){display:none!important}
+.ofm_root[data-ofm-effects="off"] :not(.ofm_tank):not(.ofm_tank *):is(:hover,:active){transform:none!important}
+.ofm_root[data-ofm-effects="off"] :is(.ofm_btn,.ofm_starbtn)::after{content:none!important}
+.ofm_tank[data-ofm-motion="off"] *{animation-play-state:paused!important}
+.ofm_root[data-ofm-active="false"] *,
+.ofm_root[data-ofm-active="false"] *::before,
+.ofm_root[data-ofm-active="false"] *::after{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){
+ .ofm_root *,.ofm_root *::before,.ofm_root *::after{animation:none!important;transition:none!important}
+}
+
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -3082,12 +3110,23 @@ window.__ModuleLoader__.load({
      */
     function Tank(props) {
       const { pct, level = 'ok', size, label } = props
+      const filled = Number(pct) > 0
+      const tankRef = useRef(null)
+      const [visible, setVisible] = useState(true)
+      useEffect(() => {
+        if (!filled || typeof IntersectionObserver !== 'function' || !tankRef.current) return undefined
+        const observer = new IntersectionObserver(entries => setVisible(entries.some(entry => entry.isIntersecting)))
+        observer.observe(tankRef.current)
+        return () => observer.disconnect()
+      }, [filled])
       const fish = ['f1', 'f2', 'f3'].map(name => h('i', { className: `ofm_fish ${name}`, key: name },
         h('svg', { viewBox: '0 0 24 14' }, h('path', { d: FISH_PATH }))))
       const bubbles = ['b1', 'b2', 'b3', 'b4', 'b5'].map(name => h('i', { className: `ofm_bubble ${name}`, key: name }))
       if (pct === null || pct === undefined) return null
       return h('div', {
         className: `ofm_tank ${level}${size === 'xl' ? ' xl' : ''}`,
+        ref: tankRef,
+        'data-ofm-motion': filled && visible ? 'on' : 'off',
         role: 'img',
         'aria-label': label ?? `${pct}%`,
         style: { '--lvl': `${Math.max(0, Math.min(100, pct))}%` },
@@ -4011,13 +4050,13 @@ window.__ModuleLoader__.load({
      * Reduced motion skips straight to the value — the number is the point, the
      * motion is not.
      */
-    function useCountUp(target) {
+    function useCountUp(target, effects = false) {
       const [value, setValue] = useState(target ?? null)
       useEffect(() => {
         if (typeof target !== 'number') return
         const reduced = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
           && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        if (reduced) { setValue(target); return }
+        if (reduced || !effects) { setValue(target); return }
         const started = Date.now()
         let raf = 0
         const tick = () => {
@@ -4027,14 +4066,14 @@ window.__ModuleLoader__.load({
         }
         raf = requestAnimationFrame(tick)
         return () => cancelAnimationFrame(raf)
-      }, [target])
+      }, [target, effects])
       return value
     }
 
     function RecoCard(props) {
       const { t, index, stat, mark, name, repo, badge, tagline, body, chips, repoUrl, extraUrl, extraLabel } = props
       const stars = stat !== null && typeof stat.stars === 'number' ? stat.stars : null
-      const shown = useCountUp(stars)
+      const shown = useCountUp(stars, props.effects)
       const forks = stat !== null && typeof stat.forks === 'number' ? stat.forks : null
       const pushedAt = stat !== null && typeof stat.pushedAt === 'number' ? stat.pushedAt : null
       const stale = stat !== null && stat.stale === true
@@ -4101,7 +4140,7 @@ window.__ModuleLoader__.load({
               h(StarButton, { t })))),
         h('div', { className: 'ofm_recogrid' },
           h(RecoCard, {
-            t, index: 0, stat: statOf('eac-desktop'), mark: RECO_DESKTOP_MARK,
+            t, effects: props.effects, index: 0, stat: statOf('eac-desktop'), mark: RECO_DESKTOP_MARK,
             name: 'EAC-Desktop', repo: 'Ebony-Vinyl/EAC-Desktop',
             badge: t('picks.desktop.badge'),
             tagline: t('picks.desktop.tagline'),
@@ -4110,7 +4149,7 @@ window.__ModuleLoader__.load({
             repoUrl: RECO_LINKS.desktop.repo, extraUrl: RECO_LINKS.desktop.extra, extraLabel: t('picks.getDesktop'),
           }),
           h(RecoCard, {
-            t, index: 1, stat: statOf('eac-pack'), mark: RECO_PACK_MARK,
+            t, effects: props.effects, index: 1, stat: statOf('eac-pack'), mark: RECO_PACK_MARK,
             name: 'EAC-Pack', repo: 'Ebony-Vinyl/EAC-Pack',
             badge: t('picks.pack.badge'),
             tagline: t('picks.pack.tagline'),
@@ -4119,7 +4158,7 @@ window.__ModuleLoader__.load({
             repoUrl: RECO_LINKS.pack.repo, extraUrl: RECO_LINKS.pack.extra, extraLabel: t('picks.getPack'),
           }),
           h(RecoCard, {
-            t, index: 2, stat: statOf('eac-design-world'), mark: RECO_DESIGN_MARK,
+            t, effects: props.effects, index: 2, stat: statOf('eac-design-world'), mark: RECO_DESIGN_MARK,
             name: 'EAC-design-world', repo: 'Ebony-Vinyl/EAC-design-world',
             badge: t('picks.design.badge'),
             tagline: t('picks.design.tagline'),
@@ -6284,6 +6323,7 @@ window.__ModuleLoader__.load({
     //   白嫖模型接入   the thirteen enabled account channels and their logins.
     // The active page lives in localStorage so a reload — or the hot reload the
     // upgrader triggers — comes back to the page the user was reading.
+    const EFFECTS_KEY = 'ofm.visualEffects'
     const TAB_KEY = 'ofm.tab'
     const TABS = ['free', 'eac', 'channels', 'aggregate', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks']
 
@@ -6295,6 +6335,26 @@ window.__ModuleLoader__.load({
           return TABS.includes(saved) ? saved : 'free'
         } catch { return 'free' }
       })
+      const [effects, setEffects] = useState(() => {
+        try { return window.localStorage?.getItem(EFFECTS_KEY) === 'on' } catch { return false }
+      })
+      const toggleEffects = () => setEffects(current => {
+        const next = !current
+        try { window.localStorage?.setItem(EFFECTS_KEY, next ? 'on' : 'off') } catch { /* 当前页面仍可切换 */ }
+        return next
+      })
+      const shellRef = useRef(null)
+      const [active, setActive] = useState(true)
+      useEffect(() => {
+        let inViewport = true
+        const update = () => setActive(inViewport && document.hidden !== true)
+        update()
+        document.addEventListener?.('visibilitychange', update)
+        const observer = typeof IntersectionObserver === 'function' && shellRef.current
+          ? new IntersectionObserver(entries => { inViewport = entries.some(entry => entry.isIntersecting); update() }) : null
+        if (observer) observer.observe(shellRef.current)
+        return () => { document.removeEventListener?.('visibilitychange', update); observer?.disconnect() }
+      }, [])
       const tabRefs = useRef({})
       const [glider, setGlider] = useState({ left: 0, top: 0, width: 0, height: 0 })
       const [catalogBusy, setCatalogBusy] = useState(false)
@@ -6351,8 +6411,9 @@ window.__ModuleLoader__.load({
             ref: node => { tabRefs.current[id] = node },
             onClick: () => setTab(id),
           }, label, num === null ? null : h('span', { className: 'ofm_tabnum' }, String(num))))),
-        h('span', { className: 'ofm_navspacer' }),
-        h(StarButton, { t }))
+        h('div', { className: 'ofm_navtools', title: t('effects.hint') },
+          h(Switch, { checked: effects, label: t('effects.enabled'), onChange: toggleEffects }),
+          h(StarButton, { t })))
 
       const page = tab === 'channels'
         ? h(ChannelsPage, { t, ctx, summary })
@@ -6371,13 +6432,13 @@ window.__ModuleLoader__.load({
                     : tab === 'upgrade'
                       ? h(UpgradePage, { t, settings: data.settings, onApply: apply, busy })
                     : tab === 'picks'
-                      ? h(PicksPage, { t })
+                      ? h(PicksPage, { t, effects })
                     : tab === 'eac'
                       ? h(EacPage, { t, data, counts, summary, stats, eacAuth, setEacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe })
                       : h(FreePage, { t, data, counts, summary, stats, eacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe })
 
-      return h('div', { className: 'ofm_root ofm_shell' },
-        h('div', { className: 'ofm_aurora', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
+      return h('div', { className: 'ofm_root ofm_shell', ref: shellRef, 'data-ofm-effects': effects ? 'on' : 'off', 'data-ofm-active': active ? 'true' : 'false' },
+        effects ? h('div', { className: 'ofm_aurora', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')) : null,
         nav,
         page)
     }
