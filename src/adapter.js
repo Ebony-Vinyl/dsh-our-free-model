@@ -17,7 +17,7 @@
  * @module src/adapter.js
  */
 
-import { applyFingerprint, baseModelId, endpointFor, mintRequestId, sessionForConversation, wireFor } from './upstream.js'
+import { applyFingerprint, baseModelId, endpointFor, mintRequestId, replaysReasoning, sessionForConversation, wireFor } from './upstream.js'
 import { toChatMessages, toClaudeMessages, toResponseInput, toToolDefs, repairToolPairing } from './messages.js'
 import { CODE, UpstreamError, postStreamed } from './http.js'
 import { postSealedStreamed } from './eac.js'
@@ -153,7 +153,13 @@ export class FreeModelAdapter {
     const entry = snapshot.catalog.find(candidate => candidate.id === baseModelId(model)) ?? null
     return {
       model: await this.resolveModel(provider, model),
-      stream: options => this.stream(options, entry, snapshot),
+      // `owned` marks a request whose assistant turns this lane produced
+      // itself: the harness's own session, where the plugin is the upstream's
+      // client and so is the one bound by the upstream's replay contract. The
+      // forward listener replays a caller's conversation instead, and #484
+      // settled that path's contract as "relay the caller's values, invent
+      // nothing".
+      stream: options => this.stream(options, entry, snapshot, { owned: true }),
     }
   }
 
@@ -161,13 +167,14 @@ export class FreeModelAdapter {
    * @param {object} options - GenerateOptions
    * @param {object|null} pinned - catalog row frozen by `prepareCall`, if any
    * @param {object} [snapshot] - state generation frozen by `prepareCall`
+   * @param {object} [scope] - who owns the history this request replays
    */
-  stream(options, pinned, snapshot = this.deps.state()) {
+  stream(options, pinned, snapshot = this.deps.state(), scope = {}) {
     const controller = new AbortController()
     const onAbort = () => controller.abort(options.signal?.reason)
     if (options.signal?.aborted === true) onAbort()
     else options.signal?.addEventListener('abort', onAbort, { once: true })
-    const iterator = this.runStream({ ...options, signal: controller.signal }, pinned, snapshot)
+    const iterator = this.runStream({ ...options, signal: controller.signal }, pinned, snapshot, scope)
     const cleanup = () => options.signal?.removeEventListener('abort', onAbort)
     const step = async (method, value) => {
       try {
@@ -196,14 +203,14 @@ export class FreeModelAdapter {
    * endpoint. Resolving that here — rather than at the picker or the gateway —
    * means both callers get the failover for free.
    */
-  async * runStream(options, pinned, snapshot) {
+  async * runStream(options, pinned, snapshot, scope = {}) {
     const modelId = baseModelId(options.model)
     const entry = pinned ?? snapshot.catalog.find(candidate => candidate.id === modelId) ?? null
     if (entry !== null && isComboEntry(entry)) {
-      yield * this.runCombo(options, entry, snapshot)
+      yield * this.runCombo(options, entry, snapshot, scope)
       return
     }
-    yield * this.runSingle(options, entry, snapshot, {})
+    yield * this.runSingle(options, entry, snapshot, { ...scope })
   }
 
   /**
@@ -220,7 +227,7 @@ export class FreeModelAdapter {
    * later failure ends the turn the normal way — the single-model recovery path
    * inside `runSingle` still gets its continuation attempt first.
    */
-  async * runCombo(options, entry, snapshot) {
+  async * runCombo(options, entry, snapshot, scope = {}) {
     const settings = snapshot.settings ?? {}
     const started = Date.now()
     const rejectedTurn = attempts => {
@@ -241,6 +248,7 @@ export class FreeModelAdapter {
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index]
       const iterator = this.runSingle(options, candidate, snapshot, {
+        ...scope,
         wire: wireOf(candidate),
         turnModel: entry.id,
         recordTurn: false,
@@ -329,6 +337,13 @@ export class FreeModelAdapter {
     // row carries the wire its provider actually serves.
     const wire = plan.wire ?? wireOf(entry)
     const style = STYLE_FOR_WIRE[wire]
+    // A thinking-mode upstream refuses the next tool turn unless the request
+    // carries the thinking behind the tool call, and the free lane always
+    // ships tools. The replay belongs to the free lane alone: the absorbed
+    // channels answer on their own contracts, and their bodies are not ours to
+    // reshape.
+    const replayReasoning = plan.owned === true && !sealed && !kilo && !aggregate
+      && wire === 'chat' && replaysReasoning(entry.id)
     const warnings = []
     const resolveImage = this.deps.resolveImage
     const messages = repairToolPairing(options.messages ?? [])
@@ -393,7 +408,7 @@ export class FreeModelAdapter {
     // 一份 payload，共用同一个数组会让 `image-dropped` 按 build 次数重复累积，还会
     // 让已经交出去的首段样本跟着后面的 build 一起变长。
     const payloadFor = (input, ceiling, sink, savingsSink) => {
-      const payload = buildPayload(wire, entry.id, input, options, ceiling, resolveImage, sink)
+      const payload = buildPayload(wire, entry.id, input, options, ceiling, resolveImage, sink, { reasoningReplay: replayReasoning })
       if (declared.length > 0) payload.tools = declared
       if (typeof options.temperature === 'number' && Number.isFinite(options.temperature)) payload.temperature = options.temperature
       if (wire !== 'responses' && Array.isArray(options.stop) && options.stop.length > 0) payload.stop = options.stop
@@ -709,7 +724,7 @@ async function postSealedTurn(deps, payload, signal, onData) {
   return postSealedStreamed({ credential, body: payload, signal, onData })
 }
 
-function buildPayload(wire, modelId, messages, options, budget, resolveImage, warnings) {
+function buildPayload(wire, modelId, messages, options, budget, resolveImage, warnings, scope = {}) {
   if (wire === 'responses') {
     const input = toResponseInput(messages, resolveImage, warnings)
     return {
@@ -730,7 +745,7 @@ function buildPayload(wire, modelId, messages, options, budget, resolveImage, wa
       ...shaped.system === undefined ? {} : { system: shaped.system },
     }
   }
-  const chat = toChatMessages(messages, resolveImage, warnings)
+  const chat = toChatMessages(messages, resolveImage, warnings, scope)
   return {
     model: modelId,
     messages: typeof options.system === 'string' && options.system !== ''
