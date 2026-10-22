@@ -57,6 +57,9 @@ import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPer
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver/prompts.js'
 import { OPTIMIZATIONS } from './src/local-optimize.js'
 import { createModelRuntime, createRuntimeStores } from './src/core/runtime.js'
+import { countFields, renderTemplate } from './src/letter-template.js'
+import { analyse, renderLedger } from './src/letter-ledger.js'
+import { readGitHubReferences } from './src/letter-reference.js'
 
 export { fromOpenAiMessages } from './src/core/completion.js'
 import { buildStats } from './src/core/stats.js'
@@ -68,6 +71,13 @@ export const name = 'our-free-model'
 const PKG_URL = new URL('./', import.meta.url)
 const PKG_DIR = fileURLToPath(PKG_URL)
 const ENTRY_URL = new URL('index.js', import.meta.url).href
+
+/**
+ * A pasted letter yields one ledger row per sentence. The page renders every row,
+ * so a very long paste is cut here rather than shipped to the browser; the
+ * response says it was truncated instead of silently dropping the tail.
+ */
+const LEDGER_MAX_CLAIMS = 400
 
 /** Published version of the installed package, read once at load. */
 function readPackageVersion() {
@@ -1749,6 +1759,48 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/eac/status') {
         return send(200, await deps.eacAuth.status())
+      }
+      // The community-letter template is a static rendering: no inputs are read
+      // from the request, and the response is a markdown skeleton whose every
+      // substantive field is a placeholder. It is served so the page can offer
+      // "download a template" without the browser half having to carry the text.
+      if (method === 'GET' && routePath === '/letter-template') {
+        const markdown = renderTemplate()
+        return send(200, { markdown, fields: countFields(markdown) })
+      }
+      // The receipt: classifies a pasted letter's numeric claims and returns the
+      // ledger. The body is capped by readJson; the ledger is capped again here
+      // because a long paste yields one row per sentence and the page renders all
+      // of them. `references` is optional and only ever compares against pages the
+      // caller supplied — nothing here reaches the network.
+      if (method === 'POST' && routePath === '/letter-ledger') {
+        const body = await readJson(req)
+        const source = typeof body?.source === 'string' ? body.source : ''
+        if (source.trim() === '') return send(400, { error: 'source is required' })
+        const references = body?.references !== undefined && body.references !== null && typeof body.references === 'object' ? body.references : {}
+        const ledger = analyse(source, references)
+        const claims = ledger.claims.slice(0, LEDGER_MAX_CLAIMS)
+        const trimmed = { ...ledger, claims, truncated: ledger.claims.length > claims.length }
+        return send(200, { ledger: trimmed, markdown: renderLedger(trimmed, { title: '粘贴内容' }) })
+      }
+      // Read GitHub issue/pull-request pages into reference records, then classify
+      // a pasted letter against them in one round trip. The URL parser in
+      // src/letter-reference.js is the boundary: only github.com issue/pull URLs
+      // are accepted, the request host is a constant, and redirects are refused.
+      // A page that cannot be read is reported in `skipped` — the ledger still
+      // comes back for the pages that did resolve.
+      if (method === 'POST' && routePath === '/letter-reference') {
+        const body = await readJson(req)
+        const source = typeof body?.source === 'string' ? body.source : ''
+        if (source.trim() === '') return send(400, { error: 'source is required' })
+        const urls = Array.isArray(body?.urls) ? body.urls : []
+        const token = typeof body?.token === 'string' ? body.token.trim() : ''
+        const { references, skipped } = await readGitHubReferences(urls, token === '' ? {} : { token })
+        const merged = { ...(typeof body?.references === 'object' && body.references !== null ? body.references : {}), ...references }
+        const ledger = analyse(source, merged)
+        const claims = ledger.claims.slice(0, LEDGER_MAX_CLAIMS)
+        const trimmed = { ...ledger, claims, truncated: ledger.claims.length > claims.length }
+        return send(200, { ledger: trimmed, markdown: renderLedger(trimmed, { title: '粘贴内容' }), skipped })
       }
       if (method === 'POST' && routePath === '/eac/logout') {
         return send(200, await deps.eacAuth.logout())

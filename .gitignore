@@ -9,6 +9,17 @@ Thumbs.db
 .verify/
 .aio-backup/
 .probe-*
+# An isolated DSH_HOME for booting a throwaway `dsh web` during manual testing,
+# and the package cache a sandboxed npm run needs. Both are local scratch.
+.dsh-test/
+.pnpm-store/
+# One-off probes written while building a change; emptied after use and never
+# part of a commit. `_render-probe.mjs` is a tracked tool and is not excluded.
+scripts/_audit-*.mjs
+scripts/_preview-*.mjs
+scripts/_probe-*.mjs
+scripts/_split.mjs
+scripts/_verify-*.mjs
 
 # Editor
 .idea/

@@ -139,6 +139,39 @@ window.__ModuleLoader__.load({
         'eac.noLane': '当前运行环境未解锁 EAC 协付车道，无法进行 GitHub 授权。',
         'eac.lockedTitle': '需要 GitHub 授权并 star 仓库后使用',
         'eac.lockedNote': '未授权：点下方按钮用 GitHub 登录并 star 仓库，或到「EAC 渠道授权」区完成。',
+        'section.letter': '社区律师函模板',
+        'section.letterHint': '生成一份与 issue 区流传格式一致的模板；全部实质内容为占位符，不含签章与具体要求。',
+        'letter.title': '文书工具',
+        'letter.sub': '生成与核对社区律师函：生成的是模板骨架，核对的是你自己贴进来的文本；两者都不联网、不上传。',
+        'letter.pillTemplate': '模板生成',
+        'letter.pillCheck': '文本核对',
+        'letter.note': '这是一份模板，不是律师函。所有〔待填〕须自行完成；在使用具备资格的执业者审阅并签章之前，本文不具备任何法律效力，也不应作为文书送达。本模板不构成法律意见。',
+        'letter.download': '下载模板 (.md)',
+        'letter.preview': '预览模板',
+        'letter.previewTitle': '模板预览',
+        'letter.fields': '待填项 {count} 处',
+        'letter.failed': '无法生成模板（{reason}）。',
+        'letter.saved': '已下载 {name}',
+        'letter.hide': '收起预览',
+        'section.check': '社区律师函核对',
+        'section.checkHint': '把收到的函件正文粘贴进来，逐句标出可核事实，并与你手上的页面比对。不会上传，不会改写原文。',
+        'check.placeholder': '在此粘贴函件正文（Markdown 或纯文本）…',
+        'check.run': '开始核对',
+        'check.running': '核对中…',
+        'check.clear': '清空',
+        'check.empty': '请先粘贴函件正文。',
+        'check.failed': '核对失败（{reason}）。',
+        'check.result': '核对完成：{claims} 条主张，其中 {contradicted} 条与页面不一致。',
+        'check.truncated': '主张过多，仅核对前 {count} 条。',
+        'check.export': '导出核对单 (.md)',
+        'check.exported': '已导出 {name}',
+        'check.more': '添加对照页面（可选）',
+        'check.moreHint': '贴 GitHub 的 issue / pull 链接，Host 会去读取该页面作为对照；只接受 github.com 的这两类链接。不填也可以，只是所有数字主张都只能标为「未验证」。',
+        'check.refsPlaceholder': 'https://github.com/owner/repo/issues/123\nhttps://github.com/owner/repo/pull/456',
+        'check.fetchFailed': '{count} 个链接无法读取：{detail}',
+        'check.token': 'GitHub Token（可选，只用于提高限流额度）',
+        'check.tokenHint': 'Token 只发往 api.github.com，不落盘、不回显、不写日志。',
+        'check.urlsTooMany': '最多 10 个链接。',
         'section.forward': '本地转发（OpenAI 兼容）',
         'section.forwardHint': '让其它本地工具用一个 base URL 调用这些模型。',
         'section.egress': '出口代理（订阅分流）',
@@ -557,6 +590,7 @@ window.__ModuleLoader__.load({
         'nav.tab.aggregate': '聚合渠道',
         'nav.tab.saver': '省 Token',
         'nav.tab.routing': '路由',
+        'nav.tab.letter': '文书工具',
         'agg.title': '聚合渠道',
         'agg.sub': '把第三方 OpenAI 兼容端点接进同一条模型清单：写入本机的 Key 只以指纹回显，保存后清单与模型选择器一起更新。',
         'agg.registryCount': '注册表 {n} 家',
@@ -861,6 +895,39 @@ window.__ModuleLoader__.load({
         'eac.noLane': 'The EAC co-paid lane is not unlocked in this composition, so GitHub authorization is unavailable.',
         'eac.lockedTitle': 'Needs GitHub authorization and a star',
         'eac.lockedNote': 'Not authorized: sign in with GitHub and star the repository with the button below, or from the EAC authorization section.',
+        'section.letter': 'Community letter template',
+        'section.letterHint': 'Render a template with the same shape as letters circulating in issue trackers; every substantive field stays a placeholder — no seal, no demand.',
+        'letter.title': 'Documents',
+        'letter.sub': 'Generate and check community letters: the template is a placeholder skeleton, and the checker reads only the text you paste in. Neither uploads anything.',
+        'letter.pillTemplate': 'Template',
+        'letter.pillCheck': 'Checker',
+        'letter.note': 'This is a template, not a lawyer letter. Every 〔待填〕 must be completed by its author; until a qualified practitioner has reviewed and signed it, it carries no legal force and must not be served as a document. This template is not legal advice.',
+        'letter.download': 'Download template (.md)',
+        'letter.preview': 'Preview template',
+        'letter.previewTitle': 'Template preview',
+        'letter.fields': '{count} fields to fill',
+        'letter.failed': 'Could not render the template ({reason}).',
+        'letter.saved': 'Downloaded {name}',
+        'letter.hide': 'Hide preview',
+        'section.check': 'Check a community letter',
+        'section.checkHint': 'Paste the text of a letter you received; each sentence carrying a number is classified and compared against the pages you supply. Nothing is uploaded and the source is never edited.',
+        'check.placeholder': 'Paste the letter here (Markdown or plain text)…',
+        'check.run': 'Check',
+        'check.running': 'Checking…',
+        'check.clear': 'Clear',
+        'check.empty': 'Paste the letter first.',
+        'check.failed': 'Check failed ({reason}).',
+        'check.result': '{claims} claims checked, {contradicted} contradicted by the pages supplied.',
+        'check.truncated': 'Too many claims; only the first {count} were checked.',
+        'check.export': 'Export ledger (.md)',
+        'check.exported': 'Exported {name}',
+        'check.more': 'Add reference pages (optional)',
+        'check.moreHint': 'Paste GitHub issue or pull-request links and the Host will read those pages as the reference. Only github.com issue/pull links are accepted. Leaving this empty is fine — every numeric claim then simply stays UNVERIFIED.',
+        'check.refsPlaceholder': 'https://github.com/owner/repo/issues/123\nhttps://github.com/owner/repo/pull/456',
+        'check.fetchFailed': '{count} link(s) could not be read: {detail}',
+        'check.token': 'GitHub token (optional; only raises the rate limit)',
+        'check.tokenHint': 'The token is sent to api.github.com only — never stored, never echoed, never logged.',
+        'check.urlsTooMany': 'At most 10 links.',
         'heat.title': 'Token heatmap',
         'heat.legend': 'Less',
         'heat.legendMore': 'More',
@@ -1254,6 +1321,7 @@ window.__ModuleLoader__.load({
         'nav.tab.aggregate': 'Aggregate',
         'nav.tab.saver': 'Token savers',
         'nav.tab.routing': 'Routing',
+        'nav.tab.letter': 'Documents',
         'agg.title': 'Aggregate providers',
         'agg.sub': 'Bring third-party OpenAI-compatible endpoints into the same model roster: a key written here is echoed back as a fingerprint only, and saving updates the roster and the model picker together.',
         'agg.registryCount': '{n} in the registry',
@@ -1508,6 +1576,18 @@ window.__ModuleLoader__.load({
 .ofm_metrics{display:flex;gap:12px;font-size:11px;color:var(--dsw-alias-label-tertiary);flex-wrap:wrap}
 .ofm_metrics b{color:var(--dsw-alias-label-secondary);font-weight:600;font-variant-numeric:tabular-nums}
 .ofm_note{font-size:11px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
+/* ── 律师函模板预览 ──────────────────────────────────────────────────────
+   预览只是把生成的 markdown 原样贴出来：等宽、保留换行、限高可滚，不渲染
+   HTML——模板正文由用户自己填写，这里不做任何富文本解释。 */
+.ofm_details{border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 70%,transparent);padding:10px 12px}
+.ofm_details>summary{cursor:pointer;font-size:12px;font-weight:620;color:var(--dsw-alias-label-secondary);list-style:none}
+.ofm_details>summary::-webkit-details-marker{display:none}
+.ofm_details[open]>summary{margin-bottom:8px}
+.ofm_pre{margin:0;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:1.55;color:var(--dsw-alias-label-secondary)}
+/* 粘贴框：等宽、可纵向拉伸，正文由用户自己决定长度；
+   resize 只放开纵向，避免把整页宽度撑破。 */
+.ofm_textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:96px;padding:10px 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 80%,transparent);color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.6}
+.ofm_textarea:focus{outline:none;border-color:var(--dsw-alias-brand-primary,var(--dsw-alias-border-l2))}
 /* ══ 面板 ══════════════════════════════════════════════════════════════ */
 .ofm_panel{padding:16px;border-radius:16px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 82%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 5%),0 2px 6px rgb(0 0 0 / 4%);display:flex;flex-direction:column;gap:12px}
 .ofm_paneltitle{font-size:12px;font-weight:680;letter-spacing:.2px;color:var(--dsw-alias-label-secondary);display:flex;align-items:center;gap:8px}
@@ -2793,6 +2873,184 @@ window.__ModuleLoader__.load({
       onClick: props.onClick,
       title: props.title,
     }, props.children)
+
+    /**
+     * The community-letter template.
+     *
+     * One button renders a markdown skeleton on the host and saves it as a file.
+     * Nothing here transmits anything: there is no "post to issue", no clipboard
+     * hand-off into a send flow, and no field the page fills in for the author —
+     * the template arrives as placeholders and stays that way until its author
+     * replaces them.
+     */
+    function LetterTemplate(props) {
+      const { t } = props
+      const [state, setState] = useState({ busy: false, error: '', markdown: '', fields: 0, saved: '' })
+      const load = async () => {
+        setState(current => ({ ...current, busy: true, error: '' }))
+        try {
+          const payload = await api('/letter-template')
+          if (typeof payload?.markdown !== 'string' || payload.markdown === '') throw new Error(t('letter.failed').replace('{reason}', 'empty'))
+          setState({ busy: false, error: '', markdown: payload.markdown, fields: Number(payload.fields) || 0, saved: '' })
+          return payload.markdown
+        } catch (error) {
+          setState(current => ({ ...current, busy: false, error: String(error?.message ?? error) }))
+          return ''
+        }
+      }
+      const save = async () => {
+        const markdown = state.markdown === '' ? await load() : state.markdown
+        if (markdown === '') return
+        try {
+          const name = 'lawyer-letter-template.md'
+          const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }))
+          const anchor = document.createElement('a')
+          anchor.href = url
+          anchor.download = name
+          document.body.appendChild(anchor)
+          anchor.click()
+          anchor.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 0)
+          setState(current => ({ ...current, saved: name }))
+        } catch (error) {
+          setState(current => ({ ...current, error: t('letter.failed').replace('{reason}', String(error?.message ?? error)) }))
+        }
+      }
+      return h(Fragment, null,
+        h('p', { className: 'ofm_note' }, t('letter.note')),
+        h('div', { className: 'ofm_row' },
+          h(Button, { kind: 'primary', disabled: state.busy, onClick: save }, t('letter.download')),
+          h(Button, { disabled: state.busy, onClick: async () => { if (state.markdown === '') await load() } },
+            state.markdown === '' ? t('letter.preview') : t('letter.hide')),
+          state.markdown === '' ? null : h(Pill, null, t('letter.fields').replace('{count}', String(state.fields)))),
+        state.error === '' ? null : h('p', { className: 'ofm_error' }, state.error),
+        state.saved === '' ? null : h('p', { className: 'ofm_note' }, t('letter.saved').replace('{name}', state.saved)),
+        state.markdown === '' ? null : h('details', { className: 'ofm_details' },
+          h('summary', null, t('letter.previewTitle')),
+          h('pre', { className: 'ofm_pre' }, state.markdown)))
+    }
+
+    /**
+     * The receipt for a letter the user received.
+     *
+     * The paste is the only required input. Reference pages are optional: the
+     * user pastes GitHub issue/pull URLs and the Host reads them, so the browser
+     * never constructs a request to a URL the user typed. The token field is
+     * optional and only raises the API rate limit — it is posted to the local
+     * Host, which forwards it to api.github.com and nothing else.
+     *
+     * The result is downloadable as markdown; it is never sent anywhere else.
+     */
+    function LetterCheck(props) {
+      const { t } = props
+      const [source, setSource] = useState('')
+      const [urls, setUrls] = useState('')
+      const [token, setToken] = useState('')
+      const [state, setState] = useState({ busy: false, error: '', result: null, exported: '' })
+
+      const urlList = () => urls.split(/\s+/).map(value => value.trim()).filter(value => value !== '')
+
+      const run = async () => {
+        if (source.trim() === '') {
+          setState(current => ({ ...current, error: t('check.empty') }))
+          return
+        }
+        const list = urlList()
+        if (list.length > 10) {
+          setState(current => ({ ...current, error: t('check.urlsTooMany') }))
+          return
+        }
+        setState(current => ({ ...current, busy: true, error: '', exported: '' }))
+        try {
+          const payload = list.length === 0
+            ? await post('/letter-ledger', { source })
+            : await post('/letter-reference', { source, urls: list, ...(token.trim() === '' ? {} : { token: token.trim() }) }, 45000)
+          setState({ busy: false, error: '', result: payload, exported: '' })
+        } catch (error) {
+          setState(current => ({ ...current, busy: false, error: t('check.failed').replace('{reason}', String(error?.message ?? error)) }))
+        }
+      }
+
+      const exportLedger = () => {
+        const markdown = state.result?.markdown
+        if (typeof markdown !== 'string' || markdown === '') return
+        try {
+          const name = 'letter-ledger.md'
+          const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }))
+          const anchor = document.createElement('a')
+          anchor.href = url
+          anchor.download = name
+          document.body.appendChild(anchor)
+          anchor.click()
+          anchor.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 0)
+          setState(current => ({ ...current, exported: name }))
+        } catch (error) {
+          setState(current => ({ ...current, error: t('check.failed').replace('{reason}', String(error?.message ?? error)) }))
+        }
+      }
+
+      const ledger = state.result?.ledger
+      const skipped = Array.isArray(state.result?.skipped) ? state.result.skipped : []
+      const tally = ledger === undefined || ledger === null
+        ? null
+        : Object.fromEntries(['CONFIRMED', 'CONTRADICTED', 'UNVERIFIED', 'NOT_A_FACT'].map(status => [status, ledger.claims.filter(claim => claim.status === status).length]))
+
+      return h(Fragment, null,
+        h('textarea', {
+          className: 'ofm_textarea',
+          rows: 10,
+          placeholder: t('check.placeholder'),
+          value: source,
+          onInput: event => setSource(event.target.value),
+        }),
+        h('details', { className: 'ofm_details' },
+          h('summary', null, t('check.more')),
+          h('p', { className: 'ofm_note' }, t('check.moreHint')),
+          h('textarea', {
+            className: 'ofm_textarea',
+            rows: 3,
+            placeholder: t('check.refsPlaceholder'),
+            value: urls,
+            onInput: event => setUrls(event.target.value),
+          }),
+          h('label', { className: 'ofm_note' }, t('check.token')),
+          h('input', {
+            className: 'ofm_input',
+            type: 'password',
+            value: token,
+            placeholder: 'ghp_…',
+            onInput: event => setToken(event.target.value),
+          }),
+          h('p', { className: 'ofm_note' }, t('check.tokenHint'))),
+        h('div', { className: 'ofm_row' },
+          h(Button, { kind: 'primary', disabled: state.busy, onClick: run }, state.busy ? t('check.running') : t('check.run')),
+          h(Button, {
+            disabled: state.busy,
+            onClick: () => { setSource(''); setUrls(''); setToken(''); setState({ busy: false, error: '', result: null, exported: '' }) },
+          }, t('check.clear')),
+          ledger === undefined || ledger === null ? null : h(Button, { onClick: exportLedger }, t('check.export'))),
+        state.error === '' ? null : h('p', { className: 'ofm_error' }, state.error),
+        state.exported === '' ? null : h('p', { className: 'ofm_note' }, t('check.exported').replace('{name}', state.exported)),
+        skipped.length === 0 ? null : h('p', { className: 'ofm_note' },
+          t('check.fetchFailed')
+            .replace('{count}', String(skipped.length))
+            .replace('{detail}', skipped.map(row => `${row.url}（${row.error}）`).join('、'))),
+        tally === null ? null : h(Fragment, null,
+          h('p', { className: 'ofm_note' },
+            t('check.result').replace('{claims}', String(ledger.claims.length)).replace('{contradicted}', String(tally.CONTRADICTED))),
+          state.result?.ledger?.truncated === true
+            ? h('p', { className: 'ofm_note' }, t('check.truncated').replace('{count}', String(ledger.claims.length)))
+            : null,
+          h('div', { className: 'ofm_row' },
+            h(Pill, { tone: 'ok' }, `CONFIRMED ${tally.CONFIRMED}`),
+            h(Pill, { tone: 'err' }, `CONTRADICTED ${tally.CONTRADICTED}`),
+            h(Pill, null, `UNVERIFIED ${tally.UNVERIFIED}`),
+            h(Pill, null, `NOT_A_FACT ${tally.NOT_A_FACT}`)),
+          h('details', { className: 'ofm_details' },
+            h('summary', null, t('letter.previewTitle')),
+            h('pre', { className: 'ofm_pre' }, String(state.result?.markdown ?? '')))))
+    }
 
     function Section(props) {
       return h('section', { className: 'ofm_sec' },
@@ -6314,6 +6572,7 @@ window.__ModuleLoader__.load({
         ['aggregate', t('nav.tab.aggregate'), data.catalog.filter(m => m.channel === 'aggregate').length],
         ['saver', t('nav.tab.saver'), null],
         ['routing', t('nav.tab.routing'), data.catalog.filter(m => m.channel === 'combo').length],
+        ['letter', t('nav.tab.letter'), null],
         ['ledger', t('nav.tab.ledger'), null],
         ['logs', t('nav.tab.logs'), null],
         ['gateway', t('nav.tab.gateway'), null],
@@ -6355,6 +6614,8 @@ window.__ModuleLoader__.load({
                       ? h(UpgradePage, { t, settings: data.settings, onApply: apply, busy })
                     : tab === 'picks'
                       ? h(PicksPage, { t, effects })
+                    : tab === 'letter'
+                      ? h(LetterPage, { t })
                     : tab === 'eac'
                       ? h(EacPage, { t, data, counts, summary, stats, eacAuth, setEacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe })
                       : h(FreePage, { t, data, counts, summary, stats, eacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe })
@@ -6435,6 +6696,31 @@ window.__ModuleLoader__.load({
         h(Section, { title: t('section.egress'), hint: t('section.egressHint') }, h(Egress, { settings: data.settings, t, onApply: apply, busy })),
         h(Section, { title: t('section.prefs'), hint: t('section.prefsHint') }, h(Preferences, { summary: data, t, onApply: apply, busy })),
         h(Section, { title: t('section.news'), hint: t('section.newsHint') }, h(NewsPanel, { t })))
+    }
+
+    /**
+     * The documents page.
+     *
+     * It sits at the top level rather than under the EAC page, where it first
+     * lived: these are general-purpose documents tools, and a user looking for
+     * "the letter thing" will not think to look inside a co-paid model lane. The
+     * page header states the boundary once, so the two sections below can get on
+     * with what they produce.
+     */
+    function LetterPage(props) {
+      const { t } = props
+      return h('div', { className: 'ofm_page' },
+        h(SponsorBanner, { t }),
+        h('header', { className: 'ofm_hero ofm_glass' },
+          h('div', { className: 'ofm_pagehead' },
+            h('div', { className: 'ofm_pagetitle' },
+              h('h2', null, t('letter.title')),
+              h('p', { className: 'ofm_pagesub' }, t('letter.sub'))),
+            h('div', { className: 'ofm_pills' },
+              h(Pill, null, t('letter.pillTemplate')),
+              h(Pill, null, t('letter.pillCheck'))))),
+        h(Section, { title: t('section.letter'), hint: t('section.letterHint') }, h(LetterTemplate, { t })),
+        h(Section, { title: t('section.check'), hint: t('section.checkHint') }, h(LetterCheck, { t })))
     }
 
     function EacPage(props) {
