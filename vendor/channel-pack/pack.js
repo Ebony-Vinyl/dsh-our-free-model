@@ -32755,9 +32755,14 @@ var REASONING_EFFORT_RANK = Object.freeze({
   off: 0,
   none: 0,
   minimal: 1,
-  light: 2,
+  light: 3,
   low: 3,
   medium: 4,
+  // 免费车道的三档强度（light / balanced / deep）必须与 OpenAI 的
+  // low / medium / high 一一对应：漏登记会让所有更强的客户端档位退化成
+  // light，长回答因此稳定撞上 max_output_tokens。
+  balanced: 4,
+  deep: 5,
   high: 5,
   // 「开启思考」没有强度语义 —— 与 high 同序，使它在规范名里反查成 `high`。
   on: 5,

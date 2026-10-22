@@ -48,7 +48,9 @@
  * |---|---|
  * | `off` / `none` | 「关闭思考」。Qoder / Cline / Raccoon 用前者，OpenAI 用后者 |
  * | `minimal` … `high` | OpenAI 通用档位 |
- * | `light` | TRAE 的最弱档（TRAE 自己的名字，比 `minimal` 强一点） |
+ * | `light` | TRAE 的最弱档（TRAE 自己的名字，与 `low` 同强度） |
+ * | `balanced` / `deep` | 本插件免费车道的强度档位（由 `src/effort.js` 声明）；网关
+ *   必须认识它们才能把客户端的档位落到正确的强度上 |
  * | `on` | Raccoon 的「开启思考」——**没有强度语义**，故与 `high` 同序 |
  * | `extra_high` | TRAE 的最强档 |
  * | `xhigh` / `max` | OpenAI / 各家的高强档 |
@@ -58,9 +60,14 @@ export const REASONING_EFFORT_RANK: Readonly<Record<string, number>> = Object.fr
   off: 0,
   none: 0,
   minimal: 1,
-  light: 2,
+  light: 3,
   low: 3,
   medium: 4,
+  // 免费车道的三档强度（light / balanced / deep）必须与 OpenAI 的
+  // low / medium / high 一一对应：漏登记会让所有更强的客户端档位退化成
+  // light，长回答因此稳定撞上 max_output_tokens。
+  balanced: 4,
+  deep: 5,
   high: 5,
   // 「开启思考」没有强度语义 —— 与 high 同序，使它在规范名里反查成 `high`。
   on: 5,
