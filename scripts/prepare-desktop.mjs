@@ -26,7 +26,14 @@ export function stageDesktopService(destination) {
   tree('src', file => /\.(js|json)$/.test(file))
   for (const name of ['cli', 'service', 'management', 'login-terminal', 'open-external', 'eac']) copy(`packages/standalone/${name}.mjs`)
   tree('packages/standalone/channels', file => file.endsWith('.mjs'))
-  tree('packages/standalone/web', file => /\.(html|js|css|json)$/.test(file))
+  const web = 'packages/standalone/web'
+  const assets = JSON.parse(fs.readFileSync(path.join(repositoryRoot, web, 'assets.json'), 'utf8'))
+  if (!Array.isArray(assets) || assets.length === 0
+    || assets.some(name => typeof name !== 'string' || !/^[\w-]+\.(js|css)$/.test(name))
+    || new Set(assets).size !== assets.length) {
+    throw new Error('桌面端资源清单无效')
+  }
+  for (const name of ['index.html', 'splash.html', 'assets.json', ...assets]) copy(`${web}/${name}`)
   copy('packages/standalone/package.json')
   copy('packages/desktop/service-host.mjs')
   for (const name of ['qoder-auth-wasm.wasm', 'LICENSE', 'NOTICE.md']) copy(`vendor/channel-pack/${name}`)

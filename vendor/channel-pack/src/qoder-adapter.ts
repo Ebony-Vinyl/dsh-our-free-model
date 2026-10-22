@@ -32,6 +32,7 @@ import { isQoderExpired, type QoderCredential } from './qoder.js'
 import { QoderEncryptedInfer, type QoderInferMessage, type QoderInferRequest, type QoderInferTool, type QoderInferToolCall } from './qoder-wasm.js'
 import { unwrapQoderEnvelopeStream } from './qoder-envelope.js'
 import { QODER, type QoderFallbackModel, type QoderModelPromotion, type QoderProduct } from './qoder-product.js'
+import { reasoningRankOf } from './reasoning-ladder.js'
 import { projectRequestImage, type ImageRequestTarget } from './image-budget.js'
 import {
   registerAdapterIdempotent,
@@ -136,15 +137,54 @@ const QODER_EFFORT_NAMES: Readonly<Record<string, string>> = {
   max: '最大',
 }
 
+/** 未登记档位 id 的排序权重（大于任何已知强度，使它们统一落到末尾）。 */
+const UNKNOWN_EFFORT_RANK = 100
+
 /**
- * 该模型在 UI 上可选的思考档位（复刻客户端 `gU()` 的行为）。
+ * 把档位 id 列表按**强度**稳定排序（由弱到强，「关闭思考」在最左）。
+ *
+ * 强度序来自 `src/reasoning-ladder.ts` 的 `REASONING_EFFORT_RANK`（跨 provider 权威表），
+ * 不另立一份 —— 两份必然漂移，而漂移的症状是「同一个档位在两处算出不同位置」。
+ * 未登记的 id 排在末尾、彼此保持原相对顺序（与官方客户端 `?? ORDER.length` 同义）。
+ */
+export function sortEffortsByStrength(efforts: readonly string[]): string[] {
+  return efforts
+    .map((id, index) => ({ id, index, rank: reasoningRankOf(id) ?? UNKNOWN_EFFORT_RANK }))
+    .sort((a, b) => (a.rank - b.rank) || (a.index - b.index))
+    .map(({ id }) => id)
+}
+
+/**
+ * 该模型在 UI 上可选的思考档位（复刻客户端 `gU()` + `displayReasoningEfforts()`）。
  *
  * 三条口径：
- * 1. `efforts` 原样取用（目录顺序保持 —— 官方客户端也按对象键序渲染）；
+ * 1. `efforts` 取目录的 `thinking_config.enabled.efforts` 键，再**按强度序重排**（见下）；
  * 2. `supportsDisable` 为真时**追加** `none`（即「关闭思考」）；
  *    客户端 `gU()`：`… || e.includes('none') ? e : [...e, 'none']`。
  * 3. 两者皆无 → 返回空数组，调用方**不声明 `reasoning`**
  *    （UI 显示「当前模型未提供推理等级」，对应 IDE 的「不支持」）。
+ *
+ * ⚠️ **必须重排，不能原样透传目录键序**（2026-10-20 修正，此前这里写的是
+ * 「目录顺序保持 —— 官方客户端也按对象键序渲染」，那句话**是错的**）。
+ * 官方客户端拿到键序后还会再排一遍，取证是 CN 0.4.8 asar
+ * `out/renderer/assets/index-DDa3WwIe.js`：
+ * ```
+ * REASONING_EFFORT_DISPLAY_ORDER = ["none","minimal","low","medium","high","xhigh","max"]
+ * function displayReasoningEfforts(model){
+ *   return availableReasoningEfforts(model)          // 这里才把 none 追加到末尾
+ *     .map((e,i)=>({effort:e,index:i}))
+ *     .sort((a,b)=> (RANK.get(a.effort) ?? ORDER.length) - (RANK.get(b.effort) ?? ORDER.length)
+ *                   || a.index - b.index)            // 同排名 / 未登记 → 保持原序
+ *     .map(({effort})=>effort)
+ * }
+ * ```
+ * 即**按强度稳定排序、未登记排末尾**。`EffortControl` 与设置面板都只渲染这个结果。
+ *
+ * 不排的后果（实测，`dfmodel` 的真实键序 `high/max/low`）：DSH 侧拿到
+ * `高 → 最大 → 低 → 关闭思考`，而依赖「位置 = 强度」的 UI（如
+ * `dsh-codex-effort-slider` 的滑条）会把 `最大` 画在 `高` 左边、把
+ * `关闭思考` 画到最右并点亮满格能量 —— 越往右越弱、关掉思考反而最亮。
+ * 排序后是 `关闭思考 → 低 → 高 → 最大`，与 Qoder IDE 自己显示的顺序一致。
  *
  * ⚠️ **`qmodel` / `qmodel_latest` 这类「有 `disabled` 但无 `efforts`」的模型
  * 会得到 `['none']`** —— 即只提供「关闭思考」一项。这是**远端事实**
@@ -154,7 +194,7 @@ const QODER_EFFORT_NAMES: Readonly<Record<string, string>> = {
 export function qoderEffortsFor(model: QoderFallbackModel): string[] {
   const efforts = [...(model.efforts ?? [])]
   if (model.supportsDisable === true && !efforts.includes('none')) efforts.push('none')
-  return efforts
+  return sortEffortsByStrength(efforts)
 }
 
 /**
@@ -194,7 +234,6 @@ function isAborted(signal?: AbortSignal): boolean {
 function queueInfoOf(error: ModelQueuedError): QoderQueueInfo {
   return error.queueInfo as QoderQueueInfo
 }
-
 
 /**
  * 把 DSH 的工具 schema 映射成加密端点认的 `tools[]`。
@@ -413,14 +452,6 @@ export interface QoderAdapterOptions {
   readImage?: (attachment: unknown) => Promise<{ data: Uint8Array; mediaType: string } | undefined>
   /**
    * 读取图片附件的**请求版本**（按像素预算与字节目标缩放后的字节）。
-   *
-   * ⚠️ 与 {@link readImage} 的错误契约**相反**：不可用时必须返回 `undefined`
-   * 而不是抛错 —— 缩放是优化，不能因为"想缩图"把一次本来能成功的请求打死。
-   * 判据与回退都在共享的 `projectRequestImage` 里（buddy / raccoon 用同一份）。
-   *
-   * 背景（issue !IKITT9）：qoder 撞的是**请求体体积**上限（实测 8 张原图能过、
-   * 15 张 ≈57 MiB 直接 `TRANSPORT: fetch failed`），与腾讯的图片 token 预算
-   * 是两种约束，但同样只能靠缩放解决。
    */
   readImageRequest?: (
     attachment: unknown,
@@ -593,13 +624,6 @@ export class QoderAdapter extends LlmAdapter {
     return resolved
   }
 
-  /**
-   * 兼容 0.1.1-rc.2：新版 `LlmRuntime.prepareCall()` 会调用
-   * `registration.adapter.prepareCall(...)`，而本仓库链接的 dsh-llm 副本
-   * 基类尚未提供该方法，缺少时会在每轮请求开始时抛
-   * `registration.adapter.prepareCall is not a function`。
-   * 与 `BuddyAdapter` / `LobsteraiAdapter` 同款 shim。
-   */
   async prepareCall(
     provider: string,
     model: string,
@@ -902,12 +926,6 @@ export class QoderAdapter extends LlmAdapter {
    *
    * ## 用户要求（2026-09-27）
    *
-   * > qoder 碰到当日额度受限应该像 workbuddy/codebuddy 一样，设置一个模型受限时间
-   * > （他们是返回错误中带时间，qoder 和 qodercn 需要自己设置当日 24:00 受限）
-   * > 然后切换账号池中的下一个可用模型
-   *
-   * ## ⚠️ 与 buddy/CodeArts 的**关键差异**
-   *
    * 它们的错误文案里**带重置时间**（`parseRateLimitError` 从中解析）；
    * Qoder **不带** —— 故这里用 {@link nextUtc8DayStartMs} **自己算**
    * 「UTC+8 当日 24:00」。**不能**复用 `parseRateLimitError`：它会因解析不到
@@ -944,7 +962,7 @@ export class QoderAdapter extends LlmAdapter {
     //
     // ⚠️ 必须传 `tried`：池按「限流重置时间最早到期」排序，**刚失败的账号可能
     // 仍排第一**，不排除就会拿回同一个、命中下面的检查而立即放弃切换。
-    // （与 buddy 的注释同因，见 `buddy-adapter.ts` 的 1200 行附近。）
+
     const next = await pool.getAvailableAccount(this.product.id, options.model, tried)
     if (next === null || tried.has(next.entry.id)) return undefined
     tried.add(next.entry.id)
@@ -1076,8 +1094,6 @@ export function promotionActiveNow(promotion: QoderModelPromotion, now: Date): b
 /**
  * 生成模型选择器里显示的名字。
  *
- * 形态（**与 TRAE / buddy 三 provider 统一**）：
- *
  * ```
  * Qwen3.8-Flash · 免费            ← priceFactor = 0
  * Qwen3.8-Max · x0.5→x0.2        ← 折扣窗口内：原价→折后价
@@ -1088,11 +1104,6 @@ export function promotionActiveNow(promotion: QoderModelPromotion, now: Date): b
  * ⚠️ **倍率必须写进 `name` 而不是 `description`**：composer 的模型切换菜单
  * 只渲染 `name`（见 dsh-client-ui-model-selection 的 ModelSelect：
  * `children: model.name`），`description` 仅用于 `/model` 弹窗。
- *
- * ⚠️ **折扣统一用「原价→折后价」箭头**，不再附中文角标（如「错峰 4 折」）：
- * ① 旧形态只有折后价，看不出原价与折扣幅度；② 角标与数字**冗余**
- * （0.2/0.5 本就是 4 折）。TRAE（`x0.4→x0.2`）与 buddy（`x0.79→x0.50`）
- * 早就是这个形态，本次把 Qoder 对齐过去。
  *
  * ⚠️ 折后价**不直接采信目录的 `priceFactor`**：它是采集时刻的生效价，
  * 窗口切换后即失真。改为按 `beforePromotionPriceFactor × discountFactor`
@@ -1109,7 +1120,7 @@ export function qoderDisplayName(model: QoderFallbackModel, now: Date = new Date
   if (model.priceFactor === 0) return `${model.name} · 免费`
 
   if (hasPromo && active) {
-    // 折扣生效中：`原价→折后价`（与 TRAE / buddy 同形态）
+
     const effective = Number((before * discount).toFixed(4))
     return `${model.name} · x${before}→x${effective}`
   }

@@ -2,16 +2,28 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
-      "id": "2026-10-20-v2.5.7-plugin-release",
-      "title": "v2.5.7：修复 CodeArts 签名、托管更新提示与模型测速",
+      "id": "2026-10-22-v2.5.9-plugin-release",
+      "title": "v2.5.9：精简账号渠道、清理遗留资源并同步交流群信息",
       "level": "update",
       "pinned": true,
-      "createdAt": "2026-10-20T13:59:07Z",
+      "createdAt": "2026-10-22T02:12:12Z",
       "link": {
-        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.7",
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.9",
         "label": "查看插件更新说明"
       },
-      "html": "<p><b>2.5.7 更新 DSH 插件端。</b>CodeArts 使用独立签名传输，保留代理、超时与取消，并修复积分/签到跨插件实例出口串线；托管安装明确提示通过原安装方式更新。模型测速要求非空正文和正常结束，保存成功与失败结果，防止旧探测覆盖新实测。本版保留正常动画和现有赞助卡片，不包含低性能模式。</p>"
+      "html": "<p><b>2.5.9 更新 DSH 插件端。</b>清理不再提供的账号渠道及其登录、请求、页面入口、依赖和文档，保留 10 个账号渠道、匿名免费通道与 EAC。同步桌面端渠道资源并删除遗留前端文件；共享存储和备份保留历史格式兼容。README 更新交流群 5 的二维码及群号。</p>"
+    },
+    {
+      "id": "2026-10-21-v2.5.8-plugin-release",
+      "title": "v2.5.8：修复更新重试、Qoder 思考档位与工具轮次推理回传",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-21T06:28:09Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.8",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.5.8 更新 DSH 插件端。</b>修复 Windows 更新备份重命名重试，并复用已校验的下载暂存；Qoder 思考档位按强度排序；Chat 工具轮次保留客户端回传的推理内容。EAC DeepSeek Flash 显示名称增加 1017 标识。</p>"
     },
     {
       "id": "2026-10-20-v2.5.6-plugin-release",
@@ -71,7 +83,7 @@
         "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.5.2",
         "label": "查看版本说明与下载产物"
       },
-      "html": "<p><b>2.5.2 已发布插件 tarball 与 Windows x64 完整安装包。</b>修复 GitHub API 限流导致的更新失败、旧模块缓存、公告反复通知、桌面账号登录与 WorkBuddy 请求误冷却；补齐系统提示词、空白响应和流式错误处理。</p><p>新增模型隐藏、链路能力交集显示和独立服务 LAN 推理中继。包管理器安装请使用 <code>distribution: managed</code> 并更新可信 tarball 路径。</p><p><b>匿名渠道的上游 403 / LANE_LOCKED 并未被宣称修复。</b>真实可用性仍取决于上游准入、配额和网络；EAC 60 秒无有效输出会明确失败，不自动重试。请查看完整发布说明。</p>"
+      "html": "<p><b>2.5.2 已发布插件 tarball 与 Windows x64 完整安装包。</b>修复 GitHub API 限流导致的更新失败、旧模块缓存、公告反复通知、桌面账号登录与请求误冷却；补齐系统提示词、空白响应和流式错误处理。</p><p>新增模型隐藏、链路能力交集显示和独立服务 LAN 推理中继。包管理器安装请使用 <code>distribution: managed</code> 并更新可信 tarball 路径。</p><p><b>匿名渠道的上游 403 / LANE_LOCKED 并未被宣称修复。</b>真实可用性仍取决于上游准入、配额和网络；EAC 60 秒无有效输出会明确失败，不自动重试。请查看完整发布说明。</p>"
     },
     {
       "id": "2026-10-17-v2.5.1-release",

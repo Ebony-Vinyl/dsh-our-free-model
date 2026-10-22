@@ -145,7 +145,7 @@ for (const mode of ['blocked', 'closed', 'navigation-failed', 'host-failed', 'ho
   const tab = makePopup(), opens = [], requests = []
   if (mode === 'closed') tab.closed = true
   if (mode === 'navigation-failed') tab.location.replace = () => { throw new Error('fixture navigation failure') }
-  const app = mount('buddy', {
+  const app = mount('lobsterai', {
     create: () => ({ accountId: 'fixture-account', loginUrl: URL_FIXTURE }),
     open: (...args) => {
       opens.push(args)
@@ -172,7 +172,7 @@ for (const mode of ['blocked', 'closed', 'navigation-failed', 'host-failed', 'ho
 }
 for (const answer of [{ accountId: 'fixture-account' }, {}, new Error('fixture create failure')]) {
   const tab = makePopup()
-  const app = mount('buddy', {
+  const app = mount('lobsterai', {
     open: () => tab,
     create: () => { if (answer instanceof Error) throw answer; return answer },
   })
@@ -184,7 +184,7 @@ for (const answer of [{ accountId: 'fixture-account' }, {}, new Error('fixture c
 }
 for (const url of ['javascript:alert(1)', 'https://user:password@example.invalid/', 'https://', `${URL_FIXTURE}${'a'.repeat(2048)}`]) {
   const tab = makePopup()
-  const app = mount('buddy', {
+  const app = mount('lobsterai', {
     open: () => tab,
     create: () => ({ accountId: 'fixture-account', loginUrl: url }),
     fetch: () => assert.fail('invalid login URL reached the host'),
@@ -212,7 +212,7 @@ for (const url of ['javascript:alert(1)', 'https://user:password@example.invalid
 }
 {
   const pending = deferred(), tab = makePopup()
-  const app = mount('buddy', { open: () => tab, create: () => pending.promise, fetch: () => assert.fail('unmounted login opened a browser') })
+  const app = mount('lobsterai', { open: () => tab, create: () => pending.promise, fetch: () => assert.fail('unmounted login opened a browser') })
   const login = app.add()
   await settle()
   app.unmount()
@@ -264,10 +264,10 @@ for (const broken of ['getter', 'methods', 'missing']) {
   fresh.unmount()
 }
 {
-  const app = mount('buddy')
+  const app = mount('lobsterai')
   assert.equal(app.button('z.ai international'), undefined)
   await app.add()
-  assert.deepEqual(app.loginCalls()[0].payload, { provider: 'buddy' })
+  assert.deepEqual(app.loginCalls()[0].payload, { provider: 'lobsterai' })
   app.unmount()
 }
 console.log('ok  ZCode defaults, persistence, corrupt and inaccessible storage, and provider-only payloads')
@@ -363,7 +363,7 @@ for (const startedOnLatest of [true, false]) {
   } } })
   const context = { connection: connection('old') }
   const latest = connection('new')
-  const props = { channel: { id: 'buddy', name: 'buddy' }, status: { accounts: { total: 0, enabled: 0 } },
+  const props = { channel: { id: 'lobsterai', name: 'lobsterai' }, status: { accounts: { total: 0, enabled: 0 } },
     t: key => app.api.DICT.en[key], onChanged() {}, onError: (_channel, error) => assert.fail(error.message) }
   const render = () => app.render(() => {
     const { rpc } = app.api.useChannelRpc(context)
@@ -394,10 +394,10 @@ for (const completion of ['before-tick', 'after-tick', 'rejection', 'unmount']) 
     return { ok: true, value: { autoCheckin: { enabled: false } } }
   } } })
   const context = { connection: connection('old', () => stale.promise) }
-  const value = count => ({ statuses: { buddy: { accounts: { total: count, enabled: count } } } })
+  const value = count => ({ statuses: { lobsterai: { accounts: { total: count, enabled: count } } } })
   const t = Object.assign(key => app.api.DICT.en[key] ?? key, { locale: 'en' })
   const render = () => app.render(() => app.api.ChannelsPage({ ctx: context, t, summary: { channels: { state: 'ready' } } }))
-  const count = () => nodes(render()).find(node => node.type === app.api.ChannelCard && node.props.channel.id === 'buddy').props.status?.accounts?.enabled
+  const count = () => nodes(render()).find(node => node.type === app.api.ChannelCard && node.props.channel.id === 'lobsterai').props.status?.accounts?.enabled
   render()
   await settle()
   if (completion === 'unmount') {
@@ -439,8 +439,8 @@ for (const firstCompletesFirst of [true, false]) {
   } } } }
   const t = Object.assign(key => app.api.DICT.en[key] ?? key, { locale: 'en' })
   const render = () => app.render(() => app.api.ChannelsPage({ ctx: context, t, summary: { channels: { state: 'ready' } } }))
-  const count = () => nodes(render()).find(node => node.type === app.api.ChannelCard && node.props.channel.id === 'buddy').props.status?.accounts?.enabled
-  const value = enabled => ({ statuses: { buddy: { accounts: { total: enabled, enabled } } } })
+  const count = () => nodes(render()).find(node => node.type === app.api.ChannelCard && node.props.channel.id === 'lobsterai').props.status?.accounts?.enabled
+  const value = enabled => ({ statuses: { lobsterai: { accounts: { total: enabled, enabled } } } })
   render()
   app.advance(45000)
   assert.equal(reads, 2)

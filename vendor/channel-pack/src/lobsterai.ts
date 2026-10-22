@@ -1,13 +1,6 @@
 /**
  * LobsterAI（有道龙虾）协议常量、凭据结构与纯函数。
  *
- * 本模块只放**常量与纯函数**（无网络副作用，除显式的 fetcher 注入函数），
- * 与 `src/buddy.ts` 在 CodeBuddy 体系里的角色一致。网络流程见：
- * - `src/lobsterai-oauth.ts` —— 登录
- * - `src/lobsterai-auth.ts` —— 凭据服务（续期 / 状态）
- * - `src/lobsterai-adapter.ts` —— chat 转发
- * - `src/lobsterai-credits.ts` —— 签到与余额
- *
  * ## 协议速览（来源：`lobsterai2api`，实证见 docs/lobsterai-integration-plan.md §4）
  *
  * | 用途 | 方法 | 路径 | 认证 |
@@ -23,7 +16,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { jwtExpiresAtMs } from './buddy.js'
+import { jwtExpiresAtMs } from './credential-expiry.js'
 import type { LobsteraiProduct } from './lobsterai-product.js'
 
 // ── 端点路径 ──
@@ -64,12 +57,7 @@ export const LOBSTERAI_VERSION_CACHE_TTL_MS = 12 * 60 * 60 * 1000
 /**
  * 持久化的 LobsterAI 凭据。
  *
- * 字段名刻意保持 `snake_case`，与 `BuddyCredential` 一致 ——
- * `AccountPool.findAccountIdByCredential`（`src/account-pool.ts:352-364`）
- * 对非 codearts 的 provider 统一取 `access_token` 作身份标识，
- * 命名一致才能直接复用，无需改那个函数。
- *
- * ## 与 `BuddyCredential` 的关键结构差异
+ * ## 与 `StoredTokenCredential` 的关键结构差异
  *
  * LobsterAI 的 **refresh 请求体不是只带 refreshToken**，还要带
  * `firstKeyfrom` / `latestKeyfrom` / `uuid`（`auth.go:37-50` +
@@ -80,7 +68,6 @@ export interface LobsteraiCredential {
   /** 访问令牌（`Authorization: Bearer <access_token>`）。 */
   access_token: string
   /** 刷新令牌。
-   *
    * 由 exchange/refresh 返回。注意 Go 版把它当作「可缺失」处理
    * （`Parse` 不校验），故这里也保持必填但允许空串，
    * `isRefreshable` 以长度判定。
@@ -89,7 +76,7 @@ export interface LobsteraiCredential {
   /**
    * 过期时间（**毫秒时间戳字符串**）。
    *
-   * 统一存毫秒字符串而非秒/ISO：与 `BuddyCredential.expires_at` 的存储约定
+   * 统一存毫秒字符串而非秒/ISO：与 `StoredTokenCredential.expires_at` 的存储约定
    * 保持一致，`credentialExpiresAtMs` 一套解析逻辑可通用于两者。
    */
   expires_at?: string
@@ -256,9 +243,6 @@ export function parseLobsteraiEnvelope(body: unknown): LobsteraiEnvelopeResult {
 /**
  * 从凭据的 `expires_at` 解析毫秒时间戳。
  *
- * 兼容毫秒时间戳 / 秒级时间戳 / ISO 8601 三种形态，与
- * `src/buddy.ts:credentialExpiresAtMs` 的解析口径一致（详见那里的说明）。
- *
  * 后备来源：`expires_at` 为空时回退解析 `access_token` 这个 JWT 的 `exp`。
  * Go 注释（`main.go:317`）说明「实测 HS512 access token 30 天」，
  * 故 access token 是 JWT，`exp` 是权威过期时刻。
@@ -414,9 +398,6 @@ export function resolveLobsteraiUid(payload: LobsteraiTokenPayload): string {
  * 3. 都拿不到则留空（`credentialExpiresAtMs` 会再尝试 JWT，仍失败则
  *    「不判定过期」——见 `isLobsteraiExpired`）。
  *
- * ⚠️ 基准取当前时刻而非 JWT `iat`：Go 用的是 `time.Now()`，
- * 与 Buddy 侧（用 iat）不同。保持与 Go 一致以便对照排查。
- *
  * `uuid` / `first_keyfrom` / `latest_keyfrom` 必须由调用方提供 ——
  * 它们不在响应里，而是登录流程自己生成的状态（见 `lobsterai-oauth.ts`）。
  */
@@ -484,10 +465,6 @@ export function applyLobsteraiRefresh(
 
 /**
  * 构造带 Bearer 的通用请求头。
- *
- * 只设四个头：LobsterAI **不认** CodeBuddy 那套
- * `X-Domain` / `X-Product` / `X-Product-Code` / `X-IDE-*` 归属头，
- * 带上不仅无用，还可能让服务端按错误的客户端形态归因。
  */
 export function lobsteraiAuthHeaders(
   credential: LobsteraiCredential,

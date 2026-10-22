@@ -35,7 +35,7 @@ export interface TokenLedgerEntry {
   ts: number
   /** 流量来自哪条通道：DSH 宿主对话 = `direct`；OpenAI 兼容网关 = `gateway`。 */
   channel: 'direct' | 'gateway'
-  /** provider id（如 `codearts` / `qoder`）。 */
+
   provider: string
   /** 模型 id（wire 上的 `model`）。 */
   model: string

@@ -528,6 +528,7 @@ await checkAsync('stageRelease downloads and verifies', async () => {
   const manifest = parseManifest(newManifest)
   const stats = await stageRelease({ manifest, manifestUrl: `${base}/repo/feed/manifest.json`, stageDir: path.join(data, 'stage'), fetchImpl: fetch })
   assert.equal(stats.files, 4)
+  assert.equal(stats.reused, false, 'an empty stage is a real download')
   verifyStaged(path.join(data, 'stage'), manifest)
   fs.rmSync(data, { recursive: true, force: true })
 })
@@ -561,6 +562,58 @@ await checkAsync('an integrity failure never retries', async () => {
   await assert.rejects(() => stageRelease({ manifest, manifestUrl: `${corruptBase}/repo/feed/manifest.json`, stageDir: path.join(data, 'stage'), fetchImpl: counting }), /sha256 mismatch|staging failed/)
   assert.equal(calls, 4, 'one attempt per file — the trust chain does not get benefit of the doubt')
   fs.rmSync(data, { recursive: true, force: true })
+})
+// Issue #475: a retry after a late-phase failure (the backup rename throwing
+// EPERM, for one) must not re-download the release that already verified —
+// each wipe-and-redownload of ~4.8 MB on a CN egress is the "stuck on loading"
+// users see. Reuse is only ever granted against this manifest's hashes.
+await checkAsync('stageRelease reuses a verified stage instead of re-downloading (issue #475)', async () => {
+  const data = makeDataDir()
+  const stage = path.join(data, 'stage')
+  const manifest = parseManifest(newManifest)
+  const source = `${base}/repo/feed/manifest.json`
+  let calls = 0
+  const counting = (url, opts) => { calls += 1; return fetch(url, opts) }
+  try {
+    const first = await stageRelease({ manifest, manifestUrl: source, stageDir: stage, fetchImpl: counting })
+    assert.equal(first.reused, false)
+    const downloaded = calls
+    const retry = await stageRelease({ manifest, manifestUrl: source, stageDir: stage, fetchImpl: counting })
+    assert.equal(retry.reused, true, 'the verified copy is kept')
+    assert.equal(calls, downloaded, 'the retry fetched nothing')
+    assert.equal(retry.bytes, manifest.files.reduce((sum, file) => sum + file.size, 0))
+    verifyStaged(stage, manifest)
+  } finally {
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+await checkAsync('a drifted or incomplete stage is re-downloaded, never trusted (issue #475)', async () => {
+  const data = makeDataDir()
+  const stage = path.join(data, 'stage')
+  const manifest = parseManifest(newManifest)
+  const source = `${base}/repo/feed/manifest.json`
+  let calls = 0
+  const counting = (url, opts) => { calls += 1; return fetch(url, opts) }
+  try {
+    await stageRelease({ manifest, manifestUrl: source, stageDir: stage, fetchImpl: counting })
+    // Someone (or a torn write) changed a staged byte: reuse must be refused,
+    // and the retry must fetch the whole release again instead of installing it.
+    fs.writeFileSync(path.join(stage, 'index.js'), "export const v = 'tampered-in-place'\n")
+    calls = 0
+    const redone = await stageRelease({ manifest, manifestUrl: source, stageDir: stage, fetchImpl: counting })
+    assert.equal(redone.reused, false, 'a drifted stage is not reused')
+    assert.equal(calls, manifest.files.length, 'every file is fetched again')
+    assert.equal(fs.readFileSync(path.join(stage, 'index.js'), 'utf8'), newFiles['index.js'])
+    // A truncated stage — one file missing — is likewise refused.
+    fs.rmSync(path.join(stage, 'client.js'), { force: true })
+    calls = 0
+    const repaired = await stageRelease({ manifest, manifestUrl: source, stageDir: stage, fetchImpl: counting })
+    assert.equal(repaired.reused, false, 'an incomplete stage is not reused')
+    assert.equal(calls, manifest.files.length)
+    verifyStaged(stage, manifest)
+  } finally {
+    fs.rmSync(data, { recursive: true, force: true })
+  }
 })
 await checkAsync('PluginUpdater.check detects the newer version', async () => {
   const pkg = makePackage(OLD)
@@ -760,7 +813,7 @@ await checkAsync('legacy rollback receipts containing Rust caches restore only p
   const backup = path.join(data, 'rollback')
   const rel = 'packages/desktop/src-tauri/target/debug/legacy-cache.pdb'
   try {
-    backupPackage(pkg, backup)
+    await backupPackage(pkg, backup)
     const cached = Buffer.from('retained historical cache')
     const backupFile = path.join(backup, ...rel.split('/'))
     fs.mkdirSync(path.dirname(backupFile), { recursive: true })
@@ -802,7 +855,7 @@ await checkAsync('restoreBackup recovers a mixed install state', async () => {
   const pkg = makePackage(OLD)
   const data = makeDataDir()
   const backupDir = path.join(data, 'rollback')
-  backupPackage(pkg, backupDir)
+  await backupPackage(pkg, backupDir)
   // Simulate a swap that got half-way: some new files in, one overwritten.
   fs.writeFileSync(path.join(pkg, 'index.js'), newFiles['index.js'])
   fs.mkdirSync(path.join(pkg, 'src'), { recursive: true })
@@ -846,7 +899,7 @@ await checkAsync('channel runtime bytes are backed up and restored without sweep
     const source = path.join(pkg, 'vendor/channel-pack/src/index.ts')
     fs.mkdirSync(path.dirname(source), { recursive: true })
     fs.writeFileSync(source, 'development source\n')
-    backupPackage(pkg, backup)
+    await backupPackage(pkg, backup)
     for (const [rel, bytes] of Object.entries(assets)) {
       assert.deepEqual(fs.readFileSync(path.join(backup, rel)), bytes, `${rel} is backed up byte-for-byte`)
       fs.writeFileSync(path.join(pkg, rel), 'new incompatible runtime')
@@ -873,7 +926,7 @@ await checkAsync('rollback from a failed 1.x to 2.x swap removes newly added cha
   const data = makeDataDir()
   try {
     const backup = path.join(data, 'rollback')
-    backupPackage(pkg, backup)
+    await backupPackage(pkg, backup)
     fs.mkdirSync(path.join(pkg, 'vendor/channel-pack'), { recursive: true })
     fs.writeFileSync(path.join(pkg, 'vendor/channel-pack/pack.js'), 'new pack')
     fs.writeFileSync(path.join(pkg, 'vendor/channel-pack/qoder-auth-wasm.wasm'), Buffer.from([0, 1, 2]))
@@ -891,7 +944,7 @@ await checkAsync('restoreBackup reports copy failures and still restores the res
   const pkg = makePackage(OLD)
   const data = makeDataDir()
   const backupDir = path.join(data, 'rollback')
-  backupPackage(pkg, backupDir)
+  await backupPackage(pkg, backupDir)
   // A directory squatting where a file belongs makes copyFileSync fail
   // (EISDIR) without depending on platform-specific lock semantics.
   fs.rmSync(path.join(pkg, 'client.js'), { force: true })
@@ -908,7 +961,7 @@ await checkAsync('rollback restores a read-only file without deleting the remain
   const backupDir = path.join(data, 'rollback')
   const target = path.join(pkg, 'index.js')
   try {
-    backupPackage(pkg, backupDir)
+    await backupPackage(pkg, backupDir)
     fs.writeFileSync(target, newFiles['index.js'])
     fs.chmodSync(target, 0o444)
     const mode = fs.statSync(target).mode
@@ -929,7 +982,7 @@ await checkAsync('failed permission retry restores the original file mode and ke
   const target = path.join(pkg, 'index.js')
   const copy = fs.copyFileSync
   try {
-    backupPackage(pkg, backupDir)
+    await backupPackage(pkg, backupDir)
     fs.writeFileSync(target, newFiles['index.js'])
     fs.chmodSync(target, 0o555)
     const mode = fs.statSync(target).mode
@@ -1167,7 +1220,7 @@ await checkAsync('failed backup creation preserves the existing verified backup 
   const pkg = makePackage(OLD)
   const data = makeDataDir()
   const updater = fixtureUpdater(pkg, data)
-  backupPackage(pkg, updater.backupDir)
+  await backupPackage(pkg, updater.backupDir)
   const original = fs.copyFileSync
   try {
     fs.copyFileSync = (from, to, ...args) => {
@@ -1186,12 +1239,102 @@ await checkAsync('failed backup creation preserves the existing verified backup 
   }
 })
 
+// Issue #475: the backup directory renames move a tree that was just written,
+// which is exactly when a Windows scanner or indexer holds it open. They now
+// share the file swap's `renameWithRetry` seam instead of throwing on the first
+// transient EPERM — before the installed package was even touched.
+await checkAsync('backupPackage retries a transient EPERM on the rollback rename (issue #475)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backup = path.join(data, 'rollback')
+  const original = fs.renameSync
+  let attempts = 0
+  try {
+    fs.renameSync = (from, to, ...args) => {
+      if (String(from).includes('rollback.pending-') && to === backup) {
+        attempts += 1
+        if (attempts === 1) throw Object.assign(new Error('EPERM: operation not permitted, rename (scan hold)'), { code: 'EPERM' })
+      }
+      return original(from, to, ...args)
+    }
+    assert.equal(await backupPackage(pkg, backup), 3)
+    assert.equal(attempts, 2, 'the second attempt lands the backup')
+    assert.equal(updaterVersion(backup), OLD)
+  } finally {
+    fs.renameSync = original
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
+await checkAsync('a permanently denied backup rename keeps the previous verified backup in place (issue #475)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backup = path.join(data, 'rollback')
+  await backupPackage(pkg, backup)
+  fs.writeFileSync(path.join(backup, 'client.js'), 'the retained rollback copy\n')
+  const original = fs.renameSync
+  let attempts = 0
+  try {
+    fs.renameSync = (from, to, ...args) => {
+      if (String(from).includes('rollback.pending-')) {
+        attempts += 1
+        throw Object.assign(new Error('EPERM: operation not permitted, rename (locked by scanner)'), { code: 'EPERM' })
+      }
+      return original(from, to, ...args)
+    }
+    await assert.rejects(() => backupPackage(pkg, backup), /EPERM/)
+    assert.equal(attempts, 5, 'renameWithRetry exhausts its five attempts before surfacing the error')
+    assert.equal(fs.readFileSync(path.join(backup, 'client.js'), 'utf8'), 'the retained rollback copy\n')
+    assert.equal(updaterVersion(backup), OLD, 'the move-aside was undone, so a verified rollback copy still stands')
+    assert.equal(fs.readdirSync(data).filter(name => name.startsWith('rollback.')).length, 0, 'no pending or previous scratch trees remain')
+  } finally {
+    fs.renameSync = original
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
+await checkAsync('the retry after a failed backup skips re-downloading the verified stage (issue #475)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  let calls = 0
+  const counting = (url, opts) => { calls += 1; return fetch(url, opts) }
+  const updater = new PluginUpdater({
+    pkgDir: pkg, dataDir: data, runningVersion: OLD, settings: () => ({}), fetchImpl: counting,
+    defaultSources: [`${base}/repo/feed/manifest.json`], manifestPublicKey: TEST_PUBLIC_KEY,
+  })
+  const original = fs.renameSync
+  let locked = true
+  try {
+    fs.renameSync = (from, to, ...args) => {
+      if (locked && String(from).includes('rollback.pending-')) throw Object.assign(new Error('EPERM: rollback rename locked'), { code: 'EPERM' })
+      return original(from, to, ...args)
+    }
+    await assert.rejects(() => updater.apply(), /EPERM/)
+    assert.equal(fs.existsSync(updater.stageDir), true, 'the hash-verified stage is kept for the next retry')
+    assert.equal(updaterVersion(pkg), OLD, 'nothing was installed')
+    const firstRun = calls
+    calls = 0
+    locked = false
+    await updater.apply({ activate: async () => ({ ok: true, version: NEW }) })
+    assert.ok(calls < firstRun, 'the retry re-checks the manifest but serves files from the stage')
+    assert.equal(updaterVersion(pkg), NEW)
+    assert.equal(updater.status().lastApplied.reused, true)
+    assert.equal(fs.existsSync(updater.stageDir), false, 'a completed transaction cleans the stage')
+  } finally {
+    fs.renameSync = original
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
 await checkAsync('damaged rollback receipt or bytes never cause installed-file deletion', async () => {
   const pkg = makePackage(OLD)
   const data = makeDataDir()
   const backup = path.join(data, 'rollback')
   try {
-    backupPackage(pkg, backup)
+    await backupPackage(pkg, backup)
     fs.writeFileSync(path.join(pkg, 'index.js'), 'keep this edit\n')
     fs.writeFileSync(path.join(backup, 'client.js'), 'damaged backup\n')
     assert.throws(() => restoreBackup(backup, pkg), /rollback hash drift/)
@@ -1209,7 +1352,7 @@ await checkAsync('rollback reports a denied obsolete-file deletion rather than f
   const pkg = makePackage(OLD)
   const data = makeDataDir()
   const backup = path.join(data, 'rollback')
-  backupPackage(pkg, backup)
+  await backupPackage(pkg, backup)
   const obsolete = path.join(pkg, 'obsolete.js')
   fs.writeFileSync(obsolete, 'not in the old installation\n')
   const original = fs.rmSync

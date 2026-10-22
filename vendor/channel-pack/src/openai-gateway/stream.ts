@@ -58,14 +58,6 @@ function finishReason(reason: FinishReason): string {
  *
  * ⚠️ 口径转换全部在 `usage.ts` 里（两个端点共用一份判断，见该文件头）。
  * 这里只负责**改字段名**：`inputTokens`（已含缓存）→ `prompt_tokens`。
- *
- * ⚠️ 两个**私有**字段保留是**有意的向后兼容**，不是冗余：
- * - `prompt_cache_hit_tokens` 是 DeepSeek 系的私有名，本仓库多个适配器
- *   （`buddy-adapter.ts` / `openai-compat.ts` / `llm-adapter.ts` 等）在**读**它；
- * - 顶层 `reasoning_tokens` 同理由旧版网关发出，删掉会让既有消费者读不到。
- * 官方字段（`prompt_tokens_details.cached_tokens` /
- * `completion_tokens_details.reasoning_tokens`）**必须同时给**：
- * Codex 等标准客户端只认官方形态。
  */
 function usageJson(usage: TokenUsage): Record<string, unknown> {
   const normalized = toOpenAiUsage(usage)
@@ -177,7 +169,7 @@ export async function* toOpenAiSse(
         // 但它是确定性失败 —— 翻成 404 让客户端提示用户改配置。
         const normalized = normalizeUpstreamFailure({
           // 上游自带状态码（如 gemini 拒绝未知模型名时的 404）优先，否则才退化成 502。
-          // ⚠️ 门禁（400–599）不能省：codearts 会用 `{ status: 200 }` 表示业务失败，
+
           // 原样透出会让「额度用尽」在客户端眼里读成成功。另两处出口已有同一门禁。
           status: upstreamStatusOrFallback(error.status),
           type: typeof error.type === 'string' ? error.type : 'server_error',

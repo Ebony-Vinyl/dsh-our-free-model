@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 
 const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-  .replace('exports.__test = {', 'exports.__test = { SettingsPage, ModelCard, Roster,')
+  .replace('exports.__test = {', 'exports.__test = { SettingsPage, ModelCard, Roster, Tank, useCountUp,')
 const tick = () => new Promise(resolve => setImmediate(resolve))
 let checks = 0
 async function check(name, run) { await run(); checks++; console.log('  ok  ' + name) }
@@ -24,9 +24,9 @@ class Node {
   addEventListener() {}
   get firstElementChild() { return this.children[0] }
 }
-function boot({ storage = new Map(), failStorage = false, fetchImpl } = {}) {
+function boot({ storage = new Map(), failStorage = false, fetchImpl, observeVisibility = false } = {}) {
   let bundle, cursor = 0, tree, dirty = true
-  const cells = [], effects = [], listeners = new Map(), frames = new Map(), timers = [], calls = []
+  const cells = [], effects = [], listeners = new Map(), frames = new Map(), timers = [], calls = [], observers = []
   const html = new Node('html'), head = html.appendChild(new Node('head')), body = html.appendChild(new Node('body'))
   const matches = (node, selector) => {
     const className = selector.match(/^\.([\w-]+)/)?.[1]
@@ -36,7 +36,10 @@ function boot({ storage = new Map(), failStorage = false, fetchImpl } = {}) {
   }
   const all = () => flattenDom(html)
   const document = {
-    documentElement: html, head, body, baseURI: 'http://ofm.invalid/',
+    documentElement: html, head, body, baseURI: 'http://ofm.invalid/', hidden: false,
+    addEventListener(name, fn) { if (!listeners.has('document:' + name)) listeners.set('document:' + name, new Set()); listeners.get('document:' + name).add(fn) },
+    removeEventListener(name, fn) { listeners.get('document:' + name)?.delete(fn) },
+    dispatchEvent(event) { for (const fn of [...(listeners.get('document:' + event.type) ?? [])]) fn(event) },
     createElement: tag => new Node(tag), createTextNode: text => Object.assign(new Node('#text'), { textContent: text }),
     querySelectorAll: selector => all().filter(node => selector.split(',').some(part => matches(node, part.trim()))),
     querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null },
@@ -74,6 +77,11 @@ function boot({ storage = new Map(), failStorage = false, fetchImpl } = {}) {
   react.useCallback = (fn, deps) => react.useMemo(() => fn, deps)
   vm.runInNewContext(source, {
     window, document, URL, AbortController,
+    IntersectionObserver: observeVisibility ? class {
+      constructor(callback) { this.callback = callback; observers.push(this) }
+      observe(node) { this.node = node }
+      disconnect() { this.disconnected = true }
+    } : undefined,
     CustomEvent: class { constructor(type, options) { this.type = type; Object.assign(this, options) } },
     setTimeout: (fn, delay) => { const timer = { fn, delay }; timers.push(timer); return timer }, clearTimeout() {},
     setInterval: () => 1, clearInterval() {},
@@ -93,11 +101,12 @@ function boot({ storage = new Map(), failStorage = false, fetchImpl } = {}) {
     do {
       if (++passes > 30) throw new Error('hook render loop')
       dirty = false; cursor = 0; tree = component(props)
+      if (tree?.props?.ref && !tree.props.ref.current) tree.props.ref.current = new Node()
       for (const effect of effects.splice(0)) effect()
     } while (dirty)
     return tree
   }
-  return { api, plugin, t, draw, document, window, frames, timers, calls, storage,
+  return { api, plugin, t, draw, document, window, frames, timers, calls, storage, observers,
     root(className = 'ofm_root') { const node = new Node(); node.className = className; body.appendChild(node); return node },
     dispose() { for (const cell of cells) cell?.cleanup?.() },
   }
@@ -145,6 +154,73 @@ await check('a failed benchmark releases its busy state, keeps the error and ref
   const result = draw().props.benches.fixture
   assert.equal(result.running, false); assert.equal(result.result, 'No visible text')
   assert.ok(app.calls.filter(call => call.endpoint === '/summary').length >= 2); app.dispose()
+})
+
+const shellProps = app => ({ t: app.t, data: { catalog: [], settings: {} }, counts: {}, summary: {}, stats: {} })
+const effectsSwitch = (tree, app) => flatten(tree).find(node => node?.props?.label === app.t('effects.enabled'))
+await check('visual effects default off, toggle immediately, survive remount and do not change model settings', () => {
+  const storage = new Map(), app = boot({ storage }), props = shellProps(app)
+  let tree = app.draw(app.api.Shell, props)
+  assert.equal(tree.props['data-ofm-effects'], 'off')
+  assert.equal(flatten(tree).filter(node => node?.props?.className === 'ofm_aurora').length, 0)
+  const freePage = tree.children.at(-1)
+  effectsSwitch(tree, app).props.onChange(); tree = app.draw(app.api.Shell, props)
+  assert.equal(tree.props['data-ofm-effects'], 'on')
+  assert.equal(flatten(tree).filter(node => node?.props?.className === 'ofm_aurora').length, 1)
+  assert.equal(tree.children.at(-1).type, freePage.type)
+  assert.equal(tree.children.at(-1).props.data, props.data)
+  assert.equal(storage.get('ofm.visualEffects'), 'on')
+  assert.equal(app.calls.length, 0, 'a visual switch must not call the backend')
+  app.dispose()
+  const reopened = boot({ storage }), nextProps = shellProps(reopened)
+  tree = reopened.draw(reopened.api.Shell, nextProps)
+  assert.equal(tree.props['data-ofm-effects'], 'on')
+  effectsSwitch(tree, reopened).props.onChange(); tree = reopened.draw(reopened.api.Shell, nextProps)
+  assert.equal(tree.props['data-ofm-effects'], 'off'); assert.equal(storage.get('ofm.visualEffects'), 'off')
+  reopened.dispose()
+})
+await check('a blocked preference store still allows toggling; hidden pages pause and visibility listeners clean up', () => {
+  const app = boot({ failStorage: true }), props = shellProps(app)
+  let tree = app.draw(app.api.Shell, props)
+  assert.equal(tree.props['data-ofm-active'], 'true')
+  effectsSwitch(tree, app).props.onChange(); tree = app.draw(app.api.Shell, props)
+  assert.equal(tree.props['data-ofm-effects'], 'on')
+  app.document.hidden = true; app.document.dispatchEvent({ type: 'visibilitychange' })
+  tree = app.draw(app.api.Shell, props); assert.equal(tree.props['data-ofm-active'], 'false')
+  app.document.hidden = false; app.document.dispatchEvent({ type: 'visibilitychange' })
+  tree = app.draw(app.api.Shell, props); assert.equal(tree.props['data-ofm-active'], 'true')
+  app.dispose()
+})
+await check('aquarium retains its bounded level, accessibility and animated contents with decoration disabled', () => {
+  const app = boot(), tank = app.api.Tank({ pct: 143, label: 'fixture availability' })
+  assert.equal(tank.props.style['--lvl'], '100%'); assert.equal(tank.props.role, 'img')
+  assert.equal(tank.props['aria-label'], 'fixture availability')
+  const nodes = flatten(tank)
+  for (const [prefix, count] of [['ofm_fish ', 3], ['ofm_bubble ', 5], ['ofm_wave ', 2]]) {
+    assert.equal(nodes.filter(node => node?.props?.className?.startsWith(prefix)).length, count)
+  }
+  assert.equal(app.api.Tank({ pct: null }), null); app.dispose()
+})
+await check('disabled decorative number motion schedules no animation frame', () => {
+  const app = boot()
+  assert.equal(app.draw(() => app.api.useCountUp(234, false)), 234)
+  assert.equal(app.frames.size, 0); app.dispose()
+})
+
+await check('empty or offscreen aquariums pause, filled visible aquariums resume, and observers disconnect', () => {
+  const app = boot({ observeVisibility: true })
+  let tree = app.draw(app.api.Tank, { pct: 60 })
+  assert.equal(tree.props['data-ofm-motion'], 'on'); assert.equal(app.observers.length, 1)
+  const observer = app.observers[0]
+  observer.callback([{ isIntersecting: false }]); tree = app.draw(app.api.Tank, { pct: 60 })
+  assert.equal(tree.props['data-ofm-motion'], 'off')
+  observer.callback([{ isIntersecting: true }]); tree = app.draw(app.api.Tank, { pct: 60 })
+  assert.equal(tree.props['data-ofm-motion'], 'on')
+  tree = app.draw(app.api.Tank, { pct: 0 })
+  assert.equal(tree.props['data-ofm-motion'], 'off'); assert.equal(tree.props.style['--lvl'], '0%')
+  assert.equal(observer.disconnected, true)
+  tree = app.draw(app.api.Tank, { pct: 30 }); assert.equal(tree.props['data-ofm-motion'], 'on')
+  app.dispose(); assert.equal(app.observers[1].disconnected, true)
 })
 
 console.log(checks + ' plugin benchmark UI checks passed')

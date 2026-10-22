@@ -1161,7 +1161,7 @@ export function apply(ctx, config) {
   const fenceConnection = connectionAdmissionView(() => optional('connection'))
   // ── the absorbed free-channel pack ──────────────────────────────────────────
   /**
-   * The 白嫖 channels — CodeArts (华为云), CodeBuddy / WorkBuddy (腾讯), LobsterAI
+   * The 白嫖 channels — LobsterAI
    * (有道), Qoder / Qoder CN (阿里系), TRAE (字节), Cline, Loomy (讯飞), Raccoon
    * (商汤), MiniMax Code, ZCode (智谱) and Gemini (Google) — are
    * carried with local integration adaptations from the plugin that shipped them, vendored under
@@ -1190,10 +1190,10 @@ export function apply(ctx, config) {
       if (stopped) return
       pack.apply(scoped, {
         disableOpencode: true,
-        outlet: { active: egressActive, fetch: egressFetch, fetchSigned: (input, init, send) => egressFetch(input, init, send) },
+        outlet: { active: egressActive, fetch: egressFetch },
       })
       channelPack = { state: 'ready', error: '' }
-      logger.info?.('our-free-model: free-channel pack mounted (CodeArts, CodeBuddy, and 11 more)')
+      logger.info?.('our-free-model: free-channel pack mounted (10 account providers)')
       // The pack's own gateway is the lane's endpoint; its models become
       // routing destinations as soon as the listing answers.
       void settleChanLane()

@@ -40,7 +40,7 @@ export const CHANNEL_PREFIX = 'chan:'
  * `disableOpencode`, so its adapter is never registered here.
  */
 export const CHANNEL_PACK_PROVIDERS = Object.freeze([
-  'codearts', 'buddy', 'workbuddy', 'lobsterai', 'qoder', 'qodercn', 'trae',
+  'lobsterai', 'qoder', 'qodercn', 'trae',
   'cline', 'loomy', 'raccoon', 'minimax', 'gemini', 'zcode',
 ])
 const CHANNEL_PACK_PROVIDER_SET = new Set(CHANNEL_PACK_PROVIDERS)

@@ -2,9 +2,9 @@
   "subject": {
     "id": "dev.ebony-vinyl.dsh-our-free-model",
     "name": "dsh-our-free-model",
-    "version": "2.5.7",
+    "version": "2.5.9",
     "sourceRepository": "https://github.com/Ebony-Vinyl/dsh-our-free-model",
-    "sourceRevision": "807826000bddf62155b405fde913a1887001cd73"
+    "sourceRevision": "f0e905320a423fda9c812ad6767d33a6ed90a426"
   },
   "license": {
     "spdx": "MIT",
@@ -20,11 +20,11 @@
   },
   "vendoredChannelPack": {
     "path": "vendor/channel-pack/pack.js",
-    "upstreamRepository": "https://gitee.com/iJetLi/deepseek-harness-codearts",
     "upstreamRevision": "345f0a07b22713c0ae189ca7d8b97ec4f64626c6",
     "license": "MIT (vendor/channel-pack/LICENSE, unchanged)",
-    "contract": "A third-party dsh plugin carried verbatim and bundled into one file by scripts/build-channel-pack.mjs. It registers the fourteen free-channel providers (CodeArts, CodeBuddy, WorkBuddy, LobsterAI, Qoder, Qoder CN, TRAE, Cline, Loomy, Raccoon, MiniMax, ZCode, Gemini, OpenCode) and therefore imports the kernel itself; that import is upstream's design, not this plugin's seam. Mounted on its own fiber: a composition without credentials/commands/llm loses the channels and keeps the free lane. Credentials it obtains go to the host credential store, never to this plugin's files or to the browser.",
-    "provenanceNotes": "vendor/channel-pack/NOTICE.md records what was taken, what was left out (upstream's own browser half) and how to rebuild the bundle."
+    "contract": "A third-party dsh plugin adapted locally and bundled into one file by scripts/build-channel-pack.mjs. It provides ten enabled account channels (LobsterAI, Qoder, Qoder CN, TRAE, Cline, Loomy, Raccoon, MiniMax, ZCode, Gemini); the optional OpenCode account integration is disabled in this host and therefore imports the kernel itself; that import is upstream's design, not this plugin's seam. Mounted on its own fiber: a composition without credentials/commands/llm loses the channels and keeps the free lane. Credentials it obtains go to the host credential store, never to this plugin's files or to the browser.",
+    "provenanceNotes": "vendor/channel-pack/NOTICE.md records what was taken, what was left out (upstream's own browser half) and how to rebuild the bundle.",
+    "upstreamAuthorUrl": "https://gitee.com/iJetLi"
   },
   "distribution": {
     "selfUpdate": "default; in-app updater verifies feed/manifest.json SHA-256 digests before installing",

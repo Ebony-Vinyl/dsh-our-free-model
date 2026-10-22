@@ -1,13 +1,6 @@
 /**
  * LobsterAI（有道龙虾）认证服务。
  *
- * 结构与 `src/buddy-auth.ts` 的 `BuddyAuth` **刻意保持一致**：同样的
- * `RefreshScheduler` 续期语义、同样的登出竞态保护、同样的
- * `refreshAll(pool)` 批量续期。这是本插件已被两个产品验证过的模式，
- * 复用它可以减少一类「某个 provider 的续期行为与众不同」的意外。
- *
- * 与 Buddy 侧的实质差异只有两处：
- *
  * 1. **续期的终态判定更精确**。Go 版只判「响应里有没有 accessToken」，
  *    会把网络抖动也当成终态而停止续期；本实现按 HTTP 状态码 +
  *    `classifyLobsteraiError` 的 `session-dead` 判定，其余错误交给
@@ -54,11 +47,6 @@ import {
 
 /**
  * LobsterAI 凭据 → 账号池有效期所需的提取器（`refreshAll` 与按需续期共用一份）。
- *
- * ⚠️ `identityOf` 必须是 `access_token`：`AccountPool.findAccountIdByCredential`
- * 对非 codearts 的 provider 比对的就是这个字段（见其 `identifierKey`），
- * 传 ref 名会恒匹配失败且**静默无报错**。`LobsteraiCredential` 的字段名
- * 本就是 `access_token`（`src/lobsterai.ts` 的结构注释即为此说明）。
  */
 const LOBSTERAI_EXPIRY_ACCESSORS: ExpiryAccessors<LobsteraiCredential> = {
   expiresAtOf: lobsteraiCredentialExpiresAtMs,
@@ -76,11 +64,6 @@ export const LOBSTERAI_CREDENTIAL_REF = 'LOBSTERAI_ACCESS_TOKEN'
 
 /**
  * 续期被后端判定为终态（refresh_token 失效）时抛出的错误。
- *
- * 与 `buddy-oauth.ts` / `oauth.ts` 同名类**刻意是各自独立的类**：
- * `src/refresh.ts:21-25` 的 `isRefreshTokenExpired` 用 `error.name` 而非
- * `instanceof` 作判据，正是因为这些类跨模块 identity 不同。
- * 故这里也必须保证 `name` 恰为 `RefreshTokenExpiredError`。
  */
 export class RefreshTokenExpiredError extends Error {
   constructor(message: string) {
@@ -118,10 +101,6 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /**
      * LobsterAI 的认证服务实例。
-     *
-     * 与 `buddyAuth` / `workbuddyAuth` / `codeartsAuth` 并列：
-     * cordis 的 `Service` 构造时按名称注册，同名第二次注册会抛
-     * `service "..." has been registered`，故每个 provider 各占一个服务名。
      */
     lobsteraiAuth: LobsteraiAuth
   }
@@ -160,8 +139,6 @@ export class LobsteraiAuth extends Service {
 
   /**
    * 本实例默认读写的凭据 ref 名称（`LOBSTERAI_ACCESS_TOKEN`）。
-   *
-   * 由产品配置派生，与 CodeBuddy 系的两个 ref 完全隔离。
    */
   readonly credentialRefName: string
 
@@ -238,13 +215,6 @@ export class LobsteraiAuth extends Service {
 
   /**
    * **两步式登录**：起回调服务器并立即返回登录 URL，由调用方先打开窗口。
-   *
-   * 与 CodeArts 的 `CodeArtsAuth.startLogin` 同因（真实缺陷）：Channel Pack 的
-   * 「+ 新建账号」原先调用阻塞式 {@link login}，而浏览器只在用户点击后的
-   * 短暂窗口（transient activation，约 5 秒）内允许 `window.open`。
-   * 等阻塞调用返回时手势早已过期，`window.open` 被弹窗拦截器拒绝并返回
-   * `null`，前端兜底逻辑便执行 `window.location.href = loginUrl`，
-   * 把**整个设置页**跳转到登录页。
    *
    * 调用方拿到 `loginUrl` 后应当**立即** `window.open`，再 await `result`。
    */
@@ -409,11 +379,6 @@ export class LobsteraiAuth extends Service {
   /**
    * 按凭据 ref 续期**指定账号**的凭据。
    *
-   * 与 {@link refresh} 的区别（与 `BuddyAuth.refreshAccountCredential` 同因）：
-   * `refresh()` 读写本实例的默认单凭据 ref（`LOBSTERAI_ACCESS_TOKEN`），
-   * 而 Channel Pack 账号卡片对应的是 `LOBSTERAI_ACCOUNT_XXX` ——
-   * 用 `refresh()` 刷账号池里的账号，实际刷的是另一个凭据。
-   *
    * 同样**不触碰** `refreshTokenInvalid` / `lastRefreshError` / 调度器：
    * 那些状态属于单凭据路径，被多账号操作污染会让 UI 显示错误的失效提示。
    *
@@ -564,11 +529,6 @@ export class LobsteraiAuth extends Service {
   /**
    * 批量续期本产品的所有账号。
    *
-   * **包含已停用账号**（只按 `refreshable` 过滤）：停用只应影响账号池的自动
-   * 选号，不该让凭据烂掉 —— 否则用户重新启用时只能重新登录。
-   * 详见 `BuddyAuth.refreshAll` 的注释（同一缺陷）。
-   * 单账号失败不影响其他账号（与 `BuddyAuth.refreshAll` 同语义）。
-   *
    * ⚠️ **lead-time 过滤**（issue !IKIRTT）：早先这里是**无条件全量续期** ——
    * 定时器每 30 分钟就把每个账号的 refresh_token 轮换一次，与「凭据还剩多久」
    * 无关。现复用单凭据时代 `REFRESH_LEAD_MS` 的语义：**距过期不足 1 小时才刷**。
@@ -617,7 +577,7 @@ export class LobsteraiAuth extends Service {
           // 非终态失败（网络抖动、5xx、429…）：**必须留下日志**。
           //
           // 曾经这里完全静默 —— 账号在 UI 上仍显示「可续期」，续期却永远
-          // 失败，用户拿不到任何线索。`src/buddy-auth.ts` 的 refreshAll
+
           // 有同样的静默问题（属既有实现，本次不改动其行为），
           // 但新代码没有理由重复这个可诊断性缺陷。
           this.ctx.logger?.warn?.(
@@ -678,9 +638,6 @@ export class LobsteraiAuth extends Service {
   /**
    * `GET /api/models/available` → 远端模型列表。
    *
-   * 失败或未登录时返回空数组（调用方回退到产品兜底目录），
-   * 与 `BuddyAuth.fetchModels` 同语义。
-   *
    * 优先使用账号池中的可用账号；无账号池或池为空时回退到固定凭据 ref。
    * 两处都必须带上 `this.product` 与真实版本号 —— 该端点的 query 是
    * **身份载荷**（keyfrom），发错身份会让服务端返回错误的模型集合。
@@ -707,7 +664,7 @@ export class LobsteraiAuth extends Service {
       if (!response.ok) return []
       return parseLobsteraiModels(await response.json() as unknown)
     } catch {
-      // 远端不可用：返回空数组让调用方回退兜底目录（与 Buddy 侧一致）。
+
       return []
     }
   }

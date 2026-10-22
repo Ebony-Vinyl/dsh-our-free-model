@@ -48,11 +48,6 @@
  * 对整个 sidecar 做字符串扫描，`checkin` / `check-in` / `daily` / `campaign`
  * 均无任何 Cline 业务端点命中（`campaign` 的命中是 PostHog 的 UTM 参数与
  * feature-flag 事件属性；`daily` 是 YAML cron 别名与 Blob 导出频率枚举）。
- *
- * 故本模块**只实现余额**，`dailyCheckin` 能力登记为 false
- * （与 WorkBuddy 国际版的先例一致）。若将来 Cline 增加签到，
- * 需按 Qoder 那次教训（「某次实测没看到」不能推广成「不存在」）
- * 重新采集，而不是假设它永远不存在。
  */
 
 import { roundCredits, type CreditBalance, type CreditPackage } from './credits.js'
