@@ -313,6 +313,40 @@ try {
       const run = await drive(model, [{ body: deltas(wire, { reasoning: CHECKPOINT }) }, { body: deltas(wire, { reasoning: 'still thinking' }) }])
       checkCut(run)
     })
+    // max_output_tokens 撞墙后的自动续写：模型经常无视「不要重复」的指令，
+    // 把已经显示过的正文整段重写一遍，用户在界面上就会看到同一段出现两次。
+    // 读取层必须吞掉这段重复前缀，不能指望模型自觉。
+    await check(`${wire}: 续写段重写已显示的正文时不重复`, async () => {
+      const run = await drive(model, [
+        { body: deltas(wire, { text: 'FIRST_HALF_SENTINEL' }) + terminal(wire, { reason: 'length' }) },
+        { body: deltas(wire, { text: 'FIRST_HALF_SENTINEL' + ANSWER }) + terminal(wire) },
+      ])
+      checkFinal(run, 'stop', 2)
+      const visible = run.chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')
+      assert.equal(visible, 'FIRST_HALF_SENTINEL' + ANSWER, '重复的前缀必须被吞掉')
+      assert.equal((visible.match(/FIRST_HALF_SENTINEL/g) ?? []).length, 1, '同一段正文只能出现一次')
+    })
+
+    await check(`${wire}: 续写段只写后半段时原样放行`, async () => {
+      const run = await drive(model, [
+        { body: deltas(wire, { text: 'FIRST_HALF_SENTINEL' }) + terminal(wire, { reason: 'length' }) },
+        { body: deltas(wire, { text: ANSWER }) + terminal(wire) },
+      ])
+      checkFinal(run, 'stop', 2)
+      const visible = run.chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')
+      assert.equal(visible, 'FIRST_HALF_SENTINEL' + ANSWER, '没有重复时不得吞掉真实内容')
+    })
+
+    await check(`${wire}: 续写段与首段只有开头相似时不误吞`, async () => {
+      const run = await drive(model, [
+        { body: deltas(wire, { text: '第' }) + terminal(wire, { reason: 'length' }) },
+        { body: deltas(wire, { text: '第二部分是真的新内容' }) + terminal(wire) },
+      ])
+      checkFinal(run, 'stop', 2)
+      const visible = run.chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.text).join('')
+      assert.equal(visible, '第第二部分是真的新内容', '共享一个字符不能当作重复')
+    })
+
     await check(`${wire}: 第二段已有正文但 length 终止也不能冒充恢复成功`, async () => {
       const run = await drive(model, [{ body: deltas(wire, { reasoning: CHECKPOINT }) },
         { body: deltas(wire, { text: ANSWER }) + terminal(wire, { reason: 'length' }) }])

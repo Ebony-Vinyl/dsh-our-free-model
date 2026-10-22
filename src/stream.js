@@ -56,6 +56,14 @@ function createDsmlScrubber() {
   }
 }
 
+/**
+ * 续写去重所需的最短已显示正文。
+ *
+ * 真实的截断发生在输出上限，首段通常有上千字符；这个下限只用来挡掉
+ * 「首段几乎没有内容」时字符层面的歧义，正常情况不受影响。
+ */
+const MIN_REPEAT_PREFIX = 8
+
 /** Mint a tool-call id for providers that stream arguments without one. */
 function mintToolCallId() {
   return `call_${crypto.randomBytes(12).toString('hex')}`
@@ -81,6 +89,32 @@ class BlockSink {
     this.brokenToolCall = false
     this.lastToolKey = undefined
     this.dsml = createDsmlScrubber()
+    /** 续写段的重复比对状态；null 表示不做去重。见 {@link suppressRepeat}。 */
+    this.repeat = null
+  }
+
+  /**
+   * 让续写段不再重写已经显示过的正文。
+   *
+   * 续写指令只是一段文字提示，模型经常仍从头重写整篇回答，用户在界面上就会
+   * 看到同一段正文出现两次。`prefix` 是本回合已经交给调用方的正文；此后
+   * 每一帧正文先累积起来，与它逐字符比对：
+   *
+   * - 累积内容仍是 `prefix` 的前缀：还不能判定，继续压着不发；
+   * - 累积内容完整覆盖了 `prefix`：确认是重写，只放行超出的部分；
+   * - 出现不同的字符：不是重写，把压着的这一整段原样放行。
+   *
+   * 只匹配到一两个相同字符就判定重复会吞掉正常内容的开头（「第二部分」
+   * 与「第一部分」共享一个「第」字），所以判定必须等到累积内容越过
+   * `prefix` 或明确分歧；`prefix` 本身短于 {@link MIN_REPEAT_PREFIX} 时
+   * 干脆不做去重——那种长度下重复与巧合在字符层面无法区分，多显示一句的
+   * 代价小于吞掉真实内容。
+   *
+   * @param {string} prefix - 已显示的正文
+   */
+  suppressRepeat(prefix) {
+    const useful = typeof prefix === 'string' && prefix.length >= MIN_REPEAT_PREFIX
+    this.repeat = useful ? { prefix, held: '' } : null
   }
 
   /**
@@ -122,9 +156,32 @@ class BlockSink {
     return block
   }
 
+  /** 吞掉重复区里的字符；返回这一帧应当放行的部分。 */
+  swallowRepeat(delta) {
+    const state = this.repeat
+    if (state === null) return delta
+    state.held += delta
+    const { prefix, held } = state
+    if (held.length <= prefix.length && prefix.startsWith(held)) return ''
+    // 越过 prefix 或出现分歧：判定结束，交出该放行的部分。
+    this.repeat = null
+    return held.startsWith(prefix) ? held.slice(prefix.length) : held
+  }
+
+  /** 本次读取结束：压着没发的内容只有在确认不是重复时才补发。 */
+  flushRepeat() {
+    const state = this.repeat
+    if (state === null) return ''
+    this.repeat = null
+    // 仍压在 prefix 之内，说明整段都是重写的一部分，丢弃；否则是没走完的分歧内容。
+    return state.prefix.startsWith(state.held) ? '' : state.held
+  }
+
   text(key, delta) {
     if (delta === undefined || delta === null || delta === '') return
-    const scrubbed = this.dsml.push(delta)
+    const deduped = this.swallowRepeat(delta)
+    if (deduped === '') return
+    const scrubbed = this.dsml.push(deduped)
     if (scrubbed === '') return
     this.sawText = true
     if (this.answerText.length < this.answerLimit) {
@@ -174,6 +231,17 @@ class BlockSink {
   }
 
   closeAll() {
+    const spilledRepeat = this.flushRepeat()
+    if (spilledRepeat !== '') {
+      this.sawText = true
+      if (this.answerText.length < this.answerLimit) {
+        this.answerText += this.answerText.length + spilledRepeat.length > this.answerLimit
+          ? spilledRepeat.slice(0, this.answerLimit - this.answerText.length)
+          : spilledRepeat
+      }
+      this.slot('t', 'text').text += spilledRepeat
+      this.emit({ type: 'text-delta', index: this.slot('t', 'text').index, text: spilledRepeat })
+    }
     const spill = this.dsml.flush()
     let spilled = false
     for (const block of this.open.values()) {
@@ -471,6 +539,7 @@ export function windowTokens(usage, sawReasoning) {
  * @param {object} [options] - 本次读取的索引与续写检查点限制
  * @param {number} [options.startIndex=0] - 新块的起始索引
  * @param {number} [options.checkpointLimit=131072] - 推理检查点的最大字符串长度
+ * @param {string} [options.suppressRepeat] - 已交给调用方的正文；续写段会吞掉它的重复前缀
  * @param {(snapshot: object) => void} [options.onState] - 发布本次读取的已知状态
  * @param {() => void} [options.onProgress] - Meaningful tool metadata arrived before arguments.
  * @yields {object} harness StreamChunk
@@ -481,6 +550,7 @@ export async function * readStream(lines, wire, renameMap, now = () => Date.now(
   const startIndex = Number.isSafeInteger(options?.startIndex) && options.startIndex >= 0 ? options.startIndex : 0
   const checkpointLimit = Number.isSafeInteger(options?.checkpointLimit) && options.checkpointLimit >= 0 ? options.checkpointLimit : 131072
   const sink = new BlockSink(chunk => outbox.push(chunk), startIndex, checkpointLimit, options?.onProgress)
+  if (typeof options?.suppressRepeat === 'string' && options.suppressRepeat !== '') sink.suppressRepeat(options.suppressRepeat)
   const state = { usage: undefined, finish: undefined, sawFinish: false, sawUsage: false, sawToolCall: false, firstDeltaAt: undefined, sawReasoning: false, sawText: false, brokenToolCall: false }
   const snapshot = () => ({
     ...state,
