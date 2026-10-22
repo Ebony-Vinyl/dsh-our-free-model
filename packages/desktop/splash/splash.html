@@ -278,6 +278,8 @@
 
 <script>
 // 主题检测：读 localStorage 或系统偏好
+const isEn = (navigator.language || '').toLowerCase().startsWith('en')
+document.documentElement.lang = isEn ? 'en' : 'zh-CN'
 function detectTheme() {
   try {
     const saved = localStorage.getItem('ofm-theme');
@@ -299,8 +301,8 @@ if (theme === 'dark') {
 // 模拟进度状态
 const statusEl = document.getElementById('status');
 const messages = theme === 'dark'
-  ? ['正在初始化...', '校准信号...', '连接本地服务...', '就绪']
-  : ['正在初始化...', '加载模块...', '连接本地服务...', '就绪'];
+  ? (isEn ? ['Initializing...', 'Calibrating signal...', 'Connecting to local service...', 'Ready'] : ['正在初始化...', '校准信号...', '连接本地服务...', '就绪'])
+  : (isEn ? ['Initializing...', 'Loading modules...', 'Connecting to local service...', 'Ready'] : ['正在初始化...', '加载模块...', '连接本地服务...', '就绪']);
 
 let step = 0;
 const interval = setInterval(() => {

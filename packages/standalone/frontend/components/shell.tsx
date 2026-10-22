@@ -2,22 +2,23 @@ import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboar
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import brandMark from '../../../../icon.svg?inline'
+import { t, getLocale as locale, switchLocale } from '../i18n.mjs'
 import { Badge, Button } from './ui'
 import type { Host, Page, Summary } from '../types'
 
 const navigation = [
-  { label: '工作空间', items: [
-    { id: 'overview', name: '概览', icon: LayoutDashboard },
-    { id: 'models', name: '模型清单', icon: Boxes },
-    { id: 'usage', name: '用量统计', icon: Activity },
+  { label: t('nav.workspace'), items: [
+    { id: 'overview', name: t('nav.overview'), icon: LayoutDashboard },
+    { id: 'models', name: t('nav.models'), icon: Boxes },
+    { id: 'usage', name: t('nav.usage'), icon: Activity },
   ] },
-  { label: '渠道与连接', items: [
-    { id: 'channels', name: '免费账号渠道', icon: Network },
-    { id: 'eac', name: 'EAC 协付渠道', icon: Handshake },
-    { id: 'connection', name: 'API 接入', icon: Cable },
+  { label: t('nav.groupChannels'), items: [
+    { id: 'channels', name: t('nav.channels'), icon: Network },
+    { id: 'eac', name: t('nav.eac'), icon: Handshake },
+    { id: 'connection', name: t('nav.connection'), icon: Cable },
   ] },
-  { label: '管理', items: [{ id: 'settings', name: '服务设置', icon: Settings2 }] },
-  { label: '项目支持', items: [{ id: 'sponsor', name: '来自赞助商的广告', icon: Coffee }] },
+  { label: t('nav.groupManage'), items: [{ id: 'settings', name: t('nav.settings'), icon: Settings2 }] },
+  { label: t('nav.groupSponsor'), items: [{ id: 'sponsor', name: t('nav.sponsor'), icon: Coffee }] },
 ] as const
 
 type Origin = { x: number; y: number }
@@ -56,8 +57,8 @@ function useTheme() {
 
 export function ThemeToggle() {
   const { theme, toggle } = useTheme()
-  const label = theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'
-  return <Button variant="ghost" className="theme-toggle" aria-label={label} title={theme === 'dark' ? '浅色' : '深色'}
+  const label = theme === 'dark' ? t('nav.themeLight') : t('nav.themeDark')
+  return <Button variant="ghost" className="theme-toggle" aria-label={label} title={theme === 'dark' ? t('nav.light') : t('nav.dark')}
     onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); toggle({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) }}>
     <span className="theme-toggle-track" data-theme={theme}>
       <span className="theme-toggle-icon theme-toggle-sun" aria-hidden="true"><Sun size={16} /></span>
@@ -66,21 +67,30 @@ export function ThemeToggle() {
   </Button>
 }
 
+/** 语言随 localStorage 持久化并由 switchLocale 重载页面，无需响应式状态。 */
+export function LangToggle() {
+  const next = locale() === 'zh' ? 'en' : 'zh'
+  const label = next === 'en' ? t('nav.switchToEnglish') : t('nav.switchToChinese')
+  return <Button variant="ghost" className="lang-toggle" aria-label={label} title={label} onClick={() => switchLocale(next)}>
+    <span className={next === 'en' ? undefined : 'lang-toggle-cn'} aria-hidden="true">{next === 'en' ? 'EN' : '中'}</span>
+  </Button>
+}
+
 export const pageNames: Record<Page, string> = {
-  overview: '概览', models: '模型清单', usage: '用量统计', channels: '免费账号渠道',
-  eac: 'EAC 协付渠道', settings: '服务设置', connection: 'API 接入', sponsor: '来自赞助商的广告',
+  overview: t('nav.overview'), models: t('nav.models'), usage: t('nav.usage'), channels: t('nav.channels'),
+  eac: t('nav.eac'), settings: t('nav.settings'), connection: t('nav.connection'), sponsor: t('nav.sponsor'),
 }
 
 export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary; host: Host }) {
   return <>
-    <a className="console-brand" href="/" aria-label="Our Free Model 首页">
+    <a className="console-brand" href="/" aria-label={t('nav.home')}>
       <img className="console-mark" src={brandMark} alt="" width={34} height={36} />
-      <span>Our Free Model<small>本地模型工作台</small></span>
+      <span>Our Free Model<small>{t('nav.subtitle')}</small></span>
     </a>
     <div className="workspace-switch"><span className="workspace-avatar"><ShieldCheck size={17} /></span>
-      <span>个人工作空间<small>独立本地服务</small></span><Badge>本机</Badge>
+      <span>{t('nav.personalWorkspace')}<small>{t('nav.standaloneService')}</small></span><Badge>{t('nav.localBadge')}</Badge>
     </div>
-    <nav className="console-nav" aria-label="管理导航">{navigation.map(group => <div className="nav-group" key={group.label}>
+    <nav className="console-nav" aria-label={t('nav.management')}>{navigation.map(group => <div className="nav-group" key={group.label}>
       <span className="nav-group-label">{group.label}</span>
       {group.items.map(item => <button key={item.id} id={item.id === 'sponsor' ? 'ofm-sponsor-menu-desktop' : undefined} className={`console-nav-item ${item.id === 'sponsor' ? 'ofm-sponsor-nav' : ''} ${page === item.id ? 'selected' : ''}`}
         aria-current={page === item.id ? 'page' : undefined} onClick={() => host.navigate(item.id)}>
@@ -89,12 +99,12 @@ export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary
         {item.id === 'models' && <span className="count-badge">{summary?.catalog.length ?? '—'}</span>}
       </button>)}
     </div>)}</nav>
-    <div className="sidebar-support"><ShieldCheck size={17} /><div><strong>独立本地存储</strong><p>本机运行 / 仅监听回环地址</p></div></div>
-    <div className="console-sidebar-footer"><div><span className="status-dot" />本地服务在线<small>v{summary?.version ?? '—'}</small></div>
-      <ThemeToggle /><Button variant="ghost" aria-label="退出管理" title="退出管理" onClick={() => { void host.logout().catch(host.error) }}><LogOut size={16} /></Button></div>
+    <div className="sidebar-support"><ShieldCheck size={17} /><div><strong>{t('nav.localStorage')}</strong><p>{t('nav.localNote')}</p></div></div>
+    <div className="console-sidebar-footer"><div><span className="status-dot" />{t('nav.serviceOnline')}<small>v{summary?.version ?? '—'}</small></div>
+      <ThemeToggle /><LangToggle /><Button variant="ghost" aria-label={t('nav.logout')} title={t('nav.logout')} onClick={() => { void host.logout().catch(host.error) }}><LogOut size={16} /></Button></div>
   </>
 }
 export function Topbar({ page, summary }: { page: Page; summary?: Summary }) {
-  return <><div className="console-breadcrumb"><span>工作空间</span><ChevronRight size={14} /><strong key={page} className="console-breadcrumb-current">{pageNames[page]}</strong></div>
-    <div className="console-topbar-status"><span className="status-dot" /><span>{summary?.settings.enabled === false ? '推理已暂停' : '本地服务'}</span><span className="topbar-divider" /><span>LOCAL</span></div></>
+  return <><div className="console-breadcrumb"><span>{t('nav.workspace')}</span><ChevronRight size={14} /><strong key={page} className="console-breadcrumb-current">{pageNames[page]}</strong></div>
+    <div className="console-topbar-status"><span className="status-dot" /><span>{summary?.settings.enabled === false ? t('nav.paused') : t('nav.localService')}</span><span className="topbar-divider" /><span>LOCAL</span></div></>
 }
