@@ -418,6 +418,13 @@ export function apply(ctx, config) {
   const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
   const runForwarded = modelRuntime.complete
 
+  function probeInBackground(surface) {
+    if (disposed) return
+    void refreshAvailability(true).catch(error => {
+      logger.warn?.(`our-free-model: ${surface} availability probe failed (${error?.message ?? error})`)
+    })
+  }
+
   // ── registration ────────────────────────────────────────────────────────────
   const routes = () => Object.keys(state().membership)
   const registration = ctx.llm.registerAdapter([ROUTE_MAIN, ROUTE_REGION], adapter)
@@ -430,9 +437,12 @@ export function apply(ctx, config) {
   // all must not be addable to a profile just because it still appears in the
   // upstream listing.
   ctx.llm.registerModelDiscovery?.(ctx.fiber?.entry?.options?.id ?? name, async () => {
-    await refreshCatalog({ probe: true, force: true })
+    // Discovery needs the catalog that exists now. Let the availability round
+    // finish in the background and publish its own later topology update; a
+    // stalled probe must not hold the host's model picker for minutes.
+    await refreshCatalog({ probe: false, force: true })
     const advertised = new Set(Object.values(state().membership).flat())
-    return modelRuntime.catalog
+    const models = modelRuntime.catalog
       .filter(entry => advertised.has(entry.id))
       .map(entry => ({
         id: entry.id,
@@ -441,6 +451,8 @@ export function apply(ctx, config) {
         maxTokens: entry.maxOutput,
         inputModalities: entry.vision ? ['text', 'image'] : ['text'],
       }))
+    probeInBackground('model discovery')
+    return models
   })
 
   ctx.on?.('loader/volatile-update', () => {
@@ -1430,20 +1442,18 @@ export function apply(ctx, config) {
       await syncChanRelay()
       if (disposed) return
       // Every await here is a chance for teardown to have run underneath this
-      // boot: a resumed refresh would force a probe round against stores it
-      // disposed. The round is boot's only network step, so it is the one held
-      // to a failure of its own — a throw here used to take the watcher, the
-      // topology event and the upgrade marker below down with it, reported as
-      // a single "startup refresh failed" line.
+      // boot. Wait for the merged directory only: it already publishes the
+      // first topology update, and the availability round below runs after the
+      // host has been told that the catalog is ready.
       try {
-        await refreshCatalog({ probe: true, force: true })
+        await refreshCatalog({ probe: false, force: true })
       } catch (error) {
         logger.warn?.(`our-free-model: startup refresh failed (${error?.message ?? error})`)
       }
       if (disposed) return
       syncWatcher()
-      emitTopology()
       push.emit('hello', helloPayload())
+      probeInBackground('startup')
     })().catch(error => logger.warn?.(`our-free-model: startup refresh failed (${error?.message ?? error})`))
   }, 'our-free-model: boot refresh')
 

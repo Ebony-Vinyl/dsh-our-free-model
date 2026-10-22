@@ -145,12 +145,22 @@ check('the settings page says it has not been probed', midRoundRow?.availability
 check('rather than a verdict it does not have', midRoundRow?.detail ?? '', '')
 gate.resolve()
 await round
+await until(async () => {
+  const row = (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json.catalog
+    .find(candidate => candidate.id === 'union-alpha')
+  return row?.availability === 'available'
+}, { timeoutMs: 5000, what: 'the background discovery probe to publish its verdict' })
 check('once the round lands it carries a verdict',
   (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json.catalog
     .find(row => row.id === 'union-alpha')?.availability, 'available')
 stub.api.setListing(LISTING)
 
+const beforeDiscoveryEvents = ctx.__captured.events
+  .filter(event => event === 'emit:llm/adapters-updated').length
 const discovered = ids(await ctx.__captured.discovery())
+await until(() => ctx.__captured.events
+  .filter(event => event === 'emit:llm/adapters-updated').length >= beforeDiscoveryEvents + 2,
+{ timeoutMs: 5000, what: 'the discovery background probe to finish' })
 check('model discovery offers what the picker advertises, nothing more',
   discovered.sort(), [...await advertised(ROUTE_MAIN), ...await advertised(ROUTE_REGION)].sort())
 

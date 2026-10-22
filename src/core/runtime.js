@@ -147,6 +147,7 @@ export function createModelRuntime({
 
   // 手动强制刷新不能借用一个因限流而跳过探测的普通刷新。
   let catalogRefresh = null
+  let catalogRefreshReady = null
   let catalogRefreshForced = false
   let catalogRefreshProbed = false
   async function refreshCatalog(opts) {
@@ -154,23 +155,37 @@ export function createModelRuntime({
     if (disposed) return catalog
     while (catalogRefresh !== null) {
       const shared = catalogRefresh
+      const sharedReady = catalogRefreshReady
       const sharedForced = catalogRefreshForced
       const sharedProbed = catalogRefreshProbed
+      // A caller that asked for the directory only is ready at the merge. It
+      // must not inherit a probe from an unrelated periodic/manual refresh that
+      // happens to be in flight.
+      if (!probe) {
+        await sharedReady
+        return catalog
+      }
       const value = await shared
       if (disposed || ((!force || sharedForced) && (!probe || sharedProbed))) return value
     }
-    const run = refreshCatalogOnce({ probe, force })
+    const ready = Promise.withResolvers()
+    const run = refreshCatalogOnce({ probe, force, onCatalogReady: value => ready.resolve(value) })
     catalogRefresh = run
+    catalogRefreshReady = ready.promise
     catalogRefreshForced = force
     catalogRefreshProbed = probe
     try { return await run } finally {
+      // A refresh that failed before the merge must still release every
+      // directory-only waiter; the caller receives the unchanged catalog.
+      ready.resolve(catalog)
       if (catalogRefresh === run) {
-        catalogRefresh = null; catalogRefreshForced = false; catalogRefreshProbed = false
+        catalogRefresh = null; catalogRefreshReady = null
+        catalogRefreshForced = false; catalogRefreshProbed = false
       }
     }
   }
 
-  async function refreshCatalogOnce({ probe, force }) {
+  async function refreshCatalogOnce({ probe, force, onCatalogReady }) {
     let ids = []
     try {
       ids = parseListing(await fetchListing())
@@ -191,8 +206,9 @@ export function createModelRuntime({
     await refreshKiloRoster()
     if (disposed) return catalog
     mergeCatalogs()
-    if (probe) await refreshAvailability(force)
     emitTopology()
+    onCatalogReady?.(catalog)
+    if (probe) await refreshAvailability(force)
     return catalog
   }
 

@@ -1027,7 +1027,8 @@ async function responsesEndpoint(req, res, complete, options = {}) {
 
   if (body.stream === true) {
     openStreamHeaders(res, options.heartbeatMs)
-    const say = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`)
+    let sequence = 0
+    const say = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, sequence_number: sequence++, ...payload })}\n\n`)
     const response = (over = {}) => ({
       id, object: 'response', created_at: created, model, status: 'in_progress',
       output: [], usage: undefined, ...over,

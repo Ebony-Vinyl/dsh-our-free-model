@@ -614,6 +614,7 @@ export function listPackageFiles(dir) {
  */
 export async function backupPackage(pkgDir, backupDir) {
   const snapshot = packageSnapshot(pkgDir)
+  const preflightCleanup = cleanupRollbackScratch(backupDir, 'pending')
   const pending = `${backupDir}.pending-${crypto.randomUUID()}`
   const previous = `${backupDir}.previous-${crypto.randomUUID()}`
   let movedPrevious = false
@@ -636,17 +637,73 @@ export async function backupPackage(pkgDir, backupDir) {
     try {
       await renameWithRetry(pending, backupDir)
     } catch (error) {
-      if (movedPrevious) await renameWithRetry(previous, backupDir)
+      if (movedPrevious) {
+        try {
+          await renameWithRetry(previous, backupDir)
+        } catch (restoreError) {
+          // `previous` may be the only complete backup after both directory
+          // renames were refused. Keep it recoverable, but lead with the error
+          // that stopped the new backup from landing.
+          throw addErrorContext(error, [
+            `rollback restore failed (${errorMessage(restoreError)})`,
+            `recoverable rollback backup retained at ${previous}`,
+          ])
+        }
+        const cleanupFailures = cleanupRollbackScratch(backupDir, 'previous')
+        throw addErrorContext(error, rollbackCleanupContexts(cleanupFailures))
+      }
       throw error
     }
-    // Failure to clean an older copy does not invalidate the new verified copy.
-    if (movedPrevious) {
-      try { fs.rmSync(previous, { recursive: true, force: true }) } catch { /* retain it */ }
-    }
+    // Once a new verified copy is in place, every sibling `previous` tree is
+    // an older rollback copy. Failure to clean it does not invalidate the new
+    // copy, so a later successful call can retry the cleanup.
+    cleanupRollbackScratch(backupDir, 'previous')
     return snapshot.files.length
-  } finally {
-    try { fs.rmSync(pending, { recursive: true, force: true }) } catch { /* retain it */ }
+  } catch (error) {
+    const pendingCleanupFailures = cleanupRollbackScratch(backupDir, 'pending')
+    throw addErrorContext(error, [
+      ...rollbackCleanupContexts(preflightCleanup),
+      ...rollbackCleanupContexts(pendingCleanupFailures),
+    ])
   }
+}
+
+function cleanupRollbackScratch(backupDir, kind) {
+  const parent = path.dirname(backupDir)
+  const prefix = `${path.basename(backupDir)}.${kind}-`
+  let entries
+  try {
+    entries = fs.readdirSync(parent, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code === 'ENOENT') return []
+    return [{ target: parent, error }]
+  }
+  const failures = []
+  for (const entry of entries) {
+    if (!entry.name.startsWith(prefix)) continue
+    const target = path.join(parent, entry.name)
+    try {
+      fs.rmSync(target, { recursive: true, force: true })
+    } catch (error) {
+      failures.push({ target, error })
+    }
+  }
+  return failures
+}
+
+function rollbackCleanupContexts(failures) {
+  return failures.map(({ target, error }) => `rollback cleanup failed (${target}: ${errorMessage(error)})`)
+}
+
+function errorMessage(error) {
+  return String(error?.message ?? error)
+}
+
+function addErrorContext(error, contexts) {
+  if (contexts.length === 0) return error
+  const wrapped = new Error(`${errorMessage(error)}; ${contexts.join('; ')}`, { cause: error })
+  if (error?.code !== undefined) wrapped.code = error.code
+  return wrapped
 }
 
 function packageSnapshot(dir) {
