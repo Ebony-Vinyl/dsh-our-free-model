@@ -43,9 +43,10 @@ const ALWAYS_FREE = new Set(['union-alpha', 'space-bunny-free', 'big-pickle'])
  * model's own contract (models.dev's `reasoning_options`); a level outside it
  * would be a value the upstream may reject, so it is not offered.
  *
- * An entry with no `efforts` keeps the free lane's token-budget ladder: its
- * reasoning cannot be levelled on the wire, and a rung that only cut the answer
- * would be a control the model never promised to honour.
+ * An entry with no `efforts` falls back to the plugin's own three intensity
+ * rungs (`src/effort.js`). 档位现在只是强度指示器，不改变输出预算 —— 预算由
+ * 模型容量、会话的 `maxTokens` 与插件默认值决定，客户端显式发的
+ * `max_output_tokens` 原样到达上游。
  */
 export const CAPABILITIES = [
   { match: /^mimo.*v2\.6/, vision: true, reasoning: true, contextWindow: 1048576, maxOutput: 131072, canDisableThinking: false },
@@ -85,8 +86,8 @@ export const CAPABILITIES = [
  * **none**, because the wire's one expression is `reasoning_effort` and a
  * fabricated rung is a value the upstream may reject (it **validates** the
  * field: an undeclared value answers `400 invalid_value` naming the accepted
- * set). So a `toggle`-only model declares no menu here and keeps the free
- * lane's token ladder; a `budget_tokens` model does the same.
+ * set). So a `toggle`-only model declares no menu here and keeps the plugin's
+ * own intensity rungs; a `budget_tokens` model does the same.
  *
  * ### Where this table departs from models.dev, and why
  *
@@ -105,6 +106,30 @@ export const CAPABILITIES = [
  *   measured override (models.dev lists `image`, but an image request 500s).
  */
 const FREE_ID_OVERRIDES = {
+  // models.dev: effort low|medium|high|xhigh|max; 1M window, 131072 output.
+  // The family pattern above says 32K, which is the published floor rather than
+  // what this lane serves; a 32K cap would cut long answers that fit the model.
+  'beam-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 131072,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: effort low|medium|high|xhigh|max; 262144 window, 65536 output.
+  'flint-40b-free': {
+    vision: false, contextWindow: 262144, maxOutput: 65536,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: effort low|medium|high|xhigh|max; 1M window, 512000 output.
+  'minimax-m3.1-flash-free': {
+    vision: false, contextWindow: 1048576, maxOutput: 512000,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: no reasoning_options; 262144 window, 262144 output.
+  'nemotron-3.5-lightning-free': {
+    vision: false, contextWindow: 262144, maxOutput: 262144,
+  },
   // models.dev: effort low|high|max; limit 200000/32000 (floor — see above).
   'deepseek-v4.1-flash-free': {
     vision: true, contextWindow: 1048576, maxOutput: 384000,
@@ -133,7 +158,7 @@ const FREE_ID_OVERRIDES = {
     effortPatch: { reasoning_effort: '$effort' },
   },
   // models.dev: 1M window, 131072 output, reasoning_options `toggle` only →
-  // no level menu, so the free lane's token ladder applies.
+  // no level menu, so the plugin's own intensity rungs apply.
   'longcat-2.5-preview-free': {
     vision: false, contextWindow: 1048576, maxOutput: 131072,
   },
@@ -232,7 +257,7 @@ export function buildCatalog(ids) {
       regionSensitive: isRegionSensitive(base),
       // A model that declares its own thinking menu carries it end to end, the
       // same shape the absorbed channels use: the level is the real control on
-      // the wire. Without a menu the free lane's token-budget ladder applies.
+      // the wire. Without a menu the plugin's own intensity rungs apply.
       ...Array.isArray(caps.efforts) ? {
         efforts: [...caps.efforts],
         effortDefault: caps.effortDefault,
@@ -534,8 +559,8 @@ function kiloEntryOf(row) {
     contextWindow: context,
     maxOutput: output,
     // With a declared menu the thinking level itself is the control (a real
-    // effort field on the wire); without one the free lane's token-budget
-    // ladder applies and the model's streaming thinking cannot be switched off.
+    // effort field on the wire); without one the plugin's own intensity rungs
+    // apply and the model's streaming thinking cannot be switched off.
     canDisableThinking: menu.canDisableThinking === true,
     regionSensitive: false,
     ...menu.efforts === undefined ? {} : {

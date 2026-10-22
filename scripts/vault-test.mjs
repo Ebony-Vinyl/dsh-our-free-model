@@ -835,10 +835,10 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   }), roster.map(() => true))
   check('a sealed default is never the free lane balanced id', roster.filter(entry => (entry.efforts ?? []).includes('balanced')).length, 0)
   check('the sealed lane budget is not level-gated (capacity, not a ladder)', [
-    budgetFor('low', byId('deepseek-ai/deepseek-v4.1-flash'), undefined, 32768),
-    budgetFor('max', byId('deepseek-ai/deepseek-v4.1-flash'), undefined, 32768),
+    budgetFor(byId('deepseek-ai/deepseek-v4.1-flash'), undefined, 32768),
+    budgetFor(byId('deepseek-ai/deepseek-v4.1-flash'), undefined, 32768),
   ], [32768, 32768])
-  check('a free-lane model still carries the token ladder', effortsFor({ id: 'mimo-v2.6-flash-free', reasoning: true, canDisableThinking: false, maxOutput: 131072 }, undefined, 32768)?.map(m => m.id), ['light', 'balanced', 'deep'])
+  check('a free-lane model without a declared menu still carries the three intensity rungs', effortsFor({ id: 'mimo-v2.6-flash-free', reasoning: true, canDisableThinking: false, maxOutput: 131072 }, undefined, 32768)?.map(m => m.id), ['light', 'balanced', 'deep'])
 }
 
 // ── 4. the Host half boots the lane only where the gate opens ────────────────

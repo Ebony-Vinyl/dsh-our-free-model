@@ -650,6 +650,22 @@ try {
     assert.ok(run.scenario.requests[1].body.max_tokens > 0 && run.scenario.requests[1].body.max_tokens <= 600)
   })
 
+  await check('续写段不吃掉全部预算：最多拿上下文窗口的一半', async () => {
+    // 固定 8192 的续写上限会让长回答的第二段提前截断；而「把剩余预算全拿走」
+    // 会让输入加输出正好等于窗口本身，上游会拒（实测续写被静默取消）。
+    // 续写段因此取「剩余预算」与「窗口一半」的较小者。
+    const run = await drive(model, [{ body: deltas(wire, { reasoning: CHECKPOINT }) },
+      { body: deltas(wire, { text: ANSWER }) + terminal(wire) }])
+    checkFinal(run, 'stop', 2)
+    const entry = CATALOG.find(candidate => candidate.id === model)
+    const ceiling = Math.floor(entry.contextWindow / 2)
+    const [first, second] = run.scenario.requests
+    assert.ok(second.body.max_tokens <= ceiling,
+      `续写段预算 ${second.body.max_tokens} 不应超过窗口一半 ${ceiling}`)
+    assert.ok(second.body.max_tokens <= first.body.max_tokens,
+      '续写段预算不应超过首段预算')
+  })
+
   await check('目录 context 容量不足时不追加续写请求', async () => {
     const run = await drive(model, [{ body: deltas(wire, { reasoning: CHECKPOINT }) },
       { body: deltas(wire, { text: ANSWER }) + terminal(wire) }], { entryOverrides: { contextWindow: 200 } })

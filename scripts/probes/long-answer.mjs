@@ -1,12 +1,11 @@
 /**
  * Evidence script (not part of the package, not a test): does a deliberately
- * long answer still finish, or is it cut by the ceiling the effort rung sends?
+ * long answer still finish, and does each effort rung send the same budget?
  *
  * Issue #2 was a truncation report, so the fix has to be measured with a real
- * long turn on the model it named. `balanced` sends 16 384 tokens on MiMo V2.6
- * Flash after the ladder was doubled; before, the same rung sent 8 192. The
- * prompt below produced 10 164 output tokens, so the old ceiling cut this exact
- * request with finish `length` and the new one let it end with `stop`.
+ * long turn on the model it named. 档位不再决定预算：三档都按模型容量发送，
+ * 只有 `reasoning_effort` 不同。这个脚本打印实际发出的预算，便于与模型容量
+ * 对照（该脚本默认不设上限，即按容量走）。
  *
  * Run from the repository root: node scripts/probes/long-answer.mjs [light|balanced|deep]
  * It spends real quota on the free lane and takes minutes.
@@ -17,7 +16,7 @@ import { budgetFor } from '../../src/effort.js'
 
 const level = process.argv[2] ?? 'balanced'
 const entry = buildCatalog(['mimo-v2.6-flash-free'])[0]
-const settings = { enabled: true, defaultMaxTokens: 32768 }
+const settings = { enabled: true, defaultMaxTokens: 0 }
 const records = []
 const adapter = new FreeModelAdapter({
   state: () => ({ catalog: [entry], membership: { [ROUTE_MAIN]: [entry.id] }, settings, attributionUserAgent: '' }),
@@ -48,7 +47,7 @@ for await (const chunk of adapter.stream({
 
 console.log(JSON.stringify({
   level,
-  budget_sent: budgetFor(level, entry, undefined, settings.defaultMaxTokens),
+  budget_sent: budgetFor(entry, undefined, settings.defaultMaxTokens),
   finish: finish?.kind,
   output_tokens: usage?.outputTokens ?? 0,
   reasoning_tokens: usage?.reasoningTokens ?? 0,

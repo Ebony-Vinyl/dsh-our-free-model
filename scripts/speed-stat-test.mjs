@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const { decodeWindow, migrateStats, pruneDays, recordTurn, recordUsage, JsonStore, STATS_INITIAL } = await import('../src/store.js')
+const { decodeWindow, migrateSettings, migrateStats, pruneDays, recordTurn, recordUsage, JsonStore, SETTINGS_INITIAL, SETTINGS_VERSION, STATS_INITIAL } = await import('../src/store.js')
 const { windowTokens } = await import('../src/stream.js')
 const { buildStats } = await import('../index.js')
 
@@ -38,6 +38,22 @@ const store = value => ({
 check('unstreamed reasoning leaves the numerator', windowTokens({ outputTokens: 422, reasoningTokens: 291 }, false), 131)
 check('streamed reasoning stays in it', windowTokens({ outputTokens: 135, reasoningTokens: 23 }, true), 135)
 check('a model that reports no reasoning is unaffected', windowTokens({ outputTokens: 50 }, false), 50)
+
+// ── 设置迁移：旧的出厂上限 32768 不是用户选的 ────────────────────────────────
+// 版本 1 把这个数字当成每轮默认额度，于是容量更大的模型全被压到 32K，长回答
+// 稳定撞上 max_output_tokens。升级时它必须变成「不限制」；用户自己填过的其它
+// 数字要原样保留，否则这次迁移就成了静默改写用户设置。
+check('a fresh install ships no cap at all', SETTINGS_INITIAL.defaultMaxTokens, 0)
+check('the settings file version moves with the meaning',
+  [SETTINGS_INITIAL.version, SETTINGS_VERSION], [SETTINGS_VERSION, 2])
+check('the old factory value migrates to no cap',
+  migrateSettings({ version: 1, defaultMaxTokens: 32768 }).defaultMaxTokens, 0)
+check('a value the user chose survives the migration',
+  migrateSettings({ version: 1, defaultMaxTokens: 8192 }).defaultMaxTokens, 8192)
+check('a current file is left alone',
+  migrateSettings({ version: 2, defaultMaxTokens: 32768 }).defaultMaxTokens, 32768)
+check('and the migration stamps the new version',
+  migrateSettings({ version: 1, defaultMaxTokens: 32768 }).version, SETTINGS_VERSION)
 check('no usage is no tokens', windowTokens(undefined, false), 0)
 
 check('131 tokens in 1.2 s is a real 108 tok/s', decodeWindow(1209, 131, true), { measurable: true, decodeMs: 1209, tps: 108 })

@@ -24,7 +24,7 @@ import { postSealedStreamed } from './eac.js'
 import { postKiloStreamed } from './kilo.js'
 import { postAggregateStreamed, isAggregateEntry } from './aggregate.js'
 import { finishReason, readStream, sanitizeUsage, windowTokens } from './stream.js'
-import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, hasDeclaredEffortMenu, resolveLevel } from './effort.js'
+import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, hasDeclaredEffortMenu, resolveLevel, upstreamEffortFor } from './effort.js'
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
@@ -130,7 +130,8 @@ export class FreeModelAdapter {
         defaultMaxTokens: 8192,
       }
     }
-    const ceiling = Math.min(entry.maxOutput, state.settings.defaultMaxTokens ?? 32768)
+    // 档位不参与预算：没有设置上限（0）时，默认额度就是模型自己的输出容量。
+    const ceiling = budgetFor(entry, undefined, state.settings.defaultMaxTokens)
     const efforts = effortsFor(entry, undefined, state.settings.defaultMaxTokens)
     return {
       provider,
@@ -332,7 +333,7 @@ export class FreeModelAdapter {
     const warnings = []
     const resolveImage = this.deps.resolveImage
     const messages = repairToolPairing(options.messages ?? [])
-    const budget = budgetFor(options.reasoningEffort, entry, options.maxTokens, settings.defaultMaxTokens)
+    const budget = budgetFor(entry, options.maxTokens, settings.defaultMaxTokens)
     const declared = toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
     const session = sessionForConversation(options.sessionId)
@@ -405,11 +406,29 @@ export class FreeModelAdapter {
       // on the wire: it rides the request as the model's own effort field (a
       // JSON merge patch, ZCode's declaration shape). The free lane's own ids
       // now declare menus too (see `src/catalog.js`), so the gate is the entry
-      // rather than the lane — an entry without a menu still keeps the free
-      // lane's token-budget behaviour, untouched.
+      // rather than the lane.
       if (sealed || kilo || hasDeclaredEffortMenu(entry)) {
         const patch = effortPatchFor(options.reasoningEffort, entry)
         if (patch !== null) Object.assign(payload, patch)
+      }
+      // A free-lane model with no declared menu still thinks, and the gateway
+      // accepts the OpenAI intensity values (measured 2026-10-22: the accepted
+      // set is `none|minimal|low|medium|high|xhigh|max`, and the plugin's own
+      // `light` / `balanced` / `deep` are refused with 400
+      // `Invalid option`). So the rung rides the wire as its mapped
+      // intensity value. The Responses wire reads the nested spelling, the
+      // Chat wire the flat one.
+      //
+      // 「免费车道」用「没有 channel 字段」来判定，而不是逐个列出别的车道：
+      // 每条别的车道（EAC / Kilo / 聚合 / 白嫖渠道 / DSH / 组合链）都带
+      // `channel`，而免费车道的行不带。逐个列出别的车道会让这段代码在缺少
+      // 某条车道的分支上编译不过。
+      if (entry?.channel === undefined && !hasDeclaredEffortMenu(entry)) {
+        const effort = upstreamEffortFor(options.reasoningEffort)
+        if (effort !== undefined) {
+          if (wire === 'responses') payload.reasoning = { effort }
+          else payload.reasoning_effort = effort
+        }
       }
       if (sealed) applySealedPacingHint(payload)
       // The token savers run last, after every other mutation, so the byte counts
@@ -582,7 +601,15 @@ export class FreeModelAdapter {
           && canRecoverSilentStop(outcome, policy, elapsed)
         if (!recovering && (interrupted || silentStop || maxTokensCut)) {
           const remainingTokens = budget - (outcome.sawUsage ? outcome.usage.outputTokens ?? 0 : 0)
-          const continuationBudget = Math.min(remainingTokens, policy.maxOutputTokens)
+          // 续写段的额度是本回合剩下的预算，但**不能吃完**：输入已经占掉了
+          // 上下文窗口的一部分，续写段再把剩下的全拿走，输入加输出就等于
+          // 窗口本身，上游会拒。所以续写段最多拿窗口的一半，剩下的留给输入。
+          // 固定 8192 那条旧路径（已移除）同样做不出这个保证：它与窗口大小
+          // 无关，窗口小的模型上仍会挤掉输入。
+          const continuationCeiling = Math.max(MIN_BUDGET, Math.floor((entry.contextWindow ?? 0) / 2))
+          const continuationBudget = policy.maxOutputTokens === undefined
+            ? Math.min(remainingTokens, continuationCeiling)
+            : Math.min(remainingTokens, policy.maxOutputTokens, continuationCeiling)
           const nextMessages = maxTokensCut
             ? continuationMessages(messages, outcome.answerText)
             : recoveryMessages(messages, outcome.reasoningText)
@@ -844,15 +871,13 @@ function describe(entry, settings) {
   }
   if (entry.reasoning === true) {
     // A declared menu is the model's own level list on the wire — naming the
-    // levels is the honest detail line; "budget" would describe the free lane's
-    // ladder, which is exactly what a menu model does not use.
+    // levels is the honest detail line. 只有没有声明菜单的条目才落到插件自己的
+    // 三档强度（今天只有不思考的 jev-1.13-free），那一档的预算就是模型容量。
     if (Array.isArray(entry.efforts) && entry.efforts.length > 0) {
       parts.push(`thinking levels: ${entry.efforts.join(' / ')}`)
     } else {
-      const rung = Math.round(budgetFor(DEFAULT_LEVEL, entry, undefined, settings?.defaultMaxTokens) / 1024)
-      parts.push(entry.canDisableThinking === false
-        ? `thinking always on · ${rung}K default ceiling, shared with the answer`
-        : 'tunable thinking budget')
+      const ceiling = Math.round(budgetFor(entry, undefined, settings?.defaultMaxTokens) / 1024)
+      parts.push(`${ceiling}K output, shared by thinking and the answer`)
     }
   }
   return parts.join(' · ')

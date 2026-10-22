@@ -1588,7 +1588,11 @@ function sanitizeSettings(patch, current) {
   }
   positive('probeIntervalMinutes', 15)
   positive('feedPollMinutes', 30)
-  positive('defaultMaxTokens', 32768)
+  // 0 是「不设上限」，不是清空后的无效输入：每个模型按自己的输出容量走。
+  if (next.defaultMaxTokens !== undefined) {
+    const tokens = Number(next.defaultMaxTokens)
+    next.defaultMaxTokens = Number.isFinite(tokens) && tokens >= 0 ? Math.trunc(tokens) : (Number(current.defaultMaxTokens) || 0)
+  }
   if (next.updateCheckHours !== undefined) {
     // Zero is a real answer here: it means "stop checking for updates".
     const hours = Number(next.updateCheckHours)
@@ -2222,7 +2226,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
     enabled: settings.enabled !== false,
     exposeRegionModels: settings.exposeRegionModels !== false,
     probeIntervalMinutes: settings.probeIntervalMinutes ?? 15,
-    defaultMaxTokens: settings.defaultMaxTokens ?? 32768,
+    defaultMaxTokens: settings.defaultMaxTokens ?? 0,
     announcementAck: settings.announcementAck ?? '',
     feedUrl: typeof settings.feedUrl === 'string' ? settings.feedUrl : '',
     feedPollMinutes: settings.feedPollMinutes ?? 30,
@@ -2300,9 +2304,9 @@ function buildSummary(deps) {
       ...modelAvailability(entry.id, snapshot, unprobed(entry)),
       // What each rung of the effort menu will really put on the wire for this
       // model, so the page never shows a 32K "output ceiling" beside a call that
-      // was cut off at 8K. A model with no effort menu has no ladder to show;
-      // a menu model's rungs are flat (its level, not the ladder, is the wire
-      // control), which is what the card's "default ceiling" tag then reads.
+      // was cut off at 8K. 档位现在只是强度指示器，三档的额度相同（都等于模型
+      // 容量与设置上限的较小者），但这份列表仍要给出「默认档实际发多少」，
+      // 因为卡片上的标签读的是默认档那一行。
       ...(entry.reasoning === true ? { budgets: budgetLadder(entry, undefined, defaultMaxTokens) } : {}),
       // `null` here is what the picker does not advertise; the roster still lists
       // those models, because "the probe refused it" is the user's only evidence.

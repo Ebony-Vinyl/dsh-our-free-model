@@ -1,45 +1,28 @@
 /**
  * Reasoning-effort policy.
  *
- * A live probe of this lane (2026-09-24) settled the design: the gateway accepts
- * `reasoning_effort`, `thinking.budget_tokens`, `enable_thinking` and
- * `thinking_budget` and then ignores all of them — three samples per spelling
- * showed `low` producing *more* reasoning tokens than `xhigh`, and the unknown
- * fields occasionally surfaced as an upstream 503. The single control the pooled
- * account actually enforces is `max_tokens`, and reasoning volume tracks it
- * directly (a 64-token ceiling pulled reasoning from ~397 tokens down to ~63).
+ * 档位是「思考强度指示器」，与输出预算完全解耦。实测（2026-10-22）免费车道
+ * 上游按 `reasoning_effort` 校验取值，接受集是
+ * `none|minimal|low|medium|high|xhigh|max`；插件自己的三档 id
+ * （`light` / `balanced` / `deep`）不在这个集合里，直接下发会得到 400
+ * `Invalid option`，所以每个档位都按强度映射到一个上游认识的取值再透传。
  *
- * So an effort level here is a real, enforced generation budget rather than a
- * hint. Every declared level therefore changes measured behaviour; a level that
- * could not be enforced would not be declared, because an effort menu that does
- * nothing is worse to a user than no effort menu at all.
- *
- * Because the ceiling is shared by thinking and the visible answer, a lower
- * level shortens both — that is the only modulation this lane offers, and it is
- * why the levels are stated as token budgets rather than as vague adjectives.
- *
- * A model whose thinking cannot be switched off pays for it out of the same
- * ceiling before the answer starts, so every rung of its ladder is doubled: one
- * rung then leaves the answer about as much room as it has on a model that can
- * think nothing at all. Measured on `mimo-v2.6-flash-free` over the 92 calls of
- * one day: 82% of the output tokens were reasoning, so the un-doubled 8192
- * ceiling left roughly 1500 for the answer and a long turn ended in `length`
- * about every third request.
+ * 输出预算由 `budgetFor` 单独决定，与档位无关：
+ * - 客户端显式给的 `max_output_tokens` 原样生效；
+ * - 客户端没给时按模型容量（`maxOutput`），插件默认值只作为用户设定的上限
+ *   参与，两者取小。
  *
  * @module src/effort.js
  */
 
 /** Ordered for display: the array order is the picker's order. */
 export const LEVELS = [
-  { id: 'light', name: 'Light', zh: '精简', ceiling: 2048, hint: 'terse deliberation, the fastest answer here.' },
-  { id: 'balanced', name: 'Balanced', zh: '均衡', ceiling: 8192, hint: 'enough to reason through a normal turn.' },
-  { id: 'deep', name: 'Deep', zh: '深思', ceiling: undefined, hint: 'the model\'s full output capacity, extended deliberation.' },
+  { id: 'light', name: 'Light', zh: '精简', hint: '精简思考，快速回答' },
+  { id: 'balanced', name: 'Balanced', zh: '均衡', hint: '标准思考，完整回答' },
+  { id: 'deep', name: 'Deep', zh: '深思', hint: '深度思考，完整答案 + 详细推理' },
 ]
 
 export const DEFAULT_LEVEL = 'balanced'
-
-/** Rungs of a model that must think are widened by this factor; see the module note. */
-export const ALWAYS_THINKING_FACTOR = 2
 
 /** Does this model expose an effort menu at all? */
 export function supportsEffort(model) {
@@ -49,25 +32,44 @@ export function supportsEffort(model) {
 const LEVEL_ALIASES = new Map(Object.entries({
   light: 'light', minimal: 'light', low: 'light', none: 'light', off: 'light', disabled: 'light',
   balanced: 'balanced', medium: 'balanced',
-  deep: 'deep', high: 'deep', xhigh: 'deep', max: 'deep',
+  deep: 'deep', high: 'deep', xhigh: 'deep', max: 'deep', ultra: 'deep',
 }))
 
-/** Aliases for the legacy budget ladder, never for a model's declared menu. */
+/** Aliases for the plugin's own three rungs, never for a model's declared menu. */
 export function normalizeLevel(level) {
   return typeof level === 'string' ? LEVEL_ALIASES.get(level.trim().toLowerCase()) : undefined
 }
 
 /**
- * The rung in force for one call, resolved the same way for the budget sent
+ * The upstream intensity value one plugin rung stands for.
+ *
+ * The free lane's gateway validates `reasoning_effort` and answers 400
+ * `Invalid option` for anything outside
+ * `none|minimal|low|medium|high|xhigh|max` (measured 2026-10-22 on
+ * `mimo-v2.6-flash-free`: `light`, `balanced` and `deep` are all refused, while
+ * `low` / `medium` / `high` / `xhigh` / `max` / `none` are accepted and do move
+ * the reasoning volume). So the three rungs map onto that set by strength:
+ * 精简 → `low`, 均衡 → `medium`, 深思 → `high`.
+ *
+ * @param {string|undefined} level - the rung id or one of its aliases
+ * @returns {string|undefined} an upstream `reasoning_effort` value
+ */
+export function upstreamEffortFor(level) {
+  const rung = normalizeLevel(level)
+  if (rung === undefined) return undefined
+  if (rung === 'light') return 'low'
+  if (rung === 'balanced') return 'medium'
+  return 'high'
+}
+
+/**
+ * The rung in force for one call, resolved the same way for the effort sent
  * upstream and the effort recorded against it.
  *
- * A model with no effort menu has no rung: its whole output window belongs to the
- * answer, and a level inherited from elsewhere must not shrink it. A model with a
- * menu that the caller did not answer with a level still gets the menu's default.
- * The two each failed differently before: a no-menu model inherited `balanced`
- * and had its window cut by a rung it never offered, while a menu model with no
- * rung sent the full capacity and *logged* the default — so the dashboard showed
- * 均衡 next to a 32K generation that 均衡 had never promised.
+ * A model with a declared menu keeps its own level ids: that set is the
+ * model's contract, and the upstream validates it. A model with no menu takes
+ * the plugin's own three rungs, and the rung is recorded as itself even though
+ * the wire carries the mapped intensity value.
  *
  * @param {string|undefined} level - effort id from the harness, when it sent one
  * @param {object} model - catalog entry
@@ -87,26 +89,21 @@ export function resolveLevel(level, model) {
     ?? LEVELS.find(candidate => candidate.id === DEFAULT_LEVEL)
 }
 
-/** The ceiling one rung carries on one model, before capacity is applied. */
-function ceilingOf(entry, model) {
-  if (entry === undefined || entry.ceiling === undefined) return undefined
-  return model?.canDisableThinking === false ? entry.ceiling * ALWAYS_THINKING_FACTOR : entry.ceiling
-}
-
 /**
- * Resolve the generation ceiling for one level against one model.
+ * Resolve the generation ceiling against one model.
  *
- * The level ceiling is the controlling term; the model's own capacity and the
- * session's request can only lower it further, never raise it. A level with no
- * ceiling inherits the model capacity, which is why "Deep" is the top row.
+ * 档位**不再**参与预算计算。规则有三条：
  *
- * @param {string|undefined} level - the effort id the harness selected
+ * - 客户端显式发的 `max_output_tokens` 原样生效（不超过模型容量）；
+ * - 客户端没给时按模型容量（`maxOutput`）走，模型有多少就给多少；
+ * - 插件默认值是**用户自己设的上限**，只参与收窄，不参与决定默认值。
+ *
  * @param {object} model - catalog entry, supplying `maxOutput`
  * @param {number|undefined} requested - the session's maxTokens, when it set one
- * @param {number|undefined} fallback - the plugin default ceiling
+ * @param {number|undefined} fallback - the plugin's own ceiling, when the user set one
  * @returns {number} tokens
  */
-export function budgetFor(level, model, requested, fallback) {
+export function budgetFor(model, requested, fallback) {
   // A ceiling that is not a positive number is *no* ceiling. Without this, the
   // settings page's own cleared input — `Number('') || 0` — reached the wire as
   // `min(model capacity, 0)`, and every turn of every model silently came back
@@ -116,15 +113,11 @@ export function budgetFor(level, model, requested, fallback) {
     usableTokens(requested),
     usableTokens(fallback),
   )
-  // A model with a declared thinking menu has its level as the real control on
-  // the wire (an effort field the gateway forwards), so its ceiling is the
-  // model capacity regardless of level — a ladder here would cut answers for a
-  // menu that never promised to. Both absorbed channels declare menus; the
-  // free lane's own ladder is the budget semantics below.
-  if (hasDeclaredEffortMenu(model)) return Math.max(MIN_BUDGET, Math.trunc(capacity))
-  const ceiling = ceilingOf(resolveLevel(level, model), model)
-  if (ceiling === undefined) return Math.max(MIN_BUDGET, Math.trunc(capacity))
-  return Math.max(MIN_BUDGET, Math.trunc(Math.min(ceiling, capacity)))
+  // 客户端明确给的预算就是它给的数字：把它抬到下限会让「我只要 200 token」
+  // 变成 512，用户看到的截断点与自己要求的不是一回事。下限只守住
+  // 「没有明确值」的那条路径（模型容量或插件默认值算出来是 0 或更小的场合）。
+  if (Number.isFinite(requested) && requested > 0) return Math.trunc(capacity)
+  return Math.max(MIN_BUDGET, Math.trunc(capacity))
 }
 
 /** A caller-supplied token ceiling, or "none" when it is not a positive number. */
@@ -136,8 +129,8 @@ function usableTokens(value) {
 export const MIN_BUDGET = 512
 
 /**
- * The whole ladder as it applies to one model right now, for anything that has
- * to show the user the number that will actually go out on the wire.
+ * The whole ladder as it applies to one model right now. 档位不再改变预算，所以
+ * 三档的数字相同；这份列表只用于 UI 展示强度档位与默认档。
  *
  * @param {object} model - catalog entry
  * @param {number|undefined} requested - the session's maxTokens, when it set one
@@ -148,7 +141,7 @@ export function budgetLadder(model, requested, fallback) {
   return LEVELS.map(entry => ({
     id: entry.id,
     name: entry.name,
-    tokens: budgetFor(entry.id, model, requested, fallback),
+    tokens: budgetFor(model, requested, fallback),
     isDefault: entry.id === DEFAULT_LEVEL,
   }))
 }
@@ -180,7 +173,7 @@ function instantiatePatch(patch, effort) {
  *
  * These models are not budget-driven: the gateway takes the level itself as
  * the control (a JSON merge patch on the request body), so the menu is the
- * model's own level list rather than the free lane's token ladder.
+ * model's own level list rather than the plugin's three intensity rungs.
  *
  * @param {object} model - catalog entry carrying `efforts`/`effortDefault`
  * @returns {Array<{id:string, name:string, description:string}>|undefined}
@@ -224,31 +217,14 @@ export function effortPatchFor(level, model) {
 }
 
 /** Does this entry carry a declared thinking menu (its own effort field is
- *  the control on the wire)? Both absorbed channels' entries do; the free
- *  lane's never do, so its entries keep the token-ladder semantics. */
+ *  the control on the wire)? The absorbed channels' entries do, and so do the
+ *  free-lane models that publish one (`src/catalog.js` declares `efforts` +
+ *  `effortPatch` per model). A model without one takes the plugin's own three
+ *  rungs, which ride the wire as a mapped intensity value. */
 export function hasDeclaredEffortMenu(model) {
   return Array.isArray(model?.efforts) && model.efforts.length > 0
 }
 
-/**
- * The declared effort list for one model, in picker order.
- *
- * Two producers, two shapes: the free lane declares a token ladder (see the
- * module note on why a level there is an enforced generation budget), while a
- * model with a declared menu offers its own levels, which the gateway honours
- * as an effort field (see {@link declaredEffortsFor}).
- *
- * The description is generated from the same `budgetFor`/patch call that will
- * decide the request, not written next to it. A rung that advertises 8K while
- * the plugin sends 16 384 on a thinking-always-on model is the same defect
- * issue #2 reported for the settings page — a number the user reads and the
- * wire does not honour — so this cannot carry a per-level constant.
- *
- * @param {object} model - catalog entry
- * @param {number|undefined} requested - the session's maxTokens, when it set one
- * @param {number|undefined} fallback - the plugin default ceiling
- * @returns {Array<{id:string, name:string, description:string}>|undefined}
- */
 /**
  * The effort id the harness should treat as this model's default.
  *
@@ -262,15 +238,31 @@ export function defaultEffortFor(model) {
   return DEFAULT_LEVEL
 }
 
+/**
+ * The declared effort list for one model, in picker order.
+ *
+ * Two producers, two shapes: a model with a declared menu offers its own levels,
+ * which the gateway honours as an effort field (see {@link declaredEffortsFor});
+ * an entry with no menu falls back to the plugin's own three intensity rungs,
+ * which are pure indicators and do not move the budget.
+ *
+ * 描述文案不再写「输出上限」：档位不再决定预算，写一个数字会与实际发到线上的
+ * 数字不一致（issue #2 的同一类缺陷）。三档共用同一个预算，由模型容量与
+ * 客户端的 `max_output_tokens` 决定。
+ *
+ * @param {object} model - catalog entry
+ * @param {number|undefined} requested - the session's maxTokens, when it set one
+ * @param {number|undefined} fallback - the plugin default ceiling
+ * @returns {Array<{id:string, name:string, description:string}>|undefined}
+ */
 export function effortsFor(model, requested, fallback) {
   if (hasDeclaredEffortMenu(model)) return declaredEffortsFor(model)
   if (!supportsEffort(model)) return undefined
   return budgetLadder(model, requested, fallback).map(row => ({
     id: row.id,
     name: row.name,
-    description: `${kilos(row.tokens)} output ceiling, shared by thinking and the answer`
-      + (model.canDisableThinking === false ? ' (thinking cannot be switched off on this model)' : '')
-      + `: ${LEVELS.find(level => level.id === row.id)?.hint ?? ''}`,
+    description: `${LEVELS.find(level => level.id === row.id)?.hint ?? ''}`
+      + ` · ${kilos(row.tokens)} output, shared by thinking and the answer`,
   }))
 }
 

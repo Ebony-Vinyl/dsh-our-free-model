@@ -214,7 +214,7 @@ function entryOf(provider, modelId, source) {
     maxOutput: Math.min(DEFAULT_MAX_OUTPUT, contextWindow),
     wire: WIRE_BY_FORMAT[provider.format],
     source,
-    // No declared menu, so the free lane's token ladder is the control and the
+    // No declared menu, so the plugin's own intensity rungs apply and the
     // answer owns the whole window: nothing here doubles a ceiling for
     // thinking the provider never promised to stream.
     canDisableThinking: true,

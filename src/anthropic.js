@@ -58,13 +58,14 @@ const TOOL_FRAME_TOKENS = 8
 const BASE_TOKENS = 16
 
 /**
- * Thinking-budget buckets, chosen against `src/effort.js`'s free ladder:
- * `light` caps generation at 2048 tokens, `balanced` at 8192, and `deep` has no
- * rung of its own (the model's full capacity). A budget under half the balanced
- * rung asks for less deliberation than balanced provides, so it becomes
- * `light`; one at or above twice the balanced rung exceeds every rung and
- * becomes `deep`. The thresholds are deliberately round numbers, not the rungs
- * themselves: a caller sending exactly 8192 means "the default", not "deep".
+ * Thinking-budget buckets, chosen against `src/effort.js`'s three intensity
+ * rungs (`light` / `balanced` / `deep`). 档位现在只是强度指示器：它们不再
+ * 决定输出预算，预算由模型容量与客户端的 `max_tokens` 决定。
+ *
+ * 阈值取的是「相对思考量」而不是「相对输出上限」：低于 balanced 一档的
+ * 思考量就是 `light`，到 balanced 是 `balanced`，更高（或者不限）就是 `deep`。
+ * 阈值是整数而非各档本身：一个调用方发 8192 说的是「这个量级」，不是
+ * 「精确等于某一档的预算」。
  */
 const BALANCED_AT = 4096
 const DEEP_AT = 16384
@@ -187,14 +188,12 @@ function assistantBlocks(blocks) {
 /**
  * Anthropic `thinking` -> the effort id `src/effort.js` resolves.
  *
- * The returned ids are the free ladder's real rungs (`light`, `balanced`,
- * `deep`), not decorative adjectives: `resolveLevel` silently falls back to
- * `balanced` for any id it does not know, so an invented level would be a
- * budget that never reaches the wire. `disabled` is the one off spelling
- * effort.js declares (its level-name table maps `disabled` to "Off"); a
- * free-lane model has no off rung — that lane cannot switch thinking off at
- * all — so there it resolves to the model's default, while a model that
- * declares the level gets its off patch.
+ * The returned ids are the three real rungs (`light`, `balanced`, `deep`), not
+ * decorative adjectives: `resolveLevel` silently falls back to `balanced` for
+ * any id it does not know, so an invented level would never reach the wire.
+ * `disabled` is the one off spelling effort.js declares (its level-name table
+ * maps `disabled` to "Off"); a model that declares the level gets its off
+ * patch, one that cannot switch thinking off resolves to its default.
  */
 function reasoningEffortFor(thinking) {
   if (!isObject(thinking)) return undefined
