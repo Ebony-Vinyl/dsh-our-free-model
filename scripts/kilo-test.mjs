@@ -170,9 +170,10 @@ check('a verified-off family declares the full thinking menu, EAC shape',
   kiloRows.find(entry => entry.id === 'nvidia/nemotron-3.5-lightning:free')?.efforts, ['disabled', 'low', 'medium', 'high'])
 check('the auto-router declares the menu without the off rung it ignores',
   kiloRows.find(entry => entry.id === 'kilo-auto/free')?.efforts, ['low', 'medium', 'high'])
+// 档位不参与预算：默认不设上限时，三档都等于模型自己的输出容量。
 check('menu models show a flat output ceiling (the level is the control, not a ladder)',
   kiloRows.every(entry => Array.isArray(entry.budgets) && entry.budgets.length === 3
-    && entry.budgets.every(rung => rung.tokens === 32768)), true)
+    && entry.budgets.every(rung => rung.tokens === entry.maxOutput)), true)
 check('the default effort is the menu top, as on the EAC lane',
   kiloRows.every(entry => entry.effortDefault === 'high'), true)
 

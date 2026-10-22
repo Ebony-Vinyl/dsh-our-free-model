@@ -32,6 +32,16 @@ export const DATA_DIR_NAME = 'our-free-model'
 /** Bumped when the shape or the meaning of a stored field changes. */
 export const STATS_VERSION = 3
 
+/**
+ * 设置文件的版本。
+ *
+ * 2 — `defaultMaxTokens` 的含义从「每轮默认上限，出厂 32768」改成「用户自己
+ * 设的上限，出厂 0 表示不限制」。升版本时把旧的出厂值 32768 迁成 0：那个数字
+ * 不是用户选的，它把每个模型都压到 32K，长回答因此稳定撞上
+ * `max_output_tokens`。用户自己改过的其它数字保留。
+ */
+export const SETTINGS_VERSION = 2
+
 export class JsonStore {
   /**
    * @param {string} file - absolute path
@@ -150,7 +160,7 @@ export function dayKey(at = Date.now()) {
 }
 
 export const SETTINGS_INITIAL = {
-  version: 1,
+  version: SETTINGS_VERSION,
   /** Master switch: when off the routes stay registered but serve nothing. */
   enabled: true,
   /** Show region-limited models in the picker as soon as they answer. */
@@ -181,8 +191,8 @@ export const SETTINGS_INITIAL = {
   chanGateway: {
     relay: { enabled: false, host: '127.0.0.1', port: 18326, key: '' },
   },
-  /** Cap a turn's output so a slow lane cannot run away. */
-  defaultMaxTokens: 32768,
+  /** 用户自己设的单次输出上限。`0` 表示不设上限，每个模型按自己的输出容量走。 */
+  defaultMaxTokens: 0,
   /** 所有模型默认允许一次纯推理检查点续写，false 可关闭。 */
   streamRecovery: true,
   /** Token savers. Tool-output compaction is on by default — it is invisible to
@@ -290,6 +300,27 @@ export function isModelHidden(entry, settings) {
     || (settings?.hideFreeModels === true && (!entry.channel || entry.channel === 'anonymous' || entry.channel === 'kilo'
       || (entry.channel === 'combo' && Array.isArray(entry.lanes) && entry.lanes.length > 0 && entry.lanes.every(lane => lane === 'free'))))
     || (settings?.hideEacModels === true && entry.channel === 'eac')
+}
+
+/**
+ * 把旧设置的 `defaultMaxTokens` 迁移到当前含义。
+ *
+ * 版本 1 的出厂值是 32768，而它并不是用户选的上限：旧代码把它当成每一轮的
+ * 默认额度，于是所有容量更大的模型都被压到 32K。升级时把**恰好等于旧出厂值**
+ * 的数字改成 0（不限制），用户自己填过的其它数字原样保留。
+ *
+ * @param {object} value - 从磁盘读到的设置
+ * @returns {object} 迁移后的设置
+ */
+export function migrateSettings(value) {
+  const version = Number.isSafeInteger(value?.version) ? value.version : 0
+  if (version >= SETTINGS_VERSION) return value
+  const legacyDefault = value?.defaultMaxTokens === 32768
+  return {
+    ...value,
+    version: SETTINGS_VERSION,
+    ...legacyDefault ? { defaultMaxTokens: 0 } : {},
+  }
 }
 
 export const STATS_INITIAL = {

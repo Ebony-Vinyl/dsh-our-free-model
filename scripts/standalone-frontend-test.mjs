@@ -169,7 +169,7 @@ const cleanDraft = settingsDraft(savedSettings)
 assert.equal(settingsChanged(cleanDraft, savedSettings), false)
 assert.deepEqual(validateSettingsDraft(cleanDraft).patch, savedSettings)
 for (const [field, valid, invalid] of [
-  ['defaultMaxTokens', ['512', '131072', ' 8192 '], ['', ' ', '511', '131073', '512.5', 'NaN', 'Infinity']],
+  ['defaultMaxTokens', ['0', '512', '1048576', ' 8192 '], ['', ' ', '-1', '1048577', '512.5', 'NaN', 'Infinity']],
   ['probeIntervalMinutes', ['1', '1440', '12'], ['', ' ', '0', '1441', '1.5', 'NaN', 'Infinity']],
 ]) {
   for (const value of valid) {

@@ -187,8 +187,8 @@ try {
   await check('设置严格校验字段类型范围和请求体，不发生部分保存', async () => {
     for (const body of [
       null, [], { enabled: 'false' }, { enabled: false, unknown: 1 },
-      { forwardKey: 'injected' }, { standalonePort: 80 }, { defaultMaxTokens: 0 },
-      { defaultMaxTokens: 131073 }, { probeIntervalMinutes: 0 },
+      { forwardKey: 'injected' }, { standalonePort: 80 },
+      { defaultMaxTokens: -1 }, { defaultMaxTokens: 1048577 }, { probeIntervalMinutes: 0 },
       { probeIntervalMinutes: 1441 }, { probeIntervalMinutes: '15' },
       { standaloneProbe: {} }, { enabled: false, probeIntervalMinutes: 0 },
       { hideFreeModels: 'true' }, { hideEacModels: 1 }, { hiddenModelIds: null },

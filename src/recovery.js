@@ -7,7 +7,6 @@ export const RECOVERY_DEFAULTS = Object.freeze({
   maxContinuationMs: 1800000,
   totalTimeoutMs: 1800000,
   checkpointLimit: 131072,
-  maxOutputTokens: 8192,
 })
 
 export function recoveryPolicy(value) {
@@ -18,6 +17,11 @@ export function recoveryPolicy(value) {
     policy[key] = Number.isSafeInteger(requested) && requested > 0
       ? Math.min(requested, maximum) : maximum
   }
+  // 续写段没有独立的额度上限：它只受本回合剩余预算约束（见 adapter.js）。
+  // 给一个固定的 8192 会把长回答的第二段提前截断，用户看到的仍然是
+  // `max_output_tokens`，与「默认按模型容量」直接冲突。
+  const continuation = value?.maxOutputTokens
+  if (Number.isSafeInteger(continuation) && continuation > 0) policy.maxOutputTokens = continuation
   return policy
 }
 

@@ -159,22 +159,22 @@ const rowOf = id => summary.json.catalog.find(row => row.id === id)
 check('the roster still lists the hidden model, with its verdict', [rowOf('jev-1.13-free').route, rowOf('jev-1.13-free').availability], [null, 'unavailable'])
 check('the refusal is on record for the user to read', /No such model/.test(rowOf('jev-1.13-free').detail), true)
 check('and the picker positions of the working models are named', rowOf('mimo-v2.6-flash-free').route, ROUTE_MAIN)
+// 默认不设上限：三档都等于模型自己的输出容量（MiMo 是 131072），档位只表示强度。
 check('a reasoning model carries the rung ladder it will really send',
-  rowOf('mimo-v2.6-flash-free').budgets.map(row => `${row.id}:${row.tokens}`), ['light:4096', 'balanced:16384', 'deep:32768'])
+  rowOf('mimo-v2.6-flash-free').budgets.map(row => `${row.id}:${row.tokens}`), ['light:131072', 'balanced:131072', 'deep:131072'])
 check('a model with no effort menu carries no ladder to mislead with', rowOf('jev-1.13-free').budgets, undefined)
 
 // The effort menu the composer shows has to print the same number, or it is the
 // issue-#2 mismatch wearing a different hat.
 const menu = async id => (await adapter.resolveModel(ROUTE_MAIN, id))?.reasoning?.efforts ?? []
 const mimoMenu = await menu('mimo-v2.6-flash-free')
-check('the thinking-always-on menu states the doubled ceiling it will send',
-  mimoMenu.map(row => row.description.match(/^(\d+) K/)?.[1]), ['4', '16', '32'])
-check('and says out loud that thinking cannot be switched off here',
-  mimoMenu.every(row => /cannot be switched off/.test(row.description)), true)
+// 档位不再改变预算，三档共用同一个额度；描述里那个数字必须与实际发到线上的
+// 那个一致（issue #2 的同一类缺陷）。
+check('the menu states the one ceiling it will send',
+  mimoMenu.map(row => row.description.match(/(\d+) K output/)?.[1]), ['128', '128', '128'])
 const museMenu = await menu('muse-spark-1.3-contributor-free')
-check('a model that can think nothing at all keeps the published rungs',
-  museMenu.map(row => row.description.match(/^(\d+) K/)?.[1]), ['2', '8', '32'])
-check('without the always-thinking clause', museMenu.every(row => !/cannot be switched off/.test(row.description)), true)
+check('a model that can think nothing at all states the same ceiling',
+  museMenu.map(row => row.description.match(/(\d+) K output/)?.[1]), ['128', '128', '128'])
 
 // Hiding a model is about *selection*, not about breaking a session that already
 // picked it: the composer still resolves it, and a turn still reaches the gateway
@@ -236,7 +236,7 @@ check('the next honest round hides them again', (await advertised(ROUTE_MAIN)).i
 await callRoute(api(), 'POST', '/api/our-free-model/settings', { probeIntervalMinutes: 22, feedPollMinutes: 44, defaultMaxTokens: 20000 })
 check('a real value is taken as given', readSettings(), [22, 44, 20000])
 await callRoute(api(), 'POST', '/api/our-free-model/settings', { probeIntervalMinutes: 'abc', feedPollMinutes: 0, defaultMaxTokens: 0 })
-check('a cleared or nonsense field falls back to what was there, not to an extreme', readSettings(), [22, 44, 20000])
+check('a cleared field keeps its neighbours and turns the cap off', readSettings(), [22, 44, 0])
 
 function readSettings() {
   const row = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'settings.json'), 'utf8'))

@@ -96,7 +96,7 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
           {toggle('hideFreeModels', visibility.hideFree, '仅从选择器和 API 模型清单隐藏，保留历史模型调用。')}
           {toggle('hideEacModels', visibility.hideEac, '保留授权和历史模型调用，可随时恢复显示。')}
           {toggle('streamRecovery', '自动恢复断流', '允许从已生成的检查点继续回答。')}
-          {numeric('defaultMaxTokens', '单次最大输出 Token', '512–131072，实际输出还受模型能力限制。', 512, 131072)}
+          {numeric('defaultMaxTokens', '单次最大输出 Token', '0 表示不限制，按模型自身容量；填正数则封顶。', 0, 1048576)}
         </Card>
         <Card className="settings-card"><div className="settings-card-heading"><RefreshCw size={16} /><div><h2>模型刷新</h2><p>管理模型清单的周期更新与探测。</p></div></div>
           {numeric('probeIntervalMinutes', '刷新间隔（分钟）', '1–1440 分钟，保存后重新安排下一轮。', 1, 1440)}

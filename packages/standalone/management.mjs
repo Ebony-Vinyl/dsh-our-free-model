@@ -52,7 +52,8 @@ async function readBody(req, limit = MAX_BODY_BYTES) {
 function validateSettings(patch) {
   const visibility = validateModelVisibility(patch)
   const booleans = new Set(['enabled', 'exposeRegionModels', 'streamRecovery', 'standaloneProbe', 'standaloneLanEnabled'])
-  const numbers = { probeIntervalMinutes: [1, 1440], defaultMaxTokens: [512, 131072], standaloneLanPort: [0, 65535] }
+  // 0 表示「不设上限」，每个模型按自己的输出容量走。
+  const numbers = { probeIntervalMinutes: [1, 1440], defaultMaxTokens: [0, 1048576], standaloneLanPort: [0, 65535] }
   const result = {}
   for (const [key, value] of Object.entries(patch)) {
     if (Object.hasOwn(visibility, key)) { result[key] = visibility[key]; continue }
@@ -77,7 +78,7 @@ export function managementSettings(value) {
     standaloneLanEnabled: value.standaloneLanEnabled === true,
     standaloneLanPort: value.standaloneLanPort ?? 0,
     probeIntervalMinutes: value.probeIntervalMinutes ?? 15,
-    defaultMaxTokens: value.defaultMaxTokens ?? 32768,
+    defaultMaxTokens: value.defaultMaxTokens ?? 0,
   }
 }
 
