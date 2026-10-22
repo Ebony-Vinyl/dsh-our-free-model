@@ -51,7 +51,7 @@ export function chatFrames(text = 'ok') {
  */
 export async function stubUpstream({ listing = [], answer = () => ({ body: chatFrames() }) }) {
   const requests = []
-  const api = { refuseAll: false }
+  const api = { refuseAll: false, failListing: false, listingCalls: 0 }
   /** The listing the stub names, mutable so a test can make upstream add one. */
   let rows = listing.map(id => ({ id }))
   api.setListing = ids => { rows = ids.map(id => ({ id })) }
@@ -61,6 +61,12 @@ export async function stubUpstream({ listing = [], answer = () => ({ body: chatF
     req.on('end', async () => {
       const url = String(req.url ?? '')
       if (req.method === 'GET' && url === '/inference/v1/models') {
+        api.listingCalls++
+        if (api.failListing) {
+          res.writeHead(503, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ error: { message: 'listing temporarily unavailable' } }))
+          return
+        }
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ data: rows }))
         return

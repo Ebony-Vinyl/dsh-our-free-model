@@ -1329,6 +1329,161 @@ await checkAsync('the retry after a failed backup skips re-downloading the verif
   }
 })
 
+// Issue #509: if both backup directory renames are refused, keep the first
+// refusal as the primary cause and retain the only complete older backup. This
+// monkey-patches rename failures; it is not a substitute for a real NTFS lock.
+await checkAsync('backupPackage preserves the primary error when restoring the previous backup also fails (issue #509)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backup = path.join(data, 'rollback')
+  const originalRename = fs.renameSync
+  const originalSetTimeout = globalThis.setTimeout
+  let renameInAttempts = 0
+  let restoreAttempts = 0
+  try {
+    await backupPackage(pkg, backup)
+    fs.writeFileSync(path.join(backup, 'client.js'), 'older verified rollback copy\n')
+    globalThis.setTimeout = (fn, _delay, ...args) => originalSetTimeout(fn, 0, ...args)
+    fs.renameSync = (from, to, ...args) => {
+      if (to === backup && String(from).includes('rollback.pending-')) {
+        renameInAttempts += 1
+        throw Object.assign(new Error('EPERM: rename-in locked'), { code: 'EPERM' })
+      }
+      if (to === backup && String(from).includes('rollback.previous-')) {
+        restoreAttempts += 1
+        throw Object.assign(new Error('EPERM: restore-back locked'), { code: 'EPERM' })
+      }
+      return originalRename(from, to, ...args)
+    }
+    await assert.rejects(() => backupPackage(pkg, backup), error => {
+      assert.match(error.message, /^EPERM: rename-in locked; rollback restore failed \(EPERM: restore-back locked\)/)
+      assert.match(error.message, /recoverable rollback backup retained at .*rollback\.previous-/)
+      assert.equal(error.code, 'EPERM')
+      assert.equal(error.cause?.message, 'EPERM: rename-in locked')
+      return true
+    })
+    assert.equal(renameInAttempts, 5, 'the new backup exhausts retries before the restore begins')
+    assert.equal(restoreAttempts, 5, 'the restore exhausts retries without replacing the primary error')
+    assert.equal(fs.existsSync(backup), false)
+    const scratch = fs.readdirSync(data).filter(name => name.startsWith('rollback.'))
+    assert.equal(scratch.length, 1, 'only the recoverable previous tree remains')
+    assert.match(scratch[0], /^rollback\.previous-/)
+    assert.equal(fs.existsSync(path.join(data, scratch[0], 'client.js')), true)
+
+    await assert.rejects(() => backupPackage(pkg, backup), error => {
+      assert.equal(error.message, 'EPERM: rename-in locked')
+      return true
+    })
+    assert.equal(renameInAttempts, 10, 'the retry also exhausts the new-backup rename')
+    assert.equal(restoreAttempts, 5, 'there was no canonical backup to move back on the retry')
+    assert.deepEqual(
+      fs.readdirSync(data).filter(name => name.startsWith('rollback.')),
+      scratch,
+      'a repeated failure keeps the recoverable previous tree',
+    )
+
+    fs.renameSync = originalRename
+    globalThis.setTimeout = originalSetTimeout
+    assert.equal(await backupPackage(pkg, backup), 3)
+    assert.equal(updaterVersion(backup), OLD)
+    assert.equal(fs.readdirSync(data).filter(name => name.startsWith('rollback.')).length, 0, 'a later success retries stale-tree cleanup')
+  } finally {
+    fs.renameSync = originalRename
+    globalThis.setTimeout = originalSetTimeout
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
+await checkAsync('backupPackage cleans rollback scratch when no previous backup exists (issue #509)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backup = path.join(data, 'rollback')
+  const stalePending = `${backup}.pending-stale`
+  fs.mkdirSync(stalePending)
+  fs.writeFileSync(path.join(stalePending, 'partial.js'), 'interrupted copy\n')
+  const originalRename = fs.renameSync
+  const originalSetTimeout = globalThis.setTimeout
+  let attempts = 0
+  try {
+    globalThis.setTimeout = (fn, _delay, ...args) => originalSetTimeout(fn, 0, ...args)
+    fs.renameSync = (from, to, ...args) => {
+      if (to === backup && String(from).includes('rollback.pending-')) {
+        attempts += 1
+        throw Object.assign(new Error('EPERM: rename-in locked without previous backup'), { code: 'EPERM' })
+      }
+      return originalRename(from, to, ...args)
+    }
+    await assert.rejects(() => backupPackage(pkg, backup), error => {
+      assert.equal(error.message, 'EPERM: rename-in locked without previous backup')
+      return true
+    })
+    assert.equal(attempts, 5)
+    assert.equal(fs.existsSync(backup), false)
+    assert.equal(fs.existsSync(stalePending), false, 'pre-flight cleanup removes an interrupted copy')
+    assert.equal(fs.readdirSync(data).filter(name => name.startsWith('rollback.')).length, 0)
+  } finally {
+    fs.renameSync = originalRename
+    globalThis.setTimeout = originalSetTimeout
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
+await checkAsync('backupPackage appends cleanup failure without masking the rename error (issue #509)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const backup = path.join(data, 'rollback')
+  const stalePrevious = `${backup}.previous-stale`
+  const stalePending = `${backup}.pending-stale`
+  const originalRename = fs.renameSync
+  const originalRm = fs.rmSync
+  const originalSetTimeout = globalThis.setTimeout
+  let cleanupAttempts = 0
+  try {
+    await backupPackage(pkg, backup)
+    fs.mkdirSync(stalePrevious)
+    fs.writeFileSync(path.join(stalePrevious, 'old.js'), 'stale rollback copy\n')
+    fs.mkdirSync(stalePending)
+    globalThis.setTimeout = (fn, _delay, ...args) => originalSetTimeout(fn, 0, ...args)
+    fs.renameSync = (from, to, ...args) => {
+      if (to === backup && String(from).includes('rollback.pending-')) {
+        throw Object.assign(new Error('EPERM: rename-in locked before cleanup'), { code: 'EPERM' })
+      }
+      return originalRename(from, to, ...args)
+    }
+    fs.rmSync = (target, options) => {
+      if (String(target).includes('rollback.previous-')) {
+        cleanupAttempts += 1
+        throw Object.assign(new Error('EPERM: previous cleanup locked'), { code: 'EPERM' })
+      }
+      return originalRm(target, options)
+    }
+    await assert.rejects(() => backupPackage(pkg, backup), error => {
+      assert.match(error.message, /^EPERM: rename-in locked before cleanup; rollback cleanup failed \(.*EPERM: previous cleanup locked\)/)
+      assert.equal(error.code, 'EPERM')
+      assert.equal(error.cause?.message, 'EPERM: rename-in locked before cleanup')
+      return true
+    })
+    assert.equal(cleanupAttempts, 1, 'the stale previous tree is attempted after the restored tree moved back')
+    assert.equal(fs.existsSync(backup), true, 'the previous backup was restored to its canonical path')
+    assert.equal(fs.existsSync(stalePending), false, 'pending scratch is still cleaned')
+    assert.equal(fs.readdirSync(data).filter(name => name.startsWith('rollback.previous-')).length, 1)
+
+    fs.rmSync = originalRm
+    fs.renameSync = originalRename
+    globalThis.setTimeout = originalSetTimeout
+    assert.equal(await backupPackage(pkg, backup), 3)
+    assert.equal(fs.readdirSync(data).filter(name => name.startsWith('rollback.')).length, 0, 'a retry cleans locked leftovers')
+  } finally {
+    fs.renameSync = originalRename
+    fs.rmSync = originalRm
+    globalThis.setTimeout = originalSetTimeout
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
 await checkAsync('damaged rollback receipt or bytes never cause installed-file deletion', async () => {
   const pkg = makePackage(OLD)
   const data = makeDataDir()

@@ -113,6 +113,20 @@ function sseFrames(body) {
     .map(frame => JSON.parse(frame.slice('data: '.length)))
 }
 
+/** Split a Responses SSE body into its JSON data events. */
+function responsesFrames(body) {
+  return body.split('\n\n').filter(Boolean).map(frame => {
+    const data = frame.split('\n').find(line => line.startsWith('data: '))
+    return data === undefined ? undefined : JSON.parse(data.slice('data: '.length))
+  }).filter(frame => frame !== undefined)
+}
+
+function assertResponsesSequence(frames, label) {
+  assert.ok(frames.length > 0, `${label} must contain at least one event`)
+  assert.deepEqual(frames.map(frame => frame.sequence_number), frames.map((_, index) => index),
+    `${label} sequence numbers must start at 0 and increase by exactly 1`)
+}
+
 const toolCallDeltas = body => sseFrames(body)
   .flatMap(frame => frame.choices?.[0]?.delta?.tool_calls ?? [])
 
@@ -477,12 +491,56 @@ await checkAsync('responses endpoint streams events and reports usage', async ()
   const response = await authFetch(base, '/v1/responses', { model: 'muse-spark-1.3-contributor-free', input: 'hi', stream: true })
   assert.equal(response.status, 200)
   const body = await response.text()
-  const types = body.split('\n').filter(line => line.startsWith('event: ')).map(line => line.slice('event: '.length))
-  assert.deepEqual(types, ['response.created', 'response.output_item.added', 'response.output_text.delta', 'response.output_text.delta', 'response.completed'])
-  const completed = JSON.parse(body.split('\n').filter(line => line.startsWith('data: ')).at(-1).slice('data: '.length))
+  const frames = responsesFrames(body)
+  assert.deepEqual(frames.map(frame => frame.type), ['response.created', 'response.output_item.added', 'response.output_text.delta', 'response.output_text.delta', 'response.completed'])
+  assertResponsesSequence(frames, 'successful response')
+  const completed = frames.at(-1)
   assert.equal(completed.response.status, 'completed')
   assert.equal(completed.response.output[0].content[0].text, 'hello world')
   assert.equal(completed.response.usage.output_tokens, 5)
+})
+
+await checkAsync('responses streaming restarts sequence numbers for each response and numbers failures', async () => {
+  let calls = 0
+  const base = await serve({
+    complete: async (_request, onChunk) => {
+      calls += 1
+      if (calls > 1) throw new Error('scripted lane failure')
+      onChunk?.({ type: 'text-delta', text: 'first answer' })
+      onChunk?.({ type: 'finish', reason: { kind: 'stop' } })
+      return { text: 'first answer', toolCalls: [] }
+    },
+  })
+
+  const first = await authFetch(base, '/v1/responses', { model: 'muse-spark-1.3-contributor-free', input: 'first', stream: true })
+  const firstFrames = responsesFrames(await first.text())
+  assertResponsesSequence(firstFrames, 'first response')
+  assert.equal(firstFrames.at(-1).type, 'response.completed')
+
+  const second = await authFetch(base, '/v1/responses', { model: 'muse-spark-1.3-contributor-free', input: 'second', stream: true })
+  const secondFrames = responsesFrames(await second.text())
+  assert.deepEqual(secondFrames.map(frame => frame.type), ['response.created', 'response.failed'])
+  assertResponsesSequence(secondFrames, 'reconnected response')
+  assert.equal(secondFrames[0].sequence_number, 0)
+  assert.notEqual(secondFrames[0].response.id, firstFrames[0].response.id)
+})
+
+await checkAsync('non-Responses streams keep their existing frame shape', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({
+    chunks: [
+      { type: 'text-delta', text: 'unchanged' },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ],
+    outcome: { text: 'unchanged', toolCalls: [] },
+  })
+  const response = await authFetch(base, '/v1/chat/completions', { model: 'muse-spark-1.3-contributor-free', stream: true })
+  const body = await response.text()
+  const frames = sseFrames(body)
+  assert.ok(frames.length > 0)
+  assert.ok(frames.every(frame => !Object.hasOwn(frame, 'sequence_number')), 'Chat frames must not gain the Responses-only field')
+  assert.ok(body.endsWith('data: [DONE]\n\n'))
 })
 
 await checkAsync('responses streaming gives text and calls distinct output indexes', async () => {
