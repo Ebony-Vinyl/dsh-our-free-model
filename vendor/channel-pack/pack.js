@@ -55943,7 +55943,7 @@ function loadOrCreateApiKey(home, env = process.env) {
 
 // vendor/channel-pack/src/openai-gateway/messages.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { ReasoningEffortId as ReasoningEffortId10 } from "@deepseek-ai/dsh-llm";
+import { createToolResultMessage, ReasoningEffortId as ReasoningEffortId10 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/openai-gateway/images.ts
 var DEFAULT_IMAGE_LIMITS = {
@@ -56134,14 +56134,11 @@ function createGatewayMessage(role, content, source) {
   return { id: randomUUID8(), role, content, source };
 }
 function createGatewayToolMessage(toolCallId, content, isError) {
-  return {
-    id: randomUUID8(),
-    role: "tool",
+  return createToolResultMessage({
+    callId: toolCallId,
     content,
-    toolCallId,
-    ...isError === true ? { isError: true } : {},
-    source: { kind: "tool", callId: toolCallId }
-  };
+    isError: isError === true
+  });
 }
 function inboundReasoning(value) {
   const raw = typeof value.reasoning_content === "string" ? value.reasoning_content : typeof value.reasoning === "string" ? value.reasoning : void 0;

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { createToolResultMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import {
   DEFAULT_IMAGE_LIMITS,
@@ -267,45 +267,21 @@ export function createGatewayMessage(
 }
 
 /**
- * 造一条**一等工具结果消息**（DSH 0.1.7+ 的 `role:'tool'` 形状）。
- *
- * ## 为什么不能再用 `user` + `tool-result` 包裹块
- *
- * `message-shape.ts` 的文件头记录了这次迁移：0.1.6 的工具结果是 `role:'user'`
- * 里嵌 `{type:'tool-result',…}`，0.1.7 起改成 `role:'tool'` 一等消息、块类型
- * `'tool-result'` 从 `ContentBlockMap` 里删除。
- *
- * 网关早先按 0.1.6 形状产出，靠 channel-pack 自家五个序列化器的
- * `normalizeHarnessMessages()` 兜底，所以 Kilo / TRAE / Qoder 那条线看不出问题。
- * 但**外部注册的 provider 没有这层兜底**：
- *
- * - `dsh-llm-pi-ai` 的 `textOnlyContext` 只认 `message.role === 'tool'`；
- *   包裹块落进 `flattenText()`（只留 `type:'text'`）后被清空，pi-ai 因此
- *   认为工具调用无应答，自行插入 `No result provided`；
- * - `dsh-llm-deepseek` 的 Messages 序列化器对 `tool-result` 块直接抛
- *   `UNSUPPORTED_CONTENT`（`DeepSeek Messages cannot represent …`）。
- *
- * ⇒ 两个端点都改产一等 `role:'tool'` 消息。channel-pack 自家的序列化器仍走
- * `normalizeHarnessMessages()` 把新形状降级成它们认识的包裹块，行为不变。
- *
- * @param toolCallId - 与 assistant 的 `tool-call` 块 id 配对的调用 id，落在**顶层**
- *   （`toolResultOf` 读的就是 `message.toolCallId`）。
- * @param content - 结果内容块（文本/图片），`role:'tool'` 直接以内容块承载。
- * @param isError - 工具失败标记，仅在明确为 `true` 时携带。
+ * 委托当前宿主构造工具结果：≤0.1.6 使用 user/tool-result 包裹块，
+ * 0.1.7+ 使用一等 tool 消息。外部 provider 没有 channel-pack 的兼容层，
+ * 固定其中任何一种形状都会让另一代宿主丢失工具应答或拒绝请求。
+ * 工厂在两代内核中均存在，同时负责 id、source 与不可变内容。
  */
 export function createGatewayToolMessage(
   toolCallId: string,
   content: Message['content'],
   isError?: boolean,
 ): Message {
-  return {
-    id: randomUUID() as Message['id'],
-    role: 'tool',
+  return createToolResultMessage({
+    callId: toolCallId as never,
     content,
-    toolCallId: toolCallId as never,
-    ...isError === true ? { isError: true } : {},
-    source: { kind: 'tool', callId: toolCallId } as Message['source'],
-  } as Message
+    isError: isError === true,
+  })
 }
 
 /**
@@ -388,9 +364,7 @@ async function convertMessage(
     // `partsFromContent`；各适配器本就递归消费 `tool-result` 的内嵌图片
     // （见 `trae-adapter.ts` 的 `collectImages` / `userContentParts`）。
     //
-    // ⚠️ 自 0.1.7 起产**一等 `role:'tool'` 消息**，不再包成 `user` 里的
-    // `tool-result` 块——原因见 {@link createGatewayToolMessage} 的说明：
-    // 外部注册的 provider（pi-ai / deepseek Messages）没有形状兼容层。
+    // 形状由当前宿主决定，外部 provider 必须收到与该内核匹配的工具消息。
     return createGatewayToolMessage(
       value.tool_call_id,
       await partsFromContent(value.content, bridge, limits),

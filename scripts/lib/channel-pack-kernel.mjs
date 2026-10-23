@@ -1,5 +1,6 @@
 // Minimal host contracts for the generated channel pack's offline mount test.
 // Provider implementation, pool persistence and RPC handlers remain real.
+import { randomUUID } from 'node:crypto'
 export class Service {
   constructor(ctx, name) { this.ctx = ctx; ctx.provide(name, this) }
 }
@@ -11,6 +12,10 @@ export const credentialRef = value => value
 export const ReasoningEffortId = value => value
 export const ToolCallId = value => value
 export const createUserMessage = value => value
+export const createToolResultMessage = ({ callId, content, isError }) => ({
+  id: randomUUID(), role: 'tool', toolCallId: callId, content, isError,
+  source: { kind: 'tool', callId },
+})
 export const attributionHeaders = () => ({})
 export const CONTEXT_WINDOW_EXCEEDED_CODE = 'CONTEXT_WINDOW_EXCEEDED'
 export const EMPTY_RESPONSE_CODE = 'EMPTY_RESPONSE'
