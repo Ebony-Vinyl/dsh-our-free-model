@@ -56133,6 +56133,16 @@ function gatewaySource() {
 function createGatewayMessage(role, content, source) {
   return { id: randomUUID8(), role, content, source };
 }
+function createGatewayToolMessage(toolCallId, content, isError) {
+  return {
+    id: randomUUID8(),
+    role: "tool",
+    content,
+    toolCallId,
+    ...isError === true ? { isError: true } : {},
+    source: { kind: "tool", callId: toolCallId }
+  };
+}
 function inboundReasoning(value) {
   const raw = typeof value.reasoning_content === "string" ? value.reasoning_content : typeof value.reasoning === "string" ? value.reasoning : void 0;
   if (raw === void 0 || raw.length === 0) return void 0;
@@ -56176,11 +56186,10 @@ async function convertMessage(raw, provider, model, bridge, limits) {
     if (typeof value.tool_call_id !== "string" || value.tool_call_id.length === 0) {
       throw new OpenAiGatewayError("tool messages require tool_call_id");
     }
-    return createGatewayMessage("user", [{
-      type: "tool-result",
-      toolCallId: value.tool_call_id,
-      content: await partsFromContent(value.content, bridge, limits)
-    }], { kind: "tool", callId: value.tool_call_id });
+    return createGatewayToolMessage(
+      value.tool_call_id,
+      await partsFromContent(value.content, bridge, limits)
+    );
   }
   throw new OpenAiGatewayError(`unsupported message role: ${String(role)}`);
 }
@@ -56743,11 +56752,10 @@ async function toMessages(input, provider, model, bridge, limits) {
     if (type === "function_call_output") {
       const callId = nonEmptyString2(raw.call_id);
       if (callId === void 0) throw new OpenAiGatewayError("function_call_output requires call_id");
-      messages.push(createGatewayMessage("user", [{
-        type: "tool-result",
-        toolCallId: callId,
-        content: await outputParts(raw.output, bridge, limits)
-      }], { kind: "tool", callId }));
+      messages.push(createGatewayToolMessage(
+        callId,
+        await outputParts(raw.output, bridge, limits)
+      ));
       continue;
     }
     if (type === "reasoning") {

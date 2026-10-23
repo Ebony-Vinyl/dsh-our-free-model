@@ -46,6 +46,37 @@ try {
   assert.equal(chat.signal, signal)
   assert.equal(responses.signal, signal)
 
+  // A tool answer must arrive as the first-class `tool` message (DSH 0.1.7+ shape),
+  // not as a `user` message wrapping a `tool-result` block. External providers get no
+  // `normalizeHarnessMessages()` fallback: `dsh-llm-pi-ai` reads only `role === 'tool'`
+  // and otherwise drops the result (pi-ai then fabricates "No result provided"), and
+  // `dsh-llm-deepseek` rejects the wrapper block as UNSUPPORTED_CONTENT.
+  const toolMessage = chat.messages.find(m => m.role === 'tool')
+  assert.ok(toolMessage, 'chat tool answer must be a tool message')
+  assert.equal(toolMessage.toolCallId, 'call-1')
+  assert.deepEqual(toolMessage.source, { kind: 'tool', callId: 'call-1' })
+  assert.equal(JSON.stringify(chat.messages).includes('"tool-result"'), false, 'chat must not wrap the result in a tool-result block')
+
+  const responsesTool = await toResponsesGenerateOptions({ model: 'test/model', input: [
+    { type: 'message', role: 'user', content: 'hello' },
+    { type: 'function_call', call_id: 'call-9', name: 'bash', arguments: '{}' },
+    { type: 'function_call_output', call_id: 'call-9', output: 'clean' },
+  ] }, signal)
+  const responsesToolMessage = responsesTool.messages.find(m => m.role === 'tool')
+  assert.ok(responsesToolMessage, 'Responses tool answer must be a tool message')
+  assert.equal(responsesToolMessage.toolCallId, 'call-9')
+  assert.equal(JSON.stringify(responsesTool.messages).includes('"tool-result"'), false, 'Responses must not wrap the result in a tool-result block')
+
+  // An error result carries its flag, and a legacy history with no tool answer is untouched.
+  const failed = await toGenerateOptions({ model: 'test/model', messages: [
+    { role: 'tool', tool_call_id: 'call-err', content: 'boom', is_error: true },
+  ] }, signal)
+  assert.equal(failed.messages[0].role, 'tool')
+  const plain = await toGenerateOptions({ model: 'test/model', messages: [
+    { role: 'user', content: 'hi' }, { role: 'assistant', content: 'ok' },
+  ] }, signal)
+  assert.deepEqual(plain.messages.map(m => m.role), ['user', 'assistant'])
+
   const echoed = await toGenerateOptions({ model: 'deepseek/deepseek-v4.1-flash-free', messages: [
     { role: 'user', content: '看一下仓库' },
     {

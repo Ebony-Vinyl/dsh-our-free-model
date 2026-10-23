@@ -52,6 +52,7 @@ import {
   OpenAiGatewayError,
   convertTools,
   createGatewayMessage,
+  createGatewayToolMessage,
   gatewaySource,
   parseModelRoute,
   partsFromContent,
@@ -468,11 +469,13 @@ async function toMessages(
     if (type === 'function_call_output') {
       const callId = nonEmptyString(raw.call_id)
       if (callId === undefined) throw new OpenAiGatewayError('function_call_output requires call_id')
-      messages.push(createGatewayMessage('user', [{
-        type: 'tool-result',
-        toolCallId: callId as never,
-        content: await outputParts(raw.output, bridge, limits),
-      }], { kind: 'tool', callId: callId as never }))
+      // ⚠️ 与 Chat 端点同形：产一等 `role:'tool'` 消息，不再包成 user 里的
+      // `tool-result` 块。外部注册的 provider（pi-ai、deepseek Messages）没有
+      // `normalizeHarnessMessages()` 那层兼容，旧形状会让工具结果被静默丢弃。
+      messages.push(createGatewayToolMessage(
+        callId,
+        await outputParts(raw.output, bridge, limits),
+      ))
       continue
     }
     if (type === 'reasoning') {
