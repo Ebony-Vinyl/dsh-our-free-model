@@ -318,6 +318,7 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const { verifyChannelPrFixes } = await import('./channel-pr-fixes-test.mjs')
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
+  await verifyGatewayToolCallFrames()
   // 目录 `efforts` 的键序不是强度序（`dfmodel` 实测是 high/max/low），
   // 官方客户端还会按强度稳定排序；这条回归保证下发给 DSH 的档位序也是强度序。
   {
@@ -703,4 +704,49 @@ async function verifyLoopResumeEvents() {
     if (savedMax === undefined) delete process.env.DSH_REASONING_LOOP_AUTO_RESUME_MAX
     else process.env.DSH_REASONING_LOOP_AUTO_RESUME_MAX = savedMax
   }
+}
+
+/**
+ * 网关的 OpenAI 流式输出：`delta.tool_calls[]` 的 `id` 与 `function.name` 只能随该调用的首帧
+ * 出现一次，`index` 必须是客户端能直接当下标的连续调用序号。
+ * 官方客户端的流式累加器对这两个字段是**字符串拼接**（openai-python 的 `accumulate_delta`
+ * 会把每帧的 name 追加），每帧重发就会把工具名拼成 `readreadread`，客户端随后报
+ * 「未找到指定的工具」；DSH 侧 issue #20 记录的是同一机制的另一条通路。
+ * 这里按客户端语义重放一遍，修复前会得到 `readread` 与翻倍的 id。
+ */
+async function verifyGatewayToolCallFrames() {
+  const { toOpenAiSse } = await import('../vendor/channel-pack/src/openai-gateway/stream.ts')
+  const upstream = async function* () {
+    yield { type: 'reasoning-delta', text: '先想一下' } // 推理块占掉 DSH 的块 0
+    yield { type: 'tool-call-delta', index: 1, id: 'call_a', name: 'read', argumentsDelta: '{"file":' }
+    yield { type: 'tool-call-delta', index: 1, id: 'call_a', name: 'read', argumentsDelta: '"x.md"}' }
+    yield { type: 'tool-call-delta', index: 2, id: 'call_b', name: 'write', argumentsDelta: '{}' }
+    yield { type: 'finish', reason: { kind: 'tool-calls' } }
+  }
+  const frames = []
+  for await (const chunk of toOpenAiSse(upstream(), 'chatcmpl-fixture', 'fixture-model')) {
+    for (const part of chunk.split('\n\n')) {
+      if (part.startsWith('data: ') && part !== 'data: [DONE]') frames.push(JSON.parse(part.slice('data: '.length)))
+    }
+  }
+  const calls = frames.flatMap(frame => frame.choices?.[0]?.delta?.tool_calls ?? [])
+  const callAt = index => calls.filter(call => call.index === index)
+  assert.deepEqual(calls.map(call => call.index), [0, 0, 1], 'index 必须从 0 起连续编号，不能透传 DSH 的块序号')
+  assert.deepEqual(callAt(0).filter(call => call.id !== undefined).map(call => call.id), ['call_a'], 'id 只随首帧发一次')
+  assert.deepEqual(callAt(0).filter(call => call.function.name !== undefined).map(call => call.function.name), ['read'], 'function.name 只随首帧发一次')
+  assert.equal(callAt(0).map(call => call.function.arguments).join(''), '{"file":"x.md"}', 'arguments 仍是每帧增量')
+  assert.equal(callAt(1).map(call => call.function.arguments).join(''), '{}')
+  const accumulated = []
+  for (const call of calls) {
+    const slot = accumulated[call.index] ?? { id: '', name: '', arguments: '' }
+    slot.id += call.id ?? ''
+    slot.name += call.function.name ?? ''
+    slot.arguments += call.function.arguments ?? ''
+    accumulated[call.index] = slot
+  }
+  assert.deepEqual(accumulated, [
+    { id: 'call_a', name: 'read', arguments: '{"file":"x.md"}' },
+    { id: 'call_b', name: 'write', arguments: '{}' },
+  ], '按客户端累加器拼接后，工具名与 id 不能重复')
+  console.log('ok  openai-gateway tool-call frames: id/name 只在首帧、index 从 0 起，客户端拼接后工具名不重复')
 }

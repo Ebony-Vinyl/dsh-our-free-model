@@ -33,12 +33,19 @@ interface ToolState {
   id: string
   name?: string
   arguments: string
+  /** 发给客户端的 `tool_calls[].index`：从 0 起连续（理由见 `consumeChunk`）。 */
+  openAiIndex: number
+  /** `id` / `function.name` 是否已随首帧发出过：这两个字段只能发一次。 */
+  idSent: boolean
+  nameSent: boolean
 }
 
 interface Accumulated {
   content: string
   reasoning: string
   tools: Map<number, ToolState>
+  /** 下一个待分配的 `openAiIndex`。 */
+  nextToolIndex: number
   usage?: TokenUsage
   finishReason?: string
 }
@@ -107,20 +114,38 @@ function consumeChunk(state: Accumulated, chunk: StreamChunk): Record<string, un
     case 'tool-call-delta': {
       let tool = state.tools.get(chunk.index)
       if (!tool) {
-        tool = { id: String(chunk.id), arguments: '' }
+        // ⚠️ 上游的 `chunk.index` 是 DSH 的块序号（推理块先占 0），不能直接当 OpenAI 的
+        // `tool_calls[].index`：按 index 建数组的客户端会拿到稀疏数组，或直接越界报错。
+        // 这里换成从 0 起的连续调用序号，与 `src/forward.js` 的 `indexOf()` 保持同一口径。
+        tool = {
+          id: String(chunk.id),
+          arguments: '',
+          openAiIndex: state.nextToolIndex,
+          idSent: false,
+          nameSent: false,
+        }
+        state.nextToolIndex += 1
         state.tools.set(chunk.index, tool)
       }
       tool.id = String(chunk.id || tool.id)
       if (chunk.name !== undefined) tool.name = chunk.name
       tool.arguments += chunk.argumentsDelta
+      // ⚠️ `id` 与 `function.name` 只在首帧发一次：官方客户端的流式累加器对这两个字段是
+      // **字符串拼接**（openai-python 的 `accumulate_delta` 会把每帧的 name 追加），每帧
+      // 重发会把工具名拼成 `readreadread`、id 也翻倍，客户端随后报「未找到指定的工具」。
+      // `arguments` 才是增量，必须每帧带。issue #20 记录的是同一机制的另一条通路。
+      const idField = tool.idSent ? {} : { id: tool.id }
+      tool.idSent = true
+      const nameField = tool.name === undefined || tool.nameSent ? {} : { name: tool.name }
+      if (tool.name !== undefined) tool.nameSent = true
       return {
         delta: {
           tool_calls: [{
-            index: chunk.index,
-            id: tool.id,
+            index: tool.openAiIndex,
             type: 'function',
+            ...idField,
             function: {
-              ...tool.name === undefined ? {} : { name: tool.name },
+              ...nameField,
               arguments: chunk.argumentsDelta,
             },
           }],
@@ -157,7 +182,7 @@ export async function* toOpenAiSse(
   model: string,
   suggest?: SuggestionHook,
 ): AsyncIterable<string> {
-  const state: Accumulated = { content: '', reasoning: '', tools: new Map() }
+  const state: Accumulated = { content: '', reasoning: '', tools: new Map(), nextToolIndex: 0 }
   try {
     for await (const chunk of chunks) {
       const event = consumeChunk(state, chunk)
@@ -220,7 +245,7 @@ export async function collectOpenAiCompletion(
   model: string,
   suggest?: SuggestionHook,
 ): Promise<Record<string, unknown>> {
-  const state: Accumulated = { content: '', reasoning: '', tools: new Map() }
+  const state: Accumulated = { content: '', reasoning: '', tools: new Map(), nextToolIndex: 0 }
   try {
     for await (const chunk of chunks) {
       const event = consumeChunk(state, chunk)
