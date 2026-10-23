@@ -8,7 +8,7 @@ import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats
 import { STATE, detectEgress, probeCatalog } from '../probe.js'
 import { CODE, UpstreamError, getJson } from '../http.js'
 import { runModelTest, modelAvailability } from '../model-test.js'
-import { DEFAULT_LEVEL } from '../effort.js'
+import { DEFAULT_LEVEL, MIN_BUDGET } from '../effort.js'
 import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
 import { sessionForConversation } from '../upstream.js'
@@ -77,6 +77,7 @@ export function createModelRuntime({
   let egress = availability.get().egress ?? null
   let gatewayLatency = { ms: 0, at: 0 }
   let disposed = false
+  const verifiedSince = Date.now()
   const lifetime = new AbortController()
   let reprobeTimer
 
@@ -117,7 +118,7 @@ export function createModelRuntime({
   mergeCatalogs()
   const state = () => ({
     catalog,
-    membership: computeMembership(catalog, availability.get(), settings.get()),
+    membership: computeMembership(catalog, availability.get(), settings.get(), verifiedSince),
     settings: settings.get(),
     attributionUserAgent,
   })
@@ -132,6 +133,16 @@ export function createModelRuntime({
       stats.edit(value => pruneDays(value, 120))
     },
     recordTurn: record => { if (!disposed) recordTurn(stats, record) },
+    onModelFailure: (id, error) => {
+      const entry = catalog.find(row => row.id === id)
+      if (disposed || settings.get().strictAvailability !== true || !entry || (entry.channel && !isKiloEntry(entry))) return
+      if (error?.code === CODE.aborted) return
+      availability.edit(value => ({ ...value, turnResults: {
+        ...value.turnResults, [id]: { ...failedProbe(error), at: Date.now() },
+      } }))
+      availability.flush()
+      emitTopology()
+    },
     warn: message => logger.warn?.(message) ?? logger.log?.(message),
     onRegionBlocked: () => {
       if (disposed || reprobeTimer !== undefined) return
@@ -259,19 +270,31 @@ export function createModelRuntime({
   }
 
   let probeRound = null
+  let probeRoundStrict = false
   let probeThrottleStreak = 0
   let probeBackoffUntil = 0
+  // Use the real adapter wire and existing text/finish validator, without turn
+  // statistics or recovery continuations. Never probe paid or account channels.
+  const probeAdapter = new FreeModelAdapter({ state, recordUsage() {}, warn() {} })
+  async function strictProbe(entry, { signal }) {
+    const started = Date.now()
+    try {
+      const measured = await runModelTest(testSignal => probeAdapter.stream({
+        provider: ROUTE_MAIN, model: entry.id, sessionId: 'probe:our-free-model',
+        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+        maxTokens: MIN_BUDGET, signal: testSignal,
+      }, entry, { ...state(), settings: { ...settings.get(), streamRecovery: false } }), { signal, timeoutMs: 45000 })
+      return { state: STATE.available, textVerified: true, latencyMs: measured.totalMs, ttftMs: measured.ttftMs }
+    } catch (error) {
+      return { ...failedProbe(error), latencyMs: Date.now() - started }
+    }
+  }
   async function runProbeRound() {
-    // The absorbed channels get no per-model probes: their verdicts would be
-    // spent against a different gateway than the one that serves them, and a
-    // roster the listing named is advertised as-is (its health is the listing
-    // round's, refreshed on the same cadence). The aggregate lane is excluded
-    // for a sharper reason — a probe there is a *real request to a provider the
-    // user pays for*, spent to learn something the settings page already knows
-    // (whether a key is configured). A combo is excluded because it has no
-    // endpoint of its own: probing one would send the chain's own id to the free
-    // lane as a model name, spending quota to collect a verdict about nothing.
-    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry))
+    // Strict mode includes Kilo through its actual adapter wire. EAC, aggregate
+    // and account channels are not automatically tested: their calls may cost
+    // money or account quota. A combo has no endpoint of its own.
+    const strict = settings.get().strictAvailability === true
+    const probeable = catalog.filter(entry => !isEacEntry(entry) && (!isKiloEntry(entry) || strict) && !isAggregateEntry(entry) && !isComboEntry(entry))
     const results = await probeCatalog(probeable, { attributionUserAgent, signal: lifetime.signal }, (id, result) => {
       if (disposed) return
       availability.edit(value => ({
@@ -280,18 +303,20 @@ export function createModelRuntime({
           ...value.results,
           [id]: {
             state: result.state,
+            textVerified: result.textVerified === true,
             ...result.detail === undefined ? {} : { detail: result.detail },
             ...result.ttftMs === undefined ? {} : { ttftMs: result.ttftMs },
             latencyMs: result.latencyMs, startedAt: result.startedAt, at: Date.now(),
           },
         },
       }))
-    }, 2)
+      if (strict) emitTopology()
+    }, 2, strict ? strictProbe : undefined)
     if (disposed) return {}
     availability.update({ at: Date.now(), egress })
     availability.flush()
     const verdicts = Object.values(results)
-    if (verdicts.length > 0 && verdicts.every(row => row.state === STATE.unavailable)) {
+    if (!strict && verdicts.length > 0 && verdicts.every(row => row.state === STATE.unavailable)) {
       logger.warn?.(`our-free-model: the gateway refused all ${verdicts.length} models this round (${verdicts[0].detail ?? 'no detail'}); keeping them advertised`)
     }
     const allThrottled = verdicts.length > 0 && verdicts.every(row => row.state === STATE.throttled)
@@ -307,7 +332,13 @@ export function createModelRuntime({
   }
   async function refreshAvailability(force = false) {
     if (disposed || (!force && probeBackoffUntil > Date.now())) return {}
-    if (probeRound !== null) return probeRound
+    if (probeRound !== null) {
+      const previousStrict = probeRoundStrict
+      const results = await probeRound
+      if (!disposed && previousStrict !== (settings.get().strictAvailability === true)) return refreshAvailability(force)
+      return results
+    }
+    probeRoundStrict = settings.get().strictAvailability === true
     const round = runProbeRound()
     probeRound = round
     try { return await round } finally { if (probeRound === round) probeRound = null }
@@ -376,6 +407,7 @@ export function createModelRuntime({
         // Hiding advertisements must not invalidate requests using a saved id.
         return { ...snapshot, membership: computeMembership(snapshot.catalog, availability.get(), {
           ...snapshot.settings, hiddenModelIds: [], hideFreeModels: false, hideEacModels: false,
+          strictAvailability: false,
         }) }
       },
     }),
@@ -407,9 +439,11 @@ function materializeCatalog(ids) {
   return rebuilt.length > 0 ? rebuilt : FALLBACK_CATALOG
 }
 
-export function computeMembership(catalog, availabilitySnapshot, settings) {
+export function computeMembership(catalog, availabilitySnapshot, settings, verifiedSince = 0) {
   const expose = settings?.exposeRegionModels !== false
-  const verdictOf = entry => modelAvailability(entry.id, availabilitySnapshot, Boolean(entry.channel)).availability
+  const strict = settings?.strictAvailability === true
+  const measurement = entry => modelAvailability(entry.id, availabilitySnapshot, Boolean(entry.channel) && !(strict && isKiloEntry(entry)))
+  const verdictOf = entry => measurement(entry).availability
   const probeable = catalog.filter(entry => !entry.channel)
   const refusedAll = probeable.length > 0 && probeable.every(entry => verdictOf(entry) === STATE.unavailable)
   let usable = catalog.filter(entry => verdictOf(entry) !== STATE.unavailable)
@@ -418,6 +452,12 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   const region = []
   for (const entry of usable) {
     if (isModelHidden(entry, settings)) continue
+    if (strict && (!entry.channel || isKiloEntry(entry))) {
+      const sample = measurement(entry)
+      const ttl = Math.max(1, settings.probeIntervalMinutes ?? 15) * 120_000
+      if (sample.availability !== STATE.available || !sample.textVerified || sample.probedAt < verifiedSince
+        || Date.now() - sample.probedAt > ttl) continue
+    }
     const verdict = verdictOf(entry)
     if (verdict !== STATE.regionBlocked) main.push(entry.id)
     else if (expose) region.push(entry.id)
@@ -426,4 +466,11 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   if (main.length > 0) membership[ROUTE_MAIN] = main
   if (region.length > 0) membership[ROUTE_REGION] = region
   return membership
+}
+
+function failedProbe(error) {
+  const detail = String(error?.message ?? error).slice(0, 200)
+  const limited = [CODE.quota, CODE.exhausted].includes(error?.code) || error?.status === 429
+    || /usage limit|rate.?limit|quota|resourceexhausted|request limit/i.test(detail)
+  return { state: limited ? STATE.throttled : error?.code === CODE.region ? STATE.regionBlocked : STATE.unknown, detail }
 }

@@ -89,6 +89,7 @@ const suites = [
   ['usage-sanitize', 'usage-sanitize-test.mjs', []],
   ['speed-stat', 'speed-stat-test.mjs', []],
   ['picker', 'picker-test.mjs', []],
+  ['strict-availability', 'strict-availability-test.mjs', []],
   ['tui', 'tui-test.mjs', []],
   ['catalog', 'catalog-test.mjs', mode === 'contributor' ? ['--contributor'] : []],
   ['vault', 'vault-test.mjs', []],

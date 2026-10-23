@@ -360,6 +360,15 @@ check('a second trigger joins the round in flight rather than starting another',
   probesOf('mimo-v2.6-flash-free') - before, 1)
 holdProbe = null
 
+check('strict availability rejects a non-boolean setting',
+  (await callRoute(api(), 'POST', '/api/our-free-model/settings', { strictAvailability: 'true' })).status, 400)
+const strictSaved = await callRoute(api(), 'POST', '/api/our-free-model/settings', { strictAvailability: true })
+check('strict availability is publicly configurable', strictSaved.json.settings.strictAvailability, true)
+await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+check('strict mode removes a model at quota', (await advertised(ROUTE_MAIN)).includes('nemotron-3-ultra-free'), false)
+check('strict mode removes models without a successful answer', (await advertised(ROUTE_MAIN)).includes('ling-3.0-flash-fin-free'), false)
+check('strict mode keeps an actually working model', (await advertised(ROUTE_MAIN)).includes('space-bunny-free'), true)
+
 for (const dispose of ctx.__disposers.reverse()) dispose()
 await stub.close()
 fs.rmSync(scratch, { recursive: true, force: true })

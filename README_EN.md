@@ -37,6 +37,25 @@
 
 ---
 
+## Optional verified-only free-model picker
+
+In **Settings → Our Free Model → preferences**, enable **Show only verified free models**
+(`strictAvailability: true` in the plugin settings). This is off by default.
+The anonymous free channel and Kilo are tested through their actual generation
+endpoints at startup and on the configured probe interval. Only a nonempty text
+answer with a normal finish advertises the model; failed, rate-limited,
+region-blocked, untested and stale models stay in the settings catalog but leave
+the picker. Successful results appear progressively. A failed conversation hides
+that model until a newer test succeeds. An entirely failed round may leave the
+free group empty; results from a previous process are not trusted at startup.
+
+Tests use the adapter's minimum 512-token output budget and a 45-second deadline, consume free quota,
+and may conservatively hide slow or reasoning-only responses. They do not probe
+paid, EAC, account or aggregate channels, and do not change their picker policy.
+Quota backoff still applies. Availability is a point-in-time result, not a promise
+of unlimited usage; quota balances or reset times are not invented when the
+upstream does not disclose them. Saved model IDs remain usable by gateway clients.
+
 ## Community
 
 <div align="center">

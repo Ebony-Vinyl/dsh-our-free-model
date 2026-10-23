@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 
 const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-  .replace('exports.__test = {', 'exports.__test = { SettingsPage, ModelCard, Roster, Tank, useCountUp,')
+  .replace('exports.__test = {', 'exports.__test = { SettingsPage, ModelCard, Roster, Tank, useCountUp, Preferences,')
 const tick = () => new Promise(resolve => setImmediate(resolve))
 let checks = 0
 async function check(name, run) { await run(); checks++; console.log('  ok  ' + name) }
@@ -221,6 +221,20 @@ await check('empty or offscreen aquariums pause, filled visible aquariums resume
   assert.equal(observer.disconnected, true)
   tree = app.draw(app.api.Tank, { pct: 30 }); assert.equal(tree.props['data-ofm-motion'], 'on')
   app.dispose(); assert.equal(app.observers[1].disconnected, true)
+})
+
+await check('verified-only preference is opt-in, explains quota cost and posts a boolean', () => {
+  for (const enabled of [false, true]) {
+    const app = boot(), patches = []
+    const tree = app.draw(app.api.Preferences, { summary: { settings: { strictAvailability: enabled } }, t: app.t, onApply: patch => patches.push(patch), busy: false })
+    const nodes = flatten(tree)
+    const toggle = nodes.find(node => node?.props?.label === app.t('pref.strictAvailability'))
+    assert.equal(toggle.props.checked, enabled)
+    assert(nodes.includes(app.t('pref.strictAvailabilityHint')))
+    toggle.props.onChange()
+    assert.equal(patches[0].strictAvailability, !enabled)
+    app.dispose()
+  }
 })
 
 console.log(checks + ' plugin benchmark UI checks passed')

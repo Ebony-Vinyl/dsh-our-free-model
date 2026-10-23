@@ -79,10 +79,13 @@ export function modelAvailability(id, snapshot, listed = false) {
   // Compare a probe's request time with the completed manual measurement, so
   // an older in-flight probe cannot supersede it merely by finishing later.
   // Older saved snapshots have only `at`, which retains their previous order.
-  const measured = manual && (!probe || manual.at >= (probe.startedAt ?? probe.at)) ? manual : probe
+  let measured = manual && (!probe || manual.at >= (probe.startedAt ?? probe.at)) ? manual : probe
+  const turn = snapshot?.turnResults?.[id]
+  if (turn && (!measured || turn.at >= (measured.startedAt ?? measured.at))) measured = turn
   return {
-    availabilitySource: measured === manual && manual ? 'manual' : listed ? 'listing' : 'probe',
+    availabilitySource: measured === turn && turn ? 'turn' : measured === manual && manual ? 'manual' : listed ? 'listing' : 'probe',
     availability: measured?.state ?? 'unknown',
+    textVerified: measured?.textVerified === true || (measured === manual && manual?.state === 'available'),
     detail: measured?.detail ?? '', probedAt: measured?.at ?? 0,
     ttftMs: measured?.ttftMs, latencyMs: measured?.latencyMs,
   }
