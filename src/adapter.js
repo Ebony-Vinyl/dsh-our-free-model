@@ -613,6 +613,7 @@ export class FreeModelAdapter {
             : delivered || outcome.sawToolCall === true
               ? `our free model closed the stream after ${seconds}s, before its finish token; automatic recovery was not safe`
               : 'our free model closed the stream before its finish token, without answering; retrying'
+          this.deps.onModelFailure?.(entry.id, { message, code })
           record(false, outcome, { truncated: true })
           finishTurn(false, false, attempt + 1)
           yield { type: 'usage', usage: totalUsage }
@@ -620,6 +621,7 @@ export class FreeModelAdapter {
           return { ok: false, ...advanceVerdict(code, message, undefined) }
         }
         if (outcome.sawText !== true && outcome.sawToolCall !== true && outcome.sawReasoning !== true && reason.kind === 'stop') {
+          this.deps.onModelFailure?.(entry.id, { message: 'Empty response', code: CODE.empty })
           record(false, outcome)
           finishTurn(false, false, attempt + 1)
           yield { type: 'usage', usage: totalUsage }
@@ -635,6 +637,7 @@ export class FreeModelAdapter {
         if (warnings.length > 0) this.deps.warn?.(`our-free-model: dropped unsupported content for ${entry.id}: ${warnings.join(', ')}`)
         return { advance: false, verdict: null, ok: true, recovered: recovering && reason.kind === 'stop' }
       } catch (error) {
+        if (options.signal?.aborted !== true) this.deps.onModelFailure?.(entry.id, error)
         if (error?.code === CODE.region) this.deps.onRegionBlocked?.(entry.id)
         const aborted = options.signal?.aborted === true
         let failure = toFailure(error)

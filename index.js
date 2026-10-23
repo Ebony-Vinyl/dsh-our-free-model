@@ -1046,6 +1046,10 @@ export function apply(ctx, config) {
     settings, stats, availability, catalog: () => modelRuntime.catalog, state,
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress,
     onVisibilityChanged: emitTopology,
+    onStrictAvailabilityChanged: () => {
+      emitTopology()
+      void refreshAvailability(true).catch(error => logger.warn?.(`our-free-model: strict availability refresh failed (${error?.message ?? error})`))
+    },
     pool: fetchPoolSnapshot,
     eacAuth,
     picks,
@@ -1840,7 +1844,8 @@ export function createApiRoutes(deps) {
         const patch = await readJson(req)
         const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
+        if (patch.strictAvailability !== undefined && typeof patch.strictAvailability !== 'boolean') return send(400, { error: 'strictAvailability must be a boolean' })
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'strictAvailability', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
           // The listener spends this machine's lane, and a routable bind address
@@ -1894,6 +1899,7 @@ export function createApiRoutes(deps) {
           return send(500, { error: 'could not persist settings' })
         }
         if (Object.keys(visibility).length > 0) deps.onVisibilityChanged?.()
+        if (next.strictAvailability !== current.strictAvailability) deps.onStrictAvailabilityChanged?.()
         await deps.syncForward()
         await deps.syncRelay()
         await deps.syncEgress()
@@ -2221,6 +2227,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
     ...publicModelVisibility(settings),
     enabled: settings.enabled !== false,
     exposeRegionModels: settings.exposeRegionModels !== false,
+    strictAvailability: settings.strictAvailability === true,
     probeIntervalMinutes: settings.probeIntervalMinutes ?? 15,
     defaultMaxTokens: settings.defaultMaxTokens ?? 32768,
     announcementAck: settings.announcementAck ?? '',
@@ -2291,7 +2298,7 @@ function buildSummary(deps) {
   // and the aggregate lane are named by a listing round that already succeeded,
   // and a combo is a view over rows that were themselves named — none of them is
   // pinged. A listing is not an inference verdict; explicit tests add their own samples.
-  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry)
+  const unprobed = entry => isEacEntry(entry) || (isKiloEntry(entry) && state.settings.strictAvailability !== true) || isAggregateEntry(entry) || isComboEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,

@@ -219,7 +219,7 @@ export async function detectEgress({ signal, timeoutMs = 8000 } = {}) {
  * periodic loop holds *whole rounds* off while a quota backoff window is open
  * (the caller's concern, see index.js) instead of truncating this one.
  */
-export async function probeCatalog(models, options = {}, onResult = () => {}, concurrency = 2) {
+export async function probeCatalog(models, options = {}, onResult = () => {}, concurrency = 2, measure = probeModel) {
   const results = {}
   let cursor = 0
   const workers = Array.from({ length: Math.max(1, Math.min(concurrency, models.length)) }, async () => {
@@ -228,7 +228,7 @@ export async function probeCatalog(models, options = {}, onResult = () => {}, co
       const model = models[index]
       // A late reply is still the sample that began before a newer manual test.
       const startedAt = Date.now()
-      const result = { ...await probeModel(model, options), startedAt }
+      const result = { ...await measure(model, options), startedAt }
       results[model.id] = result
       onResult(model.id, result)
     }

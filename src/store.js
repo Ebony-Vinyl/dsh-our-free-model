@@ -155,6 +155,8 @@ export const SETTINGS_INITIAL = {
   enabled: true,
   /** Show region-limited models in the picker as soon as they answer. */
   exposeRegionModels: true,
+  /** Advertise free-channel models only after a successful text test this boot. */
+  strictAvailability: false,
   /** Advertisement only: retain catalog entries and historical model resolution. */
   hiddenModelIds: [],
   hideFreeModels: false,
