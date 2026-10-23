@@ -42,6 +42,15 @@ const checkThat = (name, condition, detail = '') => {
   console.log(`${condition ? 'ok  ' : 'FAIL'} ${name}${condition ? '' : ` — ${detail}`}`)
 }
 
+/** Text visible in either a legacy string or the kernel's typed content blocks. */
+const wireText = content => {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map(block => typeof block === 'string' ? block : typeof block?.text === 'string' ? block.text : '')
+    .join('\n')
+}
+
 /** A big, obviously-compressible tool result: a real `git diff` shape. */
 const BIG_DIFF = [
   'diff --git a/src/app.js b/src/app.js',
@@ -191,12 +200,14 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   const sent = freeLane.requests.slice(before).find(request => request.body?.messages?.some(message => message.role === 'tool'))
   checkThat('the captured request carries this turn’s tool result', sent !== undefined)
   const toolRow = sent?.body.messages.find(message => message.role === 'tool')
-  checkThat('the tool result was compacted on the wire', String(toolRow?.content ?? '').length < BIG_DIFF.length,
-    `sent ${String(toolRow?.content ?? '').length} bytes of ${BIG_DIFF.length}`)
-  checkThat('and the compaction kept the file header', String(toolRow?.content ?? '').includes('src/app.js'), String(toolRow?.content ?? '').slice(0, 200))
+  const toolText = wireText(toolRow?.content)
+  checkThat('the tool result was compacted on the wire', toolText.length < BIG_DIFF.length,
+    `sent ${toolText.length} bytes of ${BIG_DIFF.length}`)
+  checkThat('and the compaction kept the file header', toolText.includes('src/app.js'), toolText.slice(0, 200))
   const system = sent?.body.messages.find(message => message.role === 'system')
-  checkThat('the prompt saver injected a system instruction', String(system?.content ?? '').includes('<!-- ofm-token-saver -->'),
-    String(system?.content ?? '').slice(0, 200))
+  const systemText = wireText(system?.content)
+  checkThat('the prompt saver injected a system instruction', systemText.includes('<!-- ofm-token-saver -->'),
+    systemText.slice(0, 200))
 
   const stats = (await get('/stats')).json
   checkThat('the savings are counted', stats.savings?.saved > 0, JSON.stringify(stats.savings))

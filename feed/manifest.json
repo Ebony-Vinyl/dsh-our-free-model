@@ -1,7 +1,7 @@
 {
   "version": "2.5.9",
   "base": "../",
-  "publishedAt": "2026-10-22T03:36:10.088Z",
+  "publishedAt": "2026-10-23T02:00:26.010Z",
   "notes": "精简账号渠道至 10 个，清理遗留实现、依赖与桌面端资源，保留历史存储和备份兼容；同步交流群 5 的二维码与群号。",
   "files": [
     {
@@ -206,8 +206,8 @@
     },
     {
       "path": "src/providers/registry.json",
-      "size": 123864,
-      "sha256": "8ee47bacef13f26c9ff27cef2b01a58c8d590521eccf81c110f4b26501e32c88"
+      "size": 124782,
+      "sha256": "bfb03a1621714463e1c4157f2273006f5740dd10adcf650018f80782db1edaa0"
     },
     {
       "path": "src/push.js",
@@ -405,5 +405,5 @@
       "sha256": "6419471effa631519def7797d76d7ede38b9fcfa9a83c2148c8ef5d43355b43d"
     }
   ],
-  "signature": "2jLmGobPUDs+Jm07SXYGLcjUezjNHTTPRs8Yg66XUzyOQeltI6c22bYmUj+lsMoIOzt+1yvjvg/DlvPnitQ/DQ=="
+  "signature": "UfffZrCArOwfGB6PpyWK+d0Gg1dIYP8j8KLkJNxWyk817JicOlFythX+T+mrjCEH59nZDuknqHbQGjdIO+pVCw=="
 }
