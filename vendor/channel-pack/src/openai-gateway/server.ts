@@ -67,7 +67,18 @@ export interface OpenAiGateway {
   apiKey: ApiKeySource
 }
 
-const BODY_LIMIT = 16 * 1024 * 1024
+// 图片多的 Codex 会话会把截图原样带进每一轮请求，16 MiB 在几十张截图后就会
+// 被撑破。上限放宽到 64 MiB，仍保留对异常超大请求的拒绝。
+const BODY_LIMIT = 64 * 1024 * 1024
+
+/**
+ * 服务端空闲连接的保持时间。
+ *
+ * reqwest（CC Switch 的转发层）默认把空闲连接留到 90 秒后才复用，而 Node
+ * 默认只在 5 秒后就关闭。短于客户端的服务端超时会让复用时刻撞上已关闭的
+ * socket，客户端看到的是「连接重置」。保持时间必须长于客户端一侧的上限。
+ */
+const KEEP_ALIVE_TIMEOUT_MS = 120_000
 
 const defaultLogger: GatewayLogger = {
   info: (message) => console.info(message),
@@ -90,20 +101,29 @@ function readJson(request: IncomingMessage, signal: AbortSignal): Promise<OpenAi
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let size = 0
+    let overflowed = false
     const abort = () => reject(new OpenAiGatewayError('request was aborted', 499, 'aborted', 'aborted'))
     signal.addEventListener('abort', abort, { once: true })
     request.on('data', (chunk: Buffer | string) => {
+      if (overflowed) return
       const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       size += data.length
       if (size > BODY_LIMIT) {
-        reject(new OpenAiGatewayError('request body is too large', 413, 'invalid_request_error', 'request_too_large'))
-        request.destroy()
+        overflowed = true
+        chunks.length = 0
         return
       }
       chunks.push(data)
     })
     request.on('error', reject)
     request.on('end', () => {
+      // 超限时继续把请求体读完再回错误：中途销毁连接会让客户端只看到
+      // 「连接重置」，而不是一个能读懂并调整请求的 413。
+      if (overflowed) {
+        signal.removeEventListener('abort', abort)
+        reject(new OpenAiGatewayError('request body is too large', 413, 'invalid_request_error', 'request_too_large'))
+        return
+      }
       signal.removeEventListener('abort', abort)
       try {
         const value = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
@@ -450,6 +470,14 @@ export function createOpenAiGateway(options: OpenAiGatewayOptions): OpenAiGatewa
       if (server !== undefined) return
       const current = createServer(requestHandler)
       server = current
+      // Node 默认 5 秒就关闭空闲的 keep-alive 连接，而 reqwest 默认把空闲
+      // 连接留到 90 秒后才复用。服务端的空闲上限短于客户端，复用时刻就会
+      // 撞上已经关闭的 socket，表现为连接重置；请求体越大越难走到可以安全
+      // 重试的「尚未写入」阶段。保持时间必须长于客户端一侧的上限。
+      current.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS
+      // headersTimeout 必须大于 keepAliveTimeout，否则 Node 会在空闲期间
+      // 先以「读取请求头超时」的名义关闭连接。
+      current.headersTimeout = KEEP_ALIVE_TIMEOUT_MS + 5_000
       await new Promise<void>((resolve, reject) => {
         const onError = (error: Error) => {
           current.off('listening', onListening)
