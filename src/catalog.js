@@ -90,11 +90,18 @@ export const CAPABILITIES = [
  *
  * ### Where this table departs from models.dev, and why
  *
- * - `contextWindow`: models.dev publishes `200000` for the `-free` ids, but
- *   the same upstream accepted a ~1M-token prompt on `deepseek-v4.1-flash-free`
- *   (1025229 prompt tokens, 200) and on `glm-5.3-flash-free` (900694, 200), so
- *   the published figure is a floor, not the wire's limit. The served window
- *   is used, matching what `deepseek-v4.1-flash` (the paid id) publishes.
+ * - `contextWindow`: the `-free` ids once accepted ~1M-token prompts on this
+ *   lane (1025229 tokens on `deepseek-v4.1-flash-free`, 900694 on
+ *   `glm-5.3-flash-free`, both 200), so their overrides borrowed the paid
+ *   ids' 1M window and models.dev's `200000` was read as a floor.
+ *   ⚠️ Reversed 2026-10-20: the upstream now enforces a much smaller window
+ *   than that probe measured — turns die with `more tokens than this model's
+ *   maximum context length` around 290K while the plugin advertised 1M, so
+ *   the harness's compaction never fired (issues #494/#464, the advertised-
+ *   window half that #504 did not cover). An inflated window is not bonus
+ *   capacity: it silences the compaction trigger and the turn dies upstream.
+ *   The overrides are back on the publisher's figures — under-advertising
+ *   only compacts earlier, over-advertising costs the turn.
  * - `disabled` rung: offered only where the model's own `effort.values`
  *   includes `none`. GLM 5.3 Flash does not list `none`, and four samples at
  *   `none` still spent a median 552 reasoning tokens — an Off rung there would
@@ -105,17 +112,19 @@ export const CAPABILITIES = [
  *   measured override (models.dev lists `image`, but an image request 500s).
  */
 const FREE_ID_OVERRIDES = {
-  // models.dev: effort low|high|max; limit 200000/32000 (floor — see above).
+  // models.dev: effort low|high|max; limit 200000/32000. The 1M probe is stale
+  // (see the table comment) — the enforced window is the published one, or the
+  // harness never compacts in time (#494/#464).
   'deepseek-v4.1-flash-free': {
-    vision: true, contextWindow: 1048576, maxOutput: 384000,
+    vision: true, contextWindow: 200000, maxOutput: 32000,
     efforts: ['disabled', 'low', 'high', 'max'], effortDefault: 'high',
     effortPatch: { reasoning_effort: '$effort' },
     effortOffPatch: { reasoning_effort: 'none' },
   },
-  // models.dev: effort low|high|max. No `none` in the set, and thinking does
-  // not switch off in practice, so the menu starts at low.
+  // models.dev: effort low|high|max, limit 200000/32000. No `none` in the set,
+  // and thinking does not switch off in practice, so the menu starts at low.
   'glm-5.3-flash-free': {
-    vision: true, contextWindow: 1048576, maxOutput: 131072,
+    vision: true, contextWindow: 200000, maxOutput: 32000,
     efforts: ['low', 'high', 'max'], effortDefault: 'high',
     effortPatch: { reasoning_effort: '$effort' },
   },
