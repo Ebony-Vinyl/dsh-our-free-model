@@ -6,6 +6,9 @@ import { generateKey } from '../../src/forward.js'
 import { structuralRejection } from '../../src/trust.js'
 import { openLoginTerminal } from './login-terminal.mjs'
 import { publicModelVisibility, validateModelVisibility, isModelHidden } from '../../src/store.js'
+import { normalizeCombos, buildComboCatalog, comboId } from '../../src/combos.js'
+import { normalizeQuota, usageToday } from '../../src/quota.js'
+import { dayKey } from '../../src/store.js'
 
 const PREFIX = '/api/management'
 const BOOTSTRAP_MS = 10 * 60_000
@@ -13,6 +16,8 @@ const SESSION_MS = 8 * 60 * 60_000
 const MAX_BODY_BYTES = 16 * 1024
 const ASSETS = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/quota.html', ['quota.html', 'text/html; charset=utf-8']],
+  ['/combos.html', ['combos.html', 'text/html; charset=utf-8']],
 ])
 const SECURITY_HEADERS = {
   'cache-control': 'no-store',
@@ -56,6 +61,7 @@ function validateSettings(patch) {
   const result = {}
   for (const [key, value] of Object.entries(patch)) {
     if (Object.hasOwn(visibility, key)) { result[key] = visibility[key]; continue }
+    if (key === 'quota') { result[key] = validateQuota(value); continue }
     if (booleans.has(key)) {
       if (typeof value !== 'boolean') throw fail(400, `${key} 必须是布尔值`)
     } else if (Object.hasOwn(numbers, key)) {
@@ -65,6 +71,44 @@ function validateSettings(patch) {
     result[key] = value
   }
   return result
+}
+
+/** 限额段的整体校验：结构不对整体拒绝，单个模型的上限字段逐个查。 */
+function validateQuota(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw fail(400, 'quota 必须是 JSON 对象')
+  }
+  const out = {}
+  if (Object.hasOwn(value, 'enabled')) {
+    if (typeof value.enabled !== 'boolean') throw fail(400, 'quota.enabled 必须是布尔值')
+    out.enabled = value.enabled
+  }
+  if (Object.hasOwn(value, 'onExceed')) {
+    if (value.onExceed !== 'deny' && value.onExceed !== 'skip') throw fail(400, "quota.onExceed 必须是 'deny' 或 'skip'")
+    out.onExceed = value.onExceed
+  }
+  if (Object.hasOwn(value, 'models')) {
+    if (value.models === null || typeof value.models !== 'object' || Array.isArray(value.models)) {
+      throw fail(400, 'quota.models 必须是对象')
+    }
+    const models = {}
+    const entries = Object.entries(value.models)
+    if (entries.length > 500) throw fail(400, 'quota.models 最多 500 个模型')
+    for (const [id, limit] of entries) {
+      if (typeof id !== 'string' || id.trim() === '' || id.length > 300) throw fail(400, `quota.models 的模型 id 无效：${String(id).slice(0, 40)}`)
+      if (limit === null || typeof limit !== 'object' || Array.isArray(limit)) throw fail(400, `quota.models["${id}"] 必须是对象`)
+      const row = {}
+      for (const field of ['dailyRequests', 'dailyTokens', 'dailyCredits']) {
+        if (!Object.hasOwn(limit, field)) continue
+        const n = limit[field]
+        if (!Number.isFinite(n) || n < 0 || n > 100_000_000) throw fail(400, `quota.models["${id}"].${field} 必须是 0 到 1 亿的数字`)
+        row[field] = Math.trunc(n)
+      }
+      models[id] = row
+    }
+    out.models = models
+  }
+  return out
 }
 
 export function managementSettings(value) {
@@ -78,6 +122,7 @@ export function managementSettings(value) {
     standaloneLanPort: value.standaloneLanPort ?? 0,
     probeIntervalMinutes: value.probeIntervalMinutes ?? 15,
     defaultMaxTokens: value.defaultMaxTokens ?? 32768,
+    quota: value.quota ?? { enabled: false, onExceed: 'deny', models: {} },
   }
 }
 
@@ -104,6 +149,21 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
   for (const name of manifest) assets.set(`/assets/${name}`, {
     type: name.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8',
     body: fs.readFileSync(new URL(`./web/${name}`, import.meta.url)),
+  })
+  // 限额页脚本是手写的静态文件，不进构建清单；同样只按固定名读一次。
+  assets.set('/assets/quota.js', {
+    type: 'text/javascript; charset=utf-8',
+    body: fs.readFileSync(new URL('./web/quota.js', import.meta.url)),
+  })
+  // 路由（模型链）页脚本：同上，手写静态文件，路径固定不读请求输入。
+  assets.set('/assets/combos.js', {
+    type: 'text/javascript; charset=utf-8',
+    body: fs.readFileSync(new URL('./web/combos.js', import.meta.url)),
+  })
+  // 侧栏注入：给打包产物没有的「Auto 路由 / 积分限额」补常驻入口。
+  assets.set('/assets/bridge.js', {
+    type: 'text/javascript; charset=utf-8',
+    body: fs.readFileSync(new URL('./web/bridge.js', import.meta.url)),
   })
   const json = (res, status, payload, headers = {}) => {
     res.writeHead(status, { ...SECURITY_HEADERS, 'content-type': 'application/json; charset=utf-8', ...headers })
@@ -242,6 +302,113 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       if (result.error) throw fail(502, result.error)
       if (result.ok === false) throw fail(500, '无法移除本地授权')
       json(res, 200, result)
+    } else if (method === 'GET' && pathname === `${PREFIX}/combos`) {
+      // 桌面版同款契约：前端「路由」页读 combos（settings 里的链定义）+ models
+      // （可挂链的候选清单）+ usable（每条链当前真实可用的成员交集）。
+      const combos = normalizeCombos(stores.settings.get().combos)
+      const members = runtime.catalog.filter(entry => entry.channel !== 'combo')
+      const models = members.map(entry => ({
+        id: entry.id, name: entry.name, channel: entry.channel ?? 'free',
+        vision: entry.vision === true,
+        contextWindow: entry.contextWindow ?? 0, maxOutput: entry.maxOutput ?? 0,
+      }))
+      const usable = buildComboCatalog(combos, runtime.catalog).map(entry => ({
+        id: entry.id, models: entry.combo, lanes: entry.lanes ?? [],
+      }))
+      json(res, 200, { combos, models, usable })
+    } else if (method === 'POST' && pathname === `${PREFIX}/combos`) {
+      const body = await readBody(req)
+      if (!Array.isArray(body?.combos)) throw fail(400, 'combos 必须是数组')
+      if (body.combos.length > 200) throw fail(400, '最多 200 条链')
+      // 先在「会是什么」的影子目录上校验：桌面版的行为是名字转 id、成员必须
+      // 真实存在（否则该链条目会在清单里悄悄消失）。这里把同样的规则提前成
+      // 400，用户在页面上就能看到原因，而不是保存成功后发现链不见了。
+      const incoming = []
+      const seenIds = new Set()
+      for (const row of body.combos) {
+        if (row === null || typeof row !== 'object' || Array.isArray(row)) throw fail(400, '每条链必须是对象')
+        const name = typeof row.name === 'string' ? row.name.trim() : ''
+        if (name === '' || name.length > 80) throw fail(400, '链名称必须是非空且不超过 80 字')
+        const id = typeof row.id === 'string' && row.id.startsWith('combo:') ? row.id : comboId(name)
+        if (seenIds.has(id)) throw fail(400, `链名称重复：${name}`)
+        seenIds.add(id)
+        if (!Array.isArray(row.models) || row.models.length === 0) throw fail(400, `链「${name}」至少要有一个成员模型`)
+        if (row.models.length > 32) throw fail(400, `链「${name}」成员最多 32 个`)
+        for (const member of row.models) {
+          if (typeof member !== 'string' || member.trim() === '') throw fail(400, `链「${name}」包含无效的成员模型 id`)
+          if (member === id) throw fail(400, `链「${name}」不能把自己作为成员`)
+          if (!runtime.catalog.some(entry => entry.id === member && entry.channel !== 'combo')) {
+            throw fail(400, `链「${name}」的成员不在当前清单中：${member}`)
+          }
+        }
+        const strategy = row.strategy === 'round-robin' ? 'round-robin' : 'fallback'
+        const sticky = Number(row.stickyLimit)
+        const enabled = row.enabled === undefined ? true : row.enabled === true
+        if (row.enabled !== undefined && typeof row.enabled !== 'boolean') throw fail(400, 'enabled 必须是布尔值')
+        incoming.push({
+          id, name,
+          models: [...new Set(row.models.map(value => value.trim()))],
+          strategy,
+          stickyLimit: Number.isFinite(sticky) && sticky > 0 ? Math.min(Math.trunc(sticky), 100) : 1,
+          enabled,
+        })
+      }
+      // 桌面版契约是全量替换：前端每次都发完整列表（新增时 [...l, row]，
+      // 删除时 l.filter(...)），照单全收才能让删除生效。已按 id 转换过，
+      // 保存结果与前端发出的顺序一致，不做洗牌。
+      persist({ combos: incoming })
+      await onSettingsChanged()
+      const combos = normalizeCombos(stores.settings.get().combos)
+      const usable = buildComboCatalog(combos, runtime.catalog).map(entry => ({
+        id: entry.id, models: entry.combo, lanes: entry.lanes ?? [],
+      }))
+      json(res, 200, { combos, usable })
+    } else if (method === 'GET' && pathname === `${PREFIX}/combos/preview`) {
+      const params = new URL(req.url, 'http://localhost').searchParams
+      const ids = (params.get('models') ?? '').split(',').map(value => value.trim()).filter(value => value !== '')
+      const members = ids
+        .map(id => runtime.catalog.find(entry => entry.id === id && entry.channel !== 'combo'))
+        .filter(entry => entry !== undefined)
+      const capacity = members.length === 0 ? null : {
+        contextWindow: Math.min(...members.map(entry => entry.contextWindow ?? 131072)),
+        maxOutput: Math.min(...members.map(entry => entry.maxOutput ?? 32768)),
+        vision: members.every(entry => entry.vision === true),
+      }
+      json(res, 200, { capacity })
+    } else if (method === 'POST' && pathname === `${PREFIX}/quota`) {
+      // 限额页专用写口：比全量 settings 端口多给「删除单模型规则」和「清空
+      // 当日用量」两个动作，免得页面每次小改都重发整份 models 表。
+      const body = await readBody(req)
+      const current = normalizeQuota(stores.settings.get().quota)
+      if (body.action === 'resetDay') {
+        if (typeof body.model !== 'string' || body.model.trim() === '') throw fail(400, 'resetDay 需要模型 id')
+        const modelId = body.model.trim()
+        const day = dayKey()
+        // JsonStore.update 是浅合并：传 { days: { [day]: … } } 会把其他天的
+        // 账本整个冲掉。这里的语义是只删今天这一格，必须走 edit 读改写。
+        let removed = false
+        stores.stats.edit(value => {
+          const row = value?.days?.[day]?.models
+          if (row === undefined || !Object.hasOwn(row, modelId)) return undefined
+          delete row[modelId]
+          removed = true
+          return value
+        })
+        if (removed) stores.stats.flush()
+        json(res, 200, { ok: true, removed })
+        return
+      }
+      if (body.action === 'removeModel') {
+        if (typeof body.model !== 'string' || body.model.trim() === '') throw fail(400, 'removeModel 需要模型 id')
+        const models = { ...current.models }
+        delete models[body.model.trim()]
+        persist({ quota: { ...current, models } })
+      } else {
+        const patch = validateQuota(body.quota ?? body)
+        persist({ quota: { ...current, ...patch } })
+      }
+      await onSettingsChanged()
+      json(res, 200, { quota: normalizeQuota(stores.settings.get().quota) })
     } else if (method === 'POST' && pathname === `${PREFIX}/settings`) {
       const patch = validateSettings(await readBody(req))
       persist(patch)

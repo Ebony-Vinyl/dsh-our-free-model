@@ -50,6 +50,7 @@ export const FAILURE_KIND = Object.freeze({
   PERMISSION: 'permission',
   BILLING: 'billing',
   RATE_LIMIT: 'rate_limit',
+  QUOTA: 'quota',
   OVERLOADED: 'overloaded',
   TIMEOUT: 'timeout',
   UPSTREAM: 'upstream',

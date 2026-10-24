@@ -32,6 +32,7 @@ import { isComboEntry, comboChain } from './combos.js'
 import { applyTokenSavers, saverConfig } from './token-saver/index.js'
 import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
+import { normalizeQuota, checkQuota, quotaFailure } from './quota.js'
 
 export const ROUTE_MAIN = 'our-free-model'
 export const ROUTE_REGION = 'our-free-model-region'
@@ -51,6 +52,7 @@ export class FreeModelAdapter {
    * @param {(ref: object) => string | undefined} [dependencies.resolveImage]
    * @param {(record: object) => void} dependencies.recordUsage
    * @param {(record: object) => void} [dependencies.recordTurn]
+   * @param {object} [dependencies.stats] - stats store 本体（quota 闸门只读 get()）
    * @param {(message: string) => void} [dependencies.warn]
    */
   constructor(dependencies) {
@@ -318,6 +320,27 @@ export class FreeModelAdapter {
     if (entry === null) {
       recordRejectedTurn()
       yield { type: 'finish', reason: { kind: 'error', failure: { message: `our free model does not serve "${options.model}" on this egress`, code: CODE.server } } }
+      return { advance: false, verdict: null, ok: false }
+    }
+
+    // 积分限额闸门：请求还没出门之前先查当日账本。放在 entry 判空之后，因为
+    // 限额按模型 id 记账，连模型都没有的请求轮不到谈限额；放在车道分流之前，
+    // 因为 free/sealed/kilo/aggregate 四条车道都要过这道门。
+    // combo 链（plan.recordTurn === false）里不在这里拒绝——链条的换手逻辑
+    // 需要把「限额满了」当成一个普通的候选失败上报，由 runCombo 决定切下一个
+    // 还是放弃整个回合，直接 yield finish 会把换手机会掐掉。
+    const quota = normalizeQuota(settings.quota)
+    const quotaCheck = checkQuota(quota, this.deps.stats, entry.id)
+    if (quotaCheck.allowed === false) {
+      if (plan.recordTurn === false) {
+        // combo 候选：以可推进失败的形式上报，链条看到 advance 会切下一个。
+        // verdict 手工构造而不走 classifyFailure——分类器不认「本机账本满了」
+        // 这种失败，只有限额闸门自己知道这个候选今天到头了。
+        return { advance: true, verdict: { kind: 'quota', scope: 'account', retryable: true, cooldownMs: 0, rule: 'quota-gate', message: quotaCheck.reason }, ok: false }
+      }
+      recordRejectedTurn()
+      this.deps.warn?.(`our-free-model: ${entry.id} 被限额拦下 —— ${quotaCheck.reason}`)
+      yield { type: 'finish', reason: { kind: 'error', failure: quotaFailure(quotaCheck) } }
       return { advance: false, verdict: null, ok: false }
     }
 
