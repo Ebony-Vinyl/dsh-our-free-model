@@ -56,3 +56,32 @@ await test('a live signal preserves the existing transport arguments and result'
     lane.fetch = saved
   }
 })
+
+await test('the EAC transport preserves signed bytes through a selected HTTP proxy', async () => {
+  const saved = { fetch: lane.fetch, proxy: lane.proxy }
+  const proxy = http.createServer((req, res) => {
+    assert.equal(req.url, 'http://unreachable.invalid/eac/auth/status')
+    assert.equal(req.headers['x-synthetic-signature'], 'unchanged')
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      assert.equal(Buffer.concat(chunks).toString('utf8'), '{"signed":true}')
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end('{"ok":true}')
+    })
+  })
+  await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve))
+  try {
+    lane.fetch = null
+    lane.proxy = `http://127.0.0.1:${proxy.address().port}`
+    const response = await directFetch('http://unreachable.invalid/eac/auth/status', {
+      method: 'POST', headers: { 'x-synthetic-signature': 'unchanged' }, body: '{"signed":true}',
+    })
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { ok: true })
+  } finally {
+    lane.fetch = saved.fetch
+    lane.proxy = saved.proxy
+    await new Promise(resolve => proxy.close(resolve))
+  }
+})
