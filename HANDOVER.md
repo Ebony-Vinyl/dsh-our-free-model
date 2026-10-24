@@ -1027,3 +1027,24 @@ Ditambahkan entri root-only: `/nul`, `/hapus`, `/commit-msg.tmp`.
   `glm-5.3-flash-free` **tidak diubah**.
 - Front end Bahasa Indonesia **tidak diubah**.
 - Gateway tetap PID 65596, `forwardKey` tidak berubah.
+
+# SESI 15o — 2026-10-24 — Uji respons `glm-5.3-flash-free` via gateway
+
+## 45. Hasil uji chat `glm-5.3-flash-free`
+
+Gateway sehat (HTTP 200 di `/health`, v2.5.3, PID 65596), dan model
+terdaftar di `/v1/models` dengan `context_window: 1048576`.
+
+Namun, satu request uji chat via curl ke `glm-5.3-flash-free` (jedá ≥3 detik,
+`max_tokens: 50`, bahasa Indonesia) menghasilkan:
+
+```json
+{"error":{"message":"Free usage limit reached. Subscribe to OpenCode Go to keep going: https://opencode.ai/go","type":"rate_limit_error","code":"RATE_LIMIT","param":null}}
+```
+
+Ini adalah **rate limit dari OpenCode free tier**, bukan error dari gateway
+OFM itu sendiri. Model belum berhasil merespons chat saat uji coba ini
+dijalankan. Coba ulang setelah jeda lebih lama atau pada waktu lain.
+
+Status: `glm-5.3-flash-free` tetap aktif di katalog dan di picker Zed,
+tetapi uji respons chat belum lulus saat ini.
