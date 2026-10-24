@@ -78,6 +78,7 @@ const suites = [
   ['egress-availability', 'egress-availability-test.mjs', []],
   ['effort', 'effort-test.mjs', []],
   ['projection', 'projection-test.mjs', []],
+  ['reasoning-replay', 'reasoning-replay-test.mjs', []],
   ['fingerprint', 'fingerprint-test.mjs', []],
   ['opencode-parity', 'opencode-parity-test.mjs', []],
   ['free-lane-wire', 'free-lane-wire-test.mjs', []],

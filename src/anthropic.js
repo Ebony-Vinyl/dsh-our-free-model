@@ -150,10 +150,13 @@ function toolResultBlocks(content) {
  * `thinking` is kept as a `reasoning` block because that is the harness's own
  * spelling for streamed thinking (see `readStream`'s `block-end` chunks) and
  * because every projector — `toChatMessages`, `toClaudeMessages`,
- * `toResponseInput` — drops reasoning blocks on the way upstream. Keeping them
- * therefore cannot replay prior thinking to the provider or trip a wire that
+ * `toResponseInput` — keeps reasoning out of the wire's text. Keeping them
+ * therefore cannot replay prior thinking into an answer or trip a wire that
  * rejects it, while dropping them would erase a turn's reasoning from anything
- * that inspects the harness history.
+ * that inspects the harness history. The one place such a block does reach the
+ * wire is the Chat replay a thinking-mode upstream demands, and that carries it
+ * as `reasoning_content` rather than as text (see `toChatMessages`'s
+ * `scope.reasoningReplay`).
  *
  * `redacted_thinking` is dropped instead of being mapped to an empty reasoning
  * block: its `data` is opaque ciphertext bound to the account that produced it,

@@ -15,6 +15,17 @@ import { MAX_TOOL_NAME_LEN, baseModelId, restoreToolName } from './upstream.js'
 /** Content types an image lane can carry, matched against the verified media type. */
 const IMAGE_MEDIA = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
+/**
+ * The placeholder a client may send in place of a turn's thinking.
+ *
+ * DeepSeek's thinking mode counts a *non-empty* `reasoning_content` as "passed
+ * back": an empty string reads as "not passed back", and the next tool turn is
+ * refused with "The `reasoning_content` in the thinking mode must be passed
+ * back to the API". A single space is the value a client uses when it has no
+ * thinking text to hand, and the upstream accepts it.
+ */
+const REASONING_PLACEHOLDER = ' '
+
 /** Text of a content block list, joining every text-bearing block. */
 function textOf(blocks) {
   const parts = []
@@ -22,6 +33,22 @@ function textOf(blocks) {
     if (block?.type === 'text' && typeof block.text === 'string') parts.push(block.text)
   }
   return parts.join('\n')
+}
+
+/**
+ * The thinking one turn kept, joined the way the upstream concatenates it.
+ *
+ * A turn's reasoning block is the upstream's own stream, so its text is what
+ * the upstream expects to read back. Several blocks in one turn are the
+ * recovery path splicing a checkpoint ahead of the resumed thinking, and the
+ * upstream concatenates them without a separator.
+ */
+function reasoningOf(blocks) {
+  const parts = []
+  for (const block of blocks ?? []) {
+    if (block?.type === 'reasoning' && typeof block.text === 'string') parts.push(block.text)
+  }
+  return parts.join('')
 }
 
 /**
@@ -159,10 +186,19 @@ function callIdOf(message) {
  * Forwarded Chat reasoning_content is preserved, including explicit empty strings.
  * Internal reasoning blocks are not projected. Tool results are first-class `role: 'tool'` messages keyed by the
  * provider call id they answer.
+ *
+ * `scope.reasoningReplay` turns on the replay a thinking-mode upstream demands:
+ * a turn that called a tool has to travel back with the thinking it was
+ * answered with, because the upstream refuses the next turn without it
+ * ("The `reasoning_content` in the thinking mode must be passed back to the
+ * API"). It is opt-in and off by default — the forwarding contract is a
+ * different one (relay the caller's own values, invent nothing), and the
+ * default path has to stay byte-identical to it.
  */
-export function toChatMessages(messages, resolveImage, warnings) {
+export function toChatMessages(messages, resolveImage, warnings, scope = {}) {
   const out = []
   const followUp = []
+  const replay = scope.reasoningReplay === true
   const flushFollowUp = () => {
     if (followUp.length > 0) out.push({ role: 'user', content: followUp.splice(0) })
   }
@@ -236,6 +272,15 @@ export function toChatMessages(messages, resolveImage, warnings) {
         if (!text && calls.length === 0) break
         const entry = { role: 'assistant', content: text || null }
         if (typeof message.reasoning_content === 'string') entry.reasoning_content = message.reasoning_content
+        else if (replay && calls.length > 0) {
+          // The upstream asked this turn's question with a tool call, so its
+          // answer has to travel back with the thinking behind it. What the
+          // harness kept is what the upstream expects to read; what it kept
+          // none of travels as the placeholder, because an empty string is
+          // read as "not passed back" and refused the same way.
+          const thinking = reasoningOf(blocks)
+          entry.reasoning_content = thinking === '' ? REASONING_PLACEHOLDER : thinking
+        }
         if (calls.length > 0) entry.tool_calls = calls
         out.push(entry)
         break

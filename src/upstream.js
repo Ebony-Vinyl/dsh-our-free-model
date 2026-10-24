@@ -134,6 +134,28 @@ const RESPONSES_MODELS = new Set(['muse-spark-1.2-contributor-free', 'muse-spark
 /** Models served by the Anthropic-shaped /messages endpoint. */
 const MESSAGES_MODELS = new Set(['union-alpha'])
 
+/**
+ * Models whose chat wire replays a turn's thinking.
+ *
+ * DeepSeek's thinking mode refuses the next tool turn unless the request
+ * carries the `reasoning_content` of the assistant turn that called the tool —
+ * "The `reasoning_content` in the thinking mode must be passed back to the
+ * API" — and the free lane always ships tools, so the refusal lands on every
+ * follow-up of such a turn. The upstream reads an empty string as *not* passed
+ * back, so a turn whose thinking the harness kept none of travels as the
+ * single-space placeholder the upstream accepts.
+ *
+ * Scoped by measurement rather than by family: `deepseek-v4.1-flash-free` is
+ * the id the live sessions show being refused (14 refusals over 1861 requests
+ * to that id), and its published sibling rides the same upstream contract.
+ */
+const REASONING_REPLAY_MODELS = new Set(['deepseek-v4.1-flash-free', 'deepseek-v4-flash-free'])
+
+/** Does this model's chat wire require a turn's thinking to travel back? */
+export function replaysReasoning(modelId) {
+  return REASONING_REPLAY_MODELS.has(baseModelId(modelId))
+}
+
 export const SESSION_RE = /^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/
 
 /**
