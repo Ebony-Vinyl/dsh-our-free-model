@@ -56,6 +56,13 @@ const server = http.createServer((req, res) => {
       return
     }
     res.writeHead(200, { 'content-type': 'text/event-stream' })
+    if (answer.delayMs) {
+      res.write(answer.prefix ?? ': ping\n\n')
+      const ping = setInterval(() => res.write(': ping\n\n'), 15)
+      const timer = setTimeout(() => { clearInterval(ping); res.end(answer.body ?? '') }, answer.delayMs)
+      res.on('close', () => { clearTimeout(timer); clearInterval(ping) })
+      return
+    }
     res.end(answer.body ?? '')
   })
 })
@@ -83,14 +90,14 @@ const check = async (name, fn) => {
   catch (error) { failures += 1; console.error(`FAIL  ${name} — ${error.message}`) }
 }
 
-function setup(answers, model = COMBO_ID) {
+function setup(answers, model = COMBO_ID, limits = {}) {
   const scenario = { answers, requests: [] }
   activeCase = scenario
   const turns = []
   const controller = new AbortController()
   const adapter = new FreeModelAdapter({
     state: () => ({
-      catalog: CATALOG,
+      catalog: CATALOG.map(row => row.id === COMBO_ID ? { ...row, ...limits } : row),
       membership: { [ROUTE_MAIN]: MODELS },
       settings: { enabled: true, defaultMaxTokens: 32768, streamRecovery: false },
       attributionUserAgent: 'offline-combo-advance-test',
@@ -110,8 +117,8 @@ function setup(answers, model = COMBO_ID) {
   return { scenario, turns, controller, stream }
 }
 
-async function drive(answers, model) {
-  const run = setup(answers, model)
+async function drive(answers, model, limits) {
+  const run = setup(answers, model, limits)
   const chunks = []
   try {
     for await (const chunk of run.stream) chunks.push(chunk)
@@ -250,6 +257,48 @@ for (const [status, type, message, attempts] of [
   assert.equal(run.scenario.requests.length, attempts)
   assert.equal(run.finish?.kind, attempts === 2 ? 'stop' : 'error')
   if (attempts === 2) assert.equal(run.text, ANSWER)
+})
+
+await check('heartbeats and reasoning do not extend the first-output deadline', async () => {
+  const run = await drive([
+    { prefix: reasoningFrames('not an answer'), delayMs: 1500, body: chatFrames('late') },
+    { body: chatFrames(ANSWER) },
+  ], COMBO_ID, { firstOutputTimeoutMs: 150, totalTimeoutMs: 1000 })
+  assert.equal(run.scenario.requests.length, 2)
+  assert.equal(run.text, ANSWER)
+  assert.equal(run.chunks.some(chunk => chunk.type === 'reasoning-delta'), false)
+})
+
+await check('visible output disables the deadline and never switches models', async () => {
+  const run = await drive([
+    { prefix: sse({ choices: [{ index: 0, delta: { content: ANSWER } }] }), delayMs: 300,
+      body: sse({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + 'data: [DONE]\n\n' },
+  ], COMBO_ID, { firstOutputTimeoutMs: 150, totalTimeoutMs: 200 })
+  assert.equal(run.scenario.requests.length, 1)
+  assert.equal(run.text, ANSWER)
+  assert.equal(run.finish.kind, 'stop')
+})
+
+await check('total first-output budget bounds the whole chain', async () => {
+  const started = Date.now()
+  const run = await drive([
+    { delayMs: 2000, body: chatFrames('late') },
+    { delayMs: 2000, body: chatFrames('late') },
+  ], COMBO_ID, { firstOutputTimeoutMs: 200, totalTimeoutMs: 300 })
+  assert.equal(run.finish.kind, 'error')
+  assert.ok(Date.now() - started < 1500)
+  assert.equal(run.text, '')
+})
+
+await check('caller cancellation does not launch another candidate', async () => {
+  const run = setup([{ delayMs: 2000, body: chatFrames('late') }], COMBO_ID,
+    { firstOutputTimeoutMs: 500, totalTimeoutMs: 1000 })
+  const timer = setTimeout(() => run.controller.abort(), 100)
+  const chunks = []
+  try { for await (const chunk of run.stream) chunks.push(chunk) }
+  finally { clearTimeout(timer) }
+  assert.ok(run.scenario.requests.length <= 1)
+  assert.equal(chunks.at(-1)?.reason?.kind, 'aborted')
 })
 
 server.close()

@@ -113,6 +113,7 @@ const suites = [
   ['prompt-saver', 'prompt-saver-test.mjs', []],
   ['anthropic', 'anthropic-test.mjs', []],
   ['aggregate', 'aggregate-test.mjs', []],
+  ['aggregate-effort', 'aggregate-effort-test.mjs', []],
   ['aggregate-wiring', 'aggregate-wiring-test.mjs', []],
   ['model-test', 'model-test-test.mjs', []],
   ['model-test-probe-race', 'model-test-probe-race-test.mjs', []],

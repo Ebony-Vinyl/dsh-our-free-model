@@ -36,6 +36,11 @@ export const COMBO_CHANNEL = 'combo'
 export const COMBO_PREFIX = 'combo:'
 export const COMBO_STRATEGIES = ['fallback', 'round-robin']
 
+export function comboTimeout(value, fallback) {
+  return Number.isFinite(Number(value)) && Number(value) > 0
+    ? Math.min(600000, Math.max(100, Math.trunc(Number(value)))) : fallback
+}
+
 /** Rotation cursors, keyed by combo id. In-memory on purpose (see the header). */
 const rotation = new Map()
 
@@ -86,6 +91,8 @@ export function normalizeCombos(raw) {
       strategy: COMBO_STRATEGIES.includes(row.strategy) ? row.strategy : 'fallback',
       stickyLimit: Number.isFinite(Number(row.stickyLimit)) && Number(row.stickyLimit) > 0 ? Math.trunc(Number(row.stickyLimit)) : 1,
       enabled: row.enabled !== false,
+      firstOutputTimeoutMs: comboTimeout(row.firstOutputTimeoutMs, 20000),
+      totalTimeoutMs: comboTimeout(row.totalTimeoutMs, 60000),
     })
   }
   return out
@@ -118,6 +125,8 @@ export function buildComboCatalog(combos, catalog) {
       combo: members.map(entry => entry.id),
       strategy: combo.strategy,
       stickyLimit: combo.stickyLimit,
+      firstOutputTimeoutMs: comboTimeout(combo.firstOutputTimeoutMs, 20000),
+      totalTimeoutMs: comboTimeout(combo.totalTimeoutMs, 60000),
       // Intersection, not union — see the module header.
       vision: members.every(entry => entry.vision === true),
       reasoning: members.some(entry => entry.reasoning === true),
