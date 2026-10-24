@@ -128,10 +128,16 @@ check('a rung the plugin does not declare is recorded as the default it became',
 // level moves the reasoning volume, so the ids that publish a level set carry
 // it on the wire instead of the token ladder — the same shape the absorbed
 // channels use. A model with no declared set keeps the ladder untouched.
+//
+// The window: the 1M figures measured on 2026-10-14 are stale — the upstream
+// now enforces models.dev's 200000 (turns 400 near 290K while 1M was
+// advertised, #494/#464), so the overrides publish the enforced window and
+// the harness can compact before the turn dies.
 const DS = catalog('deepseek-v4.1-flash-free')
 const GLM = catalog('glm-5.3-flash-free')
-check('the served capacity is the measured 1M window, not the published floor', DS.contextWindow, 1048576)
-check('and the same for glm', GLM.contextWindow, 1048576)
+check('the advertised window is the enforced one, not the stale 1M probe', DS.contextWindow, 200000)
+check('and the same for glm', GLM.contextWindow, 200000)
+check('the advertised output follows the publisher too', [DS.maxOutput, GLM.maxOutput], [32000, 32000])
 check('deepseek declares its own level menu', DS.efforts, ['disabled', 'low', 'high', 'max'])
 check('glm declares only the levels it honours — no Off rung', GLM.efforts, ['low', 'high', 'max'])
 check('glm therefore cannot be told to stop thinking', GLM.canDisableThinking, false)
@@ -147,10 +153,11 @@ check('a declared level goes on the wire as reasoning_effort',
 check('the off rung maps to the wire value that switches thinking off',
   effortPatchFor('disabled', DS), { reasoning_effort: 'none' })
 // A menu model's level is the wire control, so its ceiling is the capacity —
-// bounded here only by the plugin default the test passes in (32768), never by
-// a ladder rung (which would have cut it to 2048/8192).
-check('a menu model is not cut to a ladder rung', budgetFor('low', DS, undefined, DEFAULTS), DEFAULTS)
-check('and with no fallback it spends the whole measured capacity', budgetFor('low', DS, undefined, undefined), 384000)
+// bounded by the plugin default the test passes in (32768), or by the model's
+// own advertised capacity when that is smaller (32000 now that the stale 1M
+// figures are reverted, #494/#464).
+check('a menu model is not cut to a ladder rung', budgetFor('low', DS, undefined, DEFAULTS), 32000)
+check('and with no fallback it spends the whole advertised capacity', budgetFor('low', DS, undefined, undefined), 32000)
 
 {
   const records2 = []
