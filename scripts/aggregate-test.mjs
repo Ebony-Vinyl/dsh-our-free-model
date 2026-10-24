@@ -24,6 +24,7 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { AGGREGATE_CHANNEL, buildAggregateCatalog, fetchProviderModels, isAggregateEntry, postAggregateStreamed, resolveProvider, testProvider } from '../src/aggregate.js'
+import { buildComboCatalog, normalizeCombos } from '../src/combos.js'
 import { UpstreamError } from '../src/http.js'
 import { toClaudeMessages } from '../src/messages.js'
 import { parseProviderModelId } from '../src/providers/index.js'
@@ -128,6 +129,33 @@ check('a config with no providers object builds nothing',
   [buildAggregateCatalog(undefined), buildAggregateCatalog({})], [[], []])
 check('isAggregateEntry refuses other lanes\' rows',
   [isAggregateEntry({ channel: 'kilo' }), isAggregateEntry({ id: 'x' }), isAggregateEntry(null)], [false, false, false])
+
+// ── vision capability ────────────────────────────────────────────────────────
+// The registry records only the models whose vision capability is proven; a
+// per-provider visionModels list covers the rest. A chain's capability is the
+// intersection of its members, so an all-vision chain of aggregate rows must
+// stay vision-capable end to end.
+check('a registry row proven for vision rides as vision-capable',
+  row('anthropic/claude-sonnet-4-20250514').vision, true)
+const visionOverrideRows = buildAggregateCatalog({
+  enabled: true,
+  providers: { cerebras: { enabled: true, apiKey: 'k-cerebras', visionModels: ['gpt-oss-120b'] } },
+})
+check('a per-provider vision override flips its named row only',
+  [visionOverrideRows.find(entry => entry.id === 'cerebras/gpt-oss-120b')?.vision,
+    visionOverrideRows.find(entry => entry.id === 'cerebras/llama-3.3-70b')?.vision],
+  [true, false])
+check('an empty vision override changes nothing',
+  buildAggregateCatalog({ enabled: true, providers: { cerebras: { enabled: true, apiKey: 'k-cerebras', visionModels: [] } } })
+    .find(entry => entry.id === 'cerebras/gpt-oss-120b')?.vision, false)
+const [allVisionChain] = buildComboCatalog(
+  normalizeCombos([{ name: 'vision-chain', models: ['cerebras/gpt-oss-120b', 'openai_api/gpt-4o'] }]),
+  [...visionOverrideRows, row('openai_api/gpt-4o')])
+check('a chain whose members all read images stays vision-capable', allVisionChain.vision, true)
+const [mixedChain] = buildComboCatalog(
+  normalizeCombos([{ name: 'mixed-chain', models: ['cerebras/gpt-oss-120b', 'openai_api/gpt-4o'] }]),
+  [row('cerebras/gpt-oss-120b'), row('openai_api/gpt-4o')])
+check('one text-only member drops the whole chain back to text', mixedChain.vision, false)
 
 const azureConfig = {
   providers: { azure_openai: { enabled: true, apiKey: 'k-azure', baseUrl: 'https://res.openai.azure.com/openai/v1/', models: ['gpt-4o'] } },

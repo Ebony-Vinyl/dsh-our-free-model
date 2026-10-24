@@ -108,21 +108,21 @@
         "id": "claude-sonnet-4-20250514",
         "name": "Claude Sonnet 4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "claude-opus-4-20250514",
         "name": "Claude Opus 4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "claude-3-5-sonnet-20241022",
         "name": "Claude 3.5 Sonnet",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -280,7 +280,7 @@
         "id": "llama-4-scout-17b-16e-instruct",
         "name": "Llama 4 Scout",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -320,7 +320,7 @@
         "id": "gpt-5.4-mini",
         "name": "GPT-5.4 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -575,7 +575,7 @@
         "id": "deepseek-v4-flash-vision-exp",
         "name": "DeepSeek V4 Flash Vision (Exp)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -825,7 +825,7 @@
         "id": "glm-4.6v",
         "name": "GLM 4.6V (Vision)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -899,7 +899,7 @@
         "id": "glm-4.6v",
         "name": "GLM 4.6V (Vision)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -945,7 +945,7 @@
         "id": "meta-llama/llama-4-maverick-17b-128e-instruct",
         "name": "Llama 4 Maverick",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -1244,7 +1244,7 @@
         "id": "grok-4.5",
         "name": "Grok 4.5 (LLM7)",
         "contextWindow": 500000,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -1393,7 +1393,7 @@
         "id": "mistral-large-latest",
         "name": "Mistral Large 3",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -1612,77 +1612,77 @@
         "id": "gpt-5.5",
         "name": "GPT-5.5",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.4",
         "name": "GPT-5.4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-mini",
         "name": "GPT-5.4 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-nano",
         "name": "GPT-5.4 Nano",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.2",
         "name": "GPT-5.2",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.1",
         "name": "GPT-5.1",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5",
         "name": "GPT-5",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5-mini",
         "name": "GPT-5 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5-nano",
         "name": "GPT-5 Nano",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-4o",
         "name": "GPT-4o",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-4o-mini",
         "name": "GPT-4o Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -1696,70 +1696,70 @@
         "id": "gpt-4.1",
         "name": "GPT-4.1",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-4.1-mini",
         "name": "GPT-4.1 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-4.1-nano",
         "name": "GPT-4.1 Nano",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "o3",
         "name": "O3",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "o3-mini",
         "name": "O3 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "o3-pro",
         "name": "O3 Pro",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "o4-mini",
         "name": "O4 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "o1",
         "name": "O1",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "o1-mini",
         "name": "O1 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-sol",
         "name": "GPT-5.6 Sol",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -1854,7 +1854,7 @@
         "id": "deepseek-v4-flash-vision-exp",
         "name": "DeepSeek V4 Flash Vision (Exp)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -1998,7 +1998,7 @@
         "id": "claude-sonnet-4-6",
         "name": "Claude Sonnet 4.6",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -2051,7 +2051,7 @@
         "id": "sonar-pro",
         "name": "Sonar Pro",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -2487,7 +2487,7 @@
         "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
         "name": "Llama 4 Maverick",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -2548,35 +2548,35 @@
         "id": "openai/gpt-5.4",
         "name": "Gpt 5.4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "openai/gpt-5.4-mini",
         "name": "Gpt 5.4 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "openai/gpt-5.4-pro",
         "name": "Gpt 5.4 Pro",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "openai/gpt-5.5",
         "name": "Gpt 5.5",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "openai/gpt-5.6-sol",
         "name": "Gpt 5.6 Sol",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -2725,7 +2725,7 @@
         "id": "qwen3-vl-235b-a22b",
         "name": "Qwen3 VL 235B A22B",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -2779,7 +2779,7 @@
         "id": "openai/gpt-5.5",
         "name": "GPT-5.5 (Vercel)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -2804,35 +2804,35 @@
         "id": "gemini-3.1-pro-preview",
         "name": "Gemini 3.1 Pro Preview",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3.1-flash-lite-preview",
         "name": "Gemini 3.1 Flash Lite Preview",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3-flash-preview",
         "name": "Gemini 3 Flash Preview",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-2.5-flash",
         "name": "Gemini 2.5 Flash",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "google/gemini-3.5-flash",
         "name": "Gemini 3.5 Flash (Vertex)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -3034,21 +3034,21 @@
         "id": "grok-4.6",
         "name": "Grok 4.6",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "grok-4.5",
         "name": "Grok 4.5",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "grok-4",
         "name": "Grok 4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -3069,7 +3069,7 @@
         "id": "grok-3",
         "name": "Grok 3",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -3123,7 +3123,7 @@
         "id": "mimo-v2-omni",
         "name": "MiMo V2 Omni",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -3225,7 +3225,7 @@
         "id": "glm-4.6v",
         "name": "GLM 4.6V (Vision)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -3299,7 +3299,7 @@
         "id": "glm-4.6v",
         "name": "GLM 4.6V (Vision)",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -3415,14 +3415,14 @@
         "id": "grok-4.3",
         "name": "Grok 4.3",
         "contextWindow": 1000000,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "grok-4.20",
         "name": "Grok 4.20",
         "contextWindow": 2000000,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -3725,70 +3725,70 @@
         "id": "gemini-3.8-flash",
         "name": "Gemini 3.8 Flash",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3.7-flash",
         "name": "Gemini 3.7 Flash",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3.6-flash",
         "name": "Gemini 3.6 Flash",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3.5-flash-lite",
         "name": "Gemini 3.5 Flash Lite",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3.1-pro-preview",
         "name": "Gemini 3.1 Pro Preview",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3.1-flash-lite-preview",
         "name": "Gemini 3.1 Flash Lite Preview",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-3-flash-preview",
         "name": "Gemini 3 Flash Preview",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-2.5-pro",
         "name": "Gemini 2.5 Pro",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-2.5-flash",
         "name": "Gemini 2.5 Flash",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gemini-2.5-flash-lite",
         "name": "Gemini 2.5 Flash Lite",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -3929,14 +3929,14 @@
         "id": "claude-opus-4-6",
         "name": "Claude Opus 4.6",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "claude-sonnet-4-6",
         "name": "Claude Sonnet 4.6",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       }
     ],
@@ -4492,7 +4492,7 @@
         "id": "deepseek-v4-flash-vision-exp",
         "name": "DeepSeek V4 Flash Vision Exp",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -4750,7 +4750,7 @@
         "id": "gpt-5.2",
         "name": "GPT-5.2",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -4771,14 +4771,14 @@
         "id": "gpt-5.4",
         "name": "GPT-5.4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-mini",
         "name": "GPT-5.4 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
@@ -4894,42 +4894,42 @@
         "id": "gpt-5.6-sol",
         "name": "GPT 5.6 Sol",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-terra",
         "name": "GPT 5.6 Terra",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-luna",
         "name": "GPT 5.6 Luna",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.5",
         "name": "GPT 5.5",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.4",
         "name": "GPT 5.4",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-mini",
         "name": "GPT 5.4 Mini",
         "contextWindow": null,
-        "vision": null,
+        "vision": true,
         "reasoning": null
       },
       {
