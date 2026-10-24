@@ -203,7 +203,130 @@ export class FreeModelAdapter {
       yield * this.runCombo(options, entry, snapshot)
       return
     }
+    // A chain link owned by another adapter never reaches here as a pinned
+    // entry (it is not in our catalog), so only `runCombo` dispatches foreign
+    // links; a direct call still resolves through our own lanes.
     yield * this.runSingle(options, entry, snapshot, {})
+  }
+
+  /**
+   * Does this chain link belong to another adapter?
+   *
+   * Our own catalog rows are plain objects with a `channel`; a foreign row is
+   * built by `chainMembers()` and carries `foreign: true` plus the provider
+   * route it must be dispatched under. Keeping the marker explicit means a
+   * future lane can never be mistaken for a channel by accident.
+   */
+  static isForeignLink(candidate) {
+    return candidate?.foreign === true && typeof candidate.provider === 'string' && candidate.provider !== ''
+  }
+
+  /**
+   * Run one link that another adapter owns, through the host's own registry.
+   *
+   * Why this exists: the chain editor offers the models the picker offers, and
+   * after the absorbed channels were vendored in, those include `buddy/…` and
+   * `gemini/…` rows that this plugin does not serve. Before this, such a link
+   * could be *stored* but never *resolved* (`state.catalog` has no such id), so
+   * the chain silently skipped it. Dispatching through `ctx.llm.stream()` hands
+   * the turn to the owning adapter and keeps one code path for the caller.
+   *
+   * The chunk vocabulary is the harness's own, so no translation is needed.
+   * Failures are normalised into the same `advance` verdict the local links
+   * report, which is what lets a chain mix both kinds in any order.
+   */
+  async * runForeign(options, candidate, entry) {
+    const dispatch = this.deps.dispatchForeign
+    if (typeof dispatch !== 'function') {
+      yield { type: 'finish', reason: { kind: 'error', failure: {
+        message: `the chain "${entry.name}" links to ${candidate.id}, but this host cannot dispatch another adapter's model`,
+        code: CODE.server,
+      } } }
+      return { advance: false, verdict: null, ok: false }
+    }
+
+    /**
+     * Whether another candidate could answer this failure.
+     *
+     * The **same** two vetoes and the **same** table as `runSingle`'s
+     * `advanceVerdict`: the caller walked away, or this link already put an
+     * answer on the wire. Anything else is classified with `classifyFailure`,
+     * which is what keeps one definition of "retryable" across lanes — a
+     * channel's `PERMISSION_DENIED` carries a two-minute cooldown and therefore
+     * advances, exactly as a local lane's would.
+     */
+    let sawAnswer = false
+    const advanceVerdict = (code, message, status) => {
+      if (options.signal?.aborted === true || sawAnswer) return { advance: false, verdict: null }
+      const verdict = classifyFailure({ status, code, message })
+      return { advance: shouldAdvance(verdict) || code === CODE.client || code === CODE.region, verdict }
+    }
+
+    let stream
+    try {
+      stream = await dispatch({
+        provider: candidate.provider,
+        model: candidate.model ?? candidate.id,
+        messages: options.messages,
+        system: options.system,
+        tools: options.tools,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
+        stop: options.stop,
+        signal: options.signal,
+        sessionId: options.sessionId,
+        purpose: options.purpose,
+      })
+    } catch (error) {
+      const failure = toFailure(error)
+      yield { type: 'finish', reason: { kind: 'error', failure } }
+      this.deps.warn?.(`our-free-model: chain "${entry.name}" could not reach ${candidate.id} — ${failure.message}`)
+      return { ok: false, ...advanceVerdict(failure.code, failure.message, failure.status) }
+    }
+
+    /**
+     * The failure a terminal `finish` chunk carried, if it carried one.
+     *
+     * ⚠️ **This is the bug that stopped the chain.** The harness reports an
+     * adapter failure as a `finish` chunk with `reason.kind === 'error'`, *not*
+     * as a thrown exception: `dsh-llm` converts the adapter's throw into
+     * `adapterFailureChunk()` before the consumer ever sees it. Iterating the
+     * stream therefore ends **normally**, and an implementation that reads
+     * "the loop finished" as "the model answered" reports `advance: false` for
+     * every channel failure — the chain refuses to move on even though nothing
+     * was committed. Capturing the chunk's failure and classifying it is what
+     * makes a channel link fail over like a local one.
+     */
+    let terminal = null
+    try {
+      for await (const chunk of stream) {
+        if (chunk?.type === 'text-delta' && typeof chunk.text === 'string' && chunk.text.trim() !== '') sawAnswer = true
+        if (chunk?.type === 'tool-call-delta' || chunk?.type === 'tool-call') sawAnswer = true
+        if (chunk?.type === 'finish' && chunk.reason?.kind === 'error') terminal = chunk.reason.failure ?? {}
+        yield chunk
+      }
+    } catch (error) {
+      const failure = toFailure(error)
+      yield { type: 'finish', reason: { kind: 'error', failure } }
+      this.deps.warn?.(`our-free-model: chain "${entry.name}" failed inside ${candidate.id} — ${failure.message}`)
+      return { ok: false, ...advanceVerdict(failure.code, failure.message, failure.status) }
+    }
+
+    if (terminal !== null) {
+      const outcome = advanceVerdict(terminal.code, terminal.message, terminal.status)
+      // Both endings deserve a line: "advanced" explains a model switch the
+      // caller never saw, and "stopped" is the only record of *why* a chain gave
+      // up — reading the verdict back beats guessing.
+      this.deps.warn?.(outcome.advance === true
+        ? `our-free-model: chain "${entry.name}" advanced past ${candidate.id} — ${describeVerdict(outcome.verdict)}`
+        : `our-free-model: chain "${entry.name}" stopped at ${candidate.id} — ${describeVerdict(outcome.verdict)}: ${String(terminal.message ?? 'upstream failure').slice(0, 200)}`)
+      return { ok: false, ...outcome }
+    }
+
+    // A clean end is the chain's own business to record: `runCombo` counts one
+    // turn for the whole chain (it passes `recordTurn: false` to the local
+    // path), so recording per link here would double every channel turn.
+    return { advance: false, verdict: null, ok: sawAnswer }
   }
 
   /**
@@ -231,7 +354,7 @@ export class FreeModelAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { message: 'our free model is switched off in its settings page', code: 'CONFIG_DISABLED' } } }
       return
     }
-    const candidates = comboChain(entry, snapshot.catalog)
+    const candidates = comboChain(entry, snapshot.catalog, { foreign: this.deps.resolveForeignLink })
     if (candidates.length === 0) {
       rejectedTurn(0)
       yield { type: 'finish', reason: { kind: 'error', failure: { message: `the chain "${entry.name}" has no model available on this egress`, code: CODE.server } } }
@@ -240,12 +363,16 @@ export class FreeModelAdapter {
     const tried = []
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index]
-      const iterator = this.runSingle(options, candidate, snapshot, {
-        wire: wireOf(candidate),
-        turnModel: entry.id,
-        recordTurn: false,
-        allowAdvance: true,
-      })
+      // A link owned by another adapter is dispatched through the host registry;
+      // every other link is one of our own lanes and takes the local path.
+      const iterator = FreeModelAdapter.isForeignLink(candidate)
+        ? this.runForeign(options, candidate, entry)
+        : this.runSingle(options, candidate, snapshot, {
+          wire: wireOf(candidate),
+          turnModel: entry.id,
+          recordTurn: false,
+          allowAdvance: true,
+        })
       let committed = false
       let result
       const held = []

@@ -422,8 +422,15 @@ let boundPort = 0
   check('with the stored chain', combos.json.combos[0].id, 'combo:never-fails')
   checkThat('and a model list to pick from', combos.json.models.length >= 3, String(combos.json.models.length))
   check('offering both strategies', combos.json.strategies, ['fallback', 'round-robin'])
+  // 本插件自己的车道必须带容量信息（编辑器要拿它算交集）。外部车道（渠道包
+  // 注册的模型）只报模态，窗口未知——`undefined` 是诚实答案；编一个数会让
+  // 链路的容量交集失真，所以这里只对本车道设限。
   checkThat('model picker projection preserves context and output limits',
-    combos.json.models.every(row => Number.isFinite(row.contextWindow) && Number.isFinite(row.maxOutput)), 'missing capacity metadata')
+    combos.json.models.filter(row => row.contextWindow !== undefined || row.maxOutput !== undefined)
+      .every(row => Number.isFinite(row.contextWindow) && Number.isFinite(row.maxOutput)), 'missing capacity metadata')
+  checkThat('a lane with no published capacity reports it as unknown, not as zero',
+    combos.json.models.filter(row => row.contextWindow === undefined).every(row => row.maxOutput === undefined),
+    'one half of the capacity was invented')
   const preview = await post('/combos/preview', { models: ['deepseek-v4-flash-free', 'mimo-v2.6-flash-free'] })
   const picked = combos.json.models.filter(row => ['deepseek-v4-flash-free', 'mimo-v2.6-flash-free'].includes(row.id))
   check('chain preview uses the runtime context intersection', preview.json.capacity.contextWindow, Math.min(...picked.map(row => row.contextWindow)))

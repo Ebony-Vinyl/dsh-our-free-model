@@ -218,6 +218,30 @@ const MARKER_RULES = Object.freeze([
   // A structured "this model is not routed here" without a 404 status still
   // means the same thing the 404 status rule says.
   Object.freeze({ marker: 'model_not_found', cooldownMs: COOLDOWN_LONG_MS, kind: FAILURE_KIND.UNAVAILABLE, scope: FAILURE_SCOPE.ACCOUNT, retryable: false }),
+  /**
+   * A lane refusing this client outright.
+   *
+   * Measured shape: the absorbed channels (buddy first) answer a request the
+   * upstream dislikes with a plain `400` whose body reads
+   * `Illegal API invocation from an unapproved channel`. Two things make this
+   * worth a rule of its own:
+   *
+   * - **It is not about the request.** The same body is accepted by every other
+   *   channel, so the unmatched-4xx carve-out below (which exists so a bad
+   *   parameter is not replayed against candidate after candidate) reads it
+   *   wrong here. Left unclassified it lands as request-scoped with a zero
+   *   cooldown, `shouldAdvance` answers false, and a chain stops on its first
+   *   link while five healthy ones sit idle — the reported symptom.
+   * - **It is account-scoped.** The channel pack reacts by benching *that
+   *   account* (`markPolicyBlockedAccount`), not the model, so the cooldown
+   *   belongs on the account: two minutes keeps this lane out of rotation long
+   *   enough for the next candidate to answer without writing the credential
+   *   off for good.
+   *
+   * Matched on the ASCII text because the upstream body is English even when
+   * the pack's own wrapper is Chinese.
+   */
+  Object.freeze({ marker: 'unapproved channel', cooldownMs: COOLDOWN_LONG_MS, kind: FAILURE_KIND.PERMISSION, scope: FAILURE_SCOPE.ACCOUNT, retryable: false }),
 ])
 
 /** Overload statuses FCC folds into one retryable meaning. */

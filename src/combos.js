@@ -103,14 +103,49 @@ export function normalizeCombos(raw) {
  * @param {Array<object>} combos - from `normalizeCombos`
  * @param {Array<object>} catalog - every real catalog entry
  */
-export function buildComboCatalog(combos, catalog) {
+/**
+ * Build the virtual catalog rows for every enabled combo.
+ *
+ * Models that are not in the catalog *right now* are dropped from the chain
+ * rather than kept as a hopeful entry: a chain whose second link does not exist
+ * would report "tried 2 candidates" for a turn that only ever had one. The
+ * combo itself disappears when fewer than one candidate survives, which is the
+ * same rule the picker applies to a lane with no models.
+ *
+ * **Foreign lanes.** `catalog` holds only the lanes this plugin mounts. A chain
+ * may also name a model owned by another registered adapter (the absorbed
+ * channels: `buddy/…`, `gemini/…`, …). Those ids are not in `catalog`, so they
+ * are resolved through `options.foreign` — a lookup the host fills from
+ * `ctx.llm.listModels()`. They are called *foreign* rather than *missing*
+ * because they are reachable: the chain dispatches them through the host's own
+ * `llm.stream()`, so a chain is no longer limited to this plugin's four lanes.
+ *
+ * Capabilities are the intersection across *every* link, foreign included. A
+ * foreign row usually reports only modalities, so its context window and output
+ * ceiling are unknown; `foreign` marks the link so the adapter can skip budget
+ * clamping it has no numbers for instead of guessing one.
+ *
+ * @param {Array<object>} combos - from `normalizeCombos`
+ * @param {Array<object>} catalog - every real catalog entry
+ * @param {{foreign?: (id: string) => object | undefined}} [options]
+ */
+export function buildComboCatalog(combos, catalog, options = {}) {
   const byId = new Map()
   for (const entry of catalog) if (!isComboEntry(entry)) byId.set(entry.id, entry)
+  const lookupForeign = options.foreign ?? (() => undefined)
   const out = []
   for (const combo of combos) {
     if (combo.enabled === false) continue
-    const members = combo.models.map(id => byId.get(id)).filter(entry => entry !== undefined)
+    const members = []
+    for (const id of combo.models) {
+      const own = byId.get(id)
+      if (own !== undefined) { members.push(own); continue }
+      const foreign = lookupForeign(id)
+      if (foreign !== undefined) members.push(foreign)
+    }
     if (members.length === 0) continue
+    const known = members.filter(entry => typeof entry.contextWindow === 'number' && entry.contextWindow > 0)
+    const ceilings = members.map(entry => number(entry.maxOutput)).filter(value => value !== undefined)
     out.push({
       id: combo.id,
       name: combo.name,
@@ -121,8 +156,11 @@ export function buildComboCatalog(combos, catalog) {
       // Intersection, not union — see the module header.
       vision: members.every(entry => entry.vision === true),
       reasoning: members.some(entry => entry.reasoning === true),
-      contextWindow: Math.min(...members.map(entry => number(entry.contextWindow) ?? 131072)),
-      maxOutput: Math.min(...members.map(entry => number(entry.maxOutput) ?? 32768)),
+      // A foreign link with no published window must not silently raise the
+      // chain's advertised capacity, so only known windows take part; a chain
+      // with none keeps the historical default.
+      contextWindow: known.length === 0 ? 131072 : Math.min(...known.map(entry => entry.contextWindow)),
+      maxOutput: ceilings.length === 0 ? 32768 : Math.min(...ceilings),
       canDisableThinking: members.every(entry => entry.canDisableThinking !== false),
       regionSensitive: false,
       wire: 'chat',
@@ -138,6 +176,64 @@ function number(value) {
 }
 
 /**
+ * The rows the chain editor may offer, in one place.
+ *
+ * Kept out of the HTTP handler so the rule is testable and so the two surfaces
+ * cannot drift: this is exactly the predicate the model picker applies.
+ *
+ * - `own` is this plugin's catalog (free / EAC / Kilo / aggregate), carrying the
+ *   capability fields the editor renders.
+ * - `foreign` is everything other adapters registered (the absorbed channels),
+ *   already shaped like a member row by the caller.
+ * - `isHidden` is the picker's own visibility predicate (`isModelHidden`).
+ *
+ * A hidden row is dropped from both halves: the group toggles only speak about
+ * lanes we own, but the per-id list is authoritative for anything, and offering
+ * a row the picker refuses to show is the inconsistency this fixes.
+ *
+ * `foreign` may carry **bare-id aliases** beside the canonical `provider/model`
+ * keys (see `refreshForeignIndex`). Aliases exist only so an older stored link
+ * still resolves; they are not separate rows, so a map entry whose key differs
+ * from its row's `id` is skipped here — otherwise a unique model would be listed
+ * twice, once under each name.
+ *
+ * @param {Array<object>} own
+ * @param {Map<string, object>} foreign
+ * @param {(entry: object) => boolean} isHidden
+ * @returns {Array<object>} member rows, own lanes first
+ */
+export function chainMemberRows(own, foreign, isHidden) {
+  const rows = new Map()
+  for (const entry of own) {
+    if (isHidden(entry) === true) continue
+    rows.set(entry.id, {
+      id: entry.id,
+      name: entry.name,
+      channel: entry.channel ?? 'free',
+      vision: entry.vision === true,
+      contextWindow: entry.contextWindow,
+      maxOutput: entry.maxOutput,
+    })
+  }
+  const seenIds = new Set()
+  for (const [key, entry] of foreign) {
+    // An alias points at a row already emitted under its canonical id.
+    if (key !== entry.id) continue
+    if (seenIds.has(entry.id) || rows.has(entry.id) || isHidden(entry) === true) continue
+    seenIds.add(entry.id)
+    rows.set(entry.id, {
+      id: entry.id,
+      name: entry.name,
+      channel: entry.channel,
+      vision: entry.vision === true,
+      contextWindow: undefined,
+      maxOutput: undefined,
+    })
+  }
+  return [...rows.values()]
+}
+
+/**
  * Resolve a combo row into the ordered candidate entries for one turn.
  *
  * `fallback` returns the list as stored. `round-robin` rotates the starting
@@ -146,15 +242,23 @@ function number(value) {
  * on every provider in the chain, and a strictly sticky cursor makes the other
  * candidates decoration.
  *
+ * Links that name a foreign lane (see {@link buildComboCatalog}) are resolved
+ * through `options.foreign` as well, so an ordered chain can mix local and
+ * absorbed-channel links.
+ *
  * @param {object} entry - a combo catalog row
  * @param {Array<object>} catalog
- * @param {{peek?: boolean}} [options] - `peek` computes the order without consuming a turn
+ * @param {{peek?: boolean, foreign?: (id: string) => object | undefined}} [options]
+ *   `peek` computes the order without consuming a turn
  */
 export function comboChain(entry, catalog, options = {}) {
   const ids = Array.isArray(entry?.combo) ? entry.combo : []
   const byId = new Map()
   for (const row of catalog) byId.set(row.id, row)
-  const members = ids.map(id => byId.get(id)).filter(row => row !== undefined)
+  const lookupForeign = options.foreign ?? (() => undefined)
+  const members = ids
+    .map(id => byId.get(id) ?? lookupForeign(id))
+    .filter(row => row !== undefined)
   if (members.length <= 1 || entry.strategy !== 'round-robin') return members
   const limit = Number.isFinite(Number(entry.stickyLimit)) && Number(entry.stickyLimit) > 0 ? Math.trunc(Number(entry.stickyLimit)) : 1
   const cursor = rotation.get(entry.id) ?? { index: 0, used: 0 }

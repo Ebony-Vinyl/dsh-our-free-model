@@ -5377,12 +5377,23 @@ window.__ModuleLoader__.load({
       wenyan: t('saver.level.wenyan'),
       'wenyan-ultra': t('saver.level.wenyanUltra'),
     })
+    /**
+     * Lane headings for a chain member row.
+     *
+     * The first five are this plugin's own lanes. The rest are the absorbed
+     * channels, which a chain may now link to, so the editor has to name them
+     * instead of printing a bare route id (`buddy`, `qodercn`, …) that reads
+     * like a typo. `CHANNEL_PROVIDERS` already carries those display names, so
+     * the mapping is derived from it rather than kept as a second list that
+     * could drift.
+     */
     const LANE_LABEL = t => ({
       free: t('routing.channel.free'),
       eac: t('routing.channel.eac'),
       kilo: t('routing.channel.kilo'),
       aggregate: t('routing.channel.aggregate'),
       combo: t('routing.channel.combo'),
+      ...Object.fromEntries(CHANNEL_PROVIDERS.map(row => [row.id, row.name])),
     })
 
     /**
@@ -5900,11 +5911,18 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const lanes = LANE_LABEL(t)
       const needle = query.trim().toLowerCase()
-      const rows = models
-        .filter(row => needle === '' || `${row.id} ${row.name}`.toLowerCase().includes(needle))
-        .slice(0, 60)
+      // With the absorbed channels merged in, this list is no longer a dozen
+      // rows: a hard cap of 60 would make the tail unreachable by scrolling
+      // and, worse, hide a matching model behind rows that merely loaded first.
+      // Raising the cap keeps every row reachable while the search box stays
+      // the intended way to narrow it; the count is shown so the shortening is
+      // never silent.
+      const LIMIT = 400
+      const matched = models.filter(row => needle === '' || `${row.id} ${row.name} ${row.channel ?? ''}`.toLowerCase().includes(needle))
+      const rows = matched.slice(0, LIMIT)
       return h('div', { className: 'ofm_panel' },
-        h('div', { className: 'ofm_paneltitle' }, t('routing.pickModel')),
+        h('div', { className: 'ofm_paneltitle' }, t('routing.pickModel'),
+          h('span', { className: 'ofm_sec_hint' }, t('routing.memberCount').replace('{n}', String(matched.length)))),
         h('div', { className: 'ofm_row' },
           h('div', { className: 'ofm_field', style: { flex: '1 1 200px' } },
             h('span', null, t('routing.pickModel')),
