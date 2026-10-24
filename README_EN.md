@@ -57,7 +57,7 @@
 - **The picker offers only what actually answers** — a model the upstream listing names but the gateway refuses to route outright (`Model is unavailable`, a 404 for that id) leaves the dropdown and stays visible in the settings page with its refusal recorded. Everything that is *not* a statement about the model keeps its model reachable: a 5xx from the gateway, a 429 quota window, a timeout or a dropped connection. Region-gated ones move to their own `region-limited` group. If a whole round refuses everything, nothing is hidden: the picker never goes empty.
 - **Announcement center with live push** — the repository owner edits one JSON file and pushes; every installation receives it within one poll cycle. Bodies are HTML rendered through a strict allowlist; `urgent` items open a full-screen modal; optional OS-level notifications.
 - **In-app upgrades** — one click in the settings page: download → SHA-256 verification → backup → atomic replace → read-back verification → hot reload, with automatic rollback if any step fails.
-- **Hot reload** — upgrades and code changes take effect immediately, no app restart; also available as a manual button and an optional file watcher.
+- **Hot reload** — upgrades and code changes take effect immediately, no app restart; also available as a manual button and an optional file watcher. On a host that cannot evict already-evaluated ES modules (DSH Desktop, for instance) the plugin says so instead: the verified new files are on disk and are not rolled back, and a full quit takes effect.
 - **Region-aware, per egress** — models gated by geography are separated into their own `region-limited` group instead of failing mid-turn. Switch your network exit and the next probe reclassifies them automatically.
 - **The body decides what it is, not the header** — under load this gateway answers 200 with a JSON `Content-Type` over a perfectly ordinary SSE frame stream. The plugin sniffs the first bytes and replays them into the stream, so the turn keeps streaming instead of being thrown away — and a working model is never demoted to `unavailable` because one header lied.
 - **Thinking effort that actually binds** — two kinds of model, two kinds of control. A model that declares thinking levels (DeepSeek V4.1 Flash, GLM 5.3 Flash among them) gets its own level menu (Off / Low / High / Max …), and the selected level is sent as-is in the upstream `reasoning_effort` field — which this gateway validates, so a value outside the set is a 400. A model with no level menu (MiMo V2.6 among them) gets the budget ladder: `Light / Balanced / Deep` map to output-token budgets of 2 048 / 8 192 / the model's full capacity, and a model that cannot switch thinking off gets the whole ladder doubled to 4 096 / 16 384 / capacity, because there thinking and the visible answer compete for the one ceiling. Both are recorded per call, and every model card in the settings page prints either the levels or the number it will actually send (see [Thinking effort](#thinking-effort-a-level-menu-or-a-budget-ladder)).
@@ -351,8 +351,11 @@ also get system-level toasts.
 
 **Upgrade the plugin.** `Settings → Our Free Model → Plugin upgrade` →
 *Check for updates* → *Upgrade now*. The whole flow runs inside the app
-(download → verify → backup → replace → hot reload); no reinstall, no restart.
-A failed upgrade restores the previous version and reports why.
+(download → verify → backup → replace → hot reload); no reinstall. A failed
+upgrade restores the previous version and reports why. In most hosts the hot
+reload takes effect at once; when the host cannot evict the loaded modules the
+new files are still verified and in place — the panel then says "Wrote X; fully
+quit and reopen DSH", and a full quit applies it without any rollback.
 
 ## The aggregate lane, token savers, routing and the local gateway
 
