@@ -107,20 +107,27 @@ function consumeChunk(state: Accumulated, chunk: StreamChunk): Record<string, un
     case 'tool-call-delta': {
       let tool = state.tools.get(chunk.index)
       if (!tool) {
-        tool = { id: String(chunk.id), arguments: '' }
+        tool = { id: String(chunk.id), arguments: '', announced: false, nameSent: false }
         state.tools.set(chunk.index, tool)
       }
       tool.id = String(chunk.id || tool.id)
       if (chunk.name !== undefined) tool.name = chunk.name
       tool.arguments += chunk.argumentsDelta
+      // OpenAI streaming protocol: id/type/name belong to the FIRST delta of a
+      // tool call only; later deltas must carry `index` + `arguments` alone.
+      // Re-sending them on every chunk makes strict clients concatenate the
+      // name (e.g. "BashBashBashBash") and reject the call as unknown tool.
+      const announce = !tool.announced
+      tool.announced = true
+      const sendName = tool.name !== undefined && !tool.nameSent
+      if (sendName) tool.nameSent = true
       return {
         delta: {
           tool_calls: [{
             index: chunk.index,
-            id: tool.id,
-            type: 'function',
+            ...announce ? { id: tool.id, type: 'function' } : {},
             function: {
-              ...tool.name === undefined ? {} : { name: tool.name },
+              ...sendName ? { name: tool.name } : {},
               arguments: chunk.argumentsDelta,
             },
           }],
