@@ -732,6 +732,18 @@ window.__ModuleLoader__.load({
         'gw.clientsOff': '转发端口未启用',
         'gw.clientsOffHint': '先到「免费模型」页的「本地转发」打开端口，这里才会给出可用的地址与配方。',
         'gw.clientsModels': '可转发模型 {n} 个',
+        'sub.title': '子智能体',
+        'sub.heading': '本会话的子智能体',
+        'sub.runningOfTotal': '运行中 {live} 个 / 共 {total} 个',
+        'sub.allDone': '共 {total} 个，当前无运行',
+        'sub.running': '运行中',
+        'sub.noRoute': '尚未分配模型',
+        'sub.totalHint': '总 token：输入 + 输出，括号内为 ↑输入 / ↓输出 明细',
+        'sub.cacheHint': '由提示缓存命中、未重新计费的 token',
+        'sub.hit': '命中',
+        'sub.hitHint': '输入 token 中由提示缓存命中的比例',
+        'sub.speedHint': '解码速度：每秒生成的输出 token 数',
+        'sub.finished': '已结束',
       },
       en: {
         'meta.title': 'Our Free Model',
@@ -1429,6 +1441,18 @@ window.__ModuleLoader__.load({
         'gw.clientsOff': 'The forward port is off',
         'gw.clientsOffHint': 'Enable it under "Local forward" on the Free models page first; only then does this section have a usable address and recipes.',
         'gw.clientsModels': '{n} servable models',
+        'sub.title': 'Subagents',
+        'sub.heading': 'Subagents in this session',
+        'sub.runningOfTotal': '{live} running of {total}',
+        'sub.allDone': '{total} total, none running',
+        'sub.running': 'running',
+        'sub.noRoute': 'no model assigned',
+        'sub.totalHint': 'Total tokens: input + output, with the ↑ input / ↓ output split',
+        'sub.cacheHint': 'Tokens served from the prompt cache',
+        'sub.hit': 'hit',
+        'sub.hitHint': 'Share of input tokens served from the prompt cache',
+        'sub.speedHint': 'Decode speed: output tokens per second of generation',
+        'sub.finished': 'finished',
       },
     }
 
@@ -1442,6 +1466,34 @@ window.__ModuleLoader__.load({
     // colour, callouts lost their border. Every use of those two names carries a
     // fallback for exactly that reason.
     const CSS = `
+/* Subagent strip: sits beside the model selector at composer height. */
+.ofm_sub{position:relative;display:inline-flex}
+.ofm_subbtn{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:none;cursor:pointer;font:inherit;font-size:11.5px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.ofm_subbtn:hover{background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary)}
+.ofm_subbtn[data-live="true"]{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}
+.ofm_subicon{font-size:10px;opacity:.8}
+.ofm_subcount{font-variant-numeric:tabular-nums;font-weight:600}
+.ofm_submodel{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.ofm_subtokens{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-tertiary)}
+.ofm_subpanel{position:absolute;bottom:calc(100% + 6px);right:0;z-index:40;width:400px;padding:10px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-2);box-shadow:0 6px 20px rgb(0 0 0 / 18%)}
+.ofm_subhead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 2px 6px;font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-secondary)}
+.ofm_submeta{font-weight:500;color:var(--dsw-alias-label-tertiary)}
+.ofm_sublist{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:260px;overflow:auto}
+.ofm_subrow{padding:6px 4px;border-radius:6px}
+.ofm_subrow+.ofm_subrow{border-top:0.5px solid var(--dsw-alias-border-l1)}
+.ofm_subrow[data-live="true"]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 8%,transparent)}
+.ofm_subrowhead{display:flex;align-items:center;gap:6px;min-width:0}
+.ofm_subdot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-label-tertiary)}
+.ofm_subdot[data-live="true"]{background:var(--dsw-alias-state-business-primary)}
+.ofm_sublabel{flex:1;min-width:0;font-size:12px;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofm_subrow[data-live="true"] .ofm_sublabel{color:var(--dsw-alias-state-business-primary);font-weight:600}
+.ofm_subbadge{flex:none;font-size:10px;padding:0 5px;line-height:15px;border-radius:8px;color:var(--dsw-alias-state-business-primary);background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 13%,transparent)}
+.ofm_subroute{flex:none;max-width:170px;font-size:11px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofm_subusage{display:flex;flex-wrap:wrap;gap:4px 8px;padding:3px 0 0 12px;font-size:10.5px;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}
+.ofm_submetric{padding:0 5px;border-radius:4px;background:color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent);white-space:nowrap}
+.ofm_subtotal{font-weight:600;color:var(--dsw-alias-label-primary)}
+.ofm_subrow[data-live="true"] .ofm_submetric{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 11%,transparent)}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Our Free Model — visual system
    统一令牌：所有色值取自宿主 --dsw-alias-* 变量，昼夜由宿主切换。
@@ -6712,6 +6764,16 @@ window.__ModuleLoader__.load({
         return () => {}
       }, 'our-free-model: reload notice')
 
+      // Beside the composer, where a running delegation is actually looked at.
+      // The slot is declared by the shell's composer bar; a composition without
+      // it simply never renders the strip.
+      ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+        name: 'conversation.input.right',
+        id: 'our-free-model-subagents',
+        order: 25,
+        locale: NS,
+      }, props => h(SubagentStrip, { ...props, t })))
+
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section',
         id: 'our-free-model',
@@ -6763,6 +6825,132 @@ window.__ModuleLoader__.load({
       if (ack === undefined || acknowledged) return null
       return h(Announcement, { t, complete, openSection, page, setPage, summary, acknowledged: false })
     }
+
+    /**
+     * Subagents: what this session's delegated children are spending.
+     *
+     * A row per child, running ones first, because a finished child is history
+     * while a running one is a decision. Finished children keep their numbers —
+     * the host reads them from the projection checkpoint, so a child that has
+     * left memory still answers "what did it cost me?".
+     *
+     * Polls briskly while something runs and backs off when nothing does: an idle
+     * session should cost one request a minute, not thirty.
+     */
+    function SubagentStrip(props) {
+      const { t, sessionId } = props
+      const [children, setChildren] = useState([])
+      const [summary, setSummary] = useState(null)
+      const [open, setOpen] = useState(false)
+      const [failed, setFailed] = useState(false)
+      const rootRef = useRef(null)
+      const panelRef = useRef(null)
+
+      useEffect(() => {
+        if (typeof sessionId !== 'string' || sessionId === '') return undefined
+        let cancelled = false
+        let timer
+        let ticks = 0
+        const load = async () => {
+          try {
+            const payload = await api(`/subagents?session=${encodeURIComponent(sessionId)}`, { timeout: 8000 })
+            if (cancelled) return
+            setChildren(Array.isArray(payload.children) ? payload.children : [])
+            setSummary(payload.summary ?? null)
+            setFailed(false)
+          } catch {
+            if (!cancelled) setFailed(true)
+          }
+          if (cancelled) return
+          ticks += 1
+          const running = ticks < 3 || (Array.isArray(children) && children.some(row => row.live === true))
+          timer = setTimeout(() => { void load() }, running ? 2000 : 60000)
+        }
+        void load()
+        return () => {
+          cancelled = true
+          if (timer !== undefined) clearTimeout(timer)
+        }
+      }, [sessionId])
+
+      // Dismiss on an outside press or Escape. The toggle button is excluded
+      // because its own handler owns the toggle: closing here as well would make
+      // one click close and immediately reopen the panel.
+      useEffect(() => {
+        if (!open) return undefined
+        const onDown = event => {
+          const target = event.target
+          if (!(target instanceof Node)) return setOpen(false)
+          if (panelRef.current?.contains(target) === true) return
+          if (rootRef.current?.contains(target) === true) return
+          setOpen(false)
+        }
+        const onKey = event => {
+          if (event.key !== 'Escape') return
+          event.stopPropagation()
+          setOpen(false)
+        }
+        document.addEventListener('pointerdown', onDown, true)
+        document.addEventListener('keydown', onKey, true)
+        return () => {
+          document.removeEventListener('pointerdown', onDown, true)
+          document.removeEventListener('keydown', onKey, true)
+        }
+      }, [open])
+
+      if (failed || children.length === 0) return null
+
+      const running = children.filter(row => row.live === true)
+      const ordered = [...running, ...children.filter(row => row.live !== true)]
+      const totals = summary ?? { live: running.length, total: children.length, input: 0, output: 0 }
+      const active = running.length > 0 ? running[0] : children[children.length - 1]
+      const route = active?.provider === undefined ? t('sub.noRoute') : active.model
+
+      return h('div', { className: 'ofm_sub', ref: rootRef },
+        h('button', {
+          type: 'button', className: 'ofm_subbtn',
+          'data-live': String(running.length > 0),
+          'aria-expanded': String(open), 'aria-label': `${t('sub.title')} ${totals.live}/${totals.total}`,
+          onClick: () => setOpen(value => !value),
+        },
+        h('span', { className: 'ofm_subicon', 'aria-hidden': 'true' }, '\u29c9'),
+        h('span', { className: 'ofm_subcount' }, `${totals.live}/${totals.total}`),
+        h('span', { className: 'ofm_submodel' }, route),
+        h('span', { className: 'ofm_subtokens' }, `\u2191${kilo(totals.input)} \u2193${kilo(totals.output)}`)),
+        open
+          ? h('div', { className: 'ofm_subpanel', role: 'dialog', 'aria-label': t('sub.title'), ref: panelRef },
+            h('div', { className: 'ofm_subhead' },
+              h('span', null, t('sub.heading')),
+              h('span', { className: 'ofm_submeta' }, running.length > 0
+                ? t('sub.runningOfTotal').replace('{live}', String(totals.live)).replace('{total}', String(totals.total))
+                : t('sub.allDone').replace('{total}', String(totals.total)))),
+            h('ul', { className: 'ofm_sublist' }, ordered.map(row => {
+              const live = row.live === true
+              const total = (row.usage?.input ?? 0) + (row.usage?.output ?? 0)
+              const hit = typeof row.cacheHitRate === 'number' ? `${Math.round(row.cacheHitRate * 100)}%` : null
+              const speed = typeof row.tokensPerSecond === 'number' ? `${Math.round(row.tokensPerSecond)} tok/s` : null
+              return h('li', { key: row.id, className: 'ofm_subrow', 'data-live': String(live) },
+                h('div', { className: 'ofm_subrowhead' },
+                  h('span', { className: 'ofm_subdot', 'data-live': String(live), title: live ? t('sub.running') : t('sub.finished') }),
+                  h('span', { className: 'ofm_sublabel', title: row.label }, row.label || row.id.slice(0, 8)),
+                  live ? h('span', { className: 'ofm_subbadge' }, t('sub.running')) : null,
+                  h('span', { className: 'ofm_subroute' }, row.provider === undefined
+                    ? t('sub.noRoute')
+                    : `${row.model} · ${row.provider}`)),
+                h('div', { className: 'ofm_subusage' },
+                  total > 0
+                    ? h('span', { className: 'ofm_submetric ofm_subtotal', title: t('sub.totalHint') },
+                      `${kilo(total)} (\u2191${kilo(row.usage?.input ?? 0)} \u2193${kilo(row.usage?.output ?? 0)})`)
+                    : null,
+                  speed === null ? null : h('span', { className: 'ofm_submetric', title: t('sub.speedHint') }, speed),
+                  hit === null ? null : h('span', { className: 'ofm_submetric', title: t('sub.hitHint') }, `${t('sub.hit')} ${hit}`),
+                  (row.usage?.cacheRead ?? 0) > 0
+                    ? h('span', { className: 'ofm_submetric', title: t('sub.cacheHint') }, kilo(row.usage.cacheRead))
+                    : null))
+            })))
+          : null)
+    }
+
     exports.apply = apply
     exports.inject = inject
     exports.name = 'our-free-model'

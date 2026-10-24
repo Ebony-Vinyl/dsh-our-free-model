@@ -60,6 +60,7 @@ import { createModelRuntime, createRuntimeStores } from './src/core/runtime.js'
 
 export { fromOpenAiMessages } from './src/core/completion.js'
 import { buildStats } from './src/core/stats.js'
+import { describeChildren, summarize } from './src/subagent.js'
 export { buildStats }
 
 export const name = 'our-free-model'
@@ -138,6 +139,37 @@ export function apply(ctx, config) {
   const dataDir = path.resolve(home, DATA_DIR_NAME)
   fs.mkdirSync(dataDir, { recursive: true })
   const packageVersion = version
+
+  // ── projection checkpoints for finished children ────────────────────────────
+  // A child that has ended is gone from `sessions`, but the harness checkpoints
+  // its `tokenUsage` row to one file per session. That file is the only place its
+  // spend survives, and a strip that hid a finished delegation's cost would make
+  // the one question people actually ask ("what did that child cost me?")
+  // unanswerable after the fact. A small TTL cache keeps a busy strip from
+  // re-reading the same files on every poll.
+  const checkpointCache = new Map()
+  const CHECKPOINT_TTL_MS = 15000
+  const checkpointDir = path.join(home, 'storages', 'session_projcache', 'sessions')
+
+  /**
+   * Read one session's persisted projection rows.
+   * @param {string} sessionId - the session whose checkpoint to read.
+   * @returns {object|undefined} its rows, or undefined when none is on disk.
+   */
+  function checkpointOfSession(sessionId) {
+    const cached = checkpointCache.get(sessionId)
+    if (cached !== undefined && Date.now() - cached.at < CHECKPOINT_TTL_MS) return cached.rows
+    // Synchronous by contract: the caller folds rows inside one request tick, and
+    // these files are small.
+    let rows
+    try {
+      rows = JSON.parse(fs.readFileSync(path.join(checkpointDir, `${sessionId}.json`), 'utf8'))?.record?.rows
+    } catch {
+      rows = undefined
+    }
+    checkpointCache.set(sessionId, { at: Date.now(), rows })
+    return rows
+  }
 
   // A hot reload re-enters apply with fresh stores; the generation counter lives
   // on globalThis so the new instance knows it replaced a predecessor, and does
@@ -1049,6 +1081,15 @@ export function apply(ctx, config) {
     pool: fetchPoolSnapshot,
     eacAuth,
     picks,
+    // Subagent telemetry. Both services are read late and opportunistically:
+    // neither is a hard requirement of this plugin (see `inject`), and a
+    // composition without them simply reports no children rather than failing
+    // the route.
+    subagents: parentId => describeChildren({
+      sessions: ctx.get('sessions'),
+      projections: ctx.get('sessionProjections'),
+      checkpointOf: checkpointOfSession,
+    }, parentId),
     // ── the aggregate lane's settings surface ────────────────────────────────
     // The registry is static data; the configured half is the settings file with
     // every key masked. Writing one provider rebuilds the catalog and re-emits
@@ -1673,6 +1714,18 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())
+      }
+      // ── subagent telemetry ─────────────────────────────────────────────────
+      // One parent session's delegated children and what each has cost. The
+      // services are read per request rather than captured at mount time: this
+      // route mounts on a `webServer` fiber, while `sessions` and
+      // `sessionProjections` may arrive later in the composition, and a captured
+      // `undefined` would make the strip permanently empty.
+      if (method === 'GET' && routePath === '/subagents') {
+        const parent = url.searchParams.get('session') ?? ''
+        if (parent === '') return send(400, { error: 'the session query parameter is required' })
+        const rows = await deps.subagents(parent)
+        return send(200, { children: rows, summary: summarize(rows) })
       }
       // ── the aggregate lane ─────────────────────────────────────────────────
       if (method === 'GET' && routePath === '/providers') {
