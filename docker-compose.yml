@@ -1,0 +1,19 @@
+services:
+  ofm-standalone:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/poboll/dsh-our-free-model:standalone
+    # 默认仅本机(127.0.0.1)。NAS / 局域网部署：开启下面两行，服务即绑 0.0.0.0 暴露到 LAN。
+    # 代码默认仍只绑 loopback，必须显式设 OFM_ALLOW_NONLOOPBACK=1 才会放行非回环地址。
+    environment:
+      - OFM_ALLOW_NONLOOPBACK=1
+      - OFM_BIND=0.0.0.0
+    # 用 host 网络在宿主机 / LAN 的 18900 访问；network_mode: host 仅 Linux 生效。
+    network_mode: host
+    volumes:
+      - ofm-data:/data
+    restart: unless-stopped
+
+volumes:
+  ofm-data:

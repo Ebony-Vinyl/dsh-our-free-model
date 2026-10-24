@@ -1,0 +1,36 @@
+name: build-docker
+
+# 在打 v* 标签（或手动触发）时构建 standalone 服务的容器镜像并推送到 GHCR。
+# 注意：standalone 服务仅绑定 loopback（service.mjs 限制），容器内监听 127.0.0.1:18900；
+#       拉取后请用 host 网络模式运行，或用反向代理转发。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@f7ce87c1d33b3163e0c5b9b15da9c8d0d463c1b5f
+      - uses: docker/login-action@74a5d142397b4f367a8386ef9798c87ce7012d1c
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build and push
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: .
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

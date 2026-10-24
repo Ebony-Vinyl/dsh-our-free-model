@@ -109,7 +109,22 @@ export async function startStandalone({
   logger = console, refresh = true, probe, lanEnabled, lanPort,
   startRelay = startLanRelay,
 } = {}) {
-  if (!isLoopbackHost(host)) throw new TypeError('the standalone service binds a loopback address only')
+  if (!isLoopbackHost(host)) {
+    // 默认只允许本机回环地址。Docker / NAS 等需要局域网访问时，必须由部署方显式开启
+    // （设置环境变量 OFM_ALLOW_NONLOOPBACK=1），避免服务被意外暴露到不可信网络。
+    if (process.env.OFM_ALLOW_NONLOOPBACK !== '1') {
+      throw new TypeError(
+        'the standalone service binds a loopback address only; ' +
+        'set OFM_ALLOW_NONLOOPBACK=1 to expose it on the LAN (Docker/NAS), ' +
+        'and keep it on a trusted network or behind an authenticating reverse proxy'
+      )
+    }
+    logger.warn(
+      'SECURITY: standalone service bound to non-loopback address ' + host +
+      ' — anyone on the network can reach the local API and your account credentials. ' +
+      'Keep it on a trusted network or front it with an authenticating reverse proxy.'
+    )
+  }
   if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) throw new TypeError('dataDir must be an absolute path')
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) {
     throw new TypeError('port must be an integer between 0 and 65535')

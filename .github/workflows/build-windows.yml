@@ -1,0 +1,90 @@
+name: build-windows
+
+# 在 Windows 上构建 Our Free Model 桌面壳的 .exe 安装包（未签名，需绕过 SmartScreen）。
+# 手动触发，或在打 v* 标签时自动构建，并作为构件挂到作者发布的主 release（vX.Y.Z）。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix packages/standalone ci
+          node scripts/build-standalone-ui.mjs
+          npm --prefix packages/desktop ci --ignore-scripts
+      - name: Build Windows installer
+        env:
+          CI: true
+        run: npm --prefix packages/desktop run build
+      - name: Publish installer as a release asset (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          installer=$(ls packages/desktop/src-tauri/target/release/bundle/nsis/*.exe | head -1)
+          sha=$(sha256sum "$installer" | awk '{print $1}')
+          version=$(node -p "require('./packages/desktop/package.json').version")
+          release_tag="${GITHUB_REF_NAME}"
+          cat > release-notes.md <<NOTES
+          ## Windows 社区构建 / Windows community build
+
+          本 .exe 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现，未经 Authenticode 签名。它直接挂到作者发布的主 release（vX.Y.Z），与 macOS dmg、插件同处一个 release，不再单独开「非官方」release。
+
+          This .exe is built by GitHub Actions from the public, auditable source of this repository and is not Authenticode-signed. It is attached to the same release as the author's macOS dmg and plugin (no separate "unofficial" release).
+
+          | 项 / Item | 值 / Value |
+          |---|---|
+          | 版本 / Version | ${version} |
+          | 架构 / Arch | x64 |
+
+          ### 如何安装 / How to install
+
+          1. 运行 \`Our Free Model_x64-setup.exe\`，按提示安装。Run the installer and follow the prompts.
+          2. 若被 SmartScreen 拦截：「更多信息」→「仍要运行」。If SmartScreen blocks it: More info → Run anyway.
+          3. 安装前请从托盘完全退出旧程序，配置与账号数据会被保留。Fully quit the old app from the tray before installing; config and accounts are preserved.
+
+          ### 可信性 / Trust
+
+          - 构建来自当前标签对应的公开源码，可逐行审计。
+          - 本 .exe 正是你正在查看的这次 Actions 运行的产物，由 GitHub Windows runner 构建；任何人 fork 后重跑同一 workflow 即可复现。
+          - 下载后请核对下方 SHA256。
+          NOTES
+          {
+            echo ""
+            echo "---"
+            echo "- 构建来源 / Source: ${GITHUB_REF_NAME} @ ${GITHUB_SHA}"
+            echo "- 构建记录 / CI run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- SHA256: $sha"
+          } >> release-notes.md
+          # 直接挂到作者创建的主 release（vX.Y.Z）；若主 release 尚未生成则等待（最多约 6 分钟）再上传，
+          # 避免并发创建重复 release，也消除「非官方社区构建」的独立条目。
+          for i in $(seq 1 30); do
+            if gh release view "$release_tag" >/dev/null 2>&1; then break; fi
+            echo "等待主 release $release_tag 出现… ($i/30)"; sleep 12
+          done
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" "$installer" --clobber
+            echo "已将 installer 上传到主 release $release_tag"
+          else
+            # 兜底：主 release 迟迟未出现时自行创建（不再标「非官方」）
+            gh release create "$release_tag" "$installer" \
+              --title "Our Free Model ${version} Windows (x64) 社区构建 / community build" \
+              --notes-file release-notes.md \
+              --target "$GITHUB_SHA"
+          fi

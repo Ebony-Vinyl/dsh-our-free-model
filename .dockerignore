@@ -1,0 +1,9 @@
+.git
+**/node_modules
+node_modules
+packages/desktop/src-tauri/target
+**/target
+**/*.log
+.DS_Store
+dist
+.thumbs
