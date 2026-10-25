@@ -294,6 +294,13 @@ export function normalizeToolArguments(raw: string): string {
  *
  * 注意：只把**无法解析**视为截断。能解析但类型不对（标量、数组）属于模型
  * 输出有误，交给 schema 校验回传即可，不应触发重试。
+ *
+ * 无法解析还要再分两类（issue #474）：**结构不完整**（字符串未闭合、括号
+ * 不平衡——被输出上限切断或分片丢失）才是上面的截断；**结构完整但语法非法**
+ * （如值裸写漏引号，参数有闭合 `}`、outputTokens 远未达上限）不是截断——
+ * 判成截断会冒充「已达到输出 token 上限」误导用户，且让恢复路径失效。这类
+ * 参数应原样走 tool-calls，由 harness 的 schema 校验把明确错误回传给模型
+ * 自行修正。
  */
 export function isTruncatedArguments(raw: string): boolean {
   const trimmed = raw.trim()
@@ -301,9 +308,20 @@ export function isTruncatedArguments(raw: string): boolean {
   try {
     JSON.parse(trimmed)
     return false
-  } catch {
-    return true
+  } catch {}
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (const ch of trimmed) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+    } else if (ch === '"') inString = true
+    else if (ch === '{' || ch === '[') depth += 1
+    else if (ch === '}' || ch === ']') depth -= 1
   }
+  return inString || depth > 0
 }
 
 /**

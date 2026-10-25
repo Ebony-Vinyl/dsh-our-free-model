@@ -415,6 +415,18 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
       { index: 0, id: 'call-1', function: { name: 'read', arguments: '{}' } },
     ] }, 'tool_calls'))))
     assert.equal(tools.at(-1).reason.kind, 'tool-calls', `${provider}: tools remain valid`)
+    // Issue #474: arguments that are complete but syntactically invalid (a bare
+    // value, all brackets closed) are not a cut — report tool-calls so the
+    // schema violation reaches the model; only a structurally incomplete value
+    // still downgrades to max-tokens.
+    const invalidArgs = await collect(consume(response(frame({ tool_calls: [
+      { index: 0, id: 'call-1', function: { name: 'read', arguments: '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}' } },
+    ] }, 'tool_calls'))))
+    assert.equal(invalidArgs.at(-1).reason.kind, 'tool-calls', `${provider}: complete-but-invalid arguments are not a cut`)
+    const cutArgs = await collect(consume(response(frame({ tool_calls: [
+      { index: 0, id: 'call-1', function: { name: 'read', arguments: '{"pattern": "un' } },
+    ] }, 'tool_calls'))))
+    assert.equal(cutArgs.at(-1).reason.kind, 'max-tokens', `${provider}: an unclosed string is still a cut`)
     const callDelta = { tool_calls: [{ index: 0, id: 'call-1', function: { name: 'read', arguments: '{}' } }] }
     for (const rows of [
       [frame({ content: ' \n', ...callDelta }, 'tool_calls')],
