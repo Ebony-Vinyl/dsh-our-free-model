@@ -2,13 +2,12 @@ import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { shared } from 'ofm-shared-client'
 import { ChannelBrowser } from './components/channel-browser'
-import { getLocale, providerText } from './i18n.mjs'
+import { bindT, getLocale, providerText } from './i18n.mjs'
 import 'ofm-shared-styles.css'
 
 const { EacAuth, useEacLogin, DICT, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage } = shared
 const h = React.createElement
-const t = key => DICT[getLocale()][key] ?? key
-t.locale = getLocale()
+const t = bindT(key => DICT[getLocale()][key] ?? key)
 const localizedProviders = CHANNEL_PROVIDERS.map(row => ({ ...row, name: providerText(row, 'name'), org: providerText(row, 'org'), note: providerText(row, 'note') }))
 let requestLifetime = new AbortController()
 const ctx = {

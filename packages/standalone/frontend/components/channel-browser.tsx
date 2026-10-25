@@ -60,7 +60,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
     const status = statuses?.[provider.id]
     const isConnected = (status?.accounts?.enabled ?? 0) > 0 && !status?.closed
     return `${providerText(provider, 'name')} ${providerText(provider, 'org')}`.toLowerCase().includes(search.toLowerCase().trim())
-      && (filter === 'all' || (status !== undefined && (filter === 'connected' ? isConnected : !isConnected)))
+      && (filter === 'all' || (filter === 'connected' ? isConnected : !isConnected))
   })
   // 分类标签展示全量数量；搜索后的匹配数量由结果栏单独展示。
   const counts: Record<string, number> = {
@@ -107,7 +107,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
       <div className="channel-results-meta"><span>{t.format('cb.resultCount', { n: rows.length })}</span><span><SlidersHorizontal size={13} />{t('cb.manageHint')}</span></div>
       <div className="provider-grid">{rows.map(provider => {
         const status = statuses?.[provider.id]
-        const state = status === undefined ? t('cb.reading') : status.closed ? t('cb.closed') : (status.accounts?.enabled ?? 0) > 0 ? t('cb.connected') : t('cb.pending')
+        const state = status?.closed ? t('cb.closed') : (status?.accounts?.enabled ?? 0) > 0 ? t('cb.connected') : t('cb.pending')
         return <Card className="provider-card channel-directory-row" key={provider.id}>
           <span className="provider-logo" style={{ color: provider.accent, backgroundColor: `${provider.accent}0d` }}>{providerText(provider, 'name').slice(0, 2).toUpperCase()}</span>
           <div className="channel-directory-name"><h2>{providerText(provider, 'name')}</h2><div className="provider-org">{providerText(provider, 'org')}</div><p className="provider-description">{providerText(provider, 'note')}</p></div>

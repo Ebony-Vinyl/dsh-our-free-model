@@ -18,7 +18,7 @@ import './workbench.css'
 import { SponsorPage, SponsorNotice } from './sponsor'
 
 const API = '/api/management'
-const pageNames: Page[] = ['overview', 'agents', 'providers', 'library', 'routing', 'models', 'usage', 'channels', 'eac', 'settings', 'connection', 'sponsor']
+const pageNames: Page[] = ['overview', 'workspace', 'agents', 'providers', 'library', 'routing', 'models', 'usage', 'channels', 'eac', 'settings', 'connection', 'sponsor']
 const platform = document.getElementById('root')?.dataset.loginPlatform ?? (/Windows/i.test(navigator.userAgent) ? 'windows' : /Macintosh|Mac OS/i.test(navigator.userAgent) ? 'macos' : 'unsupported')
 const terminalName = platform === 'windows' ? 'PowerShell' : t('app.terminal')
 type Request = <T = any>(path: string, body?: unknown, timeoutMs?: number, signal?: AbortSignal) => Promise<T>

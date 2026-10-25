@@ -14,7 +14,33 @@ const CLIENTS = [
   { id: 'cc-switch', name: 'CC Switch', kind: 'desktop', command: 'cc-switch', nativeOnly: true },
   { id: 'codex-plus-plus', name: 'Codex++', kind: 'desktop', command: 'codex-plus-plus', nativeOnly: true },
 ]
-const error = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
+const EN = {
+  '请选择要使用的模型': 'Select a model to use',
+  '客户端只能连接本机网关': 'Clients can only connect to the local gateway',
+  '此客户端需要 EXE 或受支持的 npm 启动器': 'This client requires an EXE or a supported npm launcher',
+  '无法解析 npm 启动器，请选择对应客户端的可执行文件': "Could not resolve the npm launcher; choose the client's executable file",
+  '未知客户端': 'Unknown client',
+  '客户端设置无效': 'Invalid client settings',
+  '请先关闭此客户端再修改配置': 'Close this client before changing its settings',
+  '不支持的客户端设置': 'Unsupported client setting',
+  '请选择有效的启动模式': 'Choose a valid launch mode',
+  '此管理器使用自身配置启动': 'This manager launches with its own configuration',
+  '可执行文件不存在，请填写绝对路径': 'The executable does not exist; enter an absolute path',
+  '请选择 EXE 或命令启动器': 'Choose an EXE or command launcher',
+  '工作目录不存在，请填写绝对路径': 'The working directory does not exist; enter an absolute path',
+  '客户端配置批次无效': 'Invalid client settings batch',
+  '工作台正在停止': 'The workbench is stopping',
+  '客户端已经启动': 'The client is already running',
+  '尚未找到客户端，请先安装或设置可执行文件路径': 'Client not found; install it or set the executable path first',
+  '工作目录不存在': 'The working directory does not exist',
+  '本地推理服务已暂停': 'The local inference service is paused',
+  '所选模型当前不可用，请重新选择': 'The selected model is unavailable; choose another',
+  '启动失败，请检查客户端路径与安装状态': 'Launch failed; check the client path and installation',
+  '该客户端没有由本工作台启动的进程': 'This client has no process launched by this workbench',
+  '无法停止客户端，请检查进程状态': 'Unable to stop the client; check the process state',
+  '客户端配置文件无效': 'Invalid client configuration file',
+}
+const error = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode, en: EN[message] })
 const regular = file => { try { return fs.statSync(file).isFile() } catch { return false } }
 const directory = file => { try { return fs.statSync(file).isDirectory() } catch { return false } }
 const runFile = promisify(execFile)
