@@ -29910,7 +29910,7 @@ function normalizeToolArguments(raw) {
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    return "{}";
+    return isTruncatedArguments(trimmed) ? "{}" : trimmed;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return "{}";
   return trimmed;
@@ -29935,7 +29935,7 @@ function isTruncatedArguments(raw) {
     else if (ch === "{" || ch === "[") depth += 1;
     else if (ch === "}" || ch === "]") depth -= 1;
   }
-  return inString || depth > 0;
+  return inString || depth !== 0;
 }
 var REASONING_LOOP_CODE = "REASONING_LOOP";
 function resolveSliceChars(raw) {

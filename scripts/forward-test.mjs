@@ -755,6 +755,13 @@ await checkAsync('complete-but-invalid arguments stay executable; an unclosed st
     chatFrame({ tool_calls: [{ index: 0, id: 'call_cut', function: { name: 'glob', arguments: '{"pattern": "un' } }] }),
   ])
   assert.equal(cut.state.brokenToolCall, true, 'an unclosed string is still a cut')
+  // A lost-prefix fragment (`"some/path.txt"}` — both quotes present, the
+  // opening `{` lost) has a negative depth — still a cut, it stays on the
+  // retry path.
+  const lostPrefix = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_lp', function: { name: 'read', arguments: '"some/path.txt"}' } }] }),
+  ])
+  assert.equal(lostPrefix.state.brokenToolCall, true, 'a lost-prefix fragment is still a cut')
 })
 
 const fakeResponse = () => {

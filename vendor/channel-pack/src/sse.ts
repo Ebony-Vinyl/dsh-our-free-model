@@ -269,8 +269,11 @@ export function normalizeToolArguments(raw: string): string {
   try {
     parsed = JSON.parse(trimmed)
   } catch {
-    // 不完整的 JSON（流被截断）：回退为空对象。
-    return '{}'
+    // 结构不完整（截断）：回退为空对象——这里多在历史序列化路径上，
+    // wire 必须是合法 JSON。结构完整的语法错误原样返回（issue #474）：
+    // 流式路径上把它补成 {} 会伪造出合法外观，让 harness 报 missing
+    // required property 而非把真实病因暴露给模型。
+    return isTruncatedArguments(trimmed) ? '{}' : trimmed
   }
   // OpenAI 规范要求 arguments 是对象；null / 数组 / 标量都不是合法参数包。
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return '{}'
@@ -321,7 +324,10 @@ export function isTruncatedArguments(raw: string): boolean {
     else if (ch === '{' || ch === '[') depth += 1
     else if (ch === '}' || ch === ']') depth -= 1
   }
-  return inString || depth > 0
+  // 不平衡无论方向都是不完整：深度为负覆盖「丢了前缀只剩中段与尾部」
+  // 的分片丢失形态（如 `"path.txt"}`），它必须留在实测有效的截断恢复
+  // 路径上，不能因为括号恰好不多不少被误判为完整。
+  return inString || depth !== 0
 }
 
 /**

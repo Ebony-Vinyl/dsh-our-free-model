@@ -423,10 +423,22 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
       { index: 0, id: 'call-1', function: { name: 'read', arguments: '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}' } },
     ] }, 'tool_calls'))))
     assert.equal(invalidArgs.at(-1).reason.kind, 'tool-calls', `${provider}: complete-but-invalid arguments are not a cut`)
+    // The invalid arguments must reach the host verbatim — normalize must not
+    // forge them into a legal-looking '{}' (the exact trap its own comment
+    // forbids); only then can the model see and fix its real mistake.
+    assert.equal(assemble(invalidArgs).find(block => block.type === 'tool-call')?.arguments,
+      '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}', `${provider}: invalid arguments pass through verbatim`)
     const cutArgs = await collect(consume(response(frame({ tool_calls: [
       { index: 0, id: 'call-1', function: { name: 'read', arguments: '{"pattern": "un' } },
     ] }, 'tool_calls'))))
     assert.equal(cutArgs.at(-1).reason.kind, 'max-tokens', `${provider}: an unclosed string is still a cut`)
+    // A negative depth is the lost-prefix fragment (`"path.txt"}` — both
+    // quotes present, the opening `{` lost) — still a cut, it belongs on the
+    // proven retry path.
+    const lostPrefix = await collect(consume(response(frame({ tool_calls: [
+      { index: 0, id: 'call-1', function: { name: 'read', arguments: '"some/path.txt"}' } },
+    ] }, 'tool_calls'))))
+    assert.equal(lostPrefix.at(-1).reason.kind, 'max-tokens', `${provider}: a lost-prefix fragment is still a cut`)
     const callDelta = { tool_calls: [{ index: 0, id: 'call-1', function: { name: 'read', arguments: '{}' } }] }
     for (const rows of [
       [frame({ content: ' \n', ...callDelta }, 'tool_calls')],

@@ -81,7 +81,10 @@ function argumentsCutMidway(raw) {
     else if (ch === '{' || ch === '[') depth += 1
     else if (ch === '}' || ch === ']') depth -= 1
   }
-  return inString || depth > 0
+  // Unbalanced is incomplete in either direction: a negative depth is the
+  // lost-prefix fragment shape (`"path.txt"}`), which belongs on the
+  // proven retry path, not on the complete-but-invalid one.
+  return inString || depth !== 0
 }
 
 class BlockSink {
