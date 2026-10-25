@@ -49,810 +49,232 @@
 
 ---
 
-## Highlights
+## What it is
 
-- **Nothing to configure** — install, restart, pick a model. No account, no key, no quota dashboard to register on.
-- **The upstreams are named** — the free lane is OpenCode's Zen gateway at `https://opencode.ai`, and the Kilo channel is Kilo AI's public gateway at `https://kilo.ai`; both are dialled directly, with no third party relaying your traffic. Who serves your requests, and where your data goes, is spelled out in [Where the models come from](#where-the-models-come-from) and the [Disclaimer](#disclaimer).
-- **A roster that tracks upstream** — model set, context length and capabilities are re-fetched on every refresh rather than frozen into the plugin.
-- **The picker offers only what actually answers** — a model the upstream listing names but the gateway refuses to route outright (`Model is unavailable`, a 404 for that id) leaves the dropdown and stays visible in the settings page with its refusal recorded. Everything that is *not* a statement about the model keeps its model reachable: a 5xx from the gateway, a 429 quota window, a timeout or a dropped connection. Region-gated ones move to their own `region-limited` group. If a whole round refuses everything, nothing is hidden: the picker never goes empty.
-- **Announcement center with live push** — the repository owner edits one JSON file and pushes; every installation receives it within one poll cycle. Bodies are HTML rendered through a strict allowlist; `urgent` items open a full-screen modal; optional OS-level notifications.
-- **In-app upgrades** — one click in the settings page: download → SHA-256 verification → backup → atomic replace → read-back verification → hot reload, with automatic rollback if any step fails.
-- **Hot reload** — upgrades and code changes take effect immediately, no app restart; also available as a manual button and an optional file watcher.
-- **Region-aware, per egress** — models gated by geography are separated into their own `region-limited` group instead of failing mid-turn. Switch your network exit and the next probe reclassifies them automatically.
-- **The body decides what it is, not the header** — under load this gateway answers 200 with a JSON `Content-Type` over a perfectly ordinary SSE frame stream. The plugin sniffs the first bytes and replays them into the stream, so the turn keeps streaming instead of being thrown away — and a working model is never demoted to `unavailable` because one header lied.
-- **Thinking effort that actually binds** — two kinds of model, two kinds of control. A model that declares thinking levels (DeepSeek V4.1 Flash, GLM 5.3 Flash among them) gets its own level menu (Off / Low / High / Max …), and the selected level is sent as-is in the upstream `reasoning_effort` field — which this gateway validates, so a value outside the set is a 400. A model with no level menu (MiMo V2.6 among them) gets the budget ladder: `Light / Balanced / Deep` map to output-token budgets of 2 048 / 8 192 / the model's full capacity, and a model that cannot switch thinking off gets the whole ladder doubled to 4 096 / 16 384 / capacity, because there thinking and the visible answer compete for the one ceiling. Both are recorded per call, and every model card in the settings page prints either the levels or the number it will actually send (see [Thinking effort](#thinking-effort-a-level-menu-or-a-budget-ladder)).
-- **Works without a browser UI** — only `llm` is a hard dependency, so the plugin activates on a headless composition such as dsh-tui and still serves its models. The dashboard half lives on its own fiber and mounts itself when `webServer` appears, so a composition that loads plugins before its HTTP server exists still gets its settings page. Availability probing and the background loops run on plain timers.
-- **Usage dashboard, local only** — token heatmap, cumulative curve by total or per model, output speed and time-to-first-token sampled per call. Nothing is uploaded.
-- **OpenAI-compatible forward port** — expose these models to any other local tool through a base URL plus a generated API key. Assistant string `reasoning_content` fields in Chat history are preserved for tool follow-ups, including explicit empty strings; absent fields are not fabricated.
-- **EAC lane** — a co-paid lane for DSHEAC AIO and kernel-declared `desktop`, `tauri`, `web`, or `web-desktop` profiles, with models prefixed `EAC`. Its credential is sealed; host admission and server-side GitHub authorization (sign in and star the repository) remain separate requirements. Command-line profile arguments alone do not grant access.
-- **The Kilo channel (keyless free pool)** — the free model pool of Kilo AI's public gateway (the listing's `isFree` slice, fetched live, including the `kilo-auto/free` auto-router) is built in; no account, no key. Model cards carry a Kilo badge. Thinking effort works like the EAC lane: the model's own level menu (Off / Low / Medium / High, default High), sent for real through the gateway's unified `reasoning` parameter — Off was verified family by family to zero out thinking (nemotron, ling, dots, poolside, apodex, cohere); the stepfun and liquid endpoints refuse to disable thinking (HTTP 400) and the two auto-routers ignore it, so those models' menus omit the Off rung. The pool is the upstream's free offer, and its model cards state that prompts may be logged to improve their services — never send sensitive content; see the [Disclaimer](#disclaimer).
-- **The aggregate lane — your own key, 76 providers** — a new settings tab brings third-party endpoints into the same roster: the registry ships 76 providers (NVIDIA NIM, OpenRouter, Groq, Cerebras, SambaNova, Gemini, DeepSeek, Mistral, Together, Fireworks, SiliconFlow, Nebius, Chutes, Hugging Face, Cloudflare, Z.ai, Kimi, MiniMax, QwenCloud/Alibaba, Bedrock, Vertex, Vercel AI Gateway, Azure OpenAI, FleetRelay Gateway, plus the no-account Ollama, LM Studio and llama.cpp). Configuring a provider (a key for the ones that need one; the local no-account ones need none) turns each of its models into a `provider/model` row in the picker and on the local gateway. Keys stay in the local `0600` settings.json; the API echoes only `hasKey` and a `…abcd` fingerprint. Per provider: enable/disable, Test (a *listing* probe — it verifies a key without spending a generation), Discover, a base-URL override, a model-list override and Remove. OAuth/ADC providers are listed but marked not drivable here. OpenCode's keyless free pool is deliberately **not** a registry row: it requires a per-request minted session id, the v2 client User-Agent and a set of official tool declarations, which this lane's generic transport has nowhere to carry — listing it would only add a picker row that can never answer, and those ten models are served natively by the plugin's own free lane.
-- **Token savers** — three things: tool-output compaction (RTK) rewrites `tool_result` content in place before the request is sent (git diff / status / log, grep, find, ls, tree, build logs, numbered file dumps, search listings, duplicate log lines) — measured live, a 40 KB `git diff` lost 90% of its bytes and the model still answered about it; prompt shaping offers the caveman and ponytail families, every level off by default; and five local answers that never call a provider. The settings page reports bytes before/after, percent saved, blocks compacted and calls measured, from the same stats rows the usage charts read.
-- **Routing (fallback chains)** — chain models from any lane into one named chain that appears in the picker and on the gateway as the virtual model `combo:<name>`. `fallback` always starts at the head; `round-robin` rotates the starting point and stays there for N turns. A link that fails *before any answer delta* is discarded whole, so the switch is invisible to the caller — and reasoning deltas deliberately do not count as content, so "thought for a minute, then hit a quota wall" is the case failover exists for.
-- **The local gateway speaks Anthropic natively** — new `POST /v1/messages` (streaming and non-streaming, with `thinking`/`tool_use` blocks, a real `stop_reason` and an in-stream `error` event when a turn fails after the headers went out) and `POST /v1/messages/count_tokens` (a local estimate — the plugin ships no tokenizer); `/v1/models` now advertises every lane, the aggregate rows and the chains included. The gateway page's new *Connect a client* section generates copy-ready recipes — Claude Code, Codex `config.toml`, the OpenAI and Anthropic SDKs, curl, and a LAN variant when the relay is up — from the port that actually bound and the key that is actually required.
-- **Optional visual effects** — The settings header has a Visual effects switch, off by default. The aquarium and model features stay available; enabling it restores background glows, glass blur and decorative motion. The preference stays in the current browser.
-- **Eleven tabs beside the old six** — Aggregate, Token savers, Routing, Plugin upgrade and Recommended projects join Free models, EAC models, Free channels, Dashboard, Request log and Gateway; the motion pass (card rise on mount, page fade on tab switch, an animated savings meter, hover lifts) respects `prefers-reduced-motion` and collapses to one column at panel width. The Recommended-projects page carries the three companion repositories — EAC-Desktop, EAC-Pack and EAC-design-world — with a description, a direct link and a star button each, and their live star, fork and last-push numbers read from GitHub (absent, never invented, when GitHub cannot be reached).
-- **Clean names in the UI** — no mojibake, no upstream vendor strings leaking into your model picker.
+A pure mount for dsh: it changes no kernel code, needs no build step, and has no runtime dependencies.
 
-## What you get
+Models come from OpenCode's keyless gateway, Kilo's public free pool, the desktop-only EAC co-paid lane, your own keys on the aggregate lane (76 providers built in), and ten account channels you can sign in to.
 
-**Composer model picker**
-
-| Group | Contents |
-| --- | --- |
-| `Our Free Model` | Models usable from your current network exit |
-| `Our Free Model · region-limited` | Models the upstream refuses for this region, kept visible but separated |
-
-A model the gateway names but refuses to route appears in neither group. It stays listed under
-**Not in the picker** in the settings page, with the refusal and the probe time, and returns to
-the picker by itself as soon as a probe gets through.
-
-**Settings page — `Settings → Our Free Model`**, seven sections:
-
-1. **Model roster** — per-model availability, vision vs text-only, context window, max output, the output ceiling each effort rung really sends, measured time-to-first-token, and an on-demand single-call benchmark.
-2. **EAC lane authorization** — one-click GitHub sign-in (the browser does the work; nothing to paste), the signed-in name and star verdict, a re-check button and sign-out; model cards carry a lock until authorized. The free lane is unaffected.
-2. **Announcement center** — the owner-pushed feed: unread counter, urgency badges, mark-read (single/all), check-now button, OS-notification toggle. Bodies render HTML through the allowlist.
-3. **Usage board** — headline counters, a 17-week token heatmap, a cumulative curve switchable between tokens and request counts and between total and any single model, speed sparklines, and a per-model table.
-4. **Local forward** — enable/disable, bind host and port, copy base URL, show / copy / rotate the API key, and a ready-to-run `curl` example.
-5. **Plugin settings** — master switch, whether region-limited models are exposed, probe interval, default output ceiling, plus the detected egress IP and country.
-6. **Plugin upgrade** — installed/latest version, check for updates, one-click upgrade with progress and failure reasons, last-upgrade history, hot-reload button and file-watcher switch.
-
-**First-run announcement** — a five-page walkthrough (preamble, model roster, how to use, what it does, news & upgrades) that acknowledges once and never reappears until the copy version is bumped.
+Everything is picked and tuned inside dsh: the model picker groups by availability, the Effort menu sends a real thinking budget, and the settings page holds the model list, dashboard, local forward port, gateway, announcements and upgrades. Usage, settings and account credentials stay on your machine.
 
 ## Install
 
-> **⚠️ Do not install this plugin from npm.**
->
-> The `dsh-our-free-model` package on npm **is not published by this repository.**
-> It is a third-party repackaging whose contents do not match this tree:
-> `index.js` and `client.js` were modified, and it ships a
-> `src/channel-visibility.js` that has never existed here. Installing it gets you
-> a build this project did not review, and you lose the signed-manifest
-> verification and in-app upgrades that this repository provides.
->
-> Install only the ways documented below: a release package from this repository,
-> or a local source directory. For any same-named package from another channel,
-> this repository is the source of truth.
-
-### Command line (plain `dsh web`)
-
 ```bash
-dsh plugin --profile web add /absolute/path/to/dsh-our-free-model
+dsh plugin --profile web add /absolute/path/dsh-our-free-model
 ```
 
-Restart the app once. `--profile` should name the profile you actually use.
+Restart the app once afterwards, and replace `--profile` with the profile you actually use.
 
-### DSHEAC AIO / desktop builds — read this first
+> **⚠️ Do not install this plugin from npm.**
+>
+> The `dsh-our-free-model` package on npm is **not published by this repository**. A third
+> party packed it with a modified `index.js` and `client.js`, plus a
+> `src/channel-visibility.js` this repository has never had. Installing it gets you a build
+> nobody reviewed here, and no signature checks or in-app upgrades.
+>
+> Install it the ways described in this document instead: a Release package from this
+> repository, or a local checkout. Wherever else a package with the same name shows up,
+> this repository is the one to trust.
 
-Some DSHEAC AIO and older desktop packs run a profile gate before starting the
-web app and restrict symlinks or directory junctions. A host with that check may report:
+There is one more restriction on desktop: Electron's `desktop` profile is managed by the app itself, so install or upgrade from Settings → Plugins. The CLI only works for plain web profiles.
 
-```text
+<details>
+<summary>Profile gate in desktop bundles, and manual tarball installs</summary>
+
+Some DSHEAC AIO / older desktop bundles check the profile before starting the web server and reject symlinks and directory junctions. You may see:
+
+```
 PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 ```
 
-When this gate applies, avoid `link:` dependencies and junctions. Use the in-app
-plugin manager or the local tarball workflow below. Follow the actual host's logs
-and installation contract rather than assuming every desktop shell shares this gate.
+Use the in-app plugin manager on such hosts, or install from a local tarball built from trusted source:
 
-To install manually as a real directory, use a trusted local tarball:
-
-1. Create `<DSH_HOME>/profiles/<profile>/vendor/`. From the reviewed repository, run `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`, or place an official same-version release tarball from this repository there. Local packing does not publish to npm.
-2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.9.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
+1. Put the package in `<DSH_HOME>/profiles/<profile>/vendor/`:
+   `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"` (a Release tarball of the same version works too).
+2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.9.tgz"` to the profile's `package.json`, then run the host's dependency install.
 3. Append `"dsh-our-free-model"` to `dsh.profile.bundles`.
 
-When the package manager owns the installed bytes, set `distribution: 'managed'` in the bundle config or plugin `settings.json`. The package manager then handles updates; in-app upgrades, announcement polling and hot reload stand down while model access remains available. For later updates, replace the trusted tarball and update its dependency path so the old lockfile cannot restore an older copy.
+If a package manager owns this install, set `distribution` to `managed` in the bundle config or the plugin's `settings.json`. In-app upgrades, the announcement feed and hot reload are disabled then; the model lanes keep working. Two writers touching the same directory will corrupt the install.
 
-If copying release files manually, copy the entire package, including `adapter/`, `src/`, `locale/`, and `vendor/channel-pack/`'s `pack.js`, WASM, LICENSE and NOTICE. Copying only entry scripts leaves channel loading incomplete.
+When copying by hand, copy the whole package: `adapter/`, `src/`, `locale/`, and `vendor/channel-pack/` with `pack.js`, the WASM file, LICENSE and NOTICE. Copying only the entry files breaks channel loading.
 
-> Do **not** also add an entry to `cordis.patch.yml`. A bundle referenced from
-> `dsh.profile.bundles` already applies its own patch layer, and registering it
-> twice fails with `duplicate loader entry id: our-free-model`.
+Do not add entries to `cordis.patch.yml`. A package referenced by `dsh.profile.bundles` applies its own patch layer automatically; registering it twice fails with `duplicate loader entry id: our-free-model`.
 
-#### Integration packs (managed installation)
+</details>
 
-When the plugin arrives through an integration pack (an EAC pack, Mojobox, …),
-the *pack* owns update timing and bytes: install with the bundle config
-`distribution: 'managed'` (or write the same field into settings.json), and the
-in-app updater, the announcement feed and the hot reload all stand down — two
-writers to one installed directory corrupt it; the model lane is unaffected.
-Acceptance lives in `scripts/offline-test.mjs`; the catalog-ready records
-(manifest 0.15 / provenance / license / integrity) are under `catalog/`.
+<details>
+<summary>Common install failures</summary>
 
-### Verify before launching the desktop app
+**`ERR_PNPM_VIRTUAL_STORE_DIR_MAX_LENGTH_DIFF`**
+This comes from stale pnpm state in the profile, not from the plugin. Close dsh, delete the profile's `node_modules` and `pnpm-lock.yaml` so they get rebuilt, then install again.
 
-Run the desktop host's own gate against your profile instead of blind-retrying:
+**`git ls-remote "git+ssh://git@github.com/..."` fails during a marketplace install**
+pnpm resolves git sources with the local git binary. If git rewrites URLs through `insteadOf` (commonly https to ssh), or the machine has no usable SSH key, the install fails before any plugin file is downloaded. Either fix the git config and confirm `git ls-remote https://github.com/Ebony-Vinyl/dsh-our-free-model.git` works, or use a Release archive: unzip it and run `dsh plugin add <directory>`.
 
-```bash
-node -e "
-const g = require('<APP_ROOT>/sidecar/dist/lib/profile-upgrade.js');
-const app = '<APP_ROOT>', profile = '<DSH_HOME>/profiles/<profile>';
-console.log(g.planProfileUpgrade(app, profile));
-g.assertProfileStartup(app, profile);
-console.log('startup gate: PASS');
-"
-```
+**`profile "desktop" is managed exclusively by the Electron application`**
+A host protection, not a plugin problem. Desktop plugins are managed in the app; CLI installs only apply to plain web profiles.
 
-Expect `status: 'compatible'`, an empty `mismatches` array, then `PASS`.
-To check bundle composition only, without booting:
+</details>
+
+## macOS desktop build (community)
+
+The desktop app ships for Windows only. The macOS build is community-made: the changes are in [PR #421](https://github.com/Ebony-Vinyl/dsh-our-free-model/pull/421), and you can build it yourself with `npm --prefix packages/desktop run build`; the pipeline lives in `.github/workflows/build-macos.yml`. Only Apple Silicon builds exist at the moment.
+
+It is neither signed nor notarized by Apple, so Gatekeeper blocks the first launch. "Damaged" does not mean the file is broken:
 
 ```bash
-DSH_HOME=<DSH_HOME> dsh --profile <profile> --dump-config | grep our-free-model
+# Try right-click → Open first; if that fails, clear the quarantine flag
+xattr -cr "/Applications/Our Free Model.app"
+# Newer macOS may also need
+sudo xattr -rd com.apple.quarantine "/Applications/Our Free Model.app"
 ```
-
-You should see exactly **one** `id: our-free-model` entry.
-
-### Install failure: `ERR_PNPM_VIRTUAL_STORE_DIR_MAX_LENGTH_DIFF`
-
-This is a **pnpm state problem in the target profile, not the plugin repo** (it fires
-before the plugin is even downloaded): the profile's existing `node_modules` was
-created by an older pnpm, and after a dsh update the bundled pnpm refuses to keep
-using it. Close dsh, delete the profile's `node_modules` and `pnpm-lock.yaml` to
-let pnpm rebuild them, then install again:
-
-```bash
-rd /s /q "%DSH_HOME%\profiles\web\node_modules"
-del "%DSH_HOME%\profiles\web\pnpm-lock.yaml"
-```
-
-The accompanying `Ignoring broken lockfile` warnings disappear with the rebuild.
-
-## Desktop installers (macOS, community build)
-
-The dsh plugin itself needs no build. The **desktop installer** (the Our Free Model desktop shell) is officially published for Windows only; the macOS installer is a community build. The source changes are listed in [PR #421](https://github.com/Ebony-Vinyl/dsh-our-free-model/pull/421) and are fully auditable, line by line. A ready-made Apple Silicon (arm64) build is available from that PR and its community release, or you can build it yourself on a Mac (`npm --prefix packages/desktop run build`; the full pipeline lives in `.github/workflows/build-macos.yml`).
-
-Verify the checksum after downloading (SHA256 is listed in the PR / release):
-
-```bash
-shasum -a 256 ~/Downloads/Our.Free.Model_<version>_aarch64.dmg
-```
-
-**"This app is damaged" or won't open?**
-
-The community build is not signed or notarized with an Apple Developer account, so Gatekeeper blocks first launch. The file is not actually damaged — pick any one of these:
-
-1. **Right-click open**: in Finder, Control-click the app icon, choose **Open**, then confirm **Open** again in the dialog.
-2. **Remove the quarantine attribute** (Terminal):
-
-   ```bash
-   xattr -cr /Applications/Our\ Free\ Model.app
-   ```
-
-3. **If it still says damaged, remove quarantine with sudo** (newer macOS versions are stricter about unsigned apps):
-
-   ```bash
-   sudo xattr -rd com.apple.quarantine "/Applications/Our Free Model.app"
-   ```
-
-4. **Allow it in System Settings**: open **System Settings → Privacy & Security** and click **Open Anyway** if the button is offered.
-
-Notes:
-
-- The current community build is **Apple Silicon (arm64)**; Intel Macs should build from source.
-- The bundle ships its own Node runtime and standalone service — no login, no API key.
-- The package is not signed or notarized by Apple. Trust it based on the auditable source change and the reproducible CI build record above, nothing else.
 
 ## Usage
 
-**Pick a model.** Open the model selector in the composer and choose anything
-under `Our Free Model`. The selection is durable per session.
+**Pick a model.** Choose the `Our Free Model` group in the model picker. Models the upstream blocks by region go to their own `region-limited` group and stay visible. Models declared but not routed never enter the picker; they stay in the settings page with the refusal reason.
 
-**Change thinking depth.** The same menu exposes `Effort` with `Light`,
-`Balanced` and `Deep`. Higher levels spend more of the output budget on
-deliberation; the ceiling is enforced on the request, so the difference is
-measurable rather than cosmetic. It is **one** ceiling shared by deliberation and
-the visible answer, which is why a model that cannot switch thinking off gets
-the whole ladder doubled (the model cards in `Settings → Our Free Model` print the
-number each rung will really send). If answers keep getting cut off, move to
-`Deep`, or raise the per-call output ceiling in the settings.
+**Adjust thinking effort.** The Effort item in the same menu. Models with declared levels (DeepSeek V4.1 Flash, GLM 5.3 Flash and others) get their own level menu and the value is sent as-is. The rest use Light / Balanced / Deep, which map to 2K / 8K / the model's ceiling in output budget; models that cannot disable thinking shift the whole ladder up. Model cards in the settings page print what each level actually sends.
 
-**Serve other local tools.** `Settings → Our Free Model → Local forward`, enable
-it, then copy the base URL and generate a key. Supported routes:
+**Call it from other local tools.** Settings → Our Free Model → Local forward: enable it, copy the base URL and generate a key.
 
-```text
-GET  /v1/models
-POST /v1/chat/completions        streaming and non-streaming
-POST /v1/responses
-POST /v1/messages                streaming and non-streaming (Anthropic Messages)
-POST /v1/messages/count_tokens   local estimate; the plugin ships no tokenizer
+- `GET /v1/models`
+- `POST /v1/chat/completions` (streaming and non-streaming)
+- `POST /v1/responses`
+- `POST /v1/messages` (Anthropic Messages, streaming and non-streaming)
+- `POST /v1/messages/count_tokens` (local estimate; the plugin ships no tokenizer)
+
+A busy port is not a silent failure: the listener retries a few times, then moves to the next free port and writes the actual port back to settings. On Windows the usual culprit is a `netsh interface portproxy` rule; `netsh interface portproxy show all` lists them.
+
+**LAN access.** Below the same panel, off by default. When enabled, the relay binds a routable address, requires its own LAN key (not interchangeable with the local key) and only forwards the five `/v1/*` routes above. Anyone who can reach this machine can spend its free quota through it, so keep it on trusted networks only.
+
+**Announcements and upgrades.** The repository pushes announcements; the plugin polls every 30 minutes by default, and `urgent` items open a full-screen modal. Upgrades run from the settings page in one click: download, verify, back up, replace, hot reload, with automatic rollback on failure.
+
+The settings page holds: model list, EAC authorization, announcements, dashboard, local forward, gateway, aggregate lane, token savers, routing, upgrades, recommended projects.
+
+## Standalone service
+
+If you would rather not install dsh, `packages/standalone` is a local service of its own. It uses `~/.our-free-model` and port 18900 by default, brings its own API key and web console, and supports the same free lane, EAC and account channels.
+
+```bash
+npm run start:standalone
 ```
 
-If another program holds the port, the listener does not die: it retries the same
-port for a few rounds (a listener that just closed, or a portproxy rule that was
-just removed, frees its port within a few hundred milliseconds), then walks to the
-next free port and says so on the settings page — *requested 18899 is not available,
-listening on 18900* — and the port written back into the settings is the real one.
-On Windows the most common owner is a `netsh interface portproxy` rule (served by IP
-Helper): its listener on `0.0.0.0` makes the loopback bind fail with `EACCES` rather
-than `EADDRINUSE`. `netsh interface portproxy show all` lists the rules and
-`netsh interface portproxy reset` clears them.
+Open the one-time admin link printed in the terminal. Options and verification are in [packages/standalone/README.md](packages/standalone/README.md). No installer or Release yet.
 
-The forward endpoint streams in full: besides the `data:` frames, a lane that is
-thinking gets periodic SSE comment frames (a `:` line), so a client's idle
-timeout cannot read "the upstream is still thinking" as "the socket is dead".
-Thinking is recognised under `reasoning`, `reasoning_content` and
-`reasoning_text` — a gateway that repeats one thought under two of them is
-counted once — and the `reasoning_details` array as well. A model whose thinking
-never streams upstream still sends no reasoning frames here; see
-[Known limitations](#known-limitations).
+## Features
 
-**Serve other devices on your network.** The same panel carries a *Network
-access* section. It is off by default; switched on, the relay binds a routable
-address (`0.0.0.0` by default) and demands **a key of its own** — separate from
-the local key, so a leak on either side costs a rotation on that side only and
-the tools already wired to the local port never notice. The relay re-issues to
-the local listener, so the model roster, streaming and error semantics are the
-same ones the local port serves. A port of `0` means "pick one" (18899 is often
-already taken on a machine that runs something else); the panel then shows the
-port and the network address it settled on. While it is on, anyone who can reach
-this machine can spend its free quota with that key — enable it only on a
-network you trust, and narrow the sources with a firewall if you can.
+- **Aggregate lane.** Bring third-party endpoints into the same roster. 76 providers ship in `src/providers/registry.json`; after you add a key, their models appear as `provider/model`. Keys go to the local `0600` `settings.json` and the API echoes only `hasKey` and a `…abcd` fingerprint. The Test button is a listing probe: it verifies a key without spending a generation.
+- **Token savers.** Tool output compaction (git diff/log, grep, find, ls, tree, build logs) rewrites `tool_result` before the request goes out; error output and small results are left alone. There are also caveman / ponytail prompt levels (off by default) and five local answers.
+- **Routing.** Chain models across lanes into `combo:<name>`, with `fallback` (always start at the head) and `round-robin` (rotate the start). A link that fails before any text is emitted is dropped entirely, so the caller never sees the switch.
+- **Local gateway.** Besides Chat Completions and Responses it speaks native Anthropic Messages (thinking, tool_use, real stop_reason and in-stream error events). The gateway page generates copy-ready recipes for Claude Code, Codex, the SDKs and curl against the real port.
+- **Ten account channels.** LobsterAI, Qoder and Qoder China, TRAE, Cline, Loomy, Raccoon, MiniMax Code, ZCode and Gemini. Credentials go to the host credential store; sign-in steps and limits live in the settings page.
+- **Usage dashboard.** Token heatmap, cumulative curves, output speed and time to first token, all local.
+- **Announcement center and hot reload.** Allowlisted HTML, unread markers, OS notifications; upgrades and code changes reload without a restart.
 
-**Send requests through a proxy outlet.** `Settings → Our Free Model → Egress
-proxy`. Optional and off by default — with it off, requests go direct. Two modes:
+## Code map
 
-- **Subscription mode**: paste a Clash/V2Ray subscription URL; the plugin spawns
-  mihomo locally (auto-detected — e.g. Clash Verge's `verge-mihomo.exe` — or set
-  the path yourself) with a built-in url-test group that re-measures every five
-  minutes and sends traffic to the fastest node, health-checking dead nodes out.
-  **The subscription URL is treated as a credential** — the path of a
-  subscription link *is* its token — so it lives at the same standard as the two
-  forward keys: kept in the local settings file, never sent with a request, and
-  never echoed in a settings payload. The panel shows the masked host only
-  (`https://host/…`); "Show" and "Copy" fetch the value from the settings page
-  itself (`GET /egress/url`), an empty input means "keep the stored address", and
-  "Clear" removes it and takes the outlet down with it.
-- **Single-proxy mode**: type an `http://` / `https://` / `socks5://` /
-  `socks5h://` proxy address and every handled request dials through it.
-
-**At rest.** mihomo has to read that address out of a config file (the plugin
-writes a throwaway `mihomo.yaml` into its data directory and spawns mihomo from
-there), so the on-disk copy stays plain text. What this treatment removes is the
-payload echo, the log line and the shoulder — not another process on the same
-machine.
-
-Only three kinds of traffic are taken over: model inference, the model listing
-fetch, and the egress IP probe; announcements, upgrades, and the EAC lane stay
-direct so the subscription identity never mixes into the release channel.
-
-**Scope.** The outlet serves this plugin's opencode traffic and nothing else on
-this machine. The mihomo it spawns runs from a throwaway config of the plugin's
-own: `bind-address: 127.0.0.1` with `allow-lan: false`, no `tun:` section, no
-system proxy, no system-level proxy registration and no virtual adapter — the
-listener is a temporary free loopback port. Your browser, shell tools and other
-IDE extensions never go through it; only requests this plugin sends to the
-opencode gateway are rerouted. Single-proxy mode works the same way: the rewrite
-happens inside the plugin.
-
-**Live status.** While the outlet is on, the settings page adds three lines below
-it: the current outlet (masked host · mode), the **best node** (the node url-test
-picked, with the delay that won it the rank), and **opencode access** (the last
-model-listing round trip, in seconds). Node and latency are readings, refreshed
-every 15 seconds by asking mihomo's own controller; when a reading is missing the
-line says "measuring…" and outbound traffic is unaffected.
-
-**What it can and cannot buy you**: per-IP rate limits and region gates move
-with the outlet; per-session rate limits and fingerprint gates do not care
-which outlet you use. Toggling the outlet re-probes on its own — a cold outlet
-needs a few seconds before it carries traffic, and the plugin waits for the new
-exit to answer before regrouping, so region-gated models follow the new exit.
-Reprobe (below) does the same on demand.
-
-**Re-check geography.** `重新探测可用性` (Reprobe) re-runs availability against
-your current exit. Toggling a VPN and re-probing moves region-gated models
-between the two groups on its own.
-
-**Receive announcements.** Everything is automatic: after the owner pushes, a
-running installation picks the item up within one poll cycle (30 minutes by
-default, or immediately via *Check for new announcements*). Regular items raise
-a toast, `urgent` items open a full-screen modal, and both land in the
-announcement center with an unread marker. Enable *OS notifications* there to
-also get system-level toasts.
-
-**Upgrade the plugin.** `Settings → Our Free Model → Plugin upgrade` →
-*Check for updates* → *Upgrade now*. The whole flow runs inside the app
-(download → verify → backup → replace → hot reload); no reinstall, no restart.
-A failed upgrade restores the previous version and reports why.
-
-## The aggregate lane, token savers, routing and the local gateway
-
-### The aggregate lane: bring your own key for 76 providers
-
-The **Aggregate** tab brings third-party endpoints into the same roster. The provider registry ships 76 entries (`src/providers/registry.json`, categorised `free | free-tier | apikey | oauth | local`): NVIDIA NIM, OpenRouter, Groq, Cerebras, SambaNova, Gemini, DeepSeek, Mistral, Together, Fireworks, SiliconFlow, Nebius, Chutes, Hugging Face, Cloudflare, Z.ai, Kimi, MiniMax, QwenCloud/Alibaba, Bedrock, Vertex, Vercel AI Gateway, Azure OpenAI, FleetRelay Gateway, and the local no-account ones — Ollama, LM Studio and llama.cpp. The data comes from free-claude-code's provider catalogue, 9router's provider registry, and the custom gateway added by this project. FleetRelay Gateway currently advertises `deepseek-v4.1-flash-free` and `gpt-6-astra`; its third-party T1 candidate is disabled pending distribution authorization.
-
-Once a provider is configured (a key for the ones that need one; the local no-account ones need none), each of its models becomes a catalog row named `provider/model`: selectable in the model picker and dialable through the local gateway. A provider's own wire format decides how it is served — OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages (the last two for the providers that only speak those).
-
-Keys live only in the plugin's own `0600` `settings.json`, and the API never echoes them: the page shows `hasKey` plus a `…abcd` fingerprint. An absent field keeps the stored key; an empty string clears it. Per provider the page offers enable/disable, a Test button, a Discover button, a base-URL override (needed for Azure, Cloudflare and Vertex, which have no usable default), a model-list override and Remove. Test is a *listing* probe — it verifies a key through the provider's model listing without spending a generation, and says so when the provider declares no listing. Providers whose auth is OAuth or ADC (Google ADC) are listed but marked *not drivable* here, because this lane cannot complete those flows.
-
-### Token savers: tool-output compaction, prompt shaping and local answers
-
-**Tool-output compaction (RTK)** rewrites `tool_result` / `role:"tool"` content in place before the request is sent: git diff, git status, git log, grep, find, ls, tree, build and package-manager logs, numbered file dumps, Cursor search listings, and runs of duplicate log lines. Measured live: a 40 KB `git diff` lost 90% of its bytes and the model still answered about the diff. The safety rules: error tool results are never touched, bodies below a size floor are left alone, the replacement is never larger than the input, a filter that throws passes the original through, and the pass is idempotent. It applies to every lane, the local gateway included, and is on by default.
-
-**Prompt shaping** offers two families with levels — `caveman` (terse replies: `off/lite/full/ultra/wenyan-lite/wenyan/wenyan-ultra`) and `ponytail` (YAGNI-minimal replies: `off/lite/full/ultra`). They change how the assistant talks, so every level starts `off`. Injection is idempotent and format-aware (a system message on chat, Anthropic's `system` including the block-array form and inserted before the last `cache_control`, `instructions`/input item on Responses), and it is reversible.
-
-**The savings dashboard** shows bytes before → after, bytes saved, percent, blocks compacted and the number of calls measured — read from the same stats rows the usage charts use.
-
-**Five local answers** (ported from free-claude-code, each individually switchable, all on by default) never call a provider: a quota probe (`max_tokens:1` plus "quota" → `Quota check passed.`), shell command-prefix detection (`<policy_spec>` plus `Command:` → the prefix, refusing command injection), session-title generation (→ `Conversation`), suggestion mode (→ the empty string) and filepath extraction (→ a `<filepaths>` block). The local gateway answers them in-process.
-
-### Routing: named fallback chains (combos)
-
-A named, ordered list of model ids across every lane, which appears in the picker and on the gateway as `combo:<name>` — a virtual model. Two strategies: `fallback` (always start at the head) and `round-robin` (rotate the starting point, sticky for N turns). The chain walks its links until one produces output; a link that fails *before any content delta* is discarded whole, so the switch is invisible to the caller. Reasoning deltas deliberately do not count as content — "thought for a minute, then hit a quota wall" is the highest-value case to fail over. Once an answer delta has been delivered, a later failure ends the turn normally (the single-model checkpoint recovery still gets its continuation attempt first). Capacities are the intersection of the links (a chain advertises vision only if every link has it, and the smallest context window), and a chain whose links are all currently unavailable is stored and marked not usable rather than silently dropped.
-
-### The local gateway: a native Anthropic surface and connect recipes
-
-Two new endpoints: `POST /v1/messages` (streaming and non-streaming, with correct `message_start` / `content_block_*` / `message_delta` / `message_stop` framing, `thinking` blocks, `tool_use` blocks, a real `stop_reason`, and an in-stream `error` event when a turn fails after the headers went out) and `POST /v1/messages/count_tokens` (a documented local estimate — the plugin ships no tokenizer). Claude Code and the Anthropic SDKs can therefore point straight at the plugin. The existing `/v1/chat/completions` and `/v1/responses` are unchanged, and `/v1/models` now advertises every lane, the aggregate rows and the chains included. A new *Connect a client* section on the gateway page renders ready-to-copy recipes generated from the port that actually bound and the key that is actually required: Claude Code environment variables, Codex `config.toml`, the OpenAI SDK, the Anthropic SDK, curl, and a LAN variant when the relay is up.
-
-One false success was fixed along the way: a turn whose only output was a tool call the caller never declared used to answer as a clean empty success; it now reports what happened, because the token saver's own `[full diff: rtk git diff --no-compact]` hint can make a model ask for a tool the caller does not have.
-
-## How it works
-
-```text
-index.js      host half: adapter registration, catalog + availability probes,
-              settings/stats stores, webServer API routes, forward lifecycle,
-              announcement / upgrade / hot-reload wiring
-adapter/      kernel seam: the only module in the package allowed to import
-              @deepseek-ai/* (kernel.js: attribution User-Agent with a literal fallback)
-src/adapter.js  structural LlmAdapter: providerInfo, listModels, resolveModel,
-                prepareCall, stream, providerRetryPolicy
-src/upstream.js gateway identity: credentials, session/request id minting,
-                tool fingerprint, endpoint selection per wire
-src/stream.js   three wire decoders (chat / messages / responses) normalised to
-                harness StreamChunks, with disjoint token accounting
-src/messages.js harness messages -> wire shapes, plus tool-pairing repair
-src/effort.js   effort level -> output budget
-src/forward.js  standalone OpenAI-compatible listener (plus the Anthropic Messages endpoints)
-src/providers/registry.json aggregate-lane registry: 76 providers, category, auth, wire
-                format and endpoints
-src/providers/index.js registry access and provider/model composite id parsing
-src/aggregate.js aggregate lane: catalog rows, credential resolution, key redaction,
-                listing probes, per-wire posting
-src/anthropic.js Anthropic Messages codec for /v1/messages, plus the local token estimate
-src/token-saver/index.js compaction pipeline: prompt injection -> tool-output compaction,
-                byte accounting, fail-open
-src/token-saver/inject.js idempotent injection and stripping on the chat / messages /
-                responses wires
-src/token-saver/prompts.js the caveman and ponytail prompt families and their levels
-src/token-saver/rtk/ tool-output filters: git diff/status/log, grep, find, ls, tree,
-                build logs, numbered dumps, search listings, duplicate log lines
-src/local-optimize.js the five local answers: quota, prefix, title, suggestion, filepath
-src/combos.js fallback chains: virtual catalog rows, two strategies, intersected capacities
-src/route/classify.js one failure vocabulary and cooldown policy for every lane
-src/trust.js    request trust fence for the plugin's routes (connection bridge
-                + structural fallback)
-src/push.js     SSE push hub: arrivals, update availability, upgrade done
-src/feed.js     remote announcement feed: multi-source fetch, validation, cache,
-                arrival detection
-src/updater.js  in-app upgrade: manifest validation, SHA-256 checks, backup,
-                atomic replace, rollback
-src/reload.js   self hot reload: mirrors the kernel HMR sequence (cache purge,
-                re-import, re-register, rollback)
-client.js       browser half: hand-written ModuleLoader bundle, no build step
+```
+index.js                 host half: adapter registration, probing, storage, routes, forward, upgrades
+adapter/kernel.js        the only place allowed to import @deepseek-ai/*
+src/adapter.js           structural LlmAdapter
+src/upstream.js          credentials, session ids, endpoint per wire protocol
+src/stream.js            chat / messages / responses decoding into one shape
+src/forward.js           local OpenAI-compatible listener + Anthropic Messages
+src/aggregate.js         aggregate lane: rows, key masking, listing probe
+src/token-saver/         tool output compaction and prompt injection
+src/combos.js            fallback chains
+src/updater.js           in-app upgrades: signature, hashes, backup, rollback
+client.js                browser half, a hand-written ModuleLoader bundle
 ```
 
-Design decisions worth knowing:
+A few choices worth knowing:
 
-- **One adapter, two provider routes.** The harness groups the model picker strictly by provider route, and the catalog wire has no group/tag/badge field. Publishing a second route is therefore the only way to render a separate `region-limited` heading — and because the client drops empty groups, the two collapse into one automatically once geography stops blocking.
-- **Structural adapter, no `@deepseek-ai/dsh-llm` import.** The kernel never checks `instanceof`, so the adapter is duck-typed. This keeps the plugin from pinning itself to one kernel version and is what lets the same code run on both 0.1.5 and 0.1.7.
-- **Own JSON store instead of the settings seam.** The settings registration API differs between kernels; a private JSON store under `DSH_HOME` behaves identically on both and keeps the forward key in a `0600` file that never enters any shared settings document.
-- **The token savers run on the single choke point, and they fail open.** Prompt injection and tool-output compaction run after every other mutation has been applied — the fingerprint rename, the effort patch, the sealed lane's pacing hint — at `payloadFor()`, the one place both the adapter's own dispatch and the local gateway (which dials through the adapter) pass through, so every lane and every recovery segment is compacted. Every step fails open: a saver that throws is skipped, a filter that throws passes the original text through, an unrecognised body shape is left alone — a request must never fail over the thing that was supposed to make it cheaper.
-- **A combo is a virtual catalog row, so failover is resolved in the adapter.** A chain joins the merged catalog as `channel:'combo'` plus a list of real model ids, which is why the picker advertises it and the gateway dials it by name like any other row; the chain is expanded and advanced inside the adapter's `runStream()`, so neither caller has to know about failover.
+- **One adapter, two provider routes.** The picker groups by provider and the roster format has no group field, so `region-limited` needs a second route; once the region gate lifts, the empty group is dropped by the client and the two merge.
+- **Structural adapter, no import of `@deepseek-ai/dsh-llm`.** The kernel never does an `instanceof` check, so duck typing is enough, and the same code runs on 0.1.5 and 0.1.7.
+- **The body decides, not the Content-Type.** Under load the upstream answers `200 + application/json` over a full SSE stream. Trusting the header reads the whole turn into a string and fails to parse it, and can demote a working model to unreachable. The plugin sniffs the first chunk and replays the bytes it already read into the stream.
+- **Compaction sits at one choke point and fails open.** A broken compactor is skipped, a broken filter passes content through, an unknown shape is left alone. A request must never fail because of a step meant to make it cheaper.
+- **A truncated long-thinking turn gets one retry.** It triggers only when the first segment produced thinking with no text and no tool call; the retry disables tools, asks for at most 800 words, and returns `STREAM_CUT` if it fails. Details in [docs/issue-12-recovery.md](docs/issue-12-recovery.md).
 
-### Thinking effort: a level menu, or a budget ladder
+## Known limits
 
-Two kinds of model, two kinds of control.
-
-A model that declares thinking levels (its listing carries `reasoning_options`
-with `effort.values`) gets a **level menu**: the selected level is sent as-is
-in the upstream `reasoning_effort` field, the same shape the EAC and Kilo lanes
-use. That is the 2026-10-17 re-probe result — the lane did ignore the field
-back on 2026-09-24, but it now **validates** it: a value outside the set
-answers `400 invalid_value` naming the accepted set
-(`none|minimal|low|medium|high|xhigh|max`), and reasoning volume really does
-move with the level (`deepseek-v4.1-flash-free`, medians over three samples:
-none 0, low 793, high 700, xhigh 1405, max 1906). So the menu offers only the
-levels that model declares; a model whose set has no off rung (GLM 5.3 Flash,
-whose `none` does not actually stop it thinking) is not given one.
-
-A model with no level menu (its listing offers only `toggle` or
-`budget_tokens`, or no `reasoning_options` at all) keeps the **budget ladder**:
-effort is a hard output-token ceiling, which does bind — recorded reasoning
-tokens rise monotonically with the level. Inventing a rung the upstream cannot
-express would claim a capability the model never had.
-
-Window and output ceilings follow the 9router / models.dev convention
-(`limit.context` / `limit.output`, `modalities.input`); the upstream listing
-publishes an id and nothing else.
-
-### Three kernel behaviours that cost real debugging time
-
-These are recorded here because they will bite any provider plugin:
-
-1. **`providerRetryPolicy()` is stored verbatim.** Neither kernel resolves it, and
-   the backoff scheduler reads `initialDelayMs / maxDelayMs / jitterRatio` off the
-   **top level**. Returning them nested under `backoff` yields `undefined * 2ⁿ =
-   NaN`, and the durable session log rejects non-finite numbers — so a recoverable
-   transient failure becomes an aborted turn. Return an already-resolved, flat policy.
-2. **One interrupted tool call poisons the whole session.** A tool call with no
-   matching result replays as `400 invalid_request_error`, after which *every*
-   request in that session fails. The plugin repairs pairing before sending, on all
-   three wires.
-3. **A service you did not name in `inject` throws when read as a property, and
-   `ctx.get()` answers `undefined` for one that is merely not provided yet.** Both
-   bit this round: after `inject` was reduced to `['llm']`, `typeof ctx.interval ===
-   'function'` threw `cannot get property "timer" without inject` (`ctx.interval` is
-   a mixin over the `timer` service) and the plugin stopped activating on *every*
-   composition. Switching that one to `ctx.get('webServer')` then answered
-   `undefined` — not because the composition had no web server, but because plugins
-   load before the browser half publishes it — so the settings routes were never
-   registered and the dashboard had no data source behind a server that was busy
-   serving the app. The shape that works is `ctx.inject(deps, callback)`: give the
-   services you need their own fiber and let *it* wait, instead of guessing once at
-   load time.
-
-### Why the response is read by body shape, not by `Content-Type`
-
-Under load this lane answers 200 with `application/json` over a normal SSE frame
-stream. Trusting the header meant `await response.text()` swallowed the live stream,
-`JSON.parse` failed, and the turn was lost — and because that error carried
-`status: 200`, the availability probe read the perfectly working model as
-unroutable and dropped it from the picker for a round. The first bytes (≤4 KB) are
-now sniffed and classified, then replayed into the stream, so nothing is buffered and
-no token arrives late; `sniffBody` in `src/http.js` is the only discriminator.
-
-### Why the speed panel can say `—`
-
-An early build published 2 941 tok/s for a lane really doing ~40. The gateway was
-not at fault — a raw-read probe shows 64 frames spread over 5.6 s — but the
-numerator and the denominator described different intervals: one call billed 422
-output tokens of which 291 were reasoning that **never streamed a single frame**,
-and the window began at the first visible token anyway. Dividing the whole
-completion by the seconds the answer text took is not a decode rate.
-
-So a rate is published only over a window that can carry it: `windowTokens()`
-removes unstreamed reasoning tokens from the numerator, `decodeWindow()` rejects
-windows too short to time and rates too fast to be real, and both the panel and
-the per-model table sum tokens over sum seconds instead of averaging per-call
-ratios — one 1 ms window was enough to move a 26-call average by three orders of
-magnitude. A model whose answer lands in two frames therefore has no measurable
-output speed, and says so.
-
-### Automatic recovery after a long reasoning stream is cut (issue #12)
-
-Every model enables one bounded recovery attempt by default, across the Chat
-Completions, Messages and Responses upstream protocols. It requires a first
-stream that delivered nonempty reasoning, no answer text or tool call, and then
-either reached EOF without a normal terminal frame, or received a normal `stop`
-terminal carrying reasoning only with no answer text — a turn the host would
-classify as an empty response. Cancellation, a normal ending that already
-delivered answer text or a tool call, an output ceiling and an explicit upstream
-error do not trigger recovery.
-
-The plugin sends **one new request** containing the original input and the
-received reasoning as a text checkpoint, asking for the answer directly. This is
-not a native upstream resume, and already displayed reasoning is not replayed.
-Tools are disabled for the recovery request. A cut after answer text or a tool
-call has started is not recovered, to avoid duplicate content or execution.
-
-To avoid another long reasoning pass, the continuation prompt asks for the
-conclusion first and at most 800 words. This is a prompt instruction, not a hard
-token limit, and the model may ignore it. Recovery is a degraded answer: an
-original request for a long or step-by-step analysis may be shortened.
-
-One logical turn makes at most two physical requests: the original and one
-recovery. The default total deadline is 900 seconds (15 minutes); recovery gets
-at most 300 seconds, bounded by the remaining total time. Recovery output is
-capped at 8192 tokens and still respects the user's and model's ceilings. Known
-output tokens from the first segment are subtracted from the original budget;
-recovery does not start if fewer than 512 tokens remain. The checkpoint is
-limited to 131072 characters and must pass a conservative text-byte estimate of
-context capacity.
-That estimate does not count image tokens and is not an exact tokenizer check.
-Exceeding a limit stops recovery. Success requires a normal ending with answer
-text that is not only whitespace. Recovery failure returns `STREAM_CUT`, which
-the harness does not resend as a whole turn; user cancellation keeps
-`aborted` / `ABORTED`.
-
-Set `streamRecovery: false` in the local settings.json to disable it. An object
-can also supply an `enabled` switch and lower numeric limits; limits cannot
-exceed the defaults. There is no model allowlist.
-
-The local dashboard keeps **physical requests** and **logical turns** separate.
-Upstream requests and request failures count each HTTP request actually sent;
-conversation turns, turn failures and recovered turns count one adapter
-invocation by its final outcome. A first segment cut short and a successful
-continuation therefore show 2 upstream requests and 1 request failure, while
-remaining at 1 conversation turn with 0 turn failures and 1 recovered turn.
-Each segment still has its own sample with recovery identity, attempt index and
-`noUsage` markers. A shared `recoveryId` associates those markers to identify
-missing usage. Final usage sent to the harness sums only counts the upstream
-actually reported; if one segment has no usage report, this is not the full
-turn's token total. Reasoning checkpoints are not written to the statistics
-file.
-
-Pre-upgrade history has only physical request records, so migrated turn and
-failure counts are estimates and the dashboard labels them. Turns recorded
-after the upgrade use the final outcome and are exact.
-Requests, turns and token totals are lifetime values; speed, first-frame and
-heatmap details use the locally retained history window.
-
-One live MiMo V2.6 Flash · Deep request recovered successfully; an earlier
-attempt failed at the 480-second deadline. This does not establish live coverage
-of every model or guarantee completion of every long reasoning turn. The
-v1.3.1 records below describe behaviour before recovery was added.
-
-## Verification
-
-Tested on Windows against the live upstream. The table is kept per release round,
-and each row says which way it was checked — only the rows marked *live upstream*
-or *hands-on* are behaviour a user sees in the interface.
-
-### Issue #12: verification status
-
-Implementation, offline regression and live results are tracked separately in
-[`docs/issue-12-recovery.md`](docs/issue-12-recovery.md). Recovery 99/99,
-truncation 35/35, 11 new fingerprint checks and typecheck have passed. Twelve
-checks use the real plugin over local HTTP to verify forward success, failures,
-client disconnection and stored statistics. The technical record carries the
-final full-suite result. In a live MiMo Deep run, the first
-stream reached natural EOF at 304.161 seconds; recovery took 32.777 seconds and
-produced 4264 characters of answer text, ending with `stop`, usage and `[DONE]`.
-There were two requests over 336.942 seconds. The first segment had no usage
-report, so the summary contains only known counts. The earlier failed
-480-second attempt remains in the technical record. Real dsh UI and other
-models have not been individually accepted.
-
-### Historical: v1.3.2 (issues #11, #13, #19, #20, #21)
-
-| Item | Fix | Verification |
-| --- | --- | --- |
-| #19 self-update trust chain | Ed25519-signed manifests (public key pinned in the plugin, private key out of the repo), the update channel fully decoupled from `feedUrl`, manifest `base` restricted to relative paths | updater-test: four new cases (signature, tamper, foreign key, feedUrl not followed); release-e2e's negative control now refuses at the signature |
-| #19 forward surface | `localhost` binds resolve first and require all-loopback answers; a 1 MB cap (413) on plugin API bodies; the forward endpoint answers 400 for a non-JSON body and 404 for an unknown model | forward-test `resolveLoopbackBind` cases; offline-test 404 case |
-| #20/#21 tools unusable through the forward port (#21's `Unknown tool 'bash'/'read'/'grep'` is exactly the fingerprint decoy quartet: the lane forces those names to be declared, the model dials them, the forwarded client never registered them) | streaming `tool_calls[].index` renumbered from 0 (no longer shares the block counter with reasoning); fingerprint-decoy calls suppressed per block on the forward wire (unnamed blocks have their arguments held); a ceiling-cut turn finishes as `length` on the stream too | forward-test: four streaming/non-streaming cases against the real listener with a scripted lane |
-| #20 dsh-side decoy hazard | `stream.js` keys parallel tool calls without an `index` by call id; bare argument continuations join the preceding call | existing truncation/fingerprint suites stay green |
-| #13 quota experience | 429 removed from the retryable codes (no more three automatic retries of the same wall); a probe round answered by nothing but 429s backs the next periodic round off 30→120 minutes (manual reprobe, egress change and the boot round are exempt); the probe recognizes in-stream error frames inside a 200; the bench button uses the default effort and a realistic client timeout | retry-safety-test assertion updated; probe logic covered by the offline suites |
-| #13 concentrated forward quota | 429 no longer auto-retried (above); the forward session key stays derived from `user`/`conversation` (deliberate: the lane accounts per session) | behavior unchanged, no new spend |
-| #11 heatmap | cell gap removed and corners tightened for a GitHub contribution-graph ribbon; the layout was already column-major week-aligned | client-lint green |
-| Other | per-route client timeouts (bench 240 s, upgrade 600 s — the 8 s guard now covers only fast routes); EventSource reconnects with backoff (30 s → 5 min) instead of closing forever; a completed upgrade clears the stale error banner; the speed-scope copy now says what the panel really averages (last 40 calls); a failed store flush is logged once | client-lint; speed-stat green |
-
-All 20 offline suites (including the new `forward-test`) and `tsc --noEmit` pass; `host-selftest` costs real network and real free-lane quota, so it did not run with this round.
-
-### Historical: v1.3.1 (issues #8, #9, #10)
-
-| Item | How | Result |
-| --- | --- | --- |
-| Both tool-result vocabularies really reach the model | live upstream, `host-selftest.mjs` step 2 | Same model, same `get_weather` answer, sent once in the pre-V4 shape (`user` carrying a `tool-result` block) and once in the V4 shape (`role:'tool'`): both `finish=stop`, and both times the model repeated the `22°C / sunny` from the result. Before the fix the plugin did not recognise the first shape at all (`src/messages.js` never mentioned `tool-result`), so that request carried neither the call nor its answer |
-| The shapes are taken from records, not imagined | every session root on this machine — 40 `session*.jsonl.zstd` across four homes (zstd, which needs splitting frame by frame) | `tool/result` events appear in exactly two shapes: **362** with `role:'user'` carrying a `tool-result` block (V1/V3 format — 336 written by AIO 6.9.3's v3 home, 26 by `~/.dsh`'s v1) and **27** V4 `role:'tool'` from the v4 session copies. Both generations are in live use and the plugin read only the latter — issue #9 was right, about a kernel older than the reporter's |
-| Projection and pairing repair | offline `projection-test.mjs` (new, 40 assertions) | Three wires × two vocabularies: each call and its answer reach the wire, keyed by call id; three parallel calls each get their own answer, merged into one user turn on the Messages wire with `tool_result` first (the same rule the kernel's own adapter uses); images nested in a result survive instead of vanishing (Chat follows with a user turn, Messages nests them inside `tool_result`); **each answer appears exactly once on each wire** — counted in the bytes that go out, not by block type, because a block-type assertion cannot see a duplicate; answers with no call id, dangling calls and orphan results are still removed; already-valid history is returned byte for byte |
-| `pwsh` filling the `bash` slot is accepted upstream | live upstream, `probes/shell-slot-promotion.mjs` (new) | Declares `bash, glob, grep, read`, where `bash` carries pwsh's real schema and no decoy is added: the gateway does not answer `FreeTierError`, the turn finishes `tool-calls`, and the call comes back renamed to **`pwsh`** (`{"command":"Get-Date"}`) — a tool the kernel can actually run. Offline, `fingerprint-test.mjs` (new, 20 assertions) pins no-duplicate declarations, a real `bash` winning over the donor, and the decoy surviving only when there is nothing to promote |
-| A cut stream is no longer a completed turn | offline `truncation-test.mjs` (new, 22 assertions) | A local HTTP server really does `res.end()` a stream that never carries a finish token → `kind=error`, recorded `ok=false` and flagged `truncated`; checked on each of the three wires; genuine endings such as `message_stop` and `response.completed` are not caught; a turn that finishes without a usage frame is flagged `noUsage`, so `0/0` stops being indistinguishable from "produced nothing". **Re-sending now depends on what had already arrived**: a cut that delivered no token at all stays `TRANSPORT` (retryable), while one that had streamed content becomes `STREAM_CUT` (outside the retryable set, so the turn fails on the spot) — the reason is the next row |
-| What retries cost, measured in a real kernel session | real `dsh` web kernel, one turn sent from the browser on MiMo V2.6 Flash · Deep | Taken event by event out of the durable session log: `llm/retry retry=1 delay=702ms code=TRANSPORT` at 304 s, `retry=2 delay=1124ms` at 608 s, `turn/end {kind:"error",code:"TRANSPORT"}` at 912 s; `stats.json` holds three `ok:false truncated:true` rows of 0/0, 304 s apart; the interface showed *turn failed* with the message and the code. The cut on this lane is a function of how long the turn thinks, so a retryable code only billed the same five minutes three times over — which is why content that already streamed is not re-sent |
-| Re-reviewing this release found two defects in the above | offline `projection-test.mjs` section 7 and `truncation-test.mjs` section 12, plus one forwarded round trip in `tui-test.mjs` | (1) Once the Messages wire recognised V4's `role:'tool'`, it put the same answer inside `tool_result` *and* left it in the ordinary blocks after it — the text twice, and a returned image with its whole base64 payload twice. The message is now skipped once its result is emitted, and reverting that turns the assertion red. (2) `response.incomplete`, `response.failed` and `response.done` end that wire on purpose too; reading only `response.completed` as terminal turned a turn that hit its output ceiling into a cut stream and burned two retries on it. The status still decides the finish token, and a terminal frame naming no reason no longer erases one a previous frame gave. (3) The forwarded `/v1/responses` route had never been exercised with tool history; the outbound `messages` are now compared byte for byte against a stub gateway, call and result both present |
-| What a normal ending looks like on this lane | live upstream, `probes/stream-terminal-frames.mjs` (new) | Raw SSE captured frame by frame: `finish_reason:"stop"` → the usage frame → `data: [DONE]` → `{"choices":[],"cost":"0"}`, identically on two models. So "no finish token ever arrived" is genuinely an anomaly rather than a second normal ending — which is the basis for #10's check |
-| No false positives against the real lane | live upstream, `host-selftest.mjs`, full run | 11 models probed plus plain chat, two tool rounds, three effort rungs and vision input: every call landed on its own normal ending (`stop` / `tool-calls` / `max-tokens`), none read as truncated; the region-gated model still returns `REGION_BLOCKED` |
-| The upstream is documented (#8) | every outbound destination in the code, checked one by one | New section [Where the models come from](#where-the-models-come-from): `opencode.ai/inference/v1/*` (inference and `/models`; `/zen/v1` before 2026-10-14), this repository's `feed/*.json` (raw first, jsDelivr as fallback), and `api.ipify.org` / `ipinfo.io` / `ipapi.co` (only to read back this machine's egress IP and country code). No account pool, no relay |
-| Offline suite | `npm test` (18 suites) | Green; `projection` and `fingerprint` added, still no network and no free-lane quota spent |
-
-### v1.2.2 (issues #1–#4, #6)
-
-Each row names how it was checked: *offline fake kernel* never leaves the machine,
-*live upstream* means the plugin really calls the gateway but runs on a
-hand-built cordis context, and *real kernel* means the plugin was installed and
-started inside dsh. The distinction cost this round a ship-blocker — see the last
-row.
-
-| Check | How | Result |
-| --- | --- | --- |
-| Manifest describes the shipped files | offline, `build-manifest.mjs --check` + `release-e2e.mjs` | All 26 published files match. Before the fix, `main`'s published 1.2.1 manifest had drifted on **6** files (`index.js`, both READMEs, `src/catalog.js`, `src/store.js`, `src/upstream.js`) — one more recurrence than the 2 issue #1 reported, after the issue was filed. Regenerated with the version; `--check` and the new `release-e2e.mjs` (it installs the real release end to end, with a negative control proving a manifest that lies about one byte is refused) now run in `npm test` and in CI. This round closed two holes of the same family: digests are now computed over **LF-normalised** bytes (`.gitattributes` says `* text=auto eol=lf`, and an editor on Windows can leave the working tree CRLF while `git status` stays clean — which is exactly how issue #1 came back), and listed directories are walked **recursively** (the old one-level scan skipped `src/lib/x.js`: npm ships it, the manifest does not name it, and `installStaged` deletes whatever the manifest does not name from every installed copy). Both carry standing assertions, the first of which rewrites all 26 files to CRLF and runs `--check` |
-| Offline suites | `npm test` (14 suites) | 14/14 pass; no network, no free-lane quota spent. Suite ports come from the ephemeral range (a hard-coded port loses a race with any other process: occupying the one `tui` used to write down made its own fetch hit somebody else's listener and hang to the runner's timeout, printing six `ok` lines as the "failure detail"), and the runner puts a 60 s deadline on every suite and says so when one hangs |
-| The new tests actually bite | old behaviour patched back in, suite re-run | Reverting the `computeMembership` guard → picker fails with `Cannot read properties of undefined (reading 'state')` (2 checks); reverting the response sniff → sniff fails 7 checks. Restoring each fix turns both green again. Every assertion added this round went through the same treatment as a **mutation check**: 9 fixes reverted one at a time in throwaway copies, 9/9 turned their suite red |
-| Probe verdicts → what the picker advertises | live upstream, `host-selftest.mjs` | 10 listed models → 7 on the main route plus 2 under `region-limited`, and the forward port's `/v1/models` follows at 9; `deepseek-v4-flash-free` (`Model is unavailable`) left the dropdown with its refusal recorded in the settings page. 5xx / 429 / dropped connections all keep their model |
-| A model with no verdict is survivable | offline fake kernel, `picker-test.mjs` | With a newly listed model whose probe the test holds open, `listModels` and `/summary` both answer, the model is advertised and reads `availability=unknown` |
-| Rungs still enforced | live upstream, MiMo V2.6 Flash | `light` now sends 4096 and the same prompt finished `stop` at 2 980 tokens; before the change `light` (2048) ended that same prompt with `length` |
-| Long answers stop being cut | live upstream, `probes/long-answer.mjs` | `balanced` sent `max_tokens=16384`; the request produced **10 164** output tokens (19 914 characters, 194 s) and finished `stop`. The old 8192 ceiling cut the same turn with `length` — the symptom in issue #2. The model cards print each rung's real number (`默认档上限 16K`), read in the browser |
-| The body decides, not the header (issue #6) | offline fake gateway, `sniff-test.mjs` | A 200 with `application/json` over SSE frames streams normally with no error; a Chinese character split across chunks, a 400-frame stream past the 4 K sniff window, a single JSON body, an empty body and an HTML junk body all route by shape. On the old code that same response also made the probe report a working model as `unavailable` |
-| Composition with no web server | offline fake kernel, `scripts/tui-test.mjs` | With only `llm` mounted, `apply()` does not throw, both routes register, a full streamed turn completes, the forward port comes up and rejects keyless requests, and the background loops run on plain unref'd timers. The dashboard half waits, and mounts both routes the moment `webServer` appears. **Not yet verified on a real dsh-tui**: neither kernel on this machine (source build 0.1.7-rc.1, AIO 6.9.3) ships a tui profile |
-| The plugin really installs and runs | **real kernel**, dsh 0.1.7-rc.1 web on port 3099 | No `did not activate` in the startup log; `/api/our-free-model/summary` 200 (10 models: 6 available, 2 region-blocked, 1 unknown, 1 unavailable), `/events` streams its hello; in the browser `Settings → Our Free Model` renders the 10 cards, the *Not in the picker* group, the `思考不可关` and `默认档上限 16K` tags, with an empty console. The first cut of this round **failed here**: with `inject` reduced to `['llm']`, reading `ctx.interval` threw `cannot get property "timer" without inject` and the plugin stopped activating on every composition |
-| Two new problems the review itself caught | targeted repro + standing assertions | (1) Aborting during the head sniff threw the raw `AbortError` (numeric `code` 20), which `toFailure` cannot recognise and downgrades to `TRANSPORT` — a retryable code, i.e. a hole where a turn the user cancelled could be retried. All three read paths now share `classifyStreamFailure`, and sniff carries two abort assertions. (2) After committing, another `src/http.js` edit drifted the manifest, and `--check` plus the new `release-e2e.mjs` failed it on the spot - the gate works, and it is also the reminder that any edit means re-running it |
-| This round, on the request path: two ways to lose or double-pay a turn | local fake gateway, targeted repro + standing assertions | (1) `readHead` filled its whole 4 KB window before deciding what the body was, so a **short answer the gateway had already finished typing** sat in the sniff until the deadline and was then discarded with the cancel — a completed turn reported as a retryable `TIMEOUT`, which the harness sends again and the lane pays for twice (the repro prints `frames delivered: 0`). The body is now allowed to declare itself a stream on the first frame, which also stops withholding the first 4 KB of every answer. (2) In-stream errors were classified into `llmCode`, and `toFailure` reads `code` — so every refusal inside a stream arrived as retryable `TRANSPORT` (re-sending a turn whose partial answer had already been forwarded), and a mid-turn `RegionError` could never reach the egress re-probe. In-stream errors now go through the same `classifyFailure` as an error envelope |
-| This round, at the settings boundary | offline, `picker-test.mjs` + `effort-test.mjs` | `probeIntervalMinutes:'abc'` made `Math.max(1,'abc')` = NaN, and Node treats `setTimeout(fn, NaN)` as 1 ms — a full catalog probe every second. `defaultMaxTokens:0` (which is what clearing the settings-page field posts) became `min(capacity, 0)`, cutting every turn to the 512-token floor while the picker went on printing its 4 K/16 K/32 K ladder. Numbers are now coerced both where they are written and where they are read, and a non-positive value means "unset". The same assertions pin the forward listener to a loopback bind (`0.0.0.0` is refused with a 400 that says why) and pin that `connection` admission is read **per request**: patch the snapshot back in and the late-mount 401 check goes red on the spot |
-| This round, three suites that only looked like tests | mutation check (revert one fix per throwaway copy) | `retry-safety-test.mjs`'s four cases all landed on the "model not on this route" early return — it passed `model:"our-free-model/test-model-free"`, and `baseModelId` strips a label, not a route — so the suite had never sent a request; against real calls its 7 cases now pin the code, whether it may be retried, and whether the region re-probe fired. `tui-test.mjs` compared the *counts* of two different populations, so deleting the 120 s loop's `unref()` stayed green; it now checks each period individually. And the hard-coded port in `tui` became an ephemeral one after it hung for 180 s against somebody else's listener |
-| Usage accounting | offline, `retry-safety-test.mjs` | A `usage` object without `prompt_tokens_details` no longer computes `inputTokens: NaN`; the forward port answers in `prompt_tokens/completion_tokens` and reports a refused turn as an error instead of an empty 200. On the Messages wire `message_delta` carries only the output side, and the old whole-record overwrite zeroed the prompt tokens of every Claude turn; records are now merged field by field |
-| This round: a 5xx reason phrase is no longer read as a verdict (the same regression issue #3 was about) | offline, `sniff-test.mjs` + revert check | `stateOf` matched its message fallback without regard for the status, and "Service Unavailable" is the reason phrase every reverse proxy answers a 503 with — so an overloaded gateway was read as the gateway naming each model refused, and those models left the picker one at a time (the cost issue #3 removed, back through the message fallback). The fallback now only speaks when the status has not already answered for the gateway; a body that names the model — including `type: ModelError` under a 5xx — is still a refusal. Four new assertions, two of which go red the moment the old implementation is restored |
-
-### v1.1.2 (announcements, in-app upgrades, hot reload, trust fence)
-
-Every v1.1.2 capability was **operated for real**, including click-through in a
-browser and inside the DSHEAC AIO desktop window:
-
-| Check | Result |
-| --- | --- |
-| `dsh` 0.1.7-rc.1 (source build) | Boots clean; picker shows both groups; multi-round tool calling completes |
-| `dsh` 0.1.5-rc.2 (DSHEAC AIO 6.9.3 kernel) | Boots clean alongside the other installed third-party plugins |
-| EAC startup gate | Run at install time **and after the in-app upgrade**: `compatible` / `PASS` |
-| Model reachability | All 10 catalog models stayed invocable (behaviour at that round: even probe-failed ones remained in the picker; since v1.2.2 a model judged unroutable is not advertised); real chat, multi-round tools and vision input pass on both kernels |
-| Real harness conversation | One real turn completed and answered in both dsh web and the AIO desktop window |
-| Announcement feed | New items pushed on a local "repository server" arrived within one poll cycle on both surfaces |
-| Announcement center UI | 4 items rendered (bold/code/links/lists), urgency badge, unread dots, mark-read single/all |
-| Urgent announcement | An `urgent` push opened the full-screen modal; acknowledging persisted |
-| Toast + OS notifications | Live toast on arrival; the desktop `window.Notification` channel exists (when the WebView2 permission policy denies the request, the UI says so) |
-| In-app upgrade | 1.1.0 → 1.1.2 completed on both dsh web and AIO: 23 files downloaded, SHA-256 verified, backed up, replaced, hot-reloaded; `/meta` reported the new version immediately |
-| Upgrade safety | A hash mismatch discards staging, leaves the installed package untouched and logs the failure; upgraded artifacts pass the EAC gate and a full restart |
-| Hot reload | Button and API entry points; ESM cache purge + re-register + rollback sequence; `generation` increments, client notices once via localStorage |
-| Client bundle hot swap | Replacing `client.js` reloaded the browser bundle automatically via the kernel's client-hmr (observed twice) |
-| Trust fence | Non-loopback Host / cross-site `sec-fetch-site` / foreign `Origin` all 403; cookieless loopback requests 401 (same as the kernel's `/api`) |
-| SSE push | `hello`/`announcements`/`update`/`upgraded` events verified; EventSource reconnects after a hot reload |
-| Effort propagation | light/balanced/deep measured live: reasoning 2048 (budget-truncated) / 3386 / 3522, output rising monotonically |
-| Region gating | Region-blocked model surfaces as `REGION_BLOCKED` and stays in its own group |
-| Forward listener | `/v1/models`, streaming and non-streaming `/v1/chat/completions`, unauthenticated requests rejected `401` |
-| UI strings | No mojibake; the upstream vendor name appears in exactly two places — the repository docs and the announcement body, since #8's disclosure needs a place a user can actually see. The model picker, the settings page and error copy still never name it |
-Not verified, so stated plainly: the **final OS-level notification rendering**
-was not visually confirmed — the AIO build's WebView2 permission policy denies
-`Notification.requestPermission()` (the plugin's Tauri notification channel is
-present, the plain-browser path works, and the settings page says plainly that
-permission was denied). The AIO guard also runs a report-only heuristic scan
-that logs one finding for the `env`-adjacent-URL pattern in `src/upstream.js`;
-it never touches files.
-
-## Known limitations
-
-- **"No usage cap" means no cap to buy.** There is no balance, no plan and no per-token billing; the lane is metered by session rate, though, and hammering it surfaces as `429`. The plugin marks the model *quota reached* rather than hiding it, and the next probe clears the state.
-- **Some upstream models are slow.** `nemotron-3.5-lightning-free` measured over 30 s to first token in one run. That is upstream latency, and the dashboard reports it rather than hiding it.
-- **Output speed is sometimes `—`.** A model that answers in one or two large frames, or whose thinking never streams, has no window worth dividing. The panel says so instead of publishing the model's thinking time as decoding speed.
-- **Thinking is a silent wait, and it shares the output budget.** `mimo-v2.6-flash-free` measured 60–70 s of silence while the lane billed 3024 reasoning tokens and streamed not one reasoning frame; such a turn ends as `stop` with nothing visible, which clients report as an empty response. The forward endpoint and the LAN relay keep the connection alive with heartbeats — but that protects the connection, not the timeout: the SSE parser skips comment frames, and pi-ai's idle watchdog (`streamIdleTimeoutMs`, default 300 s) resets only when real content frames arrive, so a stall past 300 s on the wire still fails (issue #34). Only the caller can give it **budget**: raise the per-call output ceiling past 16k, or use a model the catalogue marks `reasoning: false`.
-- **Automatic recovery has request, time and context limits.** It handles only reasoning-only EOF and reasoning-only silent stops (a normal `stop` ending with no answer text) and adds at most one request. Answer text, tool calls, cancellation and explicit errors exclude recovery. A checkpoint request cannot preserve internal upstream state that was never sent, and success is not guaranteed. Usage with a missing report is only the known part.
-- **Capabilities are what probes can confirm.** Anything the public listing and a live probe do not evidence is left unlabelled.
-- **Source is plain JavaScript.** It has to be, to load as a local plugin. Anyone with the folder can read the gateway logic; treat that as an accepted property of this distribution form, not as something obfuscation would fix.
-- **Desktop installs need a real directory**, for the reason given in [Install](#install).
-- **Upgrade and hot-reload trust boundary**: as of v1.3.2 the in-app upgrader's trust root is the Ed25519 public key pinned inside the plugin, not "HTTPS to the repository" — a manifest must carry the release key's signature before anything is installed, so a poisoned mirror (jsDelivr included) fails the upgrade instead of executing code. Whoever holds the **release private key** can push arbitrary code, the same trust model as whoever can push the repository, but a repository account takeover is now a failed-upgrade outage for every user rather than a direct RCE. File integrity is enforced by signature + SHA-256 manifest; content safety by the client-side allowlist renderer and the host's plugin isolation.
-- **The AIO build's WebView2 permission policy may deny notification permission** (measured `denied` on this machine). The announcement center says so plainly; plain-browser access to dsh web is unaffected.
-- **The forward port is not required to be 18899.** When the port is taken the listener moves to the next free one and writes that port back into the settings (the settings page carries the note). That is deliberate: a port change beats a forward listener that silently stays down. Which process holds the port is the operating system's answer to give; the plugin only reports what it said.
-- **The plugin routes' auth depends on the composition**: with a connection service mounted (dsh web, the AIO desktop) it matches the kernel's `/api` (the app's own cookie/token); in minimal compositions without one, a structural fence applies (loopback + same-origin), and other local processes can still reach the routes — the same behaviour the kernel has in those compositions. **This covers `/forward/key` and `/forward/lan/key` too**: in such a composition any local process can fetch both keys with one request and spend the machine's free quota from another machine. Treat the two keys as local-process-readable files there (same trust level as `settings.json`), or mount a connection service at deploy time when you need more isolation.
+- "No usage cap" means there is no quota system, not that there is no rate limit. The lane meters per session, answers 429 when hammered, and the next probe recovers.
+- Some models are simply slow upstream: `nemotron-3.5-lightning-free` measured over 30 seconds to first token. The dashboard reports it as it is.
+- Output speed sometimes shows `—`: when the answer lands in one or two large frames, or the model never streams its thinking, there is no measurable window. The dashboard leaves it blank rather than counting thinking time as output speed.
+- Thinking is silent and shares the output budget. `mimo-v2.6-flash-free` measured 60 to 70 seconds of silence while billing 3,024 reasoning tokens without sending a frame. Heartbeats keep the connection alive but do not fix the timeout; raise the output ceiling or use a model marked `reasoning: false`.
+- Recovery has count, time and context limits. It re-requests from a checkpoint, so it cannot preserve upstream state and does not always succeed.
+- Capability labels only state what probing can prove.
+- The source is plain JavaScript. A local plugin cannot be anything else: anyone who can read the directory can read the gateway logic, and obfuscation does not change that.
+- The upgrade trust root is an Ed25519 public key pinned in the plugin. Only signed manifests install, poisoning a mirror just makes upgrades fail, and whoever holds the release key is equivalent to whoever can push to the repository.
 
 ## Development
 
+Node `^22.19.0 || >=24.0.0`, no install step, no dependencies.
+
 ```bash
-npm test                            # every offline suite below, plus the manifest check
-node scripts/client-lint.mjs        # browser half: copy/style key coverage, bundle executes
-node scripts/sanitize-test.mjs      # announcement HTML allowlist renderer vs an XSS corpus
-node scripts/trust-test.mjs         # request trust fence for the plugin's routes
-node scripts/feed-test.mjs          # announcement feed: parsing, failover, cache, arrivals
-node scripts/updater-test.mjs       # in-app upgrade: manifests, SHA-256, backup/rollback
-node scripts/build-manifest.mjs     # release: regenerate feed/manifest.json
-node scripts/retry-safety-test.mjs  # failures, retry policy and usage counts are durable-log safe
-node scripts/speed-stat-test.mjs    # no call can average its way into a fake tok/s
-node scripts/effort-test.mjs        # a rung is the max_tokens that goes out, and is recorded as itself
-node scripts/sniff-test.mjs         # a 2xx body is read by shape: SSE frames, single JSON, empty, split mid-codepoint, abort
-node scripts/release-e2e.mjs        # upgrade against the real manifest, and prove a lying one is refused
-node scripts/picker-test.mjs        # only usable models are advertised, and the picker never goes empty
-node scripts/tui-test.mjs           # the plugin activates and serves with no web server in the composition
-node scripts/host-selftest.mjs      # host half end to end against the live upstream
+npm test                             # all offline suites + manifest consistency
+node scripts/client-lint.mjs         # browser half: copy keys, style keys, bundle executes
+node scripts/offline-test.mjs        # offline end to end
+node scripts/host-selftest.mjs       # real network, spends free quota
+node scripts/build-manifest.mjs      # regenerate the release manifest (needs the release key)
+npm run typecheck                    # strict check of the adapter seam; needs typescript
 ```
 
-Release manifests must be signed with the release private key (`--key <pem-path>`
-or the `OFM_MANIFEST_KEY` environment variable); the builder refuses to write an
-unsigned one — the in-app upgrader installs only manifests whose signature
-matches the public key pinned in the plugin, as of v1.3.2. The private key lives
-in neither the repository nor any artifact; rotating it means rotating the trust
-root: change the pinned key in `src/updater.js` and cut a full release.
+The release manifest must be signed (`--key` or `OFM_MANIFEST_KEY`); the builder rejects unsigned manifests. The private key never enters the repository or any distribution.
 
-`scripts/probes/` holds the one-off evidence scripts behind the findings report —
-capability matrix, region gate, the `reasoning_effort` no-op sampling, budget
-dialects, dangling tool calls, tool-name charset rules, raw read timestamps
-(`batch-delivery`), per-frame arrival against final usage (`decode-window`),
-and whether a long answer survives its ceiling (`long-answer`). Six of them
-exercise this plugin's own code and run from the repo root
-(`node scripts/probes/pairing-repair.mjs`); the rest reach the upstream through a
-third-party SSE client and assume that checkout's module paths, so they are
-recorded as evidence rather than offered as a test suite. None of them is wired
-into `npm test`, which runs the offline checks above — no network, no free-lane
-quota spent.
+Per-release verification lives in [docs/releases/](docs/releases/) and [docs/verification/](docs/verification/). Scripts in `scripts/probes/` are one-off evidence from the investigation, dial upstream directly, and are not part of the test suite.
 
-Requires Node `^22.19.0 || >=24.0.0`. No install step, no dependencies.
+## EAC lane (desktop only)
+
+On desktop the plugin adds a co-paid lane whose models carry an `EAC` prefix. It only appears after host admission: DSHEAC AIO (Tauri shell) needs the kernel path, the embedded node and the web-desktop profile to match at once; DeepSeek Harness desktop and DSH Tauri accept the `desktop` / `tauri` profile the kernel reports. Command-line arguments do not count.
+
+Channel credentials are sealed with AES-256-GCM; the key is derived at unlock time from three masks split across two files, and plaintext exists only for the frame that builds the request. GitHub authorization is separate: sign in and star the repository, and the gateway issues a conversation token, rechecked every 12 hours by default.
+
+`worker/` holds an optional Cloudflare Worker gateway; rotate the signing secret there and every client is revoked at once. Deployment is in [worker/README.md](worker/README.md).
 
 ## Where the models come from
 
-Two public keyless upstreams, both dialled directly with no third party in the
-middle; the fourth destination (the EAC lane) is your own or the maintainer's
-deployed gateway, covered in its own section.
+All direct, no account pools, no relaying:
 
-**The free lane: OpenCode's key-free gateway**, `https://opencode.ai/inference/v1/*`
-(moved there from `/zen/v1` on 2026-10-14; the old path answers 403 FreeTierError
-for every free model). Every fact lives in `src/upstream.js`, and each one was
-checked by direct request against the live gateway (paths and fingerprint:
-2026-10-14 / 10-16):
-
-| What | Where | Credentials sent |
+| Purpose | Target | Credentials |
 | --- | --- | --- |
-| Inference | `POST …/inference/v1/chat/completions`, `…/inference/v1/responses`, `…/inference/v1/messages` (per model, see `endpointFor`) | `Authorization: Bearer public` — this lane is a public, key-free allowance; the plugin holds no secret of yours |
-| Model list | `GET …/inference/v1/models` | same |
-| Announcements and the update manifest | this repository's `feed/*.json`: `raw.githubusercontent.com` first, `cdn.jsdelivr.net` as fallback | none |
-| Egress region check | `api.ipify.org` / `ipinfo.io` / `ipapi.co`, only to read back your own public IP and country code | none |
+| free lane inference and roster | `https://opencode.ai/inference/v1/*` | `Bearer public`; the lane itself is the public keyless quota |
+| Kilo free pool | `https://api.kilo.ai/api/gateway/*` | none; no account, key or session |
+| announcements and upgrade manifest | this repository's `feed/*.json`, raw.githubusercontent.com first, jsDelivr as fallback | none |
+| egress region check | api.ipify.org / ipinfo.io / ipapi.co, only the public IP and country | none |
 
-**The Kilo channel: Kilo AI's public gateway**, `https://api.kilo.ai/api/gateway`
-(added 2026-10-06). The code is `src/kilo.js`; each row was checked by direct
-request on the day it was wired in:
+Your prompts, tool results and images go to the upstream behind the model you picked, as with any model API. Nothing else leaves the machine: usage, settings and keys stay in `DSH_HOME/our-free-model/`.
 
-| What | Where | Credentials sent |
-| --- | --- | --- |
-| Inference | `POST …/api/gateway/chat/completions` (OpenAI Chat Completions compatible, SSE streaming) | **none** — the gateway's free pool (the listing's `isFree: true` models, including the `kilo-auto/free` auto-router) needs no account, key or login state |
-| Model list | `GET …/api/gateway/models` | none |
-
-On privacy and trust, plainly:
-
-- **No account pool, no relay, no reseller.** The tables above are the complete
-  set of destinations the plugin can contact. `npm test` touches no network at
-  all — the shared test scaffolding points both keyless upstreams at closed
-  loopback ports by default, so no suite can "incidentally" reach a real gateway —
-  and the only things that do are `scripts/host-selftest.mjs` and
-  `scripts/probes/`, which you run by hand. If another source is ever added, this
-  section is updated before the feature is.
-- **Your prompts, tool results and any attached images go to the upstream that
-  serves the model you picked, as an ordinary inference request** — the same as
-  calling any model API. Nothing else leaves the machine: the usage dashboard's
-  data, settings and the forwarding key all stay in `DSH_HOME/our-free-model/`.
-- **Key-free is not unmanaged.** The free lane fingerprints clients through
-  `x-opencode-*` headers, accounts free usage per session, answers 403 for a
-  disallowed region and 429 once the allowance is spent. **Kilo's free pool
-  states on its model cards that prompts may be logged by the upstream provider
-  and used to improve their services** (verbatim from the `kilo-auto/free` card:
-  "Prompts may be logged by the upstream provider and used to improve their
-  services. Not suitable for production or sensitive data workloads."). The model
-  set and the quota policy belong to the upstream and can change at any time; all
-  the plugin can do is withdraw an unavailable model from the picker and say why.
-- This section is repository documentation. Inside the app — picker, settings
-  page, error copy — the upstreams' names still do not appear (the convention is
-  recorded under [Verification](#verification)), except that the Kilo badge's
-  tooltip does say prompts may be logged — that is information you need while
-  choosing a model.
-
+Keyless does not mean unmanaged: the free lane fingerprints clients through `x-opencode-*`, meters per session, returns 403 for regions and 429 when over quota. Kilo's free pool states in its model cards that prompts may be logged upstream and used to improve their services; do not send sensitive content.
 
 ## Disclaimer
 
-- **This plugin is a client, not a model provider.** Every model response is
-  generated and delivered by the third-party upstreams named above (OpenCode's
-  Zen gateway, Kilo AI's public gateway, and the EAC gateway you or the
-  maintainer deploy); the plugin hosts, modifies and filters none of it. Models
-  can produce wrong, outdated or biased content — verify before you rely on it.
-- **Free does not mean unlimited, and it does not mean private.** The free
-  allowances are the upstreams' unilateral offer and can be throttled, priced or
-  withdrawn at any time; Kilo's free pool states that prompts may be logged and
-  used to improve their services. **Never send passwords, keys, personal data,
-  trade secrets, or anything you would not hand to a third party through this
-  plugin's free lanes**; for production and sensitive work, use your own paid
-  API.
-- **You agree to the upstreams' terms by using them.** Using a channel means you
-  accept that upstream's terms of service and usage policy; throttling, bans or
-  other consequences of violating them are yours to own. The plugin makes no
-  promise about any upstream's availability, accuracy or continuity.
-- **The EAC lane is a shared, co-paid offer.** Its gateway is deployed by the
-  repository maintainer and unlocked by a GitHub login plus a star; it is for
-  authorized users only. Do not try to bypass the gate, resell, or share access —
-  abuse tightens the lane for everyone.
-- **The plugin is not affiliated with, nor endorsed by, any of the upstreams.**
-  Vendor names and trademarks belong to their owners and are cited only to name
-  the source.
+- This plugin is a client, not a model provider. Responses come from the upstreams; the plugin does not host, rewrite or filter them.
+- Free quota is offered by the upstreams and can be throttled, priced or withdrawn at any time. Do not send passwords, keys, identity data or business secrets through it; use your own paid API for sensitive work.
+- Using a channel means accepting that upstream's terms; throttling or bans from misuse are on the user.
+- The EAC lane is co-paid: its credentials and gateway are run by the maintainers and limited to authorized users. Do not resell or share access.
+- This project is not affiliated with or endorsed by any model provider; names and trademarks belong to their owners.
 
 ## Security and privacy
 
-- All state lives in `DSH_HOME/our-free-model/`; usage and settings stay local, nothing is uploaded.
-- **The aggregate lane's keys never leave the machine.** They are written only into the plugin's own `0600` `settings.json`, requests go only to the provider you configured, and the plugin's API echoes `hasKey` plus a `…abcd` fingerprint rather than the key itself; the Test and Discover probes redact the credential out of anything a provider answers back.
-- The forward listener binds a **loopback address only**, `127.0.0.1` by default, and rejects keyless requests. Widening it to a routable interface is refused: `POST /settings` answers 400 with the reason, and on a composition with no web server a hand-written `settings.json` simply does not start the listener. That traffic is spent from this machine's free lane; one string in a settings file should not put a whole subnet on it.
-- **Network access is a second door, not a relaxation of the rule above.** The local listener still binds loopback only and still refuses a routable address; reaching another machine takes an explicit switch, and then **every** request must carry the network key — `/` and `/health` included, unlike the local listener, because an unauthenticated liveness answer tells the whole subnet that this machine is here and proxying. The relay carries five whitelisted paths (`/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/messages/count_tokens`, each also accepted without its `/v1` prefix) and is not a general proxy for whatever else answers on loopback; it swaps the network key for the local one at the door, so the two are never interchangeable; a request that already carries the relay's hop marker is refused with `508`, so a relay port equal to the local one cannot spin. The network key is minted by `crypto`, compared with `timingSafeEqual`, stored in the same `0600` file, and rotated on its own from the panel.
+Settings, usage and aggregate keys live in `0600` files under `DSH_HOME/our-free-model/`. The API echoes only `hasKey` and a `…abcd` fingerprint.
 
-- **Network access is a second door, not a relaxation of the rule above.** The local listener still binds loopback only and still refuses a routable address; reaching another machine takes an explicit switch, and then **every** request must carry the network key — `/` and `/health` included, unlike the local listener, because an unauthenticated liveness answer tells the whole subnet that this machine is here and proxying. The relay carries three whitelisted paths (`/v1/models`, `/v1/chat/completions`, `/v1/responses`) and is not a general proxy for whatever else answers on loopback; it swaps the network key for the local one at the door, so the two are never interchangeable; a request that already carries the relay's hop marker is refused with `508`, so a relay port equal to the local one cannot spin. The network key is minted by `crypto`, compared with `timingSafeEqual`, stored in the same `0600` file, and rotated on its own from the panel. **The address to dial is re-read from this machine's interfaces** — the panel polls it every 15 s while the relay is on, so a laptop that changed networks, woke from sleep or brought a VPN up is not told where it used to be. A machine commonly holds several private addresses at once (the router's `192.168.x.y`, plus whatever a virtual switch, tunnel or VPN adapter has), so the physical interface leads and is the address the panel offers to copy, with the others listed below it; the relay binds every interface, but whether a given address answers from another machine depends on the network that adapter is on.
-- **The EAC lane's per-user gate lives server-side.** The plugin carries only a shared signing secret, and any install can extract it — so the one place a per-person gate can actually hold is the gateway in front of the relay credential. A chat turn needs a token minted after a GitHub sign-in verified to have starred the repository; the star is re-checked on a configurable window (12 h by default), a removed star revokes at the next sweep, tokens are revocable at any time, and per-account rate and concurrency ceilings bound a shared token. The relay key never reaches the plugin, and the token never reaches the browser — the settings page sees a login name and a verdict.
-- The forward key is minted at runtime by `crypto`, compared with `timingSafeEqual`, and stored in a `0600` file. No hardcoded credential ships in this repository. `/` and `/health` answer ahead of the key check because they are liveness probes — they answer only "is it there"; the model roster requires the key.
-- The plugin's HTTP routes carry a **request trust fence** (fixed in v1.1): the plugin's `/api/our-free-model` prefix outranks the kernel's `/api` in webServer's longest-prefix dispatch and used to bypass kernel auth. Every request now goes through the composition's `connection` admission first (exactly the kernel's `/api` check: cookie/token); compositions without a connection service fall back to a structural fence — loopback Host, cross-site `sec-fetch-site` refused, `Origin`/`Referer` must match the Host authority and port, and a **missing or empty Host is refused too** (fail closed; there is no fallback to the socket's local address). Measured: foreign Host/Origin 403, cookieless loopback 401. `connection` is resolved per request, because the browser half provides it only after plugins load — reading it once at apply time silently degrades the fence to its structural layer for the life of the process.
-- **Announcement HTML renders through a strict client-side allowlist**: `scripts/sanitize-test.mjs` runs an XSS corpus (script injection, event handlers, `javascript:`/`data:` URLs, iframe/svg/form, style injection, mangled tags) and asserts all of it is dropped; nothing ever reaches an `innerHTML` sink. The feed URL is user-overridable, so the renderer treats feed content as untrusted.
-- **The in-app upgrade integrity chain (signed as of v1.3.2)**: manifest Ed25519 signature verification (public key pinned in `src/updater.js`; unsigned or unverified manifests are refused outright, so no mirror can serve an installable forgery) → manifest validation (semver, path traversal, hash shape, `base` restricted to manifest-relative paths) → per-file SHA-256 + byte size on download → read-back verification of staging → read-back verification after install → backup restore on any failure. The manifest is re-fetched immediately before installing so a stale one can never vouch for different bytes. Boundaries in [Known limitations](#known-limitations).
-- **The update channel is fully decoupled from `feedUrl`** (v1.3.2): the setting redirects the announcement feed only, never the upgrade manifest — previously one settings value could point the update channel at any server with self-consistent hashes, turning "wrote a config field" into "executed arbitrary code in the host process". The announcement override itself is now restricted to https (loopback http excepted, so a locally-hosted mirror and the test suites still work) and may not carry credentials. **The target host is not restricted**: any https address may serve as `feedUrl`, and the plugin polls it on the `feedPollMinutes` period — so in a composition without a connection service (see the auth note above), a local caller who can edit settings can point the process at any external address indefinitely. This is trusted the same way as the plugin's other outbound calls: someone who can write `settings.json` can already install code.
-- **The forward listener binds loopback by resolution, not by spelling** (v1.3.2): a hostname such as `localhost` is resolved with `dns.lookup` first and every answer must be loopback; the listener binds the resolved IP — so a hosts file or enterprise DNS pointing `localhost` at a routable interface can no longer pass the check while the listener hands the lane to the subnet.
-- Uninstalling removes the bundle entry; the plugin leaves no patches behind. Its data directory is plain JSON you can delete.
+The forward listener binds loopback only, and `POST /settings` rejects a routable address. LAN access is a separate door: the relay binds a routable address, every request needs the LAN key (including `/health`), and only the five `/v1/*` routes above are allowed.
+
+Plugin routes carry a request trust fence. Compositions with a connection service (dsh web, desktop) match the kernel's `/api` and need the app's cookie or token; minimal compositions without one fall back to loopback plus same-origin checks, in which case other local processes can read the forward key, so use that trust level accordingly.
+
+Announcement HTML is rendered through an allowlist client-side, exercised by `scripts/sanitize-test.mjs` with XSS corpora. The upgrade chain is Ed25519 signature, manifest validation, per-file SHA-256, staging read-back and post-install read-back, with backup restore at any failed step. `feedUrl` can only move the announcement source, never the upgrade source.
+
+Uninstalling means removing the bundle entry; the plugin leaves no patches, and the data directory is plain JSON.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
-This project is an independent plugin and is not affiliated with, endorsed by, or
-sponsored by any model provider. Using it to reach free tiers is subject to those
-providers' own terms; check them before deploying anywhere beyond your own machine.
+## Star history
+
+<a href="https://www.star-history.com/?type=date&amp;repos=Ebony-Vinyl%2Fdsh-our-free-model">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date&amp;theme=dark" />
+    <img alt="GitHub star history for dsh-our-free-model" src="https://api.star-history.com/svg?repos=Ebony-Vinyl/dsh-our-free-model&amp;type=Date" />
+  </picture>
+</a>
