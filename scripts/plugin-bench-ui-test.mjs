@@ -158,19 +158,23 @@ await check('a failed benchmark releases its busy state, keeps the error and ref
 
 const shellProps = app => ({ t: app.t, data: { catalog: [], settings: {} }, counts: {}, summary: {}, stats: {} })
 const effectsSwitch = (tree, app) => flatten(tree).find(node => node?.props?.label === app.t('effects.enabled'))
+// The workspace panel is addressed by its own class, not by being the last
+// child: the shell also renders a footer after it.
+const workspace = tree => tree.children.find(node => node?.props?.className === 'ofm_workspace')
 await check('visual effects default off, toggle immediately, survive remount and do not change model settings', () => {
-  const storage = new Map(), app = boot({ storage }), props = shellProps(app)
+  const storage = new Map([['ofm.tab', 'free']]), app = boot({ storage }), props = shellProps(app)
   let tree = app.draw(app.api.Shell, props)
   assert.equal(tree.props['data-ofm-effects'], 'off')
   assert.equal(flatten(tree).filter(node => node?.props?.className === 'ofm_aurora').length, 0)
-  const freePage = tree.children.at(-1)
+  const freePage = workspace(tree).children[0]
   effectsSwitch(tree, app).props.onChange(); tree = app.draw(app.api.Shell, props)
   assert.equal(tree.props['data-ofm-effects'], 'on')
-  assert.equal(flatten(tree).filter(node => node?.props?.className === 'ofm_aurora').length, 1)
-  assert.equal(tree.children.at(-1).type, freePage.type)
-  assert.equal(tree.children.at(-1).props.data, props.data)
+  assert.equal(flatten(tree).filter(node => node?.props?.className === 'ofm_aurora').length, 0, 'workspace uses a plain background in either effects mode')
+  assert.equal(workspace(tree).children[0].type, freePage.type)
+  assert.equal(workspace(tree).children[0].props.data, props.data)
   assert.equal(storage.get('ofm.visualEffects'), 'on')
-  assert.equal(app.calls.length, 0, 'a visual switch must not call the backend')
+  // The disclaimer read belongs to the shell's own mount, not to this switch.
+  assert.equal(app.calls.filter(call => call.endpoint !== '/disclaimer').length, 0, 'a visual switch must not call the backend')
   app.dispose()
   const reopened = boot({ storage }), nextProps = shellProps(reopened)
   tree = reopened.draw(reopened.api.Shell, nextProps)
@@ -221,6 +225,36 @@ await check('empty or offscreen aquariums pause, filled visible aquariums resume
   assert.equal(observer.disconnected, true)
   tree = app.draw(app.api.Tank, { pct: 30 }); assert.equal(tree.props['data-ofm-motion'], 'on')
   app.dispose(); assert.equal(app.observers[1].disconnected, true)
+})
+
+await check('the disclaimer renders both excluded channels and acknowledges through the backend', () => {
+  const app = boot({ fetchImpl: endpoint => endpoint === '/disclaimer'
+    ? { version: 1, title: '使用须知与免责声明', subtitle: '关于本插件未提供的渠道',
+      intro: '个人学习与技术研究项目', accept: '我已阅读并了解', reopen: '查看免责声明',
+      sections: [{ id: 'excluded', heading: '本插件不提供这些渠道', body: '不含 WorkBuddy 与华为云 Huawei Cloud MaaS' }],
+      acknowledged: false }
+    : {} })
+  const tree = app.draw(app.api.Disclaimer, { t: app.t, copy: {
+    version: 1, title: '使用须知与免责声明', subtitle: '关于本插件未提供的渠道',
+    intro: '个人学习与技术研究项目', accept: '我已阅读并了解', reopen: '查看免责声明',
+    sections: [{ id: 'excluded', heading: '本插件不提供这些渠道', body: '不含 WorkBuddy 与华为云 Huawei Cloud MaaS' }],
+  }, onClose() {} })
+  const text = flatten(tree).filter(node => typeof node === 'string').join(' ')
+  assert.match(text, /WorkBuddy/, 'the excluded channel is named')
+  assert.match(text, /Huawei Cloud/, 'the second excluded channel is named')
+  assert.match(text, /个人学习/, 'the project states its purpose')
+  assert.ok(flatten(tree).some(node => node?.props?.role === 'dialog'), 'it is a modal dialog')
+  // The accept button writes the acknowledgement, then closes.
+  let closed = false
+  const app2 = boot()
+  const tree2 = app2.draw(app2.api.Disclaimer, { t: app2.t, copy: {
+    version: 1, title: 'T', subtitle: 'S', intro: 'I', accept: 'OK', reopen: 'R', sections: [],
+  }, onClose() { closed = true } })
+  const accept = flatten(tree2).find(node => node?.props?.onClick && node?.props?.disabled === false)
+  assert.ok(accept, 'an accept control exists')
+  accept.props.onClick()
+  assert.ok(app2.calls.some(call => call.endpoint === '/disclaimer/ack'), 'acknowledgement is posted')
+  app.dispose(); app2.dispose()
 })
 
 console.log(checks + ' plugin benchmark UI checks passed')

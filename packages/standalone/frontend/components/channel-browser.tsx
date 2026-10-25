@@ -38,7 +38,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
     void rpc('usage.autoCheckin', {}).then(value => {
       if (mounted.current) setAuto(value.autoCheckin)
     }).catch(() => {})
-    const timer = setInterval(() => { void reload() }, 45000)
+    const timer = setInterval(() => { if (!document.hidden) void reload() }, 45000)
     return () => { mounted.current = false; sequence.current++; clearInterval(timer) }
   }, [rpc, reload])
   useEffect(() => {
@@ -68,7 +68,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
     connected,
     pending: providers.filter(provider => {
       const status = statuses?.[provider.id]
-      return status !== undefined && (status.closed || (status.accounts?.enabled ?? 0) <= 0)
+      return !status || status.closed || (status.accounts?.enabled ?? 0) <= 0
     }).length,
   }
   return <>
@@ -108,13 +108,13 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
       <div className="provider-grid">{rows.map(provider => {
         const status = statuses?.[provider.id]
         const state = status === undefined ? t('cb.reading') : status.closed ? t('cb.closed') : (status.accounts?.enabled ?? 0) > 0 ? t('cb.connected') : t('cb.pending')
-        return <Card className="provider-card" key={provider.id}>
-          <div className="provider-card-top"><span className="provider-logo" style={{ color: provider.accent, backgroundColor: `${provider.accent}0d` }}>{providerText(provider, 'name').slice(0, 2).toUpperCase()}</span>
-            <Badge tone={state === t('cb.connected') ? 'success' : 'neutral'}>{state === t('cb.connected') && <span className="status-dot" />}{state}</Badge></div>
-          <h2>{providerText(provider, 'name')}</h2><div className="provider-org">{providerText(provider, 'org')}</div><p className="provider-description">{providerText(provider, 'note')}</p>
+        return <Card className="provider-card channel-directory-row" key={provider.id}>
+          <span className="provider-logo" style={{ color: provider.accent, backgroundColor: `${provider.accent}0d` }}>{providerText(provider, 'name').slice(0, 2).toUpperCase()}</span>
+          <div className="channel-directory-name"><h2>{providerText(provider, 'name')}</h2><div className="provider-org">{providerText(provider, 'org')}</div><p className="provider-description">{providerText(provider, 'note')}</p></div>
           <div className="provider-counts"><span>{t('cb.accounts')} <strong>{status ? status.accounts?.total ?? 0 : '—'}</strong></span>
             <span>{t('cb.models')} <strong>{status ? Math.max(0, (status.models?.total ?? 0) - (status.models?.disabled ?? 0)) : '—'}</strong></span></div>
-          <Button variant="outline" className="provider-manage" onClick={() => select(provider.id)}>{t('cb.manage')} <ArrowRight size={14} /></Button>
+          <Badge tone={state === t('cb.connected') ? 'success' : 'neutral'}>{state === t('cb.connected') && <span className="status-dot" />}{state}</Badge>
+          <Button variant="outline" className="provider-manage" onClick={() => select(provider.id)}>{state === t('cb.connected') ? t('cb.manage') : t('cb.connect')}<ArrowRight size={14} /></Button>
         </Card>
       })}</div>
       {rows.length === 0 && <Card className="channel-empty"><Search size={24} /><h2>{t('cb.noMatch')}</h2><p>{t('cb.noMatchHint')}</p><Button variant="outline" onClick={() => { setSearch(''); setFilter('all') }}>{t('cb.resetFilters')}</Button></Card>}

@@ -6,6 +6,11 @@ import { generateKey } from '../../src/forward.js'
 import { structuralRejection } from '../../src/trust.js'
 import { openLoginTerminal } from './login-terminal.mjs'
 import { publicModelVisibility, validateModelVisibility, isModelHidden } from '../../src/store.js'
+import { createWorkbench } from './workbench.mjs'
+import { createProviderManagement } from './providers.mjs'
+import { createWorkbenchLibrary } from './library.mjs'
+import { createRoutingManagement } from './routing.mjs'
+import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from '../../src/disclaimer.js'
 
 const PREFIX = '/api/management'
 const BOOTSTRAP_MS = 10 * 60_000
@@ -86,9 +91,10 @@ export function managementSettings(value) {
 }
 
 /** 管理读写要求鉴权；登录恢复仅允许同源页面触发固定本机动作。 */
-export function createManagement({ stores, runtime, channels, eac, info, onSettingsChanged, loginTerminal = openLoginTerminal }) {
+export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal }) {
   let bootstrap = { token: crypto.randomBytes(32).toString('base64url'), until: Date.now() + BOOTSTRAP_MS }
   const sessions = new Map()
+  const privilegedSessions = new Set()
   let cookieName
   let closed = false
   let terminalOpening = false
@@ -119,13 +125,20 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
   }
   const clearCookie = () => `${cookieName}=; Path=${PREFIX}; HttpOnly; SameSite=Strict; Max-Age=0`
   const pruneSessions = () => {
-    for (const [id, until] of sessions) if (until <= Date.now()) sessions.delete(id)
+    for (const [id, until] of sessions) if (until <= Date.now()) {
+      sessions.delete(id)
+      privilegedSessions.delete(id)
+    }
   }
   const authenticated = req => {
     const bearer = /^Bearer (.+)$/i.exec(String(req.headers.authorization ?? ''))?.[1]
     if (matches(bearer, stores.settings.get().forwardKey)) return true
     pruneSessions()
     return sessions.has(cookie(req))
+  }
+  const sessionAuthenticated = req => {
+    pruneSessions()
+    return sessions.has(cookie(req)) && privilegedSessions.has(cookie(req))
   }
   const persist = patch => {
     const previous = stores.settings.get()
@@ -137,6 +150,17 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       throw fail(500, '无法保存设置，请检查数据目录权限和磁盘空间')
     }
   }
+  const workbench = runtime && typeof info().dataDir === 'string' ? createWorkbench({
+    dataDir: info().dataDir,
+    info: () => ({ ...info(), enabled: stores.settings.get().enabled !== false }),
+    key: () => stores.settings.get().forwardKey,
+    modelRows: () => runtime.publicModelRows(),
+    ...workbenchOptions,
+  }) : undefined
+  const providerManagement = runtime ? createProviderManagement({ stores, runtime, persist }) : undefined
+  const routingManagement = runtime ? createRoutingManagement({ stores, runtime, persist }) : undefined
+  const library = workbench ? createWorkbenchLibrary({ dataDir: info().dataDir, workbench }) : undefined
+  workbench?.setLibrary(library)
   const summary = () => {
     const state = runtime.state()
     const available = stores.availability.get()
@@ -188,26 +212,143 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
     if (method === 'POST' && pathname === `${PREFIX}/session`) {
       const body = await readBody(req)
       const validBootstrap = bootstrap !== null && bootstrap.until > Date.now() && matches(body.bootstrapToken, bootstrap.token)
-      if (!validBootstrap && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, msg(req, '登录链接已失效或 API Key 不正确', 'Login link expired or API key incorrect'))
+      const validManagementKey = matches(body.key, stores.settings.get().managementKey)
+      if (!validBootstrap && !validManagementKey && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, msg(req, '登录链接已失效或登录令牌不正确', 'Login link expired or login token incorrect'))
       pruneSessions()
       if (sessions.size >= 64) throw fail(429, msg(req, '管理会话过多，请稍后重试', 'Too many management sessions; retry later'))
       if (validBootstrap) bootstrap = null
       const id = crypto.randomBytes(32).toString('base64url')
       sessions.set(id, Date.now() + SESSION_MS)
+      if (validBootstrap || validManagementKey) privilegedSessions.add(id)
       json(res, 200, { ok: true }, {
         'set-cookie': `${cookieName}=${id}; Path=${PREFIX}; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MS / 1000}`,
       })
       return
     }
-    if (!authenticated(req)) throw fail(401, msg(req, '请先登录管理页面', 'Sign in to the management page first'))
+    const privilegedManagementRoute =
+      pathname === `${PREFIX}/workbench` || pathname.startsWith(`${PREFIX}/workbench/`)
+      || pathname === `${PREFIX}/library` || pathname.startsWith(`${PREFIX}/library/`)
+      || pathname === `${PREFIX}/providers` || pathname.startsWith(`${PREFIX}/providers/`)
+      || pathname === `${PREFIX}/subscriptions` || pathname.startsWith(`${PREFIX}/subscriptions/`)
+      || pathname === `${PREFIX}/routing` || pathname.startsWith(`${PREFIX}/routing/`)
+      || pathname === `${PREFIX}/engine` || pathname.startsWith(`${PREFIX}/engine/`)
+    // A sandboxed plugin page inside the workspace carries a per-run HMAC
+    // capability in its own path; it has an opaque origin and cannot send this
+    // console's session. The engine validates the capability and serves only
+    // that plugin's files, exactly as it does for the plugin build. This has to
+    // be decided before the session check for the same reason.
+    const enginePluginAsset = ['GET', 'HEAD'].includes(req.method)
+      && /^\/api\/management\/engine\/ui\/_magpie\/plugin\/[a-f0-9]{32}\/[^?]+$/.test(pathname)
+    if (!authenticated(req) && !enginePluginAsset) throw fail(401, msg(req, '请先登录管理页面', 'Sign in to the management page first'))
+    if (privilegedManagementRoute && !sessionAuthenticated(req) && !enginePluginAsset) {
+      throw fail(403, msg(req, '此管理操作需要已登录的本地管理会话', 'This management operation requires a signed-in local management session'))
+    }
     if (method === 'POST' && pathname === `${PREFIX}/logout`) {
       await readBody(req)
       sessions.delete(cookie(req))
+      privilegedSessions.delete(cookie(req))
       json(res, 200, { ok: true }, { 'set-cookie': clearCookie() })
     } else if (method === 'GET' && pathname === `${PREFIX}/summary`) {
       json(res, 200, summary())
     } else if (method === 'GET' && pathname === `${PREFIX}/stats`) {
       json(res, 200, buildStats(stores.stats.get(), runtime.catalog))
+    } else if (method === 'GET' && pathname === `${PREFIX}/engine/status`) {
+      json(res, 200, magpieEngine?.status() ?? { state: 'unavailable', available: false })
+    } else if (method === 'POST' && pathname === `${PREFIX}/engine/start`) {
+      await readBody(req)
+      if (!magpieEngine) throw fail(503, '模型工作台不可用')
+      await magpieEngine.start()
+      await magpieModels?.refresh()
+      onEngineStarted?.()
+      json(res, 200, magpieEngine.status())
+    } else if (method === 'POST' && pathname === `${PREFIX}/engine/refresh`) {
+      await readBody(req)
+      if (!magpieEngine) throw fail(503, '模型工作台不可用')
+      await magpieModels?.refresh()
+      json(res, 200, { ok: true })
+    } else if (pathname === `${PREFIX}/engine/ui` || pathname.startsWith(`${PREFIX}/engine/ui/`)) {
+      if (!magpieEngine) throw fail(503, '模型工作台不可用')
+      if (magpieEngine.status().state !== 'ready') throw fail(503, '模型工作台尚未启动')
+      if (pathname === `${PREFIX}/engine/ui` && !req.url.endsWith('/')) {
+        res.writeHead(302, { location: `${PREFIX}/engine/ui/` })
+        return res.end()
+      }
+      // The embedded page is same-origin HTML that the engine rewrites for this
+      // mount; a POST from it is how the workspace reports a change, and the
+      // published catalog has to follow.
+      res.once('finish', () => {
+        if (req.method === 'POST') void magpieModels?.refresh().catch(() => {})
+      })
+      const upstream = req.url.slice(PREFIX.length + '/engine/ui'.length) || '/'
+      // The engine derives its visible mount from the plugin build's own path
+      // (`/api/our-free-model/engine/ui/`). This console mounts the same UI at a
+      // different prefix, so both the mount it should treat as its own and the
+      // prefix it should emit are passed explicitly instead of guessed.
+      const mount = `${PREFIX}/engine/ui/`
+      await magpieEngine.proxy(req, res, upstream, { prefix: mount, mount })
+      return
+    } else if (pathname === `${PREFIX}/workbench` && method === 'GET' && workbench) {
+      json(res, 200, { clients: workbench.clients(), accounts: subscriptions?.list() ?? [] })
+    } else if (pathname.startsWith(`${PREFIX}/workbench/clients/`) && method === 'POST' && workbench) {
+      const body = await readBody(req)
+      const action = pathname.slice(`${PREFIX}/workbench/clients/`.length)
+      if (action === 'save') json(res, 200, workbench.save(body))
+      else if (action === 'launch') json(res, 200, await workbench.launch(body))
+      else if (action === 'stop') json(res, 200, await workbench.stop(body))
+      else throw fail(404, '客户端操作不存在')
+    } else if (pathname === `${PREFIX}/library` && method === 'GET' && library) {
+      json(res, 200, library.list())
+    } else if (pathname === `${PREFIX}/routing` && method === 'GET' && routingManagement) {
+      json(res, 200, routingManagement.list())
+    } else if (pathname.startsWith(`${PREFIX}/routing/`) && method === 'POST' && routingManagement) {
+      const action = pathname.slice(`${PREFIX}/routing/`.length)
+      if (!['save', 'remove', 'preview'].includes(action)) throw fail(404, '路由组操作不存在')
+      json(res, 200, routingManagement[action](await readBody(req, 128 * 1024)))
+    } else if (pathname.startsWith(`${PREFIX}/library/`) && method === 'POST' && library) {
+      const action = pathname.slice(`${PREFIX}/library/`.length)
+      const actions = {
+        'profiles/save': 'saveProfile', 'profiles/apply': 'applyProfile', 'profiles/remove': 'removeProfile',
+        'resources/save': 'saveResource', 'resources/remove': 'removeResource',
+      }
+      const body = await readBody(req, 1024 * 1024 + 8192)
+      if (!Object.hasOwn(actions, action)) throw fail(404, '资源操作不存在')
+      json(res, 200, library[actions[action]](body))
+    } else if (pathname === `${PREFIX}/providers` && method === 'GET' && providerManagement) {
+      json(res, 200, providerManagement.list())
+    } else if (pathname.startsWith(`${PREFIX}/providers/`) && method === 'POST' && providerManagement) {
+      const action = pathname.slice(`${PREFIX}/providers/`.length)
+      const body = await readBody(req, 128 * 1024)
+      if (!['save', 'remove', 'test', 'discover'].includes(action)) throw fail(404, '供应商操作不存在')
+      const controller = new AbortController()
+      const abort = () => controller.abort()
+      res.once('close', abort)
+      try { json(res, 200, await providerManagement[action](body, controller.signal)) }
+      finally { res.removeListener('close', abort) }
+    } else if (pathname === `${PREFIX}/subscriptions` && method === 'GET' && subscriptions) {
+      json(res, 200, { accounts: subscriptions.list() })
+    } else if (pathname === `${PREFIX}/subscriptions/discover` && method === 'GET' && subscriptions) {
+      const discovered = await subscriptions.discover()
+      json(res, 200, { candidates: [
+        { provider: 'codex', label: 'Codex / ChatGPT' },
+        { provider: 'claude', label: 'Claude Code' },
+        { provider: 'gemini', label: 'Gemini CLI' },
+      ].map(row => ({ ...row, available: discovered.some(candidate => candidate.provider === row.provider) })) })
+    } else if (pathname.startsWith(`${PREFIX}/subscriptions/`) && method === 'POST' && subscriptions) {
+      const action = pathname.slice(`${PREFIX}/subscriptions/`.length)
+      const body = await readBody(req, 1024 * 1024)
+      if (action === 'import') await subscriptions.import(body)
+      else if (action === 'import-local') await subscriptions.importLocal(body)
+      else if (action === 'enabled') await subscriptions.setEnabled(body)
+      else if (action === 'remove') await subscriptions.remove(body)
+      else if (action === 'quota') {
+        const controller = new AbortController()
+        const abort = () => controller.abort()
+        res.once('close', abort)
+        try { await subscriptions.refreshQuota({ ...body, signal: controller.signal }) }
+        finally { res.removeListener('close', abort) }
+      } else throw fail(404, '订阅操作不存在')
+      runtime.syncAggregateCatalog()
+      json(res, 200, { accounts: subscriptions.list() })
     } else if (method === 'POST' && pathname === `${PREFIX}/channels/rpc` && channels) {
       // 渠道备份导入包含多账号凭据，仍限制总大小，但不能套设置表单的 16KB。
       const body = await readBody(req, 8 * 1024 * 1024)
@@ -248,6 +389,11 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       if (result.error) throw fail(502, result.error)
       if (result.ok === false) throw fail(500, msg(req, '无法移除本地授权', 'Unable to remove local authorization'))
       json(res, 200, result)
+    } else if (method === 'GET' && pathname === `${PREFIX}/disclaimer`) {
+      json(res, 200, { ...DISCLAIMER, acknowledged: disclaimerAcknowledged(stores.settings.get()) })
+    } else if (method === 'POST' && pathname === `${PREFIX}/disclaimer/ack`) {
+      persist({ disclaimerAck: DISCLAIMER_VERSION })
+      json(res, 200, { ok: true, acknowledged: true })
     } else if (method === 'POST' && pathname === `${PREFIX}/settings`) {
       const patch = validateSettings(await readBody(req), langOf(req))
       persist(patch)
@@ -269,8 +415,11 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       persist({ forwardKey: generateKey() })
       // 仅当前管理会话保留；旧密钥与其他会话立即失效。
       const until = sessions.get(id)
+      const privileged = privilegedSessions.has(id)
       sessions.clear()
+      privilegedSessions.clear()
       if (until) sessions.set(id, until)
+      if (until && privileged) privilegedSessions.add(id)
       bootstrap = null
       json(res, 200, { key: stores.settings.get().forwardKey })
     } else if (method === 'POST' && pathname === `${PREFIX}/models/refresh`) {
@@ -327,6 +476,6 @@ export function createManagement({ stores, runtime, channels, eac, info, onSetti
       }
       return true
     },
-    dispose() { closed = true; bootstrap = null; sessions.clear() },
+    dispose() { closed = true; bootstrap = null; sessions.clear(); privilegedSessions.clear(); return workbench?.dispose() },
   }
 }

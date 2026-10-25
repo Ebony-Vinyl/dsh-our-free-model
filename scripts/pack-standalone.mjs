@@ -25,13 +25,19 @@ const sourceFiles = [
   'packages/standalone/login-terminal.mjs',
   'packages/standalone/open-external.mjs',
   'packages/standalone/eac.mjs',
+  'packages/standalone/workbench.mjs',
+  'packages/standalone/client-terminal.mjs',
+  'packages/standalone/providers.mjs',
+  'packages/standalone/library.mjs',
+  'packages/standalone/routing.mjs',
   ...['business', 'contracts', 'credentials', 'images', 'runtime', 'worker']
     .map(name => `packages/standalone/channels/${name}.mjs`),
   'packages/standalone/web/index.html',
   'packages/standalone/web/assets.json',
-  ...['adapter', 'aggregate', 'anthropic', 'catalog', 'channel', 'combos', 'deferred-response', 'eac', 'eac-login', 'eac-user', 'effort',
-    'egress', 'failure', 'forward', 'http', 'image-pricing', 'kilo', 'local-optimize', 'messages', 'model-test', 'probe', 'recovery',
-    'store', 'stream', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
+  ...['adapter', 'aggregate', 'anthropic', 'catalog', 'channel', 'combos', 'deferred-response', 'disclaimer', 'eac', 'eac-login', 'eac-user', 'effort',
+    'egress', 'failure', 'forward', 'gemini', 'http', 'image-pricing', 'kilo', 'local-optimize',
+    'loopback-fetch', 'magpie-engine', 'magpie-models', 'magpie-policy', 'messages', 'model-test', 'probe', 'recovery',
+    'store', 'stream', 'subscriptions', 'subscription-completion', 'subscription-adapter', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
     .map(name => `src/${name}.js`),
   ...['completion', 'runtime', 'stats'].map(name => `src/core/${name}.js`),
   'src/providers/index.js',

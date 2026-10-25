@@ -33,9 +33,10 @@ const summary = { settings, catalog: [], networkMode: 'fixture' }
 import { t, getLocale as locale, switchLocale } from '../packages/standalone/frontend/i18n.mjs'
 const context = {
   ...react, h: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }), Fragment: 'fragment',
-  Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle',
+  Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle', DisclaimerDialog: 'DisclaimerDialog',
+  Agents: 'Agents', Providers: 'Providers', Library: 'Library', Routing: 'Routing', Workspace: 'Workspace',
   t, locale, switchLocale,
-  pageNames: ['overview', 'models', 'usage', 'channels', 'eac', 'settings', 'connection'], API: '/api/management',
+  pageNames: ['overview', 'workspace', 'agents', 'providers', 'library', 'routing', 'models', 'usage', 'channels', 'eac', 'settings', 'connection', 'sponsor'], API: '/api/management',
   messageOf: error => error.message, AbortSignal, URLSearchParams, location: { hash: '' }, history: {},
   window: { scrollTo() {}, addEventListener() {}, removeEventListener() {}, setInterval() { return 1 }, clearInterval() {} },
   document: { hidden: false }, navigator: { clipboard: { writeText: async () => {} } },

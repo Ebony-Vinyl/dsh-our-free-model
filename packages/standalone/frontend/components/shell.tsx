@@ -1,4 +1,4 @@
-import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboard, LogOut, Moon, Network, Settings2, ShieldCheck, Sun } from 'lucide-react'
+import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboard, LogOut, Moon, Network, Settings2, ShieldCheck, Sun, Monitor, PanelsTopLeft, LibraryBig, Route } from 'lucide-react'
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import brandMark from '../../../../icon.svg?inline'
@@ -9,10 +9,15 @@ import type { Host, Page, Summary } from '../types'
 const navigation = [
   { label: t('nav.workspace'), items: [
     { id: 'overview', name: t('nav.overview'), icon: LayoutDashboard },
+    { id: 'workspace', name: t('nav.workbench'), icon: PanelsTopLeft },
+    { id: 'agents', name: t('nav.agents'), icon: Monitor },
     { id: 'models', name: t('nav.models'), icon: Boxes },
     { id: 'usage', name: t('nav.usage'), icon: Activity },
+    { id: 'library', name: t('nav.library'), icon: LibraryBig },
   ] },
   { label: t('nav.groupChannels'), items: [
+    { id: 'providers', name: t('nav.providers'), icon: PanelsTopLeft },
+    { id: 'routing', name: t('nav.routing'), icon: Route },
     { id: 'channels', name: t('nav.channels'), icon: Network },
     { id: 'eac', name: t('nav.eac'), icon: Handshake },
     { id: 'connection', name: t('nav.connection'), icon: Cable },
@@ -77,11 +82,12 @@ export function LangToggle() {
 }
 
 export const pageNames: Record<Page, string> = {
-  overview: t('nav.overview'), models: t('nav.models'), usage: t('nav.usage'), channels: t('nav.channels'),
+  overview: t('nav.overview'), workspace: t('nav.workbench'), models: t('nav.models'), usage: t('nav.usage'), channels: t('nav.channels'),
+  agents: t('nav.agents'), providers: t('nav.providers'), library: t('nav.library'), routing: t('nav.routing'),
   eac: t('nav.eac'), settings: t('nav.settings'), connection: t('nav.connection'), sponsor: t('nav.sponsor'),
 }
 
-export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary; host: Host }) {
+export function Sidebar({ page, summary, host, onDisclaimer }: { page: Page; summary?: Summary; host: Host; onDisclaimer(): void }) {
   return <>
     <a className="console-brand" href="/" aria-label={t('nav.home')}>
       <img className="console-mark" src={brandMark} alt="" width={34} height={36} />
@@ -102,6 +108,7 @@ export function Sidebar({ page, summary, host }: { page: Page; summary?: Summary
     <div className="sidebar-support"><ShieldCheck size={17} /><div><strong>{t('nav.localStorage')}</strong><p>{t('nav.localNote')}</p></div></div>
     <div className="console-sidebar-footer"><div><span className="status-dot" />{t('nav.serviceOnline')}<small>v{summary?.version ?? '—'}</small></div>
       <ThemeToggle /><LangToggle /><Button variant="ghost" aria-label={t('nav.logout')} title={t('nav.logout')} onClick={() => { void host.logout().catch(host.error) }}><LogOut size={16} /></Button></div>
+    <button type="button" className="sidebar-disclaimer" onClick={onDisclaimer}>{t('nav.disclaimer')}</button>
   </>
 }
 export function Topbar({ page, summary }: { page: Page; summary?: Summary }) {

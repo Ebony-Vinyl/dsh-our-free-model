@@ -66,10 +66,10 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
       if (mounted.current) setSaving(false)
     }
   }
-  const toggle = (name: 'enabled' | 'exposeRegionModels' | 'streamRecovery' | 'standaloneProbe' | 'hideFreeModels' | 'hideEacModels', label: string, help: string) =>
+  const toggle = (name: 'enabled' | 'exposeRegionModels' | 'streamRecovery' | 'standaloneProbe' | 'hideFreeModels' | 'hideEacModels', label: string, help: string, disabled = false) =>
     <label className="settings-field" key={name}>
       <span><strong>{label}</strong><small>{help}</small></span>
-      <input type="checkbox" role="switch" name={name} className="settings-toggle"
+      <input type="checkbox" role="switch" name={name} className="settings-toggle" disabled={disabled}
         checked={state.draft[name]} onChange={event => update(name, event.target.checked)} />
     </label>
   const numeric = (name: NumberField, label: string, help: string, min: number, max: number) =>
@@ -101,7 +101,7 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
         </Card>
         <Card className="settings-card"><div className="settings-card-heading"><RefreshCw size={16} /><div><h2>{t('cfg.refreshTitle')}</h2><p>{t('cfg.refreshSub')}</p></div></div>
           {numeric('probeIntervalMinutes', t('cfg.interval'), t('cfg.intervalHelp'), 1, 1440)}
-          {toggle('standaloneProbe', t('cfg.probe'), t('cfg.probeHelp'))}
+          {toggle('standaloneProbe', t('cfg.probe'), t('cfg.probeHelp'), true)}
           <p className="settings-note" role="note"><CircleAlert size={15} /><span>{summary.automaticRefresh
             ? t('cfg.refreshOn')
             : t('cfg.refreshOff')}</span></p>

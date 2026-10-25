@@ -39,9 +39,9 @@
 ## 交流群
 
 <div align="center">
-  <img src="docs/images/qq-group-756199839.png" alt="ai技术交流群6 入群二维码（群号：756199839）" width="300">
+  <img src="docs/images/qq-group-883073874.jpg" alt="AI技术交流群9 入群二维码（群号：1129698318）" width="300">
   <br>
-  <b>QQ 群：756199839（ai技术交流群6）</b>
+  <b>QQ 群：1129698318（AI技术交流群9）</b>
   <br>
   扫码或搜索群号加入群聊，一起交流插件使用心得、反馈问题与分享玩法。
 </div>
@@ -64,7 +64,7 @@
 - **OpenAI 兼容转发端口**——本机其它工具通过 base URL 与 Key 即可调用这些模型。Chat 历史中 assistant 的字符串 `reasoning_content` 会随工具后续请求保留，包括显式空字符串；缺失字段不会被补造。
 - **EAC 渠道（桌面端专属）**——在 DeepSeek Harness 桌面端与 DSHEAC AIO 桌面端中自动解锁一条协付通道，模型以 EAC 前缀显示（如 EAC DeepSeek V4.1 Flash）；凭据加密密封，由宿主指纹闸门把守；该渠道在服务器侧校验 GitHub 授权（登录并 star 本仓库）后才放行对话；在命令行及其它宿主中该通道完全不存在。详见「EAC 渠道」。
 - **Kilo 渠道（免密免费池）**——内置 Kilo AI 公共网关的免费模型池（`isFree` 清单实时拉取，含 `kilo-auto/free` 自动路由），无需任何账号或 Key；模型卡带 Kilo 徽章。思考强度与 EAC 渠道同款：模型自身的档位菜单（Off / Low / Medium / High，默认 High），经网关统一的 `reasoning` 参数真实下发——Off 已逐家族实测将思考归零（nemotron、ling、dots、poolside、apodex、cohere）；stepfun 与 liquid 端点强制思考（对关闭请求返回 400）、两个自动路由不透传关闭，这些模型的菜单不含 Off 档。该池由上游免费提供，上游会在其模型卡中声明 prompt 可能被记录用于改进服务——请勿发送敏感内容，详见「免责声明」。
-- **聚合渠道，自带 Key**——设置页新增一页，把第三方端点接进同一条模型清单：注册表内置 75 家提供商（NVIDIA NIM、OpenRouter、Groq、Cerebras、SambaNova、Gemini、DeepSeek、Mistral、Together、Fireworks、SiliconFlow、Nebius、Chutes、Hugging Face、Cloudflare、Z.ai、Kimi、MiniMax、QwenCloud/Alibaba、Bedrock、Vertex、Vercel AI Gateway、Azure OpenAI，以及无需账号的 Ollama、LM Studio、llama.cpp），写入 Key（本机免账号的提供商不需要）后其模型即以 `provider/model` 出现在选择器里，也可经本地网关调用。Key 只写入本机 0600 的 settings.json，API 只回显 `hasKey` 与 `…abcd` 指纹；每家可单独启停、测试（列表探测，不花一次生成）、发现模型、覆盖 Base URL 与模型清单。OAuth 与 ADC 认证的提供商照常列出，但标注为不可驱动。
+- **聚合渠道，自带 Key**——设置页新增一页，把第三方端点接进同一条模型清单：注册表内置 76 家提供商（NVIDIA NIM、OpenRouter、Groq、Cerebras、SambaNova、Gemini、DeepSeek、Mistral、Together、Fireworks、SiliconFlow、Nebius、Chutes、Hugging Face、Cloudflare、Z.ai、Kimi、MiniMax、QwenCloud/Alibaba、Bedrock、Vertex、Vercel AI Gateway、Azure OpenAI、FleetRelay Gateway，以及无需账号的 Ollama、LM Studio、llama.cpp），写入 Key（本机免账号的提供商不需要）后其模型即以 `provider/model` 出现在选择器里，也可经本地网关调用。Key 只写入本机 0600 的 settings.json，API 只回显 `hasKey` 与 `…abcd` 指纹；每家可单独启停、测试（列表探测，不花一次生成）、发现模型、覆盖 Base URL 与模型清单。OAuth 与 ADC 认证的提供商照常列出，但标注为不可驱动。
 - **省 Token**——三件事：工具输出压缩（RTK）在请求发出前就地重写 `tool_result`（git diff / status / log、grep、find、ls、tree、构建日志、编号转储、搜索清单、重复日志行），实测 40 KB 的 `git diff` 移除 90% 的字节且模型仍能就它作答；提示词瘦身有 caveman 与 ponytail 两族、默认全关；另有五个不占用上游请求的本地应答。设置页用与用量图表同一批统计行显示压缩前后字节、节省比例、压缩块数与统计调用数。
 - **路由（降级链）**——把任意车道的模型串成一条命名链，以 `combo:<name>` 作为虚拟模型出现在选择器与网关上；`fallback` 固定从链首开始，`round-robin` 轮换起点并连续 N 轮粘滞。链接在输出任何正文之前失败会被整段丢弃，切换对调用方不可见；思考增量不算正文，因此「想了很久才撞上配额墙」正是降级最有价值的场景。
 - **本地网关原生说 Anthropic**——新增 `POST /v1/messages`（流式与非流式，含 thinking / tool_use 块、真实 stop_reason 与流内 error 事件）与 `POST /v1/messages/count_tokens`（本地估算）；`/v1/models` 广播全部车道，含聚合行与链路。网关页新增「接入客户端」分区，按实际绑定的端口与真实要求的密钥生成 Claude Code、Codex、OpenAI SDK、Anthropic SDK、curl 与局域网的可复制配方。
@@ -148,7 +148,7 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 以真实目录手工安装时，使用可信源码打出的本地 tarball：
 
 1. 创建 `<DSH_HOME>/profiles/<profile>/vendor/`，在审核过的本仓库目录运行 `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`，或将本仓库正式发布的同版本 tarball 放入该目录。本地打包不执行 npm 发布。
-2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.5.9.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
+2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.7.1.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
 3. 在 dsh.profile.bundles 末尾追加 `"dsh-our-free-model"`。
 
 包管理器拥有这份安装的字节时，同时将 bundle config 或插件 `settings.json` 的 `distribution` 设为 `managed`，由包管理器统一更新；应用内升级、公告 feed 与热重载会停用，模型功能保留。以后更新时替换可信 tarball 并同步依赖路径，避免包管理器按旧锁文件恢复旧版本。
@@ -311,9 +311,9 @@ Windows 自动检测只支持手动代理，不执行 PAC 自动配置脚本；�
 
 ## 聚合渠道、省 Token、路由与本地网关
 
-### 聚合渠道：自带 Key 的 75 家提供商
+### 聚合渠道：自带 Key 的 76 家提供商
 
-设置页的**聚合渠道**一页把第三方端点接进同一条模型清单。提供商注册表内置 75 家（`src/providers/registry.json`，分类为 `free | free-tier | apikey | oauth | local`），包括 NVIDIA NIM、OpenRouter、Groq、Cerebras、SambaNova、Gemini、DeepSeek、Mistral、Together、Fireworks、SiliconFlow、Nebius、Chutes、Hugging Face、Cloudflare、Z.ai、Kimi、MiniMax、QwenCloud/Alibaba、Bedrock、Vertex、Vercel AI Gateway、Azure OpenAI，以及本机、无需账号的 Ollama、LM Studio、llama.cpp。注册表数据来自 free-claude-code 的提供商目录与 9router 的提供商注册表。
+设置页的**聚合渠道**一页把第三方端点接进同一条模型清单。提供商注册表内置 76 家（`src/providers/registry.json`，分类为 `free | free-tier | apikey | oauth | local`），包括 NVIDIA NIM、OpenRouter、Groq、Cerebras、SambaNova、Gemini、DeepSeek、Mistral、Together、Fireworks、SiliconFlow、Nebius、Chutes、Hugging Face、Cloudflare、Z.ai、Kimi、MiniMax、QwenCloud/Alibaba、Bedrock、Vertex、Vercel AI Gateway、Azure OpenAI、FleetRelay Gateway，以及本机、无需账号的 Ollama、LM Studio、llama.cpp。注册表数据来自 free-claude-code 的提供商目录、9router 的提供商注册表，以及本项目新增的自定义中转。FleetRelay Gateway 当前公开 `deepseek-v4.1-flash-free` 与 `gpt-6-astra`；其第三方 T1 候选池尚未获分发授权，因此保持禁用。
 
 写入 Key（本机免账号的提供商不需要）后，该提供商的每个模型以 `provider/model` 成为清单行：在选择器里可选，也可经本地网关调用。三种线协议按提供商各自声明：OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages（后两者用于只提供这两种协议的上游）。
 
@@ -355,7 +355,7 @@ src/stream.js 三种线协议解码（chat / messages / responses）归一为 ha
 src/messages.js harness 消息 -> 各线协议形态，外加工具调用配对修复
 src/effort.js 思考档位 -> 输出预算
 src/forward.js 独立的 OpenAI 兼容监听器（另含 Anthropic Messages 端点）
-src/providers/registry.json 聚合车道注册表：75 家提供商的分类、认证、线协议与端点
+src/providers/registry.json 聚合车道注册表：76 家提供商的分类、认证、线协议与端点
 src/providers/index.js 注册表读取与 provider/model 复合 id 解析
 src/aggregate.js 聚合车道：清单行、凭据解析、Key 脱敏、列表探测、按线协议发送
 src/anthropic.js /v1/messages 的 Anthropic Messages 编解码与本地 token 估算
