@@ -234,9 +234,9 @@ import{c as Lo,R as zo,r as G,p as Be,j as A,N as Io,S as gt,C as Fo,B as ga,a a
 .ofm_modalfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 72%,transparent)}
 @media (max-width:720px){.ofm_sec_hint{margin-left:0;width:100%}.ofm_pills{margin-left:0;width:100%}}
 /* ══ 北辰 API 赞助横幅：免费模型页首屏入口，与桌面端保持独立 ═══════ */
-.ofm_sponsor_banner{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) auto;align-items:center;gap:14px;padding:13px 16px;border:1px solid rgb(121 151 204 / 42%);border-radius:14px;overflow:hidden;background:linear-gradient(115deg,#0b1425 0%,#17253d 54%,#263654 100%);color:#f3f7ff;box-shadow:0 9px 20px rgb(12 24 49 / 20%),inset 0 1px 0 rgb(255 255 255 / 13%)}
+.ofm_sponsor_banner{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) auto;align-items:center;gap:14px;padding:13px 16px;border:1px solid rgb(121 151 204 / 42%);border-radius:14px;overflow:hidden;overflow:clip;background:linear-gradient(115deg,#0b1425 0%,#17253d 54%,#263654 100%);color:#f3f7ff;box-shadow:0 9px 20px rgb(12 24 49 / 20%),inset 0 1px 0 rgb(255 255 255 / 13%)}
 .ofm_sponsor_banner::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.36;background-image:linear-gradient(rgb(126 164 225 / 15%) 1px,transparent 1px),linear-gradient(90deg,rgb(126 164 225 / 15%) 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(90deg,black,transparent 85%)}
-.ofm_sponsor_banner::after{content:"";position:absolute;inset:auto -12% -80% 35%;height:180%;pointer-events:none;background:radial-gradient(ellipse,rgb(96 137 222 / 22%),transparent 68%);transform:rotate(-7deg)}
+.ofm_sponsor_banner::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 76% 118% at 85% 112%,rgb(96 137 222 / 22%),transparent 68%)}
 .ofm_sponsor_banner>*{position:relative;z-index:1}
 .ofm_sponsor_logo{display:flex;flex-direction:column;align-items:center;justify-content:center;width:56px;height:56px;border-radius:14px;background:#f8fbff;color:#c8470b;box-shadow:0 5px 11px rgb(0 0 0 / 22%),inset 0 0 0 1px rgb(255 255 255 / 80%);transform:rotate(4deg);font-weight:800;letter-spacing:-1px;line-height:1}
 .ofm_sponsor_logo span{font-size:16px}

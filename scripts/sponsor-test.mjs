@@ -40,4 +40,13 @@ assert.equal(new URL(SPONSOR.url).searchParams.get('aff'), SPONSOR.invite)
 assert.equal(SPONSOR.paragraphs.length, 6)
 assert.equal(fs.readFileSync(new URL('../docs/images/sponsor-beichen-examples.jpg', import.meta.url)).length, 59507)
 execFileSync(process.execPath, [fileURLToPath(new URL('./build-sponsor.mjs', import.meta.url)), '--check'], { stdio: 'pipe' })
+// 宿主的设置滚动修复器会把「内容溢出 + overflow 隐藏」的卡片当作滚动容器接管滚轮。
+// 广告卡的装饰层（网格纹理、光晕）必须留在卡片内，否则滚轮会滚动卡片里的文字。
+const pluginCss = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+const bannerRules = pluginCss.match(/^\.ofm_sponsor_banner\{[^}]*\}$/m) ?? []
+const decorationRules = pluginCss.match(/^\.ofm_sponsor_banner::(?:before|after)\{[^}]*\}$/gm) ?? []
+assert.equal(bannerRules.length, 1, '广告卡主样式只应有一条')
+assert.match(bannerRules[0], /overflow:clip/, '广告卡不应是滚动容器')
+assert.equal(decorationRules.length, 2, '广告卡装饰层应保持两条（网格纹理与光晕）')
+for (const rule of decorationRules) assert.match(rule, /[;{]inset:0[;}]/, `广告卡装饰层不得越出卡片：${rule.slice(0, 80)}`)
 console.log('sponsor: 日期、跨日、重复挂载、并发窗口、存储异常、取消展示与共享内容检查通过')
