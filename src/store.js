@@ -245,6 +245,10 @@ export const SETTINGS_INITIAL = {
   updateNotifiedFor: '',
   /** Watch the installed package and hot-reload on change (development aid). */
   autoReloadWatch: false,
+  /** Show an account balance badge beside the composer. Default on: the badge is
+   *  the only place the remaining quota is visible without opening the settings
+   *  page, and it stays silent on lanes that have no account to report. */
+  showBalanceBadge: true,
   /** Who owns the installed bytes: `self` updates in-app from the repository;
    *  `managed` — written by a distribution pack's installer, or passed as the
    *  bundle config `distribution` — stands the self-updater, the announcement

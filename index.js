@@ -1984,7 +1984,7 @@ export function createApiRoutes(deps) {
         const patch = await readJson(req)
         const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch', 'showBalanceBadge']), ...visibility }, current)
         if (next.autoReloadWatch === true && deps.update.status().hotReloadAvailable === false) next.autoReloadWatch = false
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
@@ -2383,6 +2383,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
     notifyOs: settings.notifyOs === true,
     updateCheckHours: settings.updateCheckHours ?? 6,
     autoReloadWatch: settings.autoReloadWatch === true,
+    showBalanceBadge: settings.showBalanceBadge !== false,
     reloadedAt: settings.reloadedAt ?? 0,
     reloadCount: settings.reloadCount ?? 0,
     tokenSaver: publicTokenSaver(settings.tokenSaver),
