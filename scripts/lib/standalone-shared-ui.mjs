@@ -17,8 +17,6 @@ replaceOnce("api('/pool', { timeout: 25_000 })", "api('/eac/pool', { timeout: 25
 replaceOnce("...body === undefined ? {} : { body: JSON.stringify(body) },", "body: JSON.stringify(body ?? {}),")
 replaceOnce("h(PageHero, { t, titleKey: 'dash.title', subKey: 'dash.sub' },",
   "h(PageHero, { title: t('dash.title'), sub: t('dash.sub') },")
-replaceOnce("'chan.sub': '把各家的免费额度接进来：登录一次，模型就出现在对话框的模型选择器里。凭据只写入本机凭据库，页面永远拿不到明文。',",
-  "'chan.sub': '登录各家的账号后，通过同一个 API 地址接入免费额度。凭据保存在本机；账号管理页面不显示明文，导出备份包含凭据。',")
 let record
 vm.runInNewContext(source, { window: { __ModuleLoader__: { load: value => { record = value } } } })
 const shared = record.factory(() => ({})).standalone

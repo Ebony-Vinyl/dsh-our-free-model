@@ -29,9 +29,10 @@ import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
 import { isEacEntry, isKiloEntry } from './catalog.js'
 import { isComboEntry, comboChain } from './combos.js'
-import { applyTokenSavers, saverConfig } from './token-saver/index.js'
+import { applyTokenSavers, saverConfig } from './token-saver.js'
 import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
+import { isSubscriptionEntry, subscriptionChunks } from './subscription-adapter.js'
 
 /**
  * How long a combo candidate may stay silent before the chain counts the try as
@@ -93,6 +94,7 @@ export class FreeModelAdapter {
    * @param {(record: object) => void} dependencies.recordUsage
    * @param {(record: object) => void} [dependencies.recordTurn]
    * @param {(message: string) => void} [dependencies.warn]
+   * @param {{complete: (request: object, onChunk: Function) => Promise<object>}} [dependencies.subscriptionRuntime]
    */
   constructor(dependencies) {
     this.deps = dependencies
@@ -272,7 +274,7 @@ export class FreeModelAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { message: 'our free model is switched off in its settings page', code: 'CONFIG_DISABLED' } } }
       return
     }
-    const candidates = comboChain(entry, snapshot.catalog)
+    const candidates = comboChain(entry, snapshot.catalog, snapshot.routing ?? {})
     if (candidates.length === 0) {
       rejectedTurn(0)
       yield { type: 'finish', reason: { kind: 'error', failure: { message: `the chain "${entry.name}" has no model available on this egress`, code: CODE.server } } }
@@ -361,6 +363,9 @@ export class FreeModelAdapter {
       yield { type: 'finish', reason: { kind: 'error', failure: { message: `our free model does not serve "${options.model}" on this egress`, code: CODE.server } } }
       return { advance: false, verdict: null, ok: false }
     }
+    if (isSubscriptionEntry(entry)) return yield * this.runSubscription({
+      ...options, maxTokens: Math.min(options.maxTokens ?? settings.defaultMaxTokens ?? entry.maxOutput, entry.maxOutput),
+    }, entry, plan)
 
     const sealed = isEacEntry(entry)
     const kilo = isKiloEntry(entry)
@@ -711,6 +716,85 @@ export class FreeModelAdapter {
       }
     }
   }
+
+  /** The subscription helper owns physical usage; the caller owns the turn. */
+  async * runSubscription(options, entry, plan) {
+    let answered = false
+    let terminal = false
+    let ending
+    let stream
+    const blocks = createBlockTracker()
+    try {
+      const request = {
+        ...options, model: entry.id,
+        resolveImage: this.deps.resolveImage,
+        toolChoice: subscriptionToolChoice(options.toolChoice, options.tools),
+        maxTokens: Math.min(options.maxTokens ?? entry.maxOutput, entry.maxOutput),
+        messages: repairToolPairing(options.messages ?? []),
+        // A combo chain records one logical turn for the whole chain; letting
+        // the member record its own would count that turn twice.
+        recordTurn: plan.recordTurn !== false,
+      }
+      stream = subscriptionChunks(this.deps.subscriptionRuntime, request)
+      while (true) {
+        const row = await stream.next()
+        if (row.done) {
+          if (row.value?.error) throw Object.assign(new Error(row.value.error), row.value.failure)
+          break
+        }
+        const chunk = row.value
+        if (chunk.type === 'finish') {
+          // Wait for complete() to settle before certifying a successful turn.
+          ending = chunk
+          terminal = true
+          continue
+        }
+        if (commitsAnswer(chunk)) answered = true
+        blocks.accept(chunk)
+        yield chunk
+      }
+      if (!terminal) throw new UpstreamError('Subscription stream ended before completion', CODE.transport)
+      if (ending.reason?.kind === 'error' || ending.reason?.kind === 'aborted') {
+        throw Object.assign(new Error(ending.reason.failure?.message ?? 'Subscription completion failed'), ending.reason.failure, {
+          code: ending.reason.kind === 'aborted' ? CODE.aborted : ending.reason.failure?.code,
+        })
+      }
+      yield ending
+      return { advance: false, verdict: null, ok: true, recovered: false }
+    } catch (error) {
+      const aborted = options.signal?.aborted === true || error?.code === CODE.aborted
+      const failure = toFailure({
+        message: error?.message ?? 'Subscription completion failed',
+        code: error?.code,
+        status: error?.status ?? error?.statusCode,
+      })
+      const verdict = aborted ? null : classifyFailure(failure)
+      for (const chunk of blocks.close()) yield chunk
+      yield { type: 'finish', reason: { kind: aborted ? 'aborted' : 'error', failure } }
+      return {
+        ok: false,
+        advance: plan.allowAdvance === true && !aborted && !answered
+          && (shouldAdvance(verdict) || ['DISABLED', 'NOT_FOUND'].includes(failure.code)),
+        verdict,
+      }
+    } finally {
+      await stream?.return()
+    }
+  }
+}
+
+/** Validate subscription-only restrictions before account resolution or dispatch. */
+function subscriptionToolChoice(value, tools) {
+  if (value === undefined) return undefined
+  const names = new Set((Array.isArray(tools) ? tools : []).map(tool => tool?.name ?? tool?.function?.name).filter(name => typeof name === 'string'))
+  const named = value !== null && typeof value === 'object' && !Array.isArray(value)
+    && ((value.type === 'function' && (value.function?.name ?? value.name)) || (value.type === 'tool' && value.name)
+      || (value.type === undefined && value.name))
+  const validName = typeof named === 'string' && named.length > 0 && names.has(named)
+  if (value === 'auto' || value === 'none') return value
+  if ((value === 'required' || value === 'any') && names.size > 0) return value
+  if (validName) return { type: 'function', function: { name: named } }
+  throw new UpstreamError('Invalid subscription tool choice', 'INVALID_INPUT', { status: 400 })
 }
 
 /** The co-paid reasoning models can burn minutes in the thinking channel on
@@ -815,6 +899,7 @@ function toFailure(error) {
  * free lane splits its endpoints per model id.
  */
 function wireOf(entry) {
+  if (isSubscriptionEntry(entry)) return entry.wire ?? 'chat'
   if (isAggregateEntry(entry)) return entry.wire ?? 'chat'
   if (isEacEntry(entry) || isKiloEntry(entry)) return 'chat'
   return wireFor(entry.id)
