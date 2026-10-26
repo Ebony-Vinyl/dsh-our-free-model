@@ -22,7 +22,60 @@
   "binaries": {
     "win32-x64": {
       "path": "bin/magpie-win32-x64.exe",
-      "sha256": "6490f7ed2c5f001adc97284276af453f2a2b1711712e175e6fc780e09046fa3b"
+      "sha256": "6490f7ed2c5f001adc97284276af453f2a2b1711712e175e6fc780e09046fa3b",
+      "compressed": {
+        "algorithm": "gzip",
+        "size": 35128000,
+        "sha256": "5964bf859e7de297bdc755d9fb4d540b816df87efd6fd28bbf9e1103c326730e",
+        "outputSize": 68578304,
+        "parts": [
+          {
+            "path": "src/engine-parts/win32-x64.000.part",
+            "size": 4194304,
+            "sha256": "ee492eaa5d992b8703ede29821e07b4bd46a9ff0395faba2128211e1363fa4b9"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.001.part",
+            "size": 4194304,
+            "sha256": "141c520cf249a6930618c198c6072ccf04fab7edee93ab4f28da41c4619e61aa"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.002.part",
+            "size": 4194304,
+            "sha256": "854178a956532bdfc7b6eee89d179c6a5ea5a29fef9a0a2d19f396938ca93fe7"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.003.part",
+            "size": 4194304,
+            "sha256": "37740d6058361640c8a46cbcb26576ed88ba41f99c6162a495475828d5c7bff1"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.004.part",
+            "size": 4194304,
+            "sha256": "228b98336fef117087c55d5ab85cc972cc42f61ea1d4b19ced145ac408723525"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.005.part",
+            "size": 4194304,
+            "sha256": "4c723b29f4d69861fd29751951e7c480ae35ad981489b406cb0765b78cc5a26f"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.006.part",
+            "size": 4194304,
+            "sha256": "397e3c199a0ed6ef6ffdf7a9de62cc7467f5583a2a5ecef3d5867cde9d14ce86"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.007.part",
+            "size": 4194304,
+            "sha256": "18cb47f20ab54d013aaf9f7471695bb5a6e7ef5b8ed39a088c61a63a8ce73132"
+          },
+          {
+            "path": "src/engine-parts/win32-x64.008.part",
+            "size": 1573568,
+            "sha256": "4a0877e8067b71b5968304008afeb8b96fd578ac581a52e2281df45b95e0d3ce"
+          }
+        ]
+      }
     }
   },
   "modules": [

@@ -7,6 +7,7 @@ import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loopbackFetch } from './loopback-fetch.js'
+import { hasEnginePayload, materializeEngine } from './engine-payload.js'
 import {
   POLICY_REFUSED, assertEngineMutation, deniedLookup, filterEngineJSON, policyMutation, policyResponse,
 } from './magpie-policy.js'
@@ -632,7 +633,7 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
   try { metadata = JSON.parse(readFileSync(path.join(vendor, 'engine.json'), 'utf8')) } catch {}
   const target = `${process.platform}-${process.arch}`
   const entry = metadata.binaries?.[target]
-  const executable = binary ? path.resolve(binary) : path.join(vendor, 'bin', `magpie-${target}${process.platform === 'win32' ? '.exe' : ''}`)
+  let executable = binary ? path.resolve(binary) : path.join(vendor, 'bin', `magpie-${target}${process.platform === 'win32' ? '.exe' : ''}`)
   const home = path.join(dataDir, 'magpie')
   let state = 'stopped'
   let error = null
@@ -651,7 +652,7 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
   let recovering = Promise.resolve()
   const active = new Set()
   const status = () => ({
-    state, available: existsSync(executable), version: metadata.version || null,
+    state, available: existsSync(executable) || (!binary && hasEnginePayload(fileURLToPath(new URL('../', import.meta.url)), entry)), version: metadata.version || null,
     revision: metadata.revision || null, error,
   })
   const note = () => {
@@ -684,6 +685,10 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
   const boot = async () => {
     await recovering
     assertOpen()
+    if (!binary && !existsSync(executable) && entry?.compressed) {
+      executable = await materializeEngine({ pkgDir: fileURLToPath(new URL('../', import.meta.url)), dataDir, entry })
+      assertOpen()
+    }
     if (!existsSync(executable)) throw engineError('Magpie engine binary is unavailable')
     const beside = path.dirname(await realpath(executable))
     if (existsSync(path.join(beside, '.portable')) || existsSync(path.join(beside, 'data'))) {

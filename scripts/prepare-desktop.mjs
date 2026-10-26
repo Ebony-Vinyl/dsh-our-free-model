@@ -24,7 +24,7 @@ export function stageDesktopService(destination, { requireWorkspace = false } = 
     }
   }
   tree('src', file => /\.(js|json)$/.test(file))
-  for (const name of ['cli', 'service', 'management', 'login-terminal', 'open-external', 'eac', 'workbench', 'providers', 'library', 'client-terminal', 'routing']) copy(`packages/standalone/${name}.mjs`)
+  for (const name of ['cli', 'service', 'management', 'desktop-update', 'login-terminal', 'open-external', 'eac', 'workbench', 'providers', 'library', 'client-terminal', 'routing']) copy(`packages/standalone/${name}.mjs`)
   tree('packages/standalone/channels', file => file.endsWith('.mjs'))
   const web = 'packages/standalone/web'
   const assets = JSON.parse(fs.readFileSync(path.join(repositoryRoot, web, 'assets.json'), 'utf8'))

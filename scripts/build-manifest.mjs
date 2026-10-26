@@ -103,6 +103,10 @@ function addFile(rel) {
 }
 
 files.sort((a, b) => a.path.localeCompare(b.path))
+// 已安装旧版用户必须能读取发布清单，限制不能只在新版升级器里检查。
+if (files.length > 80 || files.some(file => file.size > 4 * 1024 * 1024)) {
+  throw new Error('发布内容超出旧版升级器预算：最多 80 个文件，每个最多 4 MiB；先构建兼容资源')
+}
 
 let previous
 try { previous = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) } catch { /* first manifest */ }

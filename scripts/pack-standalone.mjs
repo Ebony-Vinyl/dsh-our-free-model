@@ -22,6 +22,7 @@ const sourceFiles = [
   'packages/standalone/cli.mjs',
   'packages/standalone/service.mjs',
   'packages/standalone/management.mjs',
+  'packages/standalone/desktop-update.mjs',
   'packages/standalone/login-terminal.mjs',
   'packages/standalone/open-external.mjs',
   'packages/standalone/eac.mjs',
@@ -35,9 +36,9 @@ const sourceFiles = [
   'packages/standalone/web/index.html',
   'packages/standalone/web/assets.json',
   ...['adapter', 'aggregate', 'anthropic', 'catalog', 'channel', 'combos', 'deferred-response', 'disclaimer', 'eac', 'eac-login', 'eac-user', 'effort',
-    'egress', 'failure', 'forward', 'gemini', 'http', 'image-pricing', 'kilo', 'local-optimize',
+    'egress', 'engine-payload', 'failure', 'forward', 'gemini', 'http', 'image-pricing', 'kilo', 'local-optimize',
     'loopback-fetch', 'magpie-engine', 'magpie-models', 'magpie-policy', 'messages', 'model-test', 'probe', 'recovery',
-    'store', 'stream', 'subscriptions', 'subscription-completion', 'subscription-adapter', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
+    'store', 'stream', 'subscriptions', 'subscription-completion', 'subscription-adapter', 'token-saver', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
     .map(name => `src/${name}.js`),
   ...['completion', 'runtime', 'stats'].map(name => `src/core/${name}.js`),
   'src/providers/index.js',

@@ -31,11 +31,13 @@ if (!['all', 'contributor', 'release'].includes(options.mode)) {
   process.exit(1)
 }
 const { mode, only } = options
-const releaseSuites = new Set(['manifest', 'release', 'catalog'])
+const releaseSuites = new Set(['manifest', 'release', 'catalog', 'legacy-upgrade', 'engine-payload'])
 
 const suites = [
   ['manifest', 'build-manifest.mjs', ['--check']],
   ['release', 'release-e2e.mjs', []],
+  ['legacy-upgrade', 'legacy-upgrade-test.mjs', mode === 'contributor' ? [] : ['--production']],
+  ['engine-payload', 'engine-payload-test.mjs', []],
   ['release-preparation', 'release-preparation-test.mjs', []],
   ['client-lint', 'client-lint.mjs', []],
   ['sponsor', 'sponsor-test.mjs', []],
@@ -45,6 +47,8 @@ const suites = [
   ['feed', 'feed-test.mjs', []],
   ['picks', 'picks-test.mjs', []],
   ['picks-ui', 'picks-ui-test.mjs', []],
+  ['stat-bucket-ui', 'stat-bucket-ui-test.mjs', []],
+  ['free-pool', 'free-pool-test.mjs', []],
   ['updater', 'updater-test.mjs', []],
   ['upgrade-ui', 'upgrade-ui-test.mjs', []],
   ['reload', 'reload-test.mjs', []],
@@ -77,6 +81,7 @@ const suites = [
   ['forward-boot', 'forward-boot-test.mjs', []],
   ['standalone', 'standalone-test.mjs', []],
   ['desktop', 'desktop-test.mjs', []],
+  ['desktop-update', 'desktop-update-test.mjs', []],
   ['standalone-desktop-regression', 'standalone-desktop-regression-test.mjs', []],
   ['standalone-page-lifecycle', 'standalone-page-lifecycle-test.mjs', []],
   ['standalone-management', 'standalone-management-test.mjs', []],
