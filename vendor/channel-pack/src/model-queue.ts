@@ -137,7 +137,6 @@ export function looksLikeBillingError(text: string): boolean {
  */
 export const QUEUE_MAX_DELAY_MS = 10_000
 
-/** 排队重试的**次数上限**（与 CodeArts 适配器的既有惯例一致）。 */
 export const QUEUE_MAX_ATTEMPTS = 180
 
 /** 排队错误里我们关心的字段（客户端 `PJa()` 的裁剪版）。 */

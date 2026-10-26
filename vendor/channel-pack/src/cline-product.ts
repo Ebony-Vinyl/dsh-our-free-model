@@ -5,13 +5,6 @@
  *
  * Cline 与既有六个 provider **都不同源**，且差异点与任何一个都不重合：
  *
- * | 维度 | codearts | buddy/workbuddy | lobsterai | qoder | trae | **cline** |
- * |------|----------|-----------------|-----------|-------|------|-----------|
- * | 登录 | OAuth 回调 | external-link 轮询 | 本地回调 + authCode | PKCE 设备码 | ExchangeToken | **WorkOS 设备码** |
- * | 续期 | refresh_token | refresh_token | + 身份字段 | + machine_id | refreshToken 轮换 | **`{refreshToken, grantType}`** |
- * | 鉴权头 | SDK-HMAC | Bearer | Bearer | Bearer（WASM 签名头） | Cloud-IDE-JWT | **`Bearer workos:<jwt>`** |
- * | 推理体 | 华为自有 | 腾讯自有 | 有道自有 | WASM 加密 | SOLO 格式 | **标准 OpenAI** |
- *
  * 共用的是架构**模式**（产品差异收敛到单一真相源、账号池、限流切换），
  * 不是任何一个既有 Product 类型 —— 与 Qoder / TRAE 的处理方式一致。
  *
@@ -115,12 +108,6 @@ export interface ClineProduct {
   defaultCredentialRef: string
   /**
    * 单张请求图片的像素预算（issue !IKITT9）。
-   *
-   * ⚠️ Cline **没有**腾讯那道「图片视觉 token 预算」—— 实测 24 张
-   * 2560×1600 原图（≈159K 图片 token，远超 100,000）全部成功，
-   * 直到 32 张（≈122 MiB）才因**请求体体积** `TRANSPORT` 失败。
-   * 所以这里的预算是为体积兜底，不是为了 token 配额；取值比其他家宽松。
-   * 未配置时适配器用 `DEFAULT_IMAGE_PIXEL_BUDGET`。
    */
   imagePixelBudget?: number
   /** 单张请求图片的编码字节目标（未配置用 1 MiB，见 `src/image-budget.ts`）。 */

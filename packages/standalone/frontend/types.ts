@@ -1,4 +1,4 @@
-export type Page = 'overview' | 'models' | 'usage' | 'channels' | 'eac' | 'settings' | 'connection' | 'sponsor'
+export type Page = 'overview' | 'workspace' | 'agents' | 'providers' | 'library' | 'routing' | 'models' | 'usage' | 'channels' | 'eac' | 'settings' | 'updates' | 'connection' | 'sponsor'
 export interface Model {
   id: string
   name: string
@@ -10,10 +10,14 @@ export interface Model {
   reasoning?: boolean
   contextWindow?: number
   maxOutput?: number
+  availabilitySource?: 'listing' | 'probe' | 'manual'
+  detail?: string
+  probedAt?: number
+  latencyMs?: number
   availability?: string
   ttftMs?: number | null
 }
-export interface ModelTestResult { ok: boolean; text: string; latencyMs: number }
+export interface ModelTestResult { ok: boolean; text: string; latencyMs: number; ttftMs?: number; persisted?: boolean }
 export interface ServiceSettings {
   enabled: boolean
   exposeRegionModels: boolean

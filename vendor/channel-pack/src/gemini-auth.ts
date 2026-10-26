@@ -4,8 +4,6 @@
  * 登录走**浏览器回调式 OAuth**（见 `gemini-oauth.ts`：本地 `createServer` 起回调、
  * 立即返回 `loginUrl`），续期走 `refresh_token` grant。
  *
- * ## ⚠️ `refreshAll` 照 `src/service.ts:406`（codearts）范式，**不照** `minimax-auth.ts:281`
- *
  * 旧范式第一行是 `if (!entry.refreshable) continue` —— 那让这个布尔变成一道
  * **单向门**：任何一次把它写成 false 的路径都会让该账号此后**永远不进循环**，
  * 「自动续期没工作、重启也还是 401」，而凭据本体可能完全健康。

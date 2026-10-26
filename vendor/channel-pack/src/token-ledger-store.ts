@@ -74,7 +74,7 @@ export const TOKEN_LEDGER_DAYS = 90
 /** 落盘节流窗口（毫秒）。 */
 export const TOKEN_LEDGER_FLUSH_MS = 2_000
 
-const SCHEMA = 'dsh-codearts-auth/token-ledger/v1'
+const SCHEMA = 'channel-pack/token-ledger/v1'
 
 /** 日聚合的持久化后端接口（同步读、节流异步写）。 */
 export interface TokenLedgerStore {

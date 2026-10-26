@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 /** 使用实际已打包 RPC，只提供账号池 ref，禁止真实网络与旧单凭据回退。 */
 export async function verifyChannelCreditsRpc({ ctx, call, creds }) {
   const originalFetch = globalThis.fetch
-  const providers = ['buddy', 'workbuddy', 'qoder', 'qodercn', 'loomy', 'minimax', 'lobsterai', 'zcode', 'gemini']
+  const providers = ['qoder', 'qodercn', 'loomy', 'minimax', 'lobsterai', 'zcode', 'gemini']
   let quotaRequests = 0, quotaFailed = true
   const originalResolve = ctx.credentials.resolve
   const resolvedRefs = []
@@ -80,7 +80,7 @@ export async function verifyChannelCreditsRpc({ ctx, call, creds }) {
 
 async function verifyRefreshDispatch({ ctx, call }) {
   const providers = [
-    'codearts', 'buddy', 'workbuddy', 'lobsterai', 'qoder', 'qodercn', 'trae',
+    'lobsterai', 'qoder', 'qodercn', 'trae',
     'cline', 'loomy', 'raccoon', 'minimax', 'zcode', 'gemini',
   ]
   for (const provider of providers) {
@@ -108,5 +108,5 @@ async function verifyRefreshDispatch({ ctx, call }) {
       await ctx.accountPool.removeAccount(accountId)
     }
   }
-  console.log('ok  refresh RPC: all 13 providers pass exact ref/pool/id; disabled accounts refresh; failures return ok:false')
+  console.log('ok  refresh RPC: all 10 providers pass exact ref/pool/id; disabled accounts refresh; failures return ok:false')
 }

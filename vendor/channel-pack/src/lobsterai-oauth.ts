@@ -14,9 +14,6 @@
  * 直接 `resolve` 结果。这样就没有跨进程状态文件、没有残留文件误判、
  * 没有 shell 与 python3 依赖 —— 而这三样正是 Go 侧最脆弱的环节
  * （`main.go:162-164` 专门写了清理上一轮残留的代码，就说明它踩过坑）。
- *
- * 骨架取自 `src/login.ts` 的 CodeArts OAuth 回调服务器（本插件已验证的模式），
- * 但没有 PKCE / DPoP —— LobsterAI 的 exchange 不要求它们。
  */
 
 import { createServer, type Server } from 'node:http'
@@ -191,7 +188,7 @@ function toLoginFlowResult(
 ): LobsteraiLoginFlowResult {
   return {
     access: JSON.stringify(credential),
-    // 与 Buddy 侧一致：无法解析过期时间时报告 0，而不是抛错 ——
+
     // 凭据本身可用（只是有效期未知），不该因为展示层的缺失而登录失败。
     expires: lobsteraiCredentialExpiresAtMs(credential) ?? 0,
     loginUrl,
@@ -199,19 +196,13 @@ function toLoginFlowResult(
   }
 }
 
-/** 默认的平台浏览器打开器（延迟 import 以复用 CodeArts 的既有实现）。 */
 async function defaultOpenBrowser(url: string): Promise<void> {
-  const { openBrowser } = await import('./login.js')
+  const { openBrowser } = await import('./open-browser.js')
   openBrowser(url)
 }
 
 /**
  * 已启动但尚未完成的登录流程（两步式登录用）。
- *
- * 拆出这一层与 CodeArts 的 `startOAuthFlow` 同因：浏览器只在用户点击后的
- * 短暂窗口（transient activation，约 5 秒）内允许 `window.open`。
- * 若把「起服务器 → 打开浏览器 → 等用户授权」做成一次阻塞调用，
- * 调用方拿到 URL 时手势早已过期，`window.open` 会被拦截。
  */
 export interface StartedLobsteraiLoginFlow {
   /** 展示给用户的登录 URL。 */

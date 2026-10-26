@@ -20,19 +20,19 @@ export function verifyChannelImagePricing(adapters) {
   const original = Object.getOwnPropertyDescriptor(LlmAdapter.prototype, 'imageRequestPricing')
   try {
     LlmAdapter.prototype.imageRequestPricing = () => undefined
-    assert.equal(adapters.get('buddy').imageRequestPricing('buddy', 'model').priceImages(images).length, 2,
+    assert.equal(adapters.get('lobsterai').imageRequestPricing('lobsterai', 'model').priceImages(images).length, 2,
       '宿主默认方法返回 undefined 时也必须兜底')
     const native = { priceImages: () => [{ visualTokens: 2345, text: 'native' }] }
     LlmAdapter.prototype.imageRequestPricing = function (provider, model) {
-      assert.equal(provider, 'buddy'); assert.equal(model, 'native-model')
+      assert.equal(provider, 'lobsterai'); assert.equal(model, 'native-model')
       assert.ok(this instanceof LlmAdapter)
-      assert.notEqual(this, adapters.get('buddy'), '厂商方法必须绑定原对象')
+      assert.notEqual(this, adapters.get('lobsterai'), '厂商方法必须绑定原对象')
       return native
     }
-    assert.equal(adapters.get('buddy').imageRequestPricing('buddy', 'native-model'), native,
+    assert.equal(adapters.get('lobsterai').imageRequestPricing('lobsterai', 'native-model'), native,
       '已有厂商计价器必须原样保留')
     LlmAdapter.prototype.imageRequestPricing = () => { throw new Error('native-pricing-error') }
-    assert.throws(() => adapters.get('buddy').imageRequestPricing('buddy', 'model'), /native-pricing-error/,
+    assert.throws(() => adapters.get('lobsterai').imageRequestPricing('lobsterai', 'model'), /native-pricing-error/,
       '厂商实现的真实异常不能被吞掉')
   } finally {
     if (original) Object.defineProperty(LlmAdapter.prototype, 'imageRequestPricing', original)

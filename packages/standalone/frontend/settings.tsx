@@ -65,10 +65,10 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
       if (mounted.current) setSaving(false)
     }
   }
-  const toggle = (name: 'enabled' | 'exposeRegionModels' | 'streamRecovery' | 'standaloneProbe' | 'hideFreeModels' | 'hideEacModels', label: string, help: string) =>
+  const toggle = (name: 'enabled' | 'exposeRegionModels' | 'streamRecovery' | 'standaloneProbe' | 'hideFreeModels' | 'hideEacModels', label: string, help: string, disabled = false) =>
     <label className="settings-field" key={name}>
       <span><strong>{label}</strong><small>{help}</small></span>
-      <input type="checkbox" role="switch" name={name} className="settings-toggle"
+      <input type="checkbox" role="switch" name={name} className="settings-toggle" disabled={disabled}
         checked={state.draft[name]} onChange={event => update(name, event.target.checked)} />
     </label>
   const numeric = (name: NumberField, label: string, help: string, min: number, max: number) =>
@@ -100,7 +100,7 @@ export function Settings({ summary, host, active }: { summary: Summary; host: Ho
         </Card>
         <Card className="settings-card"><div className="settings-card-heading"><RefreshCw size={16} /><div><h2>模型刷新</h2><p>管理模型清单的周期更新与探测。</p></div></div>
           {numeric('probeIntervalMinutes', '刷新间隔（分钟）', '1–1440 分钟，保存后重新安排下一轮。', 1, 1440)}
-          {toggle('standaloneProbe', '自动探测可用性', '周期刷新时发送探测请求，消耗上游额度；遇到限流会自动退避。')}
+          {toggle('standaloneProbe', '自动探测可用性（已停用）', '自动探测已关闭：周期刷新只更新模型清单，不会发送探测请求。', true)}
           <p className="settings-note" role="note"><CircleAlert size={15} /><span>{summary.automaticRefresh
             ? '自动刷新已启用，保存间隔后会重新安排下一轮。'
             : '当前以 --no-refresh 启动。设置会保存，但自动任务保持暂停；手动刷新仍可用。'}</span></p>

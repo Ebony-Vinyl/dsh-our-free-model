@@ -30,10 +30,8 @@ EAC 覆盖原 GitHub prepare/poll/ACK、签名、独立用户 token、模型清�
 使用内置浏览器访问 `http://127.0.0.1:18888/`，数据位于忽略目录
 `.verify/channels-preview-data`，只有本机替身账号。观察并验证：
 
-- 原十三张渠道卡均可见；展开 WorkBuddy 国内版替身账号并点击测试，页面显示连接正常。
 - 供应商与备份页：保存昵称、勾选永久积分锁定、关闭后重新启用供应商，页面显示保存成功。
 - 重启后昵称、积分锁定与账号保留；模型清单显示中文供应商名称及实际容量，未知容量不显示为零。
-- 在统一模型页测试 `buddy/fixture-free`，回答为“OK · 本机替身请求已完成”，上下文 128K、输出 4096。
 - 请求日志记录该调用成功、输入 11、输出 7、共 18 Token；渠道用量和日志页面正常加载。
 - EAC 页面显示未授权、GitHub 登录入口及本机替身资源池（并发 3、24 小时活跃 5、容量 100）。
   没有点击第三方授权或代用户登录。
@@ -64,7 +62,6 @@ EAC 覆盖原 GitHub prepare/poll/ACK、签名、独立用户 token、模型清�
 
 ## 登录失败反馈的定位与修正
 
-用户反馈 WorkBuddy 国内/国际版缺少 `state`、Cline 设备授权缺少字段、
 MiniMax 设备码响应无法解析。核对 18888 的实际监听进程，确认仍为
 `.verify/channels-preview.mjs`。该进程装载测试 preload，将外部 HTTPS 请求
 全部重定向到本机替身；替身对这些授权路径返回通用对象，产生反馈中的字段错误。
@@ -83,8 +80,6 @@ MiniMax 设备码响应无法解析。核对 18888 的实际监听进程，确�
 
 | 渠道 | 返回授权页面的域名 |
 | --- | --- |
-| WorkBuddy 国内版 | `copilot.tencent.com` |
-| WorkBuddy 国际版 | `www.workbuddy.ai` |
 | Cline | `authkit.cline.bot` |
 | MiniMax Code | `account.minimax.cn` |
 

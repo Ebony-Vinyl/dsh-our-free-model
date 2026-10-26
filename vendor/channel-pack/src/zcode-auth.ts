@@ -512,10 +512,6 @@ export class ZcodeAuth extends Service {
     result: Promise<{ refName: string; credential: ZcodeCredential }>
   }> {
     /**
-     * ⚠ 授权 URL 必须**立刻**拿到并返回：前端的 `window.open` 只在
-     * 用户手势窗口内有效（等用户授权完再返回必被弹窗拦截 ——
-     * `AGENTS.md` 记过 CodeArts 早期这个缺陷）。
-     *
      * 故这里手工编排「发起 → 回调 URL → 后台轮询」，而不是直接
      * `await runZcodeLogin()`（那会阻塞到授权完成）。
      */
@@ -1094,7 +1090,7 @@ export class ZcodeAuth extends Service {
       /**
        * 入池与取出时各校验一次：阿里云 SDK 的**降级产物**看起来像正常返回值，
        * 但在索要验证的窗口里发出去必然 `3007`（那边实测：合法 280 字符 vs 降级约 76 字符；
- * 上游不要验证的那些窗口里连非法 param 也能 200 —— 那不能证明它合法，本地判据照旧）。
+       * 上游不要验证的那些窗口里连非法 param 也能 200 —— 那不能证明它合法，本地判据照旧）。
        * 宁可在本地丢掉重产，也不要让它变成用户可见的一次失败。
        */
       validate: (param) => validateCaptchaParam(param).ok,
@@ -1221,8 +1217,6 @@ export class ZcodeAuth extends Service {
     return remote !== undefined && remote.length > 0 ? [...remote] : []
   }
 
-  // ===== 签到（与 CodeArts / Buddy 等共用 CheckinStatus / ClaimOutcome 形状）=====
-
   /**
    * 查签到状态。
    *
@@ -1293,9 +1287,6 @@ export class ZcodeAuth extends Service {
    * 依据与落点理由见 {@link claimDailyWith}，产出顺序见 {@link mintClaimCaptcha}。
    *
    * ## ⚠ `1003`（已领取）是**成功**
-   *
-   * 服务端对「已领取过」回 `code:1003`。把它当失败会让定时任务
-   * 反复误报 —— 这与 Buddy / Qoder 的幂等语义一致。
    *
    * ⚠ `captchaRegion` 与 {@link claimDailyFor} 同款：**省略即跟随配置**，别传兜底常量
    * （真实缺陷，Gitee issue IKJNPS）。
@@ -1371,11 +1362,7 @@ export class ZcodeAuth extends Service {
 
       await reportZcodeActivation(credential, this.fetchImpl)
       const plans = await fetchZcodeClaimablePlans(credential, this.fetchImpl)
-      /**
-       * ⚠ 「没有可领 plan」**不等于**「今天已领」——也可能是活动未投放。
-       * 但两种情况下用户的动作都是「明天再来」，故归为 `already-claimed`
-       * 并给出如实文案（与 Buddy / Qoder 的幂等语义一致）。
-       */
+
       if (plans.length === 0) {
         return [{ kind: 'already-claimed', message: '今日暂无可领额度（服务端按日刷新）' }]
       }
@@ -1712,11 +1699,6 @@ export class ZcodeAuth extends Service {
    *
    * ## ⚠ 用 `findAccountIdByIdentityField` 而**不是** `findAccountIdByCredential`
    *
-   * 后者写死了「codearts 用 `access_key_id`、其余用 `access_token`」
-   * （见 `account-pool.ts` 的方法注释），而 zcode 凭据里**没有** `access_token`
-   * 字段（它用 `zcode_jwt` / `user_id`）⇒ 拿它查 zcode 恒回空串，
-   * 诊断会静默退化成「所有账号都是 #1」。
-   *
    * ## 处处容错（非关键路径）
    *
    * 账号池可能未注册（headless / 单测）、`user_id` 可能缺失（老凭据）——
@@ -1761,11 +1743,6 @@ export class ZcodeAuth extends Service {
    * 插件池里两条都是 A → A 已耗尽 → 报额度用尽。
    *
    * ## 修法：**绝不跨账号写**
-   *
-   * ZCode **不可续期**（凭据是静态的，没有 refresh 端点），所以「刷新」
-   * 唯一正确的语义是：**重新解析该账号自己的 ref，再写回它自己**
-   * （用于「用户在别处更新了这个账号的凭据」这种情形）。
-   * 与 `BuddyAuth.refreshAll` 的做法一致（那边也是逐账号读自己的 ref）。
    *
    * ⚠ 传了 `refName` 就**只动那一个 ref**；没传才回退到当前账号自己的 ref。
    * 无论如何**不会**拿到 A 的凭据去写 B。
@@ -1863,7 +1840,7 @@ export class ZcodeAuth extends Service {
         }
         await this.ctx.credentials.set(ref, JSON.stringify(own))
       } catch {
-        // 单个账号失败不影响其余（与 BuddyAuth.refreshAll 同语义）。
+        // 单个账号失败不影响其余。
       }
     }
   }

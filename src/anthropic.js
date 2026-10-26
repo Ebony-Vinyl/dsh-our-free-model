@@ -304,11 +304,33 @@ export function fromAnthropicRequest(body) {
 
   const maxTokens = number(body.max_tokens)
   const temperature = number(body.temperature)
+  let toolChoice
+  if (body.tool_choice !== undefined) {
+    const choice = body.tool_choice
+    if (!isObject(choice) || !['auto', 'none', 'any', 'tool'].includes(choice.type)
+      || Object.keys(choice).some(key => !['type', 'name', 'disable_parallel_tool_use'].includes(key))) {
+      return { error: '`tool_choice` must select auto, none, any or a declared tool' }
+    }
+    if (choice.disable_parallel_tool_use !== undefined && choice.disable_parallel_tool_use !== false) {
+      return { error: 'serial-only tool use is not supported by this gateway' }
+    }
+    if (choice.type === 'tool') {
+      if (typeof choice.name !== 'string' || !tools.some(tool => tool.name === choice.name)) {
+        return { error: '`tool_choice.name` must name a declared tool' }
+      }
+      toolChoice = { type: 'function', name: choice.name }
+    } else {
+      if (choice.name !== undefined) return { error: '`tool_choice.name` requires type tool' }
+      if (choice.type === 'any' && tools.length === 0) return { error: '`tool_choice: any` requires a declared tool' }
+      toolChoice = choice.type === 'any' ? 'required' : choice.type
+    }
+  }
   return {
     model,
     messages,
     system,
     tools,
+    ...toolChoice === undefined ? {} : { toolChoice },
     // A non-positive ceiling is "no ceiling" to the adapter (`usableTokens`),
     // so it is reported as unset rather than passed along as 0.
     maxTokens: maxTokens !== undefined && maxTokens > 0 ? maxTokens : undefined,
