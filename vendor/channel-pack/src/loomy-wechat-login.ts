@@ -18,9 +18,6 @@
  *
  * ## 与其余 provider 的契约一致性
  *
- * 对外仍返回 `loginUrl`（指向本地 `/wechat/qr`），前端照常 `window.open` ——
- * 与 codearts / lobsterai / qoder / trae / cline 的「两步式」体验完全一致。
- *
  * ## ⚠️ redirect_uri 必须是官方地址
  *
  * 微信校验域名白名单（实测换本地地址会得到「redirect_uri 参数错误」），
@@ -47,11 +44,6 @@ import {
 
 /**
  * 按平台决定「用哪个命令打开 URL」。
- *
- * ⚠️ **本模块不使用它，也不应该使用** —— Loomy 走**两步式**：返回
- * `loginUrl` 由**前端** `window.open` 打开（与 codearts / lobsterai /
- * qoder / trae / cline 一致）。宿主侧主动开浏览器会**破坏两步式的意义**
- * （`window.open` 只在用户手势窗口内有效，等流程跑完再开必被拦截）。
  *
  * 保留这个纯函数是为了让「平台分派」有**可离线单测**的落点 ——
  * 早期这里有个会真的 spawn 浏览器的 `defaultOpenBrowser`，单测一调它

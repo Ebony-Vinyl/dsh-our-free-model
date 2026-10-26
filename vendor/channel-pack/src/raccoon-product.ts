@@ -3,13 +3,6 @@
  *
  * ## 为什么新建 `RaccoonProduct` 而不复用既有类型
  *
- * `BuddyProduct` / `LobsteraiProduct` / `QoderProduct` / `LoomyProduct` 的字段
- * 全部围绕各自协议设计（归属头、refresh 载荷、WASM 签名参数、讯飞 AccessKey…），
- * 对 raccoon 无一有意义。raccoon 需要的是：一套 API 前缀、桌面端身份标识、
- * 手机号加密密钥、阿里云验证码配置，以及一张兜底模型表。
- * 故定义**平行**的接口 —— 共用的是架构**模式**（产品差异收敛到单一真相源），
- * 不是那个类型。
- *
  * ## 数据来源
  *
  * - API 基址与各前缀：`app.asar` 的 `.env.electron`
@@ -152,12 +145,6 @@ export interface RaccoonProduct {
   desktopApiPrefix: string
   /**
    * 单张请求图片的像素预算（issue !IKITT9 的 raccoon 变体）。
-   *
-   * ⚠️ **raccoon 的约束与腾讯不是一回事**：它按**请求体字节**卡 ——
-   * 实测 `HTTP_413: request body exceeds 10MB`，一张 2560×1600 的截图
-   *（原图 2.87 MiB → base64 后 ≈3.9 MB）过、四张必爆。
-   * 所以真正起作用的是下面的 `imageMaxBytes`；像素预算只是让图不至于
-   * 大到编码器压不进那个字节目标。
    */
   imagePixelBudget?: number
   /**
@@ -309,10 +296,6 @@ const RACCOON_FALLBACK_MODELS: readonly RaccoonFallbackModel[] = [
  *
  * ### 为什么用显式白名单，而不是「恒 true」
  *
- * 与 `buddy-adapter.ts` 的 `IMAGE_CAPABILITY_OVERRIDES` 同构：只覆盖**实测确认**的
- * 个案，新增条目必须先有真实请求证据。若改成「该家恒支持」，将来上架纯文本模型时
- * 会把图放行、让上游回一个更难懂的 400 —— 错误更晚、更难排查。
- *
  * ### ⚠️ 顺带发现：`sn-glm-5-3` 节点不一致（provider 侧缺陷，不归我们）
  *
  * 它 3 次里只对 1 次，两次回「当前模型不支持图片或视频输入」。错误体暴露网关有
@@ -347,7 +330,7 @@ export const RACCOON: RaccoonProduct = {
   // ⚠️ 用『Raccoon (商汤)』而非『Raccoon Work (商汤)』—— 后者在 Channel Pack 的
   // provider Tab 里**触发换行**（用户报障）。客户端内的品牌名是 `Raccoon Work`，
   // 但那个词组太长；缩短成 `Raccoon` 后与其余 provider 的标签长度一致
-  //（`CodeBuddy (腾讯)` / `LobsterAI (有道)` / `WorkBuddy (国际版)`）。
+
   displayName: 'Raccoon (商汤)',
   apiBase: RACCOON_API_BASE,
   authApiPrefix: '/api/web/auth/v1',
@@ -372,9 +355,6 @@ export const ALL_RACCOON_PRODUCTS: readonly RaccoonProduct[] = [RACCOON]
 
 /**
  * 按 provider id 取产品配置；未知 id 返回 undefined。
- *
- * 与 `productById`（CodeBuddy 系）/ `lobsteraiProductById` / `loomyProductById`
- * 分开：各自返回**不同类型**，合并会让调用方拿到联合类型后再也不得不做类型收窄。
  */
 export function raccoonProductById(id: string): RaccoonProduct | undefined {
   return ALL_RACCOON_PRODUCTS.find((product) => product.id === id)

@@ -3,10 +3,6 @@
  *
  * ## 为什么用设备码而不是本地回调
  *
- * 官方桌面端就是这么登的（asar `@mavis/oauth-core`），我们复刻它：
- * 申请设备码 → 用户在浏览器完成授权 → 我们轮询换 token。
- * **不起本地监听端口**（与 Qoder 同型，与 buddy/lobsterai 不同）。
- *
  * ## ⚠️ 最容易踩的坑：`pending` 是 **HTTP 200**
  *
  * OAuth 标准的设备码轮询用 **400 + `error=authorization_pending`** 表示「还在等」，

@@ -60,7 +60,16 @@ function launch({ port = 0, directory = dataDir, endInput = false } = {}) {
 const occupied = net.createServer(socket => socket.end())
 try {
   await check('仅选择完整运行资源，临时包在源码仓库之外，不带工具索引及用户数据', () => {
-    stageDesktopService(serviceRoot)
+    const orphan = path.join(repositoryRoot, `packages/standalone/web/orphan-fixture-${process.pid}.js`)
+    assert.equal(fs.existsSync(orphan), false)
+    try {
+      fs.writeFileSync(orphan, '// obsolete generated resource\n')
+      stageDesktopService(serviceRoot)
+      assert.equal(fs.existsSync(path.join(serviceRoot, path.relative(repositoryRoot, orphan))), false,
+        '资源清单之外的旧 JS 文件不得进入桌面安装包')
+    } finally {
+      fs.rmSync(orphan, { force: true })
+    }
     fs.copyFileSync(process.execPath, path.join(scratch, process.platform === 'win32' ? 'node.exe' : 'node'))
     for (const file of ['src/providers/registry.json', 'src/core/runtime.js', 'packages/standalone/web/assets.json',
       'packages/standalone/management.mjs', 'packages/standalone/channels/worker.mjs', 'vendor/channel-pack/qoder-auth-wasm.wasm']) {

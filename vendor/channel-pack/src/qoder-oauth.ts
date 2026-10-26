@@ -3,11 +3,6 @@
  *
  * ## 与其它 provider 的差异
  *
- * CodeArts / LobsterAI 都起**本地回调服务器**等浏览器跳回 `127.0.0.1`。
- * Qoder 不是：它的 `redirect_uri` 是自定义协议 `qoder-app://`，
- * 官方 CLI 的做法是「打开授权页 → 轮询 `/api/v1/deviceToken/poll`」。
- * 本模块照搬该模式 —— 不起监听端口，也就没有端口泄漏与回调伪造问题。
- *
  * ## 两步式的必要性
  *
  * 浏览器只在用户点击后的短暂窗口（transient activation，约 5 秒）内允许
@@ -180,9 +175,8 @@ function toLoginFlowResult(
   }
 }
 
-/** 默认的平台浏览器打开器（延迟 import 以复用 CodeArts 的既有实现）。 */
 async function defaultOpenBrowser(url: string): Promise<void> {
-  const { openBrowser } = await import('./login.js')
+  const { openBrowser } = await import('./open-browser.js')
   openBrowser(url)
 }
 
