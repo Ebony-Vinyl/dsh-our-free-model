@@ -69,6 +69,18 @@ check('manifest rejects missing or malformed hashes', () => {
   assert.throws(() => parseManifest(manifestOf({ files: [{ path: 'index.js', sha256: 'nope', size: 1 }] })))
   assert.throws(() => parseManifest(manifestOf({ files: [{ path: 'index.js', sha256: 'a'.repeat(64), size: -5 }] })))
 })
+check('signed engine packages fit without raising the ordinary file size limit', () => {
+  const engine = { path: 'vendor/magpie/bin/magpie-win32-x64.exe', sha256: 'c'.repeat(64), size: 68 * 1024 * 1024 }
+  const files = [...manifestOf().files, engine,
+    ...Array.from({ length: 87 }, (_, i) => ({ path: `src/part-${i}.js`, sha256: 'd'.repeat(64), size: 20 }))]
+  assert.equal(parseManifest(manifestOf({ files })).files.length, 90)
+  for (const path of ['src/oversize.js', 'vendor/magpie/bin/other.exe', 'vendor/magpie/bin/magpie-win32-x64.exe.js']) {
+    assert.throws(() => parseManifest(manifestOf({ files: [...manifestOf().files, { ...engine, path }] })), /size/)
+  }
+  assert.throws(() => parseManifest(manifestOf({ files: [...manifestOf().files, { ...engine, size: 128 * 1024 * 1024 + 1 }] })), /size/)
+  const tooMany = [...files, ...Array.from({ length: 39 }, (_, i) => ({ path: `src/extra-${i}.js`, sha256: 'e'.repeat(64), size: 10 }))]
+  assert.throws(() => parseManifest(manifestOf({ files: tooMany })), /cap/)
+})
 check('manifest base must stay manifest-relative (issue #19)', () => {
   for (const base of ['https://evil.example/', '//evil.example/', '/abs', 'C:\escape']) {
     assert.throws(() => parseManifest(manifestOf({ base })), /relative/, `base "${base}" must be refused`)
@@ -466,6 +478,68 @@ await checkAsync('CDN authorization refusal cannot trigger a mirror fallback', a
     await assert.rejects(() => stageRelease({ manifest: parseManifest(newManifest), manifestUrl: cdnSnapshot, stageDir: data, fetchImpl }), /HTTP 403/)
     assert.equal(calls.length, 4)
     assert.equal(calls.some(url => url.includes('gcore')), false)
+  } finally { fs.rmSync(data, { recursive: true, force: true }) }
+})
+
+await checkAsync('a release file jsDelivr refuses by size falls back to raw at the same SHA', async () => {
+  // Measured 2026-10-25: the 65 MB vendored engine binary answers 403 on every
+  // jsDelivr edge while ordinary files on the same commit answer 200. That is a
+  // structural refusal, not an authorization one, so the pinned commit's raw
+  // transport is the fallback — and only for the engine binary's own path.
+  const enginePath = 'vendor/magpie/bin/magpie-win32-x64.exe'
+  const engineBody = 'engine-binary-fixture'
+  const withEngine = manifestFor({ ...newFiles, [enginePath]: engineBody })
+  const fixture = snapshotFetch({ source: cdnSnapshot })
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-cdn-oversized-'))
+  const calls = []
+  const fetchImpl = async (url, opts) => {
+    const parsed = new URL(url)
+    calls.push(String(url))
+    if (parsed.pathname.endsWith(`/${enginePath}`)) {
+      if (parsed.hostname === 'cdn.jsdelivr.net' || parsed.hostname === 'gcore.jsdelivr.net') {
+        return new Response(null, { status: 403 })
+      }
+      assert.match(parsed.pathname, new RegExp(`/${SNAPSHOT}/${enginePath}$`), 'the fallback stays on the pinned commit')
+      return new Response(engineBody)
+    }
+    return fixture.fetchImpl(url, opts)
+  }
+  try {
+    await stageRelease({ manifest: parseManifest(withEngine), manifestUrl: cdnSnapshot, stageDir: data, fetchImpl })
+    verifyStaged(data, parseManifest(withEngine))
+    const attempts = calls.filter(url => url.endsWith(enginePath))
+    assert.ok(attempts.some(url => url.includes('raw.githubusercontent.com')), 'raw is tried at the same SHA')
+    assert.equal(fs.readFileSync(path.join(data, ...enginePath.split('/')), 'utf8'), engineBody)
+  } finally { fs.rmSync(data, { recursive: true, force: true }) }
+})
+
+await checkAsync('a gcore-sourced manifest gets the same oversized-file fallback', async () => {
+  // A manifest discovered on the gcore edge composes gcore file URLs; those must
+  // recognize their own origin and reach the same pinned commit on raw.
+  const enginePath = 'vendor/magpie/bin/magpie-win32-x64.exe'
+  const engineBody = 'engine-binary-fixture'
+  const withEngine = manifestFor({ ...newFiles, [enginePath]: engineBody })
+  const fixture = snapshotFetch({ source: gcoreSnapshot })
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-gcore-oversized-'))
+  const calls = []
+  const fetchImpl = async (url, opts) => {
+    const parsed = new URL(url)
+    calls.push(String(url))
+    if (parsed.pathname.endsWith(`/${enginePath}`)) {
+      if (parsed.hostname === 'cdn.jsdelivr.net' || parsed.hostname === 'gcore.jsdelivr.net') {
+        return new Response(null, { status: 403 })
+      }
+      assert.match(parsed.pathname, new RegExp(`/${SNAPSHOT}/${enginePath}$`), 'the fallback stays on the pinned commit')
+      return new Response(engineBody)
+    }
+    return fixture.fetchImpl(url, opts)
+  }
+  try {
+    await stageRelease({ manifest: parseManifest(withEngine), manifestUrl: gcoreSnapshot, stageDir: data, fetchImpl })
+    verifyStaged(data, parseManifest(withEngine))
+    const attempts = calls.filter(url => url.endsWith(enginePath))
+    assert.ok(attempts.some(url => url.includes('raw.githubusercontent.com')), 'gcore also falls back to raw')
+    assert.equal(fs.readFileSync(path.join(data, ...enginePath.split('/')), 'utf8'), engineBody)
   } finally { fs.rmSync(data, { recursive: true, force: true }) }
 })
 
