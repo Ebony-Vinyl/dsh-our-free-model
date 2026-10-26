@@ -17,7 +17,7 @@ export async function openLoginTerminal(dataDir, {
     const copy = [
       'const fs = require("node:fs");',
       'const { execFileSync } = require("node:child_process");',
-      'const key = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).forwardKey;',
+      'const settings = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const key = settings.managementKey ?? settings.forwardKey;',
       'if (typeof key !== "string" || !key.trim()) throw new Error("missing login token");',
       'execFileSync("/usr/bin/pbcopy", [], { input: key, timeout: 5000, stdio: ["pipe", "ignore", "ignore"] });',
     ].join(' ')
@@ -49,7 +49,9 @@ export async function openLoginTerminal(dataDir, {
     "$Host.UI.RawUI.WindowTitle = 'Our Free Model - 获取登录令牌'",
     "$ErrorActionPreference = 'Stop'",
     'try {',
-    `  $ofmLoginKey = (Get-Content -LiteralPath ${quote(keyFile)} -Raw -Encoding UTF8 | ConvertFrom-Json).forwardKey`,
+    `  $ofmLoginSettings = Get-Content -LiteralPath ${quote(keyFile)} -Raw -Encoding UTF8 | ConvertFrom-Json`,
+    '  $ofmLoginKey = $ofmLoginSettings.managementKey',
+    '  if ([string]::IsNullOrWhiteSpace($ofmLoginKey)) { $ofmLoginKey = $ofmLoginSettings.forwardKey }',
     "  if ([string]::IsNullOrWhiteSpace($ofmLoginKey)) { throw '配置文件没有登录令牌' }",
     '  Set-Clipboard -Value $ofmLoginKey',
     '  $ofmLoginKey = $null',
