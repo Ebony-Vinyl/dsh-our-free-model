@@ -34,7 +34,7 @@ import { createHash } from 'node:crypto'
 
 export const COMBO_CHANNEL = 'combo'
 export const COMBO_PREFIX = 'combo:'
-export const COMBO_STRATEGIES = ['fallback', 'round-robin']
+export const COMBO_STRATEGIES = ['fallback', 'round-robin', 'smart', 'usage', 'pace']
 
 /** Rotation cursors, keyed by combo id. In-memory on purpose (see the header). */
 const rotation = new Map()
@@ -106,29 +106,55 @@ export function normalizeCombos(raw) {
 export function buildComboCatalog(combos, catalog) {
   const byId = new Map()
   for (const entry of catalog) if (!isComboEntry(entry)) byId.set(entry.id, entry)
+  const definitions = new Map(combos.map(combo => [combo.id, combo]))
+  const visits = new Map()
+  const invalid = new Set()
+  const cycle = id => {
+    if (visits.get(id) === 1) return true
+    if (visits.get(id) === 2) return invalid.has(id)
+    const row = definitions.get(id)
+    if (!row || row.enabled === false) return false
+    visits.set(id, 1)
+    const bad = row.models.filter(model => definitions.has(model)).some(model => cycle(model))
+    visits.set(id, 2)
+    if (bad) invalid.add(id)
+    return bad
+  }
+  for (const combo of combos) cycle(combo.id)
+  const built = new Map()
+  const resolve = (combo, path = new Set()) => {
+    if (built.has(combo.id)) return built.get(combo.id)
+    if (combo.enabled === false || invalid.has(combo.id) || path.has(combo.id)) return null
+    const branch = new Set([...path, combo.id])
+    let cycle = false
+    const members = combo.models.map(id => {
+      if (byId.has(id)) return byId.get(id)
+      const nested = definitions.get(id)
+      if (!nested) return null
+      if (branch.has(id)) { cycle = true; return null }
+      const child = resolve(nested, branch)
+      if (child === null && nested.enabled !== false && nested.models.some(model => branch.has(model))) cycle = true
+      return child
+    }).filter(Boolean)
+    if (cycle || members.length === 0) return null
+    const entry = {
+      id: combo.id, name: combo.name, channel: COMBO_CHANNEL,
+      combo: members.map(member => member.id), strategy: combo.strategy, stickyLimit: combo.stickyLimit,
+      vision: members.every(member => member.vision === true),
+      reasoning: members.some(member => member.reasoning === true),
+      contextWindow: Math.min(...members.map(member => number(member.contextWindow) ?? 131072)),
+      maxOutput: Math.min(...members.map(member => number(member.maxOutput) ?? 32768)),
+      canDisableThinking: members.every(member => member.canDisableThinking !== false),
+      regionSensitive: false, wire: 'chat',
+      lanes: [...new Set(members.flatMap(member => member.lanes ?? [member.channel ?? 'free']))],
+    }
+    built.set(combo.id, entry)
+    return entry
+  }
   const out = []
   for (const combo of combos) {
-    if (combo.enabled === false) continue
-    const members = combo.models.map(id => byId.get(id)).filter(entry => entry !== undefined)
-    if (members.length === 0) continue
-    out.push({
-      id: combo.id,
-      name: combo.name,
-      channel: COMBO_CHANNEL,
-      combo: members.map(entry => entry.id),
-      strategy: combo.strategy,
-      stickyLimit: combo.stickyLimit,
-      // Intersection, not union — see the module header.
-      vision: members.every(entry => entry.vision === true),
-      reasoning: members.some(entry => entry.reasoning === true),
-      contextWindow: Math.min(...members.map(entry => number(entry.contextWindow) ?? 131072)),
-      maxOutput: Math.min(...members.map(entry => number(entry.maxOutput) ?? 32768)),
-      canDisableThinking: members.every(entry => entry.canDisableThinking !== false),
-      regionSensitive: false,
-      wire: 'chat',
-      /** Which lanes this chain can reach, for the detail line. */
-      lanes: [...new Set(members.map(entry => entry.channel ?? 'free'))],
-    })
+    const entry = resolve(combo)
+    if (entry) out.push(entry)
   }
   return out
 }
@@ -154,8 +180,55 @@ export function comboChain(entry, catalog, options = {}) {
   const ids = Array.isArray(entry?.combo) ? entry.combo : []
   const byId = new Map()
   for (const row of catalog) byId.set(row.id, row)
-  const members = ids.map(id => byId.get(id)).filter(row => row !== undefined)
-  if (members.length <= 1 || entry.strategy !== 'round-robin') return members
+  const path = new Set(options.path ?? [])
+  if (path.has(entry?.id)) return []
+  path.add(entry?.id)
+  const dedup = new Set()
+  const members = ids.flatMap(id => {
+    const row = byId.get(id)
+    return row ? isComboEntry(row) ? comboChain(row, catalog, { ...options, path }) : [row] : []
+  }).filter(row => { if (dedup.has(row.id)) return false; dedup.add(row.id); return true })
+  if (members.length <= 1) return members
+  if (['smart', 'usage', 'pace'].includes(entry.strategy)) {
+    const now = Number.isFinite(options.now) ? options.now : Date.now()
+    const readings = row => {
+      const quota = options.quota?.[row.id]
+      const checked = Date.parse(quota?.checkedAt ?? '')
+      if (!quota || !['ok', 'available'].includes(quota.status) || !Number.isFinite(checked) || now - checked > 15 * 60_000 || checked > now + 60_000) return []
+      return (quota.windows ?? []).filter(window => {
+        const reset = Date.parse(window.resetsAt ?? '')
+        return typeof window.remainingPercent === 'number' && window.remainingPercent >= 0 && window.remainingPercent <= 100
+          && (!Number.isFinite(reset) || reset > now)
+      })
+    }
+    const score = (row, index) => {
+      const windows = readings(row)
+      const exhausted = windows.some(window => window.remainingPercent <= 0)
+      const reset = Math.min(...windows.filter(window => window.remainingPercent > 0)
+        .map(window => Date.parse(window.resetsAt ?? '')).filter(Number.isFinite))
+      const weekly = windows.find(window => window.kind === 'weekly' || window.windowSeconds === 604800)
+      const hours = weekly ? (Date.parse(weekly.resetsAt ?? '') - now) / 3600000 : NaN
+      const pace = weekly && Number.isFinite(hours) && hours > 0 ? weekly.remainingPercent / Math.max(hours, 1 / 60) : null
+      const use = options.usage?.[row.id]
+      const usage = typeof use === 'number' && Number.isFinite(use) && use >= 0 ? use : null
+      return { row, index, exhausted, known: windows.length > 0, reset, pace, usage }
+    }
+    return members.map(score).sort((left, right) => {
+      if (left.exhausted !== right.exhausted) return left.exhausted ? 1 : -1
+      if (entry.strategy === 'usage') {
+        if ((left.usage !== null) !== (right.usage !== null)) return left.usage !== null ? -1 : 1
+        if (left.usage !== null && right.usage !== null && left.usage !== right.usage) return left.usage - right.usage
+      } else if (entry.strategy === 'pace') {
+        if ((left.pace !== null) !== (right.pace !== null)) return left.pace !== null ? -1 : 1
+        if (left.pace !== null && right.pace !== null && left.pace !== right.pace) return right.pace - left.pace
+      } else {
+        if (left.known !== right.known) return left.known ? -1 : 1
+        if (left.reset !== right.reset) return left.reset - right.reset
+      }
+      return left.index - right.index
+    }).filter(value => !value.exhausted).map(value => value.row)
+  }
+  if (entry.strategy !== 'round-robin') return members
   const limit = Number.isFinite(Number(entry.stickyLimit)) && Number(entry.stickyLimit) > 0 ? Math.trunc(Number(entry.stickyLimit)) : 1
   const cursor = rotation.get(entry.id) ?? { index: 0, used: 0 }
   const index = Math.min(Math.max(cursor.index, 0), members.length - 1)

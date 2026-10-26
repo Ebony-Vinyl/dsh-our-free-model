@@ -118,7 +118,7 @@ function ChannelConsole({ summary }) {
   return h(React.Fragment, null,
     h('header', { className: 'dashboard-heading' },
       h('div', null, h('div', { className: 'heading-eyebrow' }, 'WORKSPACE / CHANNELS'),
-        h('h1', null, '免费账号渠道'), h('p', null, '连接你的账号，把各家的免费额度汇集到一个 API。'))),
+        h('h1', null, 'EAC router'), h('p', null, '连接你的账号，把各家的免费额度汇集到一个 API。'))),
     h('div', { className: 'ofm_seg', role: 'tablist', 'aria-label': '渠道管理页面' },
       [['accounts', '登录与账号池'], ['ledger', '渠道用量'], ['logs', '请求日志'], ['tools', '供应商与备份']].map(([id, name]) =>
         h('button', { key: id, role: 'tab', 'aria-selected': page === id, onClick: () => setPage(id) }, name))),

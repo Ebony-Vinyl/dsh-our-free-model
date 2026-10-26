@@ -73,6 +73,7 @@ impl ServiceProcess {
             .arg(&data_dir)
             .env_remove("NODE_OPTIONS")
             .env_remove("NODE_PATH")
+            .env("OFM_DESKTOP_VERSION", env!("CARGO_PKG_VERSION"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
@@ -159,6 +160,8 @@ impl ServiceProcess {
             }
         }
     }
+
+    pub fn data_dir(&self) -> &Path { &self.data_dir }
 }
 
 impl Drop for ServiceProcess {
