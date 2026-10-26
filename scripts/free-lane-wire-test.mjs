@@ -21,11 +21,19 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-wire-'))
 process.env.DSH_HOME = scratch
 
 const seen = []
+/** One scripted upstream answer, used by the failure-shape checks below. */
+let scriptedReply = null
 const server = http.createServer((req, res) => {
   const pieces = []
   req.on('data', piece => pieces.push(piece))
   req.on('end', () => {
     seen.push({ method: req.method, url: req.url, headers: req.headers, body: Buffer.concat(pieces).toString('utf8') })
+    if (scriptedReply !== null) {
+      const { status, body } = scriptedReply
+      res.writeHead(status, { 'content-type': 'text/plain' })
+      res.end(body)
+      return
+    }
     if (req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ data: [] }))
@@ -173,6 +181,64 @@ console.log('\n=== 6. 目录请求与推理请求使用同一串 v2 UA ===')
   const unrelated = 'other-client/3.0 (+https://example.com/our-free-model-standalone)'
   await getJson('/inference/v1/models', { attributionUserAgent: unrelated })
   check('任何归属串都不再改变线上 UA', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
+}
+
+console.log('\n=== 7. an empty 5xx body names the hop instead of saying "HTTP 502" (issue #549) ===')
+{
+  const failureOf = async body => {
+    try {
+      await postStreamed({
+        path: up.endpointFor('cat-jam-free'),
+        body: { model: 'cat-jam-free', stream: true, ...body },
+        session: up.sessionForConversation('wire:empty-5xx'),
+        onData: () => {},
+        timeoutMs: 5000,
+      })
+      return null
+    } catch (error) {
+      return error
+    }
+  }
+  const textPart = { type: 'text', text: '颜色？' }
+  const imagePart = type => ({ type, ...(type === 'image_url' ? { image_url: { url: 'data:image/png;base64,AAAA' } } : { source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }) })
+  const withImages = type => ({ messages: [{ role: 'user', content: [textPart, imagePart(type)] }] })
+
+  scriptedReply = { status: 502, body: '' }
+  const plain = await failureOf({ messages: [{ role: 'user', content: 'ping' }] })
+  check('an empty 502 is classified as a gateway failure', plain?.code, 'SERVER')
+  check('…and keeps the status', plain?.status, 502)
+  check('…and is marked as an empty body', plain?.emptyBody, true)
+  check('…and the message names the hop', /answered HTTP 502 with an empty body/.test(plain?.message ?? ''), true)
+  check('…and says the failure is not in the request', /not in this request/.test(plain?.message ?? ''), true)
+  check('…and does not blame images when none were sent', /image content/.test(plain?.message ?? ''), false)
+
+  for (const type of ['image_url', 'input_image', 'image']) {
+    scriptedReply = { status: 502, body: '' }
+    const image = await failureOf(withImages(type))
+    check(`an empty 502 for ${type} names the image content`, /carried image content/.test(image?.message ?? ''), true)
+    check(`…and ${type} keeps the retryable class`, image?.code, 'SERVER')
+  }
+
+  scriptedReply = { status: 503, body: '  \n ' }
+  const unavailable = await failureOf({ messages: [{ role: 'user', content: 'ping' }] })
+  check('a whitespace-only 503 body counts as empty', unavailable?.emptyBody, true)
+  check('…and the message carries the real status', /answered HTTP 503/.test(unavailable?.message ?? ''), true)
+
+  // An envelope, however terse, is still the gateway's own account of the
+  // failure — it must reach the caller unchanged.
+  scriptedReply = { status: 502, body: '{"error":{"message":"upstream connect timeout"}}' }
+  const enveloped = await failureOf({ messages: [{ role: 'user', content: 'ping' }] })
+  check('a 502 with an envelope keeps its own message', enveloped?.message, 'upstream connect timeout')
+  check('…and is not marked as an empty body', enveloped?.emptyBody, undefined)
+
+  // The 4xx path is deliberately untouched: an empty 401 is still a credential
+  // verdict, not a generic client error.
+  scriptedReply = { status: 401, body: '' }
+  const unauthorized = await failureOf({ messages: [{ role: 'user', content: 'ping' }] })
+  check('an empty 401 still reads as a credential problem', unauthorized?.code, 'INVALID_CREDENTIAL')
+  check('…and is not routed through the empty-5xx message', unauthorized?.emptyBody, undefined)
+
+  scriptedReply = null
 }
 
 server.close()

@@ -376,6 +376,48 @@ function userAgentWith(_attribution) {
   return CLIENT_UA
 }
 
+/**
+ * Whether a request body carries image parts.
+ *
+ * The free lane's gateway answers a share of image requests with a bare 5xx and
+ * an empty body, so the status says nothing about the cause. The image content
+ * is then the one fact the caller can act on (issue #549).
+ *
+ * Matched on the `type` spelling rather than one dialect's field name, because
+ * the three wires this repo speaks disagree: OpenAI says `image_url`, the
+ * harness says `input_image`, Messages says `image`.
+ */
+export function carriesImageContent(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : []
+  for (const message of messages) {
+    if (!Array.isArray(message?.content)) continue
+    for (const part of message.content) {
+      if (typeof part?.type === 'string' && part.type.includes('image')) return true
+    }
+  }
+  return false
+}
+
+/**
+ * The failure an empty 5xx body deserves.
+ *
+ * `classifyFailure` turns an empty body into the message `HTTP 502`, which tells
+ * the caller nothing: a gateway hiccup and a refusal of this exact request read
+ * identically, and #549's image requests land here about half the time. Say what
+ * is known — the hop that failed, and that the request carried images — and keep
+ * the retryability a 5xx implies. A 4xx with an empty body keeps going through
+ * `classifyFailure`, which already reads the status correctly.
+ */
+function emptyBodyFailure(status, retryAfterMs, imageContent) {
+  const hint = imageContent
+    ? ' — this request carried image content, and the model behind the gateway may not accept vision input'
+    : ''
+  return new UpstreamError(
+    `the gateway answered HTTP ${status} with an empty body: the failure is upstream of the model, not in this request${hint}`,
+    CODE.server,
+    { status, emptyBody: true, ...(retryAfterMs === undefined ? {} : { providerRetryAfterMs: retryAfterMs }) })
+}
+
 export async function postStreamed({ path, body, session, attributionUserAgent, signal, onData, timeoutMs = 300000 }) {
   const headers = gatewayHeaders({ session: truncateSession(session), stream: true })
   headers['user-agent'] = userAgentWith(attributionUserAgent)
@@ -393,6 +435,11 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
   const setRetry = retryAfter(response.headers.get('retry-after'))
   if (!response.ok) {
     const text = await response.text().catch(() => '')
+    // An empty 5xx body is the case #549 is about: there is no envelope to
+    // classify, and `HTTP 502` is not an answer the caller can act on.
+    if (text.trim() === '' && response.status >= 500) {
+      throw emptyBodyFailure(response.status, setRetry, carriesImageContent(body))
+    }
     let payload
     try { payload = JSON.parse(text) } catch { payload = { error: { message: text.slice(0, 300) || `HTTP ${response.status}` } } }
     throw classifyFailure(response.status, payload, setRetry)
