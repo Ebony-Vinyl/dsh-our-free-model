@@ -13,10 +13,6 @@ function isAbnormalNetworkError(error: unknown): boolean {
 
 /**
  * 判定 refresh_token 是否已失效（终态：停止调度并提示重新登录）。
- *
- * 结构化判定而非 instanceof：CodeArts（oauth.ts）与 Buddy（buddy-oauth.ts）
- * 各自导出同名 `RefreshTokenExpiredError`，跨模块 identity 不同，
- * 用 instanceof 会让其中一个 provider 的失效信号穿透为「可重试」而无限重试。
  */
 function isRefreshTokenExpired(error: unknown): boolean {
   if (!(error instanceof Error)) return false

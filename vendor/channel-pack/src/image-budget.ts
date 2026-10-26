@@ -47,22 +47,11 @@ export interface ImageRequestTarget {
 
 /**
  * 内联图片的编码字节目标，取 **2 MiB**。
- *
- * 与 `dsh-llm-deepseek` 的 `DEFAULT_REQUEST_IMAGE_MAX_BYTES` 同值 —— 那是
- * harness 里唯一可参照的权威默认值。本插件的图片是 base64 内联（CodeBuddy
- * 只接受 `image_url` data URL，`{type:'image'}` 会被 400 拒绝），所以字节
- * 目标还额外决定了请求体大小；640K 像素的截图经 JPEG 后通常远小于此值，
- * 这个上限只对本就是小图高压缩率的极端情况起作用。
  */
 export const REQUEST_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 
 /**
  * raccoon 的单张编码字节目标：**512 KB**（issue !IKITT9 的 raccoon 变体）。
- *
- * 依据是实测的 `HTTP_413: request body exceeds 10MB` —— 那是一家按
- * **请求体字节**设限的网关，与腾讯的「图片视觉 token 总量」是两种约束。
- * 完整的算术与「为什么不做成按张数分摊」的权衡记在
- * `src/raccoon-product.ts` 的 `imageMaxBytes` 上（结论由用户 2026-09-28 定）。
  */
 export const RACCOON_REQUEST_IMAGE_MAX_BYTES = 512 * 1024
 
@@ -149,8 +138,6 @@ export function requestImageTargetFor(
 }
 
 /**
- * 适配器共用的「取请求版本」投影（buddy 与 raccoon 同一份，别各写一遍）。
- *
  * 返回 `undefined` 表示**本次发原图**，四种情形都属正常而非错误：
  *
  * 1. 调用方没桥接 `readImageRequest`（老宿主 / 其它入口构造的适配器）；

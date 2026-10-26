@@ -12,12 +12,6 @@
  *   ⇒ 下一次 `listModels` / `resolveModel` **再拉一次**；
  * - 返回空目录时同样不落缓存 ⇒ 同上。
  *
- * 而这些拉取的超时上限是 30–60 秒量级
- * （`src/buddy.ts:62` `REQUEST_TIMEOUT_MS = 60_000`、
- * `src/loomy.ts:45` `LOOMY_REQUEST_TIMEOUT_MS = 60_000`、
- * `src/raccoon.ts:55` `RACCOON_REQUEST_TIMEOUT_MS = 60_000` …），
- * 未登录或离线时表现就是「首屏加载模型巨长」。
- *
  * 另有并发维度：`listModels` 与 `resolveModel` 会被 DSH **并发**调用
  * （`Promise.all`），不去重会打出多份重复请求。
  * `src/cline-adapter.ts:243` 早先已单独处理过这一条，本模块把它抽成共用件。

@@ -51,12 +51,18 @@ import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
 import { buildAggregateCatalog, fetchProviderModels, isAggregateEntry, testProvider } from './src/aggregate.js'
-import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
+import { buildComboCatalog, COMBO_STRATEGIES, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
 import { getProvider, listProviders } from './src/providers/index.js'
-import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPercent } from './src/token-saver/index.js'
-import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver/prompts.js'
+import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPercent } from './src/token-saver.js'
+import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver.js'
 import { OPTIMIZATIONS } from './src/local-optimize.js'
 import { createModelRuntime, createRuntimeStores } from './src/core/runtime.js'
+import { createSubscriptions } from './src/subscriptions.js'
+import { createSubscriptionRuntime } from './src/subscription-completion.js'
+import { isSubscriptionEntry } from './src/subscription-adapter.js'
+import { createMagpieEngine } from './src/magpie-engine.js'
+import { createMagpieModels, combineSubscriptionRuntimes } from './src/magpie-models.js'
+import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from './src/disclaimer.js'
 
 export { fromOpenAiMessages } from './src/core/completion.js'
 import { buildStats } from './src/core/stats.js'
@@ -406,9 +412,26 @@ export function apply(ctx, config) {
     }
   }
 
+  const magpieEngine = createMagpieEngine({ dataDir, logger })
+  const magpieModels = createMagpieModels({
+    engine: magpieEngine, stats, logger,
+    onChanged: () => modelRuntime.syncAggregateCatalog(),
+  })
+  let subscriptions
+  let subscriptionRuntime
+  try {
+    subscriptions = createSubscriptions({ dataDir })
+    subscriptionRuntime = createSubscriptionRuntime({ subscriptions, stats, logger })
+  } catch {
+    // A broken private sidecar must not disable the anonymous model lane.
+    subscriptions = undefined
+    logger.warn?.('our-free-model: private subscription storage is unavailable')
+  }
+  subscriptionRuntime = combineSubscriptionRuntimes(magpieModels, subscriptionRuntime)
   const modelRuntime = createModelRuntime({
     ...stores,
     logger,
+    subscriptionRuntime,
     attributionUserAgent: 'deepseek-harness',
     resolveImage: imageResolver(ctx, logger),
     sealedCredential: sealedCredentialOf,
@@ -428,9 +451,10 @@ export function apply(ctx, config) {
   // Advertise a probe endpoint for the in-app "detect models" button. It offers
   // what the picker itself advertises — a model the gateway refuses to route at
   // all must not be addable to a profile just because it still appears in the
-  // upstream listing.
+  // upstream listing. Automatic availability probing is disabled by owner
+  // policy, so discovery refreshes the listing only.
   ctx.llm.registerModelDiscovery?.(ctx.fiber?.entry?.options?.id ?? name, async () => {
-    await refreshCatalog({ probe: true, force: true })
+    await refreshCatalog({ probe: false, force: true })
     const advertised = new Set(Object.values(state().membership).flat())
     return modelRuntime.catalog
       .filter(entry => advertised.has(entry.id))
@@ -449,9 +473,8 @@ export function apply(ctx, config) {
 
   /**
    * A freshly started outlet needs a moment before its nodes carry traffic: the
-   * first read comes back empty, and a re-probe fired on that cold path would
-   * record "unavailable" for models the new exit would have unlocked. Retry a
-   * few times and let the re-probe run only once the exit answers.
+   * first read comes back empty. Retry a few times so the settings page gets a
+   * reading; no availability probe is fired here (automatic probing is off).
    */
   async function settleOutletWatch() {
     let lastError
@@ -997,7 +1020,7 @@ export function apply(ctx, config) {
   const fenceConnection = connectionAdmissionView(() => optional('connection'))
   // ── the absorbed free-channel pack ──────────────────────────────────────────
   /**
-   * The 白嫖 channels — CodeArts (华为云), LobsterAI
+   * The 白嫖 channels — LobsterAI
    * (有道), Qoder / Qoder CN (阿里系), TRAE (字节), Cline, Loomy (讯飞), Raccoon
    * (商汤), MiniMax Code, ZCode (智谱) and Gemini (Google) — are
    * carried with local integration adaptations from the plugin that shipped them, vendored under
@@ -1026,10 +1049,10 @@ export function apply(ctx, config) {
       if (stopped) return
       pack.apply(scoped, {
         disableOpencode: true,
-        outlet: { active: egressActive, fetch: egressFetch, fetchSigned: (input, init, send) => egressFetch(input, init, send) },
+        outlet: { active: egressActive, fetch: egressFetch },
       })
       channelPack = { state: 'ready', error: '' }
-      logger.info?.('our-free-model: free-channel pack mounted (CodeArts and 10 more)')
+      logger.info?.('our-free-model: free-channel pack mounted (10 account providers)')
     }).catch(error => {
       if (stopped) return
       channelPack = { state: 'failed', error: String(error?.message ?? error).slice(0, 300) }
@@ -1049,6 +1072,14 @@ export function apply(ctx, config) {
     pool: fetchPoolSnapshot,
     eacAuth,
     picks,
+    magpieEngine,
+    magpieModels,
+    onEngineStarted: () => {
+      settings.update({ magpieEnabled: true })
+      settings.flush()
+    },
+    subscriptions,
+    onSubscriptionsChanged: syncAggregateCatalog,
     // ── the aggregate lane's settings surface ────────────────────────────────
     // The registry is static data; the configured half is the settings file with
     // every key masked. Writing one provider rebuilds the catalog and re-emits
@@ -1137,7 +1168,7 @@ export function apply(ctx, config) {
           contextWindow: entry.contextWindow, maxOutput: entry.maxOutput,
         })),
         usable: state().catalog.filter(isComboEntry).map(publicCombo),
-        strategies: ['fallback', 'round-robin'],
+        strategies: [...COMBO_STRATEGIES],
       }),
       preview: patch => {
         if (patch === null || typeof patch !== 'object' || !Array.isArray(patch.models)
@@ -1385,9 +1416,20 @@ export function apply(ctx, config) {
 
   // ── boot + background loop ──────────────────────────────────────────────────
   ctx.effect(() => () => {
+    magpieModels.close()
+    const closing = magpieEngine.close()
     modelRuntime.dispose()
     stores.dispose()
+    return closing
   }, 'our-free-model: stores')
+
+  ctx.effect(() => {
+    if (settings.get().magpieEnabled === true) {
+      void magpieEngine.start().then(() => magpieModels.refresh()).catch(() => {
+        logger.warn?.('our-free-model: model workspace could not resume')
+      })
+    }
+  }, 'our-free-model: model workspace')
 
   ctx.effect(() => () => {
     void forward?.close().catch(() => {})
@@ -1436,7 +1478,7 @@ export function apply(ctx, config) {
       // topology event and the upgrade marker below down with it, reported as
       // a single "startup refresh failed" line.
       try {
-        await refreshCatalog({ probe: true, force: true })
+        await refreshCatalog({ probe: false, force: true })
       } catch (error) {
         logger.warn?.(`our-free-model: startup refresh failed (${error?.message ?? error})`)
       }
@@ -1467,9 +1509,9 @@ export function apply(ctx, config) {
    * stopped the whole plugin from activating. `timer` is not worth declaring on a
    * headless composition, and the mixin adds nothing here beyond `setTimeout` plus
    * a disposer: it must not hold the process open, and `disposed` ends it when the
-   * fiber goes away. Without any loop the availability probe would run once at
-   * boot, so a model that throttled, recovered, or moved behind the region gate
-   * would keep the picker position it was first given.
+   * fiber goes away. Without any loop the catalog would be read once at boot,
+   * so a model added, removed or renamed upstream would keep its boot-time
+   * position until a manual refresh.
    */
   // `ms` may be a function: the period is re-read on every re-arm, so an
   // interval changed on the settings page takes effect from the next cycle
@@ -1493,14 +1535,14 @@ export function apply(ctx, config) {
       if (hours > 0) void updater.check().then(() => pushUpdate(false)).catch(() => {})
     }, () => positiveOr(settings.get().feedPollMinutes, 30, 5) * 60_000)
   }
-  // The probe period is in minutes, and one minute is the floor — a value of 0 or
-  // a negative one would otherwise spin. This used to read `Math.max(60, …)`,
-  // which floored every interval below an hour *including the shipped default of
-  // 15*, so the number on the settings page was silently ignored.
+  // Automatic availability probing is disabled by owner policy. This loop only
+  // refreshes the listing and reads the egress; the interval keeps its setting
+  // name for upgrade compatibility. `/reprobe` is the only path that still asks
+  // for a probe, and it is driven by a manual button.
   every(() => {
     void (async () => {
       await watchEgress()
-      await refreshCatalog({ probe: true })
+      await refreshCatalog({ probe: false })
     })().catch(error => logger.warn?.(`our-free-model: periodic refresh failed (${error?.message ?? error})`))
   }, () => positiveOr(settings.get().probeIntervalMinutes, 15, 1) * 60_000)
   // A failing egress watch means the network is down, which is worth one line —
@@ -1653,7 +1695,10 @@ const POOL_REASONS = new Set(['no-lane', 'gateway-status', 'malformed', 'unreach
 export function createApiRoutes(deps) {
   return async function handler(req, res) {
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const routePath = url.pathname.replace(/^\/api\/our-free-model/, '').replace(/\/+$/, '') || '/'
+    const marker = '/api/our-free-model'
+    const markerAt = url.pathname.indexOf(marker)
+    const apiPrefix = markerAt >= 0 ? url.pathname.slice(0, markerAt + marker.length) : marker
+    const routePath = url.pathname.slice(markerAt >= 0 ? apiPrefix.length : 0).replace(/\/+$/, '') || '/'
     const method = String(req.method ?? 'GET').toUpperCase()
     const rejection = rejectionFor(req, deps.connection, deps.onAdmissionRejection)
     const send = (status, payload) => {
@@ -1661,10 +1706,46 @@ export function createApiRoutes(deps) {
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       res.end(body)
     }
-    if (rejection !== undefined) return send(rejection, {
+    // Sandboxed extension assets carry a per-run HMAC capability in their path.
+    // They have an opaque origin and cannot send the host's authentication.
+    // The engine validates the capability and serves only that plugin's files.
+    const pluginAsset = ['GET', 'HEAD'].includes(method)
+      && /^\/engine\/ui\/_magpie\/plugin\/[a-f0-9]{32}\/[^?]+$/.test(routePath)
+    if (pluginAsset && deps.magpieEngine?.status().state !== 'ready') {
+      return send(503, { error: 'Model workspace is unavailable' })
+    }
+    if (rejection !== undefined && !pluginAsset) return send(rejection, {
       error: rejection === 401 ? 'unauthorized' : rejection === 503 ? 'admission unavailable' : 'forbidden',
     })
     try {
+      if (routePath === '/engine/status' && method === 'GET') {
+        return send(200, deps.magpieEngine?.status() ?? { state: 'unavailable', available: false })
+      }
+      if (routePath === '/engine/start' && method === 'POST') {
+        if (!deps.magpieEngine) return send(503, { error: 'Model workspace is unavailable' })
+        await deps.magpieEngine.start()
+        await deps.magpieModels?.refresh()
+        deps.onEngineStarted?.()
+        return send(200, deps.magpieEngine.status())
+      }
+      if (routePath === '/engine/refresh' && method === 'POST') {
+        if (!deps.magpieEngine) return send(503, { error: 'Model workspace is unavailable' })
+        await deps.magpieModels?.refresh()
+        return send(200, { ok: true })
+      }
+      if (routePath === '/engine/ui' || routePath.startsWith('/engine/ui/')) {
+        if (!deps.magpieEngine) return send(503, { error: 'Model workspace is unavailable' })
+        // Authentication above applies to every asset and engine operation.
+        if (routePath === '/engine/ui' && !url.pathname.endsWith('/')) {
+          res.writeHead(302, { location: `${apiPrefix}/engine/ui/` + url.search })
+          return res.end()
+        }
+        res.once?.('finish', () => {
+          if (method === 'POST') void deps.magpieModels?.refresh().catch(() => {})
+        })
+        const upstreamPath = url.pathname.slice(`${apiPrefix}/engine/ui`.length) || '/'
+        return await deps.magpieEngine.proxy(req, res, upstreamPath + url.search)
+      }
       if (method === 'GET' && routePath === '/summary') {
         return send(200, buildSummary(deps))
       }
@@ -1673,6 +1754,34 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())
+      }
+      if (routePath === '/subscriptions' || routePath.startsWith('/subscriptions/')) {
+        const action = routePath.slice('/subscriptions'.length)
+        const mutations = { '/import': 'import', '/import-local': 'importLocal', '/quota': 'refreshQuota',
+          '/enabled': 'setEnabled', '/remove': 'remove' }
+        if (!(method === 'GET' && (action === '' || action === '/discover'))
+          && !(method === 'POST' && Object.hasOwn(mutations, action))) {
+          return send(404, { error: 'not found' })
+        }
+        if (!deps.subscriptions) return send(503, { error: 'Subscription support is unavailable' })
+        if (method === 'GET') {
+          return send(200, { accounts: action === '/discover'
+            ? await deps.subscriptions.discover() : deps.subscriptions.list() })
+        }
+        const body = await readJson(req)
+        if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+          throw httpError(400, 'Invalid subscription request')
+        }
+        const controller = new AbortController()
+        const abort = () => controller.abort()
+        res.once?.('close', abort)
+        try {
+          await deps.subscriptions[mutations[action]](action === '/quota'
+            ? { id: body.id, signal: controller.signal } : body)
+          if (action !== '/quota') deps.onSubscriptionsChanged?.()
+          if (!controller.signal.aborted) return send(200, { accounts: deps.subscriptions.list() })
+          return
+        } finally { res.removeListener?.('close', abort) }
       }
       // ── the aggregate lane ─────────────────────────────────────────────────
       if (method === 'GET' && routePath === '/providers') {
@@ -1766,6 +1875,14 @@ export function createApiRoutes(deps) {
           deps.logger?.warn?.(`our-free-model: pool snapshot unavailable (${reason})`)
           return send(404, { error: `pool unavailable (${reason})` })
         }
+      }
+      if (method === 'GET' && routePath === '/disclaimer') {
+        return send(200, { ...DISCLAIMER, acknowledged: disclaimerAcknowledged(deps.settings.get()) })
+      }
+      if (method === 'POST' && routePath === '/disclaimer/ack') {
+        deps.settings.update({ disclaimerAck: DISCLAIMER_VERSION })
+        deps.settings.flush()
+        return send(200, { ok: true, acknowledged: true })
       }
       if (method === 'GET' && routePath === '/announcement') {
         // A managed install also stands down the owner's onboarding copy: the
@@ -1900,7 +2017,8 @@ export function createApiRoutes(deps) {
         return send(200, { ok: true, settings: publicSettings(deps.settings.get(), deps.forwardInfo(), deps.egressInfo()) })
       }
       if (method === 'POST' && routePath === '/refresh') {
-        await deps.refreshCatalog({ probe: true, force: true })
+        // A listing refresh must not turn into a probe round; only /reprobe does.
+        await deps.refreshCatalog({ probe: false, force: true })
         return send(200, { ok: true, ...buildSummary(deps) })
       }
       if (method === 'POST' && routePath === '/reprobe') {
@@ -1966,7 +2084,15 @@ export function createApiRoutes(deps) {
       return send(404, { error: 'not found' })
     } catch (error) {
       const status = Number(error?.statusCode)
-      return send(Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500, { error: String(error?.message ?? error) })
+      const responseStatus = Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500
+      if (routePath === '/subscriptions' || routePath.startsWith('/subscriptions/')) {
+        // Parse errors can quote an import body; never echo credential input.
+        return send(responseStatus, { error: ({
+          400: 'Invalid subscription request', 404: 'Subscription account not found',
+          413: 'request body too large', 499: 'Subscription request aborted',
+        })[responseStatus] ?? 'Subscription operation failed' })
+      }
+      return send(responseStatus, { error: String(error?.message ?? error) })
     }
   }
 }
@@ -2291,7 +2417,7 @@ function buildSummary(deps) {
   // and the aggregate lane are named by a listing round that already succeeded,
   // and a combo is a view over rows that were themselves named — none of them is
   // pinged. A listing is not an inference verdict; explicit tests add their own samples.
-  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry)
+  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry) || isSubscriptionEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
@@ -2314,6 +2440,7 @@ function buildSummary(deps) {
     outlet: deps.egressInfo(),
     probedAt: snapshot.at ?? 0,
     announcementVersion: ANNOUNCEMENT_VERSION,
+    disclaimerVersion: DISCLAIMER_VERSION,
     version: deps.meta().version,
     distribution: deps.meta().distribution,
     announcements: { unread: feedView.unread, fetchedAt: feedView.fetchedAt },

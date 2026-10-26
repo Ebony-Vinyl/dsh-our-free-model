@@ -1,5 +1,5 @@
 import { MIN_DECODE_MS } from '../store.js'
-import { describeSavingsTotal, emptySavings, savingsPercent } from '../token-saver/index.js'
+import { describeSavingsTotal, emptySavings, savingsPercent } from '../token-saver.js'
 
 export function buildStats(stats, catalog) {
   const days = stats.days ?? {}

@@ -19,17 +19,6 @@
  *
  * 那个判据只在**远端完整权威**的 provider 上成立。本仓库的实际情况分三类：
  *
- * | Provider | 远端目录 | 目录比对是否可用 |
- * |---|---|---|
- * | cline | `recommended-models` 的 `free` 数组完整权威 | ✅ 可用（已在 `cline-models.ts` 修） |
- * | buddy / codebuddy / workbuddy | **已知残缺** | ❌ **会删掉可用模型** |
- * | qoder / qoder-cn | 无（端点需 WASM 签名） | ❌ 无数据可比对 |
- *
- * buddy 那一类是刻意反过来设计的：`reconcileWithFallback` **以兜底表为准**，
- * 因为插件 CLI token 只拿到 13 个内部别名、而 IDE 是 20 个（见 `buddy-adapter.ts`）。
- * 在那里做目录比对会把「你有权用、只是 CLI token 看不到」的模型删掉 ——
- * 作者已为此踩过一次（`product.ts` 里 `hy4-preview` 的补录注释）。
- *
  * ⇒ 唯一**跨 provider 安全**的判据是**阳性证据**：这个模型**真的**请求失败并返回
  * 「模型不存在」时，才把它记为失效。**不从残缺目录反推。**
  *
@@ -68,7 +57,7 @@ import { resolveChannelPackHome } from './channel-pack-store.js'
 export const DEAD_MODELS_FILE = 'dead-models.json'
 
 /** 文档 schema 标记（与本仓库其它状态文档同惯例）。 */
-const SCHEMA = 'dsh-codearts-auth/dead-models/v1'
+const SCHEMA = 'channel-pack/dead-models/v1'
 
 /** 默认保留天数；可用 `DSH_DEAD_MODEL_TTL_DAYS` 覆盖（0 = 永不过期）。 */
 const DEFAULT_TTL_DAYS = 30
@@ -552,11 +541,6 @@ function filterList(providers: readonly string[], list: unknown): unknown {
 /**
  * 记录归属的 provider：`prepareCall(provider, …)` 与 `stream(options)` 都带 provider，
  * 故**按本次请求实际的 provider 归属**。
- *
- * ⚠️ 不可退化成「取 ids[0]」（2026-10-06 复审修）：那会让一个注册多路由的实例把
- * 所有失效都记到第一条路由上，而 {@link filterList} 却按**全部** ids 取并集过滤 ——
- * 两处口径不一致 ⇒ **跨 provider 误过滤**（pA 的失效会连带隐藏 pB 的同名模型，
- * 而不同 provider 确有同名模型，如 buddy 与 workbuddy 的模型池高度重合）。
  *
  * @param ids - 本适配器注册的 provider id 列表。
  * @param candidate - 本次请求的 provider；不在 ids 内则回退到第一条路由。

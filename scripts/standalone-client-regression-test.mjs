@@ -11,7 +11,10 @@ import { visibilityCopy } from '../packages/standalone/frontend/visibility-data.
 const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
   .replace('exports.__test = {', 'exports.__test = { Shell, FreePage, ChannelCard, DICT, Roster, ModelCard, Preferences, ModelPicker, ChainEditor, ChainCard, ChainCapacity,')
 let bundle
-const window = { __ModuleLoader__: { load: value => { bundle = value } } }
+const window = {
+  __ModuleLoader__: { load: value => { bundle = value } },
+  localStorage: { getItem: key => key === 'ofm.tab' ? 'free' : null },
+}
 let cursor = 0
 const cells = []
 let captureEffects = false
@@ -83,7 +86,7 @@ let accounts = [{ id: 'account', nickname: 'Fixture', enabled: true }]
 const rpcCalls = []
 let changed = 0
 const channelProps = {
-  t, channel: { id: 'codearts', name: 'CodeArts' }, status: {},
+  t, channel: { id: 'lobsterai', name: 'LobsterAI' }, status: {},
   onError: (_provider, error) => { throw error },
   onChanged: () => { changed++ },
   rpc: async (method, payload) => {

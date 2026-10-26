@@ -1,5 +1,6 @@
 mod external;
 mod service;
+mod update;
 
 use service::ServiceProcess;
 use std::sync::{
@@ -17,6 +18,39 @@ use tauri::{
 struct ServiceState {
     process: Mutex<Option<ServiceProcess>>,
     stopping: AtomicBool,
+    updating: AtomicBool,
+}
+
+#[tauri::command]
+async fn install_desktop_update(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    if !cfg!(windows) { return Err("当前仅支持 Windows 桌面安装更新".into()); }
+    let data_dir = {
+        let state = app.state::<ServiceState>();
+        let guard = state.process.lock().map_err(|_| "服务状态不可用")?;
+        let process = guard.as_ref().ok_or("桌面服务未启动")?;
+        let expected: tauri::Url = process.management_url.parse().map_err(|_| "管理地址无效")?;
+        let actual = window.url().map_err(|_| "无法确认调用窗口")?;
+        if window.label() != "main" || actual.origin() != expected.origin() { return Err("仅允许当前桌面管理窗口安装更新".into()); }
+        process.data_dir().to_owned()
+    };
+    if app.state::<ServiceState>().updating.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() { return Err("安装交接已在进行".into()); }
+    let owned = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let verified = update::prepare(&data_dir, env!("CARGO_PKG_VERSION"))?;
+        stop_service(&owned);
+        if let Err(error) = update::handoff(verified) {
+            if let Ok(address) = start_service(&owned) {
+                if let Some(window) = owned.get_webview_window("main") {
+                    if let Ok(url) = address.parse() { let _ = window.navigate(url); }
+                }
+            }
+            return Err(error);
+        }
+        owned.exit(0);
+        Ok(())
+    }).await.unwrap_or_else(|_| Err("安装交接任务未完成".to_string()));
+    if result.is_err() { app.state::<ServiceState>().updating.store(false, Ordering::SeqCst); }
+    result
 }
 
 fn titlebar_script(origin: &str) -> String {
@@ -88,6 +122,7 @@ fn show_main(app: &tauri::AppHandle, address: &str) -> tauri::Result<()> {
         "core:window:allow-is-maximized",
         "core:window:allow-hide",
         "core:window:allow-start-dragging",
+        "allow-install-desktop-update",
     ] {
         capability = capability.permission(permission);
     }
@@ -125,6 +160,7 @@ fn show_existing(app: &tauri::AppHandle) {
 
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![install_desktop_update])
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show_existing(app)))
         .setup(|app| {
             app.manage(ServiceState::default());

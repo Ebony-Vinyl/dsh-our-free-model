@@ -284,7 +284,7 @@ try {
       await page.getByTestId('overview-ready').waitFor()
       await page.locator('.console-nav-item').filter({ hasText: '免费账号渠道' }).click()
       await page.getByLabel('搜索渠道').waitFor()
-      await page.getByText('CodeArts', { exact: false }).first().waitFor()
+      await page.getByText('LobsterAI', { exact: false }).first().waitFor()
       await page.screenshot({ path: `${source}.smoke.png`, fullPage: true })
       assert.deepEqual(errors, [])
       await browser.close()
