@@ -88,8 +88,11 @@ export function managementSettings(value) {
 }
 
 /** 管理读写要求鉴权；登录恢复仅允许同源页面触发固定本机动作。 */
-export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal }) {
-  const desktopUpdate = createDesktopUpdater({ dataDir: info().dataDir, version: process.env.OFM_DESKTOP_VERSION })
+export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal, desktopPlatform = process.platform, desktopArch = process.arch }) {
+  // `desktopPlatform`/`desktopArch` are threaded from the caller instead of read
+  // from `process` so the Windows-only update flow stays exercisable on a test
+  // runner that is neither (`desktop-update.mjs` already takes them this way).
+  const desktopUpdate = createDesktopUpdater({ dataDir: info().dataDir, version: process.env.OFM_DESKTOP_VERSION, platform: desktopPlatform, arch: desktopArch })
   let bootstrap = { token: crypto.randomBytes(32).toString('base64url'), until: Date.now() + BOOTSTRAP_MS }
   const sessions = new Map()
   const privilegedSessions = new Set()
