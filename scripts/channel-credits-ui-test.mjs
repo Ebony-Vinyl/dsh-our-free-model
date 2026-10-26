@@ -62,8 +62,8 @@ export async function verifyChannelCreditsUi() {
     subscribe()
     return { calls, errors, cells, button, text, cleanup, events }
   }
-  const claimable = new Set(['codearts', 'buddy', 'lobsterai', 'qoder', 'qodercn', 'trae', 'loomy', 'minimax', 'zcode'])
-  for (const provider of [...claimable, 'workbuddy', 'cline', 'raccoon', 'gemini']) {
+  const claimable = new Set(['lobsterai', 'qoder', 'qodercn', 'trae', 'loomy', 'minimax', 'zcode'])
+  for (const provider of [...claimable, 'cline', 'raccoon', 'gemini']) {
     const app = mount(provider, async () => ({ accounts: [] }))
     await settle()
     assert.equal(app.calls[0].method, 'credits.balances', `${provider} 必须查询已有后端余额能力`)
@@ -82,7 +82,7 @@ export async function verifyChannelCreditsUi() {
     { accountId: 'one', balance: { total: 0 } },
     { accountId: 'two', balance: null, error: '凭据已失效，请重新登录' },
   ]
-  const app = mount('buddy', async method => {
+  const app = mount('minimax', async method => {
     if (method === 'account.list') return { accounts: accountRows }
     if (method === 'credits.status') return { accounts: [{ accountId: 'one', status: { todayCheckedIn: true, todayCredit: 10 } }] }
     if (method === 'credits.balances') {

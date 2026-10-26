@@ -104,14 +104,19 @@ export function egressActive() {
 export async function egressFetch(url, init) {
   const relay = activeRelay
   if (relay === null) return fetch(url, init)
-  const target = new URL(String(url))
+  const request = url instanceof Request ? new Request(url, init) : null
+  const target = new URL(request ? request.url : String(url))
   if (target.protocol !== 'http:' && target.protocol !== 'https:') {
     throw new Error(`the egress relay only carries http(s) targets, got "${target.protocol}"`)
   }
-  const headers = new Headers(init?.headers ?? {})
+  const headers = new Headers(request?.headers ?? init?.headers ?? {})
   headers.set(TARGET_HEADER, target.href)
   headers.set(KEY_HEADER, relay.key)
-  return fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...init, headers })
+  const outgoing = request ? {
+    ...init, method: request.method, body: request.body, signal: request.signal,
+    redirect: request.redirect, ...(request.body ? { duplex: 'half' } : {}),
+  } : init
+  return fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...outgoing, headers })
 }
 
 /**

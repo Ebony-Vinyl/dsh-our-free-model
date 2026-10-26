@@ -1,11 +1,6 @@
 /**
  * Gemini (Cloud Code) 的 Google OAuth 授权流程。
  *
- * 骨架照 `src/login.ts` 的 `startOAuthFlow`（两步式：先监听、**立即**返回
- * `loginUrl`，调用方自己去 await `result`），但**刻意去掉**了 CodeArts 那套
- * PKCE / DPoP / 自定义 ticket —— 上游 Cloud Code 客户端用的是最朴素的
- * authorization_code + client_secret。
- *
  * ## ⚠️ 三条上游硬约束（原版 oauth.go 实测踩过）
  *
  * 1. **token 端点强制校验客户端身份**：只发 `client_id` 会回
@@ -179,10 +174,6 @@ export function parseGeminiTokenGrant(payload: unknown, previousRefreshToken?: s
 
 /**
  * 从 `id_token` 解出身份（`sub` / `email`）。
- *
- * ⚠️ **不验签**：该值只用于展示名与稳定标识，不作为鉴权依据（与
- * `src/buddy.ts` 的 `jwtExpiresAtMs` 同口径）；令牌端点的响应本身已由 TLS 保护。
- * 任何解析失败返回 `{}` 而不抛错 —— 身份不该让授权失败。
  */
 export function geminiIdentityFromIdToken(idToken: string): GeminiUserInfo {
   if (typeof idToken !== 'string' || idToken === '') return {}
@@ -464,9 +455,6 @@ async function listenCallback(
 
 /**
  * 启动授权流程并**立即返回** `loginUrl`。
- *
- * 两步式的原因与 CodeArts 那边一样：浏览器只在用户点击后的短暂窗口内允许
- * `window.open`，阻塞式流程会让调用方拿到 URL 时手势已过期。
  */
 export async function startGeminiOAuthFlow(
   options: GeminiOAuthOptions = {},

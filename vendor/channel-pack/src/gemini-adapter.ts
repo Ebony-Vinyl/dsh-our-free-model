@@ -141,13 +141,6 @@ const GEMINI_MAX_SESSION_BUMPS = 1
  *  the maximum number of tokens allowed (1048576).","status":"INVALID_ARGUMENT"}}
  * ```
  *
- * ⚠️ **harness 的 `isContextWindowExceededError` 认不出这句话** —— 实测其五个
- * 分支里最接近的 `EXCEEDS_MODEL_CONTEXT` 要求 `exceed...` 与 `context` 同时
- * 出现（`\b(?:input|prompt|request)\b.{0,40}\bexceed\b.{0,40}\bcontext\b`），
- * 而这句话里**一个 `context` 都没有**。这与 `buddy-adapter.ts` 当年漏判
- * 「prompt is too long: N tokens > M maximum」是**同一类缺陷**，修法也相同：
- * 本仓库补一条专属判据。
- *
  * ⚠️ 判据要求「token count」+「exceeds the maximum」两个特征同时出现，
  * 避免把别的内容类 400 误判成溢出（宽泛措辞会误判，代价见上）。
  */
@@ -179,10 +172,6 @@ const GEMINI_TOKEN_COUNT_OVERFLOW =
  * `INVALID_REQUEST`（`httpErrorCode` 的 400 兜底）就**连一次压缩的机会都没有**，
  * 长会话越过窗口后每轮都报废、用户只能开新会话。
  * 归成溢出的最坏结果只是一次无效的压缩尝试。方向取「宁可多判一次溢出」。
- *
- * 判定口径与 `buddy-adapter.ts` / `llm-adapter.ts` 的 `httpErrorCode` 一致：
- * 用**完整报文**（不先用 `errorDetail` 归一化 —— 那会丢掉 `extError` /
- * `displayMsg` 等结构化字段，实测会漏判）。
  */
 function isGeminiContextOverflow(text: string): boolean {
   return isContextWindowExceededError(text) || GEMINI_TOKEN_COUNT_OVERFLOW.test(text)
@@ -202,9 +191,6 @@ export interface GeminiAdapterOptions {
   accountPool?: AccountPool
   /**
    * 内联一张图片为**原始字节**（由调用方桥接 `ctx.attachments.readImage`）。
-   *
-   * ⚠️ 契约与 `buddy-adapter.ts:195` 一致：**读不到必须抛错**，不得返回空。
-   * 静默丢图会让用户以为图片被模型看到了（与 cline / lobsterai 同口径）。
    */
   readImage?: (attachment: unknown) => Promise<{ data: Uint8Array; mediaType: string }>
   /**
@@ -379,9 +365,6 @@ export class GeminiAdapter extends LlmAdapter {
 
   /**
    * 收集并内联本次请求涉及的全部图片。
-   *
-   * ⚠️ 两跳都失败时**必须抛错**（`buddy-adapter.ts:1239-1285` 的权威写法）：
-   * 静默丢弃会表现为「图片凭空消失、模型答非所问」，是最难排查的一类问题。
    */
   private async collectInlineImages(
     messages: GenerateOptions['messages'],

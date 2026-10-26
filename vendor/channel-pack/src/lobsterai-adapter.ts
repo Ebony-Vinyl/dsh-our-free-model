@@ -1,21 +1,6 @@
 /**
  * LobsterAI（有道龙虾）LLM 适配器。
  *
- * 骨架取自 `src/buddy-adapter.ts`（本插件已验证的实现），但**协议差异全部重写**：
- * LobsterAI 与腾讯系只在「OpenAI 兼容 + SSE」这一层相同，其余没有一处能照抄。
- *
- * ## 与 `BuddyAdapter` 的关键差异（逐条对应计划文档 §3.5-C）
- *
- * | 项 | 处理 |
- * |---|---|
- * | URL | `${product.apiBase}/api/proxy/v1/chat/completions` |
- * | 请求头 | 只设 `Authorization` / `Content-Type` / `Accept` / `User-Agent` / `X-LobsterAI-Client-*`；**不设**腾讯系归属头 |
- * | `stream` | **恒为 `true`** —— 上游只支持 SSE，`stream:false` 返回 500 |
- * | `tool_choice` | **不适用**：DSH 的 `GenerateOptions` 无该字段，且 body 由本适配器自建，天然不会出现（Go 桥接层要归一化是因为它转发客户端的原始 body） |
- * | `prompt_cache_key` | **不发** —— 那是腾讯后端的前缀缓存机制，此处未实测支持 |
- * | 思考等级 | **不照抄** buddy 的 deepseek 补档逻辑（那是针对腾讯后端实测的）；仅透传 |
- * | 图片 | **不支持**，`inputModalities` 恒为 `['text']` |
- *
  * 可以原样复用的是 `src/sse.ts` 的三个工具函数（`readWithIdleTimeout` /
  * `resolveToolPairing` / `normalizeToolArguments` / `isTruncatedArguments`）——
  * 它们处理的是 **OpenAI 协议层的通用陷阱**，与具体厂商无关。
@@ -32,7 +17,7 @@ import type { GenerateOptions, LlmModelInfo, LlmProviderInfo, LlmResolvedModelIn
 import { AccountPool, providerCatalogVisible } from './account-pool.js'
 import { RemoteCatalogGate } from './remote-catalog-gate.js'
 import { settingsNamespaceFor } from './settings-compat.js'
-import { parseRateLimitError } from './llm-adapter.js'
+import { parseRateLimitError } from './rate-limit.js'
 import {
   LOBSTERAI_CHAT_PATH,
   LOBSTERAI_MODELS_PATH,
@@ -156,9 +141,6 @@ export interface LobsteraiRemoteModel {
   contextWindow?: number
   /**
    * 计费倍率（`data.costMultiplier`）。
-   *
-   * ⚠️ 与 buddy 系的 `credits` **形态完全不同**：本处是**裸数字**（实测 `0.05`），
-   * 而 buddy 是字符串 `"x0.05"`。不要共用解析函数。
    */
   costMultiplier?: number
   /** 是否接受图片输入。 */
@@ -286,7 +268,7 @@ export function parseLobsteraiModels(body: unknown): LobsteraiRemoteModel[] {
     }
     const description = readStringField(record, 'description')
     if (description.length > 0) model.description = description
-    // 计费倍率：**裸数字**（实测 0.05 / 1.08 / 20）。与 buddy 系的字符串
+
     // `"x0.05"` 形态不同，故各自解析。只在为正数时带上（0 在业务上无意义）。
     const costMultiplier = readNumberField(record, 'costMultiplier')
     if (costMultiplier !== undefined && costMultiplier > 0) model.costMultiplier = costMultiplier
@@ -342,9 +324,6 @@ export interface LobsteraiAdapterOptions {
    *
    * ⚠️ 与 {@link readImage} 的错误契约**相反**：不可用时必须返回 `undefined`
    * 而不是抛错。判据与回退都在共享的 `projectRequestImage` 里。
-   *
-   * 背景（issue !IKITT9）：LobsterAI 撞的是**请求体体积**（实测 12 张原图能过、
-   * 13 张 ≈50 MiB 回 `SERVER code=500`），不是腾讯那道图片 token 预算。
    */
   readImageRequest?: (
     attachment: unknown,
@@ -365,7 +344,6 @@ function contentToText(content: unknown): string {
     .join('')
 }
 
-/** 工具结果内嵌图片的载体文本（与 buddy / 官方 deepseek 适配器同名同义）。 */
 const TOOL_RESULT_IMAGE_TEXT = 'Attached image(s) from tool result:'
 
 /**
@@ -441,12 +419,6 @@ function collectImages(content: readonly unknown[], refs: Map<string, unknown>):
 /**
  * 将 harness 对话消息序列化为 OpenAI chat-completions 传输格式。
  *
- * 与 buddy 适配器的差异：这里**不强制** assistant 携带 `reasoning_content`
- * （那是腾讯后端对推理模型的要求，未在 LobsterAI 上实测），
- * 但仍保留其中的**通用协议要求**：
- * - 孤儿工具调用清理（见 `resolveToolPairing` 的说明，后端会 400）；
- * - 正文为空且有 `tool_calls` 时 `content` 必须为 `null`（OpenAI 规范）。
- *
  * 图片：`imageUrls` 为 `undefined` 表示整个请求没有图片；非 undefined
  * （**含空 Map**）时把 user 消息升级为多模态 parts。空 Map 不能降级为
  * undefined —— 那会让「图片存在但字节读取失败」的 `[image unavailable]`
@@ -469,7 +441,7 @@ function serializeMessages(
 
   // 工具结果内嵌图片（`read_image` 等）不能并入 `role:'tool'` 消息：该角色的
   // content 只能是字符串，且必须紧跟其 assistant tool_call，中间插消息会 400。
-  // 故挂起到其后的独立 user 消息统一发出（与 buddy 适配器同款处理）。
+
   let pendingToolImages: Array<Record<string, unknown>> = []
   const flushToolImages = (): void => {
     if (pendingToolImages.length === 0) return
@@ -673,8 +645,6 @@ function httpErrorCode(status: number): string {
 
 /**
  * 判断是否为传输级错误（可重试的 TRANSPORT）。
- *
- * 与 buddy 适配器同源：半开连接与 TCP 重置都会以这些特征出现。
  */
 function isTransportError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -824,10 +794,6 @@ export class LobsteraiAdapter extends LlmAdapter {
   /**
    * 静态兜底模型目录。
    *
-   * **不做 buddy 那样的「以兜底表为准」裁剪**（`reconcileWithFallback`）：
-   * LobsterAI 的远端接口是**权威的**（产品兜底表本身就是从它实测抄来的），
-   * 远端可用时应完全采信，兜底只在远端整体失败时顶替。
-   *
    * ⚠️ 兜底表**不含 `costMultiplier`**：它是编译期快照，而价格会变；
    * 远端整体失败时拿不到权威倍率，此时**不显示**倍率（不猜）。
    */
@@ -896,13 +862,6 @@ export class LobsteraiAdapter extends LlmAdapter {
     return resolved
   }
 
-  /**
-   * 兼容 0.1.1-rc.2：新版 `LlmRuntime.prepareCall()` 会调用
-   * `registration.adapter.prepareCall(...)`，而本仓库链接的 dsh-llm 副本
-   * 基类尚未提供该方法，缺少时会在每轮请求开始时抛
-   * `registration.adapter.prepareCall is not a function`。
-   * 与 `BuddyAdapter` 同款 shim。
-   */
   async prepareCall(
     provider: string,
     model: string,
@@ -1025,12 +984,12 @@ export class LobsteraiAdapter extends LlmAdapter {
     if (options.maxTokens !== undefined) bodyObj.max_tokens = options.maxTokens
     if (options.stop !== undefined && options.stop.length > 0) bodyObj.stop = options.stop
     // 思考等级：仅在调用方显式传入时透传，不主动补档
-    // （buddy 那套「deepseek 系必须补档否则不思考」是针对腾讯后端的实测，
+
     // 未在 LobsterAI 上验证，照搬会造成非法参数 400）。
     if (options.reasoningEffort !== undefined) {
       bodyObj.reasoning_effort = options.reasoningEffort
     }
-    // **不发 prompt_cache_key**：那是腾讯后端的前缀缓存机制，此处未实测支持。
+
     const body = JSON.stringify(bodyObj)
 
     // 4. 发送请求（401/403 时刷新一次凭据后重试）
@@ -1210,12 +1169,6 @@ export class LobsteraiAdapter extends LlmAdapter {
    *    这里靠 `line.slice(5).trim()` 天然兼容两种形态；
    * 2. `reasoning_content` 单独成块（`sse.go:74-76`）；
    * 3. `tool_calls` 按 `index` 合并（首片带 id/name，后续只带 arguments 片段）。
-   *
-   * 额外保留 buddy 适配器里两条实测得出的防坑规则（与厂商无关，属协议层）：
-   * - **`function.name` 只允许非空覆盖**：后续分片带空串 `""`，
-   *   直接覆盖会清空已解析出的工具名 → `unknown tool ""`；
-   * - **`finish_reason` 映射顺序**：`length` / 中途断流 / 参数残缺一律归为
-   *   `max-tokens`，否则 harness 会执行残缺 JSON 参数并污染会话历史。
    */
   private async *consumeSse(
     response: Response,
@@ -1228,10 +1181,6 @@ export class LobsteraiAdapter extends LlmAdapter {
     /**
      * 思考死循环检测（见 `createReasoningLoopDetector`）。命中后丢弃后续
      * reasoning 增量，收尾时发截断后的 block，并让 finish 报 max-tokens。
-     *
-     * 与 buddy 同因：`reasoning_tokens` **计入** `completion_tokens`，思考陷入
-     * 病态重复就把输出额度烧光、正文零产出，而 `finish` 若是 `stop`，UI 上
-     * 完全看不出错误。
      */
     const loopGuard = isReasoningLoopGuardEnabled() ? createReasoningLoopDetector() : undefined
     let loopDetected = false
@@ -1454,9 +1403,9 @@ export class LobsteraiAdapter extends LlmAdapter {
             const fragment = call.function?.arguments ?? ''
             block.text += fragment
             // ⚠️ **名称为空前不发射任何 chunk**（与 `openai-compat.ts` /
-            // `buddy-adapter.ts` 同因同修）。只跳过收尾的 `block-end` 不够 ——
+
             // `BlockAssembler` 会把没有 block-end 的 partial 也组装成
-            // `name:''`，污染会话后让腾讯系端点以 400 code 11133 拒绝之后每一次请求。
+
             if (!block.announced) {
               if (!hasUsableToolName(block.name)) continue
               block.announced = true
@@ -1481,7 +1430,7 @@ export class LobsteraiAdapter extends LlmAdapter {
           }
           if (data.usage) {
             const promptTokens = data.usage.prompt_tokens ?? 0
-            // 缓存命中字段有多处来源，取首个有值的（与 buddy 侧同口径）。
+
             const cachedTokens = data.usage.prompt_tokens_details?.cached_tokens
               ?? data.usage.prompt_cache_hit_tokens
               ?? 0
@@ -1656,10 +1605,6 @@ export class LobsteraiAdapter extends LlmAdapter {
       && isProseTruncatedByStopString(emittedProse)
     /**
      * 思考死循环是否**是唯一的产出**（无正文、无工具调用）。
-     *
-     * ⚠️ 与 `buddy-adapter.ts` 同因同修（Gitee !IKIZNK）：只有该步没有可见产出
-     * 时才报 `error` —— `error` 路径不落 `assistant/message`，有正文/工具调用时
-     * 报它会把可见内容丢掉。实测守卫命中 25 例全部只有思考。
      */
     const reasoningLoopIsSoleOutput = loopDetected
       && emittedProse === ''
@@ -1702,9 +1647,6 @@ export class LobsteraiAdapter extends LlmAdapter {
  *
  * 安全性：`name` **纯属展示** —— DSH 的选择与持久化只用 `id`
  * （`selectionOf` 返回 `model: model.id`），故附加价格不会污染会话。
- *
- * 形态差异：本 provider 的 `costMultiplier` 是**裸数字**（`0.05`），
- * 展示时补 `x` 前缀（buddy 系远端给的字符串本身已带 `x`）。
  */
 function displayNameFor(model: LobsteraiRemoteModel): string {
   if (model.costMultiplier === undefined) return model.name

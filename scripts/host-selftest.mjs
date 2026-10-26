@@ -99,18 +99,18 @@ const call = async (method, url, body) => {
   try { return { status, json: JSON.parse(payload) } } catch { return { status, raw: payload.slice(0, 200) } }
 }
 
-// Let the boot refresh finish: listing + a full availability probe.
+// Let the boot refresh finish: the listing is reloaded automatically, while
+// availability probing is manual now, so drive the one round this suite reads.
 const deadline = Date.now() + 120000
 while (Date.now() < deadline && !(captured.adapters.length > 0 && ctx.__routes.length > 0)) {
   await new Promise(resolve => setTimeout(resolve, 500))
 }
-// Groups are snapshotted below, so wait until the first probe has landed — a
-// picker captured mid-probe would show the fallback catalog and stale grouping.
 while (Date.now() < deadline) {
   const summary = await call('GET', '/api/our-free-model/summary').catch(() => ({ json: null }))
-  if (summary.json?.probedAt > 0 && Array.isArray(summary.json?.catalog) && summary.json.catalog.length > 0) break
+  if (Array.isArray(summary.json?.catalog) && summary.json.catalog.length > 0) break
   await new Promise(resolve => setTimeout(resolve, 1000))
 }
+await call('POST', '/api/our-free-model/reprobe')
 const boot = captured.adapters[0]
 if (boot === undefined) { console.log('FAIL: adapter never registered\n' + logs.join('\n')); process.exit(1) }
 const adapter = boot.adapter

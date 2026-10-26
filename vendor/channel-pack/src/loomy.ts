@@ -46,10 +46,6 @@ export const LOOMY_REQUEST_TIMEOUT_MS = 60_000
 
 /**
  * Loomy 凭据。
- *
- * ⚠️ `access_token` 字段名**必须**是这个 ——
- * `AccountPool.findAccountIdByCredential` 对非 `codearts` 的 provider
- * 统一取该字段作身份标识。它的值是讯飞下发的 32 位小写 hex `session`。
  */
 export interface LoomyCredential {
   /** 讯飞 session（32 位小写 hex）。 */

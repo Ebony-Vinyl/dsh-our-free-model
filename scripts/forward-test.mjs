@@ -478,7 +478,16 @@ await checkAsync('responses endpoint streams events and reports usage', async ()
   assert.equal(response.status, 200)
   const body = await response.text()
   const types = body.split('\n').filter(line => line.startsWith('event: ')).map(line => line.slice('event: '.length))
-  assert.deepEqual(types, ['response.created', 'response.output_item.added', 'response.output_text.delta', 'response.output_text.delta', 'response.completed'])
+  assert.deepEqual(types, ['response.created', 'response.output_item.added', 'response.content_part.added',
+    'response.output_text.delta', 'response.output_text.delta', 'response.output_text.done',
+    'response.content_part.done', 'response.output_item.done', 'response.completed'])
+  const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  const added = frames.find(frame => frame.type === 'response.output_item.added')
+  const done = frames.find(frame => frame.type === 'response.output_item.done')
+  assert.equal(added.item.id, done.item.id, 'native Codex requires a stable output item ID')
+  assert.equal(done.item.status, 'completed')
+  assert.equal(done.item.content[0].text, 'hello world', 'the completed item is what native Codex renders')
+  assert.equal(frames.find(frame => frame.type === 'response.output_text.delta').content_index, 0)
   const completed = JSON.parse(body.split('\n').filter(line => line.startsWith('data: ')).at(-1).slice('data: '.length))
   assert.equal(completed.response.status, 'completed')
   assert.equal(completed.response.output[0].content[0].text, 'hello world')
@@ -518,6 +527,13 @@ await checkAsync('responses streaming gives text and calls distinct output index
   assert.deepEqual(completed.response.output.map(row => row.type), ['message', 'function_call', 'function_call'])
   assert.equal(completed.response.output[1].arguments, '{"a":1}')
   assert.equal(completed.response.output[2].arguments, '{"b":2}')
+  const finished = frames.filter(frame => frame.type === 'response.output_item.done')
+  assert.deepEqual(finished.map(frame => frame.output_index), [0, 1, 2])
+  for (const item of finished) {
+    const start = added.find(frame => frame.output_index === item.output_index)
+    assert.equal(start.item.id, item.item.id)
+    if (item.item.type === 'function_call') assert.equal(start.item.call_id, item.item.call_id)
+  }
 })
 
 await checkAsync('responses endpoint reports an incomplete turn after a cut', async () => {
@@ -855,8 +871,13 @@ await checkAsync('bindForwardPort walks past a port that stays taken', async () 
   assert.notEqual(bound.port, held.port)
   assert.ok(bound.port > 0)
   if (heldNext !== null) assert.notEqual(bound.port, heldNext.port, 'a taken neighbour must be skipped too')
-  assert.equal(bound.bindError?.code, 'EADDRINUSE', `expected the occupant's code, got ${bound.bindError?.code}`)
-  await new Promise(resolve => server.close(() => resolve()))
+  try {
+    const occupiedCodes = process.platform === 'win32' ? ['EADDRINUSE', 'EACCES'] : ['EADDRINUSE']
+    assert.ok(occupiedCodes.includes(bound.bindError?.code), `expected the occupant's code, got ${bound.bindError?.code}`)
+    assert.equal(classifyBindError({ code: bound.bindError.code }).retryable, true)
+  } finally {
+    await new Promise(resolve => server.close(() => resolve()))
+  }
 })
 
 await checkAsync('startForwardServer reports the port it settled on and still serves', async () => {

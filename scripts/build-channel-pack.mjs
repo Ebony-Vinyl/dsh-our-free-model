@@ -15,7 +15,7 @@
  *   own instances (cordis contexts, the llm registry), so bundling a second
  *   copy would break identity checks, not just bloat the file.
  * - `node:*` — platform builtins.
- * Everything else (`jose`, `undici`) is inlined, which is what lets the package
+ * Everything else (`undici`) is inlined, which is what lets the package
  * stay self-contained without vendoring node_modules.
  *
  * Run after editing/re-vendoring `src/`; requires esbuild (devDependency, or any

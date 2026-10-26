@@ -8,7 +8,6 @@ export async function createChannelRuntime({ dataDir, logger = console, stats })
   const worker = new Worker(new URL('./worker.mjs', import.meta.url), {
     workerData: { dataDir },
     execArgv: process.execArgv.filter(arg => !arg.startsWith('--input-type')),
-    env: { ...process.env, OFM_CODEARTS_CACHE_DIR: path.join(dataDir, 'channel-pack', 'codearts-cache') },
   })
   const pending = new Map()
   let sequence = 0
