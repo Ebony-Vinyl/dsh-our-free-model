@@ -113,6 +113,11 @@ export async function startStandalone({
   logger = console, refresh = true, probe, lanEnabled, lanPort,
   startRelay = startLanRelay,
   workbenchOptions, subscriptionOptions,
+  // The desktop updater judges the host it runs on (`win32` + `x64` only). It
+  // already takes `platform`/`arch` at its own boundary, so they are threaded
+  // through here rather than re-derived: a test runner is never a Windows x64
+  // host, and the update flow has to be exercisable where CI actually runs.
+  desktopPlatform = process.platform, desktopArch = process.arch,
 } = {}) {
   if (!isLoopbackHost(host)) throw new TypeError('the standalone service binds a loopback address only')
   if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) throw new TypeError('dataDir must be an absolute path')
@@ -123,6 +128,8 @@ export async function startStandalone({
   if (lanPort !== undefined && (!Number.isInteger(lanPort) || lanPort < 0 || lanPort > 65535)) {
     throw new TypeError('lanPort must be an integer between 0 and 65535')
   }
+  if (typeof desktopPlatform !== 'string' || desktopPlatform === '') throw new TypeError('desktopPlatform must be a non-empty string')
+  if (typeof desktopArch !== 'string' || desktopArch === '') throw new TypeError('desktopArch must be a non-empty string')
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 })
   const releaseLock = await acquireServiceLock(dataDir)
   let stores
@@ -279,6 +286,7 @@ export async function startStandalone({
     management = createManagement({
       stores, runtime, channels, eac, subscriptions, workbenchOptions,
       magpieEngine, magpieModels,
+      desktopPlatform, desktopArch,
       onEngineStarted: () => { settings.update({ magpieEnabled: true }); settings.flush() },
       onSubscriptionsChanged: () => runtime?.syncAggregateCatalog?.(),
       info: () => ({

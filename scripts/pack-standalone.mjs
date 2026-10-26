@@ -22,6 +22,7 @@ const sourceFiles = [
   'packages/standalone/cli.mjs',
   'packages/standalone/service.mjs',
   'packages/standalone/management.mjs',
+  'packages/standalone/desktop-update.mjs',
   'packages/standalone/login-terminal.mjs',
   'packages/standalone/open-external.mjs',
   'packages/standalone/eac.mjs',

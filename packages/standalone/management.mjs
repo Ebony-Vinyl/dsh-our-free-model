@@ -10,6 +10,7 @@ import { createWorkbench } from './workbench.mjs'
 import { createProviderManagement } from './providers.mjs'
 import { createWorkbenchLibrary } from './library.mjs'
 import { createRoutingManagement } from './routing.mjs'
+import { createDesktopUpdater } from './desktop-update.mjs'
 import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from '../../src/disclaimer.js'
 
 const PREFIX = '/api/management'
@@ -87,7 +88,11 @@ export function managementSettings(value) {
 }
 
 /** 管理读写要求鉴权；登录恢复仅允许同源页面触发固定本机动作。 */
-export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal }) {
+export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal, desktopPlatform = process.platform, desktopArch = process.arch }) {
+  // `desktopPlatform`/`desktopArch` are threaded from the caller instead of read
+  // from `process` so the Windows-only update flow stays exercisable on a test
+  // runner that is neither (`desktop-update.mjs` already takes them this way).
+  const desktopUpdate = createDesktopUpdater({ dataDir: info().dataDir, version: process.env.OFM_DESKTOP_VERSION, platform: desktopPlatform, arch: desktopArch })
   let bootstrap = { token: crypto.randomBytes(32).toString('base64url'), until: Date.now() + BOOTSTRAP_MS }
   const sessions = new Map()
   const privilegedSessions = new Set()
@@ -220,6 +225,8 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       return
     }
     const privilegedManagementRoute =
+      pathname === `${PREFIX}/desktop-update` || pathname.startsWith(`${PREFIX}/desktop-update/`)
+      ||
       pathname === `${PREFIX}/workbench` || pathname.startsWith(`${PREFIX}/workbench/`)
       || pathname === `${PREFIX}/library` || pathname.startsWith(`${PREFIX}/library/`)
       || pathname === `${PREFIX}/providers` || pathname.startsWith(`${PREFIX}/providers/`)
@@ -242,6 +249,14 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       sessions.delete(cookie(req))
       privilegedSessions.delete(cookie(req))
       json(res, 200, { ok: true }, { 'set-cookie': clearCookie() })
+    } else if (pathname === `${PREFIX}/desktop-update` && method === 'GET') {
+      json(res, 200, desktopUpdate.status())
+    } else if (pathname === `${PREFIX}/desktop-update/check` && method === 'POST') {
+      await readBody(req)
+      json(res, 200, desktopUpdate.check())
+    } else if (pathname === `${PREFIX}/desktop-update/download` && method === 'POST') {
+      await readBody(req)
+      json(res, 200, desktopUpdate.download())
     } else if (method === 'GET' && pathname === `${PREFIX}/summary`) {
       json(res, 200, summary())
     } else if (method === 'GET' && pathname === `${PREFIX}/stats`) {
@@ -470,6 +485,6 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       }
       return true
     },
-    dispose() { closed = true; bootstrap = null; sessions.clear(); privilegedSessions.clear(); return workbench?.dispose() },
+    dispose() { desktopUpdate.close(); closed = true; bootstrap = null; sessions.clear(); privilegedSessions.clear(); return workbench?.dispose() },
   }
 }
