@@ -694,9 +694,48 @@ await checkAsync('PluginUpdater.check detects the newer version', async () => {
   const data = makeDataDir()
   const updater = new PluginUpdater({ pkgDir: pkg, dataDir: data, settings: () => ({ feedUrl: `${base}/repo/feed/announcements.json` }), fetchImpl: fetch, defaultSources: [`${base}/repo/feed/manifest.json`], manifestPublicKey: TEST_PUBLIC_KEY })
   const status = await updater.check()
-  assert.deepEqual(status, { available: true, current: OLD, latest: NEW })
+  assert.deepEqual(status, { available: true, current: OLD, latest: NEW, sameVersion: false })
   fs.rmSync(pkg, { recursive: true, force: true })
   fs.rmSync(data, { recursive: true, force: true })
+})
+await checkAsync('check distinguishes a same-version content change from a true no-op (issue #602)', async () => {
+  // A re-publish that keeps the version number but changes bytes must still be
+  // offered; an identical re-publish must not. Without the content comparison the
+  // strict `> 0` version check hides the first case from installs that already
+  // carry that version number.
+  const run = async republished => {
+    const pkg = makePackage(OLD)
+    const data = makeDataDir()
+    const unsigned = {
+      version: OLD, base: '../', publishedAt: '2026-10-24T00:00:00Z', notes: '<p>same-version</p>',
+      files: Object.entries(republished).map(([rel, body]) => ({ path: rel, size: Buffer.byteLength(body), sha256: sha(body) })),
+    }
+    const manifest = { ...unsigned, signature: signManifest(parseManifest(unsigned), testPrivateKey) }
+    const fetchImpl = async url => {
+      const clean = new URL(url).pathname
+      if (clean.endsWith('/feed/manifest.json')) return new Response(JSON.stringify(manifest))
+      const rel = clean.replace(/^\/repo\//, '')
+      return new Response(republished[rel] ?? 'not found', { status: republished[rel] === undefined ? 404 : 200 })
+    }
+    try {
+      const updater = new PluginUpdater({ pkgDir: pkg, dataDir: data, settings: () => ({}), fetchImpl, defaultSources: ['http://127.0.0.1:1/repo/feed/manifest.json'], manifestPublicKey: TEST_PUBLIC_KEY })
+      const result = await updater.check()
+      return { result, status: updater.status() }
+    } finally {
+      fs.rmSync(pkg, { recursive: true, force: true })
+      fs.rmSync(data, { recursive: true, force: true })
+    }
+  }
+
+  const changed = await run({ ...oldFiles, 'client.js': '// re-published client\n' })
+  assert.deepEqual(changed.result, { available: true, current: OLD, latest: OLD, sameVersion: true })
+  assert.equal(changed.status.available, true)
+  assert.equal(changed.status.sameVersion, true)
+
+  const identical = await run({ ...oldFiles })
+  assert.deepEqual(identical.result, { available: false, current: OLD, latest: OLD, sameVersion: false })
+  assert.equal(identical.status.available, false)
+  assert.equal(identical.status.sameVersion, false)
 })
 await checkAsync('PluginUpdater rejects an unparsable manifest', async () => {
   const pkg = makePackage(OLD)

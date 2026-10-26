@@ -841,6 +841,21 @@ export function verifyInstalled(pkgDir, manifest) {
 }
 
 /**
+ * True when every file the manifest lists already matches the bytes on disk.
+ * Used to detect a same-version re-publish (content changed, version number kept),
+ * which a strict `compareVersions(...) > 0` check alone would hide from installs
+ * that already have that version number — they would never be offered the update.
+ */
+export function installedMatchesManifest(pkgDir, manifest) {
+  for (const file of manifest.files) {
+    const target = path.join(pkgDir, ...file.path.split('/'))
+    if (!fs.existsSync(target)) return false
+    if (sha256File(target) !== file.sha256) return false
+  }
+  return true
+}
+
+/**
  * The upgrade lifecycle. The optional activate callback lets the Host include
  * hot reload in the transaction; standalone release audits only install files.
  */
@@ -859,6 +874,7 @@ export class PluginUpdater {
   constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEY, runningVersion }) {
     this.deps = { pkgDir, dataDir, settings, log, fetchImpl, defaultSources, manifestPublicKey, runningVersion }
     this.latest = undefined
+    this.sameVersionContent = false
     this.checkedAt = 0
     this.error = ''
     this.applying = false
@@ -936,7 +952,8 @@ export class PluginUpdater {
     const active = upgradeLocks.has(this.deps.pkgDir)
     const unfinished = ['installing', 'activating'].includes(state?.phase)
     const recoveryRequired = state?.phase === 'recovery-required' || (unfinished && !active)
-    const available = this.latest !== undefined && compareVersions(this.latest.version, current) > 0
+    const sameVersion = this.latest !== undefined && this.sameVersionContent === true
+    const available = this.latest !== undefined && (compareVersions(this.latest.version, current) > 0 || sameVersion)
     this.history = this.loadHistory()
     return {
       current,
@@ -947,6 +964,7 @@ export class PluginUpdater {
       phase: state?.phase ?? 'idle',
       latest: this.latest?.version ?? '',
       available,
+      sameVersion,
       notes: this.latest?.notes ?? '',
       publishedAt: this.latest?.publishedAt ?? 0,
       checkedAt: this.checkedAt,
@@ -983,7 +1001,9 @@ export class PluginUpdater {
       this.checkedAt = Date.now()
       this.error = ''
       this.deps.log?.(`our-free-model: update check via ${source} -> ${manifest.version} (installed ${current})`)
-      return { available: compareVersions(manifest.version, current) > 0, current, latest: manifest.version }
+      const sameVersion = compareVersions(manifest.version, current) === 0
+      this.sameVersionContent = sameVersion && !installedMatchesManifest(this.deps.pkgDir, manifest)
+      return { available: compareVersions(manifest.version, current) > 0 || this.sameVersionContent, current, latest: manifest.version, sameVersion: this.sameVersionContent }
     } catch (error) {
       this.error = String(error?.message ?? error)
       throw error
