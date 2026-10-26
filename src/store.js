@@ -159,7 +159,9 @@ export const SETTINGS_INITIAL = {
   hiddenModelIds: [],
   hideFreeModels: false,
   hideEacModels: false,
-  /** Minutes between background availability re-probes. */
+  /** Minutes between background catalog refreshes. Automatic availability
+   *  probing is disabled by owner policy; only the manual reprobe button sends
+   *  probe requests. */
   probeIntervalMinutes: 15,
   /** Serve the OpenAI-compatible forward listener for other local harnesses. */
   forward: {
@@ -223,6 +225,8 @@ export const SETTINGS_INITIAL = {
   localOptimize: { enabled: true, quota: true, prefix: true, title: true, suggestion: true, filepath: true },
   /** Acknowledged announcement copy version. */
   announcementAck: '',
+  /** Acknowledged disclaimer copy version (src/disclaimer.js); 0 = not yet read. */
+  disclaimerAck: 0,
   /** Last full catalog refresh timestamp. */
   catalogSyncedAt: 0,
   /** Owner override for the announcement/update feed location. `{repo}` expands

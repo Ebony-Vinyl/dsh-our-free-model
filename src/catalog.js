@@ -268,7 +268,7 @@ export const EAC_TAG = 'EAC'
 const EAC_DISPLAY_NAMES = {
   // The OpenCode free lane is relayed server-side; the org prefix is routing
   // detail, so the picker shows the model's own name with the lane's Free mark.
-  'opencode/deepseek-v4.1-flash-free': 'DeepSeek V4.1 Flash Free',
+  'opencode/deepseek-v4.1-flash-free': 'deepseek-v4.1-flash-free 1017',
   'opencode/glm-5.3-flash-free': 'GLM 5.3 Flash Free',
   'deepseek-ai/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
   'moonshotai/kimi-k2.6': 'Kimi K2.6',
@@ -408,8 +408,9 @@ export function buildEacCatalog(ids) {
       // The card's small line under the name. The `id` keeps its `org/` prefix —
       // that is what keeps this row distinct from the free lane's same-named
       // model during the merge — but the prefix is routing detail, so the line
-      // shows the model's own id.
-      label: id.includes('/') ? id.slice(id.indexOf('/') + 1) : id,
+      // shows the model's own id, with a display-only version marker where needed.
+      label: id === 'opencode/deepseek-v4.1-flash-free' ? 'deepseek-v4.1-flash-free 1017'
+        : id.includes('/') ? id.slice(id.indexOf('/') + 1) : id,
       channel: EAC_CHANNEL,
       wire: 'chat',
       vision: caps.vision === true,

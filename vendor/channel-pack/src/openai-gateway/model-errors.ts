@@ -20,8 +20,6 @@
  */
 
 /**
- * 判据刻意**窄**：CodeArts 的 `INVALID_REQUEST` 还覆盖参数非法、余额不足等。
- *
  * ⚠️ 最后两条是**本插件自己的措辞**（`gemini.ts` / `gemini-adapter.ts` 的
  * 「模型 "X" 不在本 provider 目录中（仅支持 …）」）。把自家文案写进通用判据表
  * 是刻意的取舍：那条错误虽已自带 `status: 404`（走 `failureToOpenAiError`），
@@ -42,9 +40,6 @@ const MISSING_MODEL_PATTERNS: readonly RegExp[] = [
 
 /**
  * 上游消息是否表示「模型不存在」。
- *
- * ⚠️ 只看消息措辞，**不**看 `code`：各家的 `INVALID_REQUEST` 覆盖面差别很大
- * （CodeArts 就同时用于参数非法、余额不足），拿 code 当门禁会大面积误判。
  */
 export function looksLikeMissingModel(message: string): boolean {
   if (typeof message !== 'string' || message.length === 0) return false
@@ -65,21 +60,6 @@ export const GATEWAY_FALLBACK_STATUS = 502
  * ## ⚠️ 为什么必须有这个门禁（三处出口，缺一不可）
  *
  * 门禁是 `400 ≤ status ≤ 599`。**上下界都必要**：
- *
- * - **下界 400**：`src/llm-adapter.ts`（codearts）有**三处**故意用
- *   `{ status: 200 }` 表示「HTTP 是 200，但流里的内容是业务失败」
- *   （`QUOTA_EXCEEDED` / `BENEFIT_NOT_FOUND` / `INVALID_REQUEST`）。宿主
- *   `normalizeLlmFailure` 只校验 `100 ≤ status ≤ 599`，**不过滤 2xx**，所以这个 200
- *   会一路活到网关。一条**错误**帧里带 `"status": 200` 是自相矛盾的 ——
- *   客户端若读 `error.status` 判成败，会把「额度用尽」读成成功。而在流式下
- *   网关自己的 HTTP 状态改不了（流已发出 200），这个字段是**唯一的**错误信号载体。
- * - **上界 599**：由宿主保证（`LlmError` 构造器与 `failureSnapshot` 都拒
- *   100–599 之外的值），这里只是与下界对称、便于阅读。
- *
- * ⚠️ **这个函数存在的理由是消除重复**：修复前 `failureToOpenAiError` 与
- * `collectOpenAiCompletion` 都有门禁，唯独 `toOpenAiSse` 漏了 —— 于是**同一条
- * codearts 配额错误，走非流式得 502（对）、走流式得 200（错）**。
- * 三处各写一遍判据就一定会再漂移一次，故收敛到这一个函数。
  *
  * ⚠️ 5xx 会**原样透出**（不归 502），这是刻意的：上游的 500/503/504 本就可重试，
  * 原样透出比统一改成 502 更准。把「5xx 也不穿透」当修复会把 503 降级成 4xx 语义，
@@ -112,21 +92,7 @@ export function normalizeUpstreamFailure(failure: {
 /**
  * 找出用户大概是手滑打错的目录条目，用于给出纠错建议。
  *
- * 存在的理由（实测）：`codearts` 的目录里 `glm-5.3-flash` 与 `GLM-5.2` **并存**，
- * 用户照着后者的大小写习惯猜出 `GLM-5.3` 会被上游拒绝，而错误信息里没有任何
- * 提示告诉他正确拼写。
- *
  * ## 两级匹配，第二级是必需的
- *
- * 实测那个真实误填 `codearts/GLM-5.3`，而正确 ID 是 `codearts/glm-5.3-flash` ——
- * **既大小写不同、又少了一截后缀**，只做「大小写全等」根本救不了它。所以第二级
- * 用「忽略大小写的前缀匹配」。
- *
- * ⚠️ 三条约束，缺一个就会给出误导性建议：
- * - **provider 段也参与比较**：`codearts/x` 与 `buddy/x` 是两个不同的模型，
- *   换 provider 不是拼写错误；
- * - **候选必须唯一**：有多个前缀候选说明用户少打的那截有歧义，不猜；
- * - **精确命中时不给建议**（那不是拼写错误）。
  *
  * @param requested 用户实际提交的完整 ID
  * @param catalog 目录里的完整 ID 列表

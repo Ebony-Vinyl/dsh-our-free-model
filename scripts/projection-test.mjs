@@ -20,6 +20,7 @@
  * Run: node scripts/projection-test.mjs
  */
 
+import { fromOpenAiMessages } from '../src/core/completion.js'
 import { repairToolPairing, toChatMessages, toClaudeMessages, toResponseInput } from '../src/messages.js'
 
 let failures = 0
@@ -289,6 +290,24 @@ console.log('\n=== 8. parallel image results stay adjacent (#112) ===')
   check('mixed wrapper text is preserved once', JSON.stringify(toChatMessages(repairToolPairing(mixed))).split('keep this note').length - 1, 1)
   check('mixed wrapper text cannot interrupt Responses outputs', toResponseInput(repairToolPairing(mixed)).map(row => row.type), ['function_call', 'function_call', 'function_call_output', 'function_call_output', 'message'])
 }
+
+
+// Chat forwarding must retain the caller's previous reasoning through tool results.
+for (const reasoning of ['previous reasoning', '']) {
+  const messages = [
+    { role: 'user', content: 'read a file' },
+    { role: 'assistant', content: null, reasoning_content: reasoning, tool_calls: [{ id: 'a', type: 'function', function: { name: 'read', arguments: '{"path":"owned.txt"}' } }] },
+    { role: 'tool', tool_call_id: 'a', content: 'file contents' },
+    { role: 'assistant', content: 'done', reasoning_content: reasoning },
+  ]
+  const projected = toChatMessages(repairToolPairing(fromOpenAiMessages({ messages }, false, 'reflection/beam-free')))
+  check('forwarding retains explicit reasoning, including empty strings', projected, messages)
+}
+for (const reasoning of [undefined, null, 4, {}]) {
+  const messages = [{ role: 'user', content: 'hello', reasoning_content: 'user field' }, { role: 'assistant', content: 'reply', reasoning_content: reasoning }]
+  check('forwarding does not invent reasoning or accept other roles/invalid values', toChatMessages(fromOpenAiMessages({ messages }, false, 'model')), [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'reply' }])
+}
+check('internal reasoning blocks are not exposed as Chat text', toChatMessages([{ role: 'assistant', content: [{ type: 'reasoning', text: 'internal' }, { type: 'text', text: 'visible' }] }]), [{ role: 'assistant', content: 'visible' }])
 
 console.log(failures === 0 ? '\nall projection checks passed' : `\n${failures} projection check(s) failed`)
 process.exitCode = failures === 0 ? 0 : 1

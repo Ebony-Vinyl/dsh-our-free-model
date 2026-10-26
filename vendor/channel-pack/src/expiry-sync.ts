@@ -14,14 +14,6 @@ import { REFRESH_LEAD_MS } from './refresh.js'
  *
  * 这条分叉有两条产生路径，都真实发生过：
  *
- * 1. **按需续期不回写**：`refreshAccountCredential`（RPC `account.refresh` 走的
- *    路径）原先只有 raccoon 记得 `pool.updateAccount({ expiresAt })`，
- *    其余七个 provider 只 `credentials.set` —— 续期成功了、凭据换新了，
- *    UI 却纹丝不动，且没有任何自救手段（「重测」按钮的 refresh 是刻意的 no-op）。
- * 2. **定时器首轮要等满一个周期**：`src/index.ts` 的多账号续期只有 `setInterval`、
- *    没有启动时首轮，短寿命 provider（cline 1h / codearts 2h / raccoon 3h）
- *    在宿主关闭期间到期后，最长要等 30 分钟才第一次被处理。
- *
  * 本模块把 raccoon 已经验证过的写法抽成一份实现，让九个 provider 共用 ——
  * 与 AGENTS.md「差异收敛到产品配置、缺陷只修一遍」的一贯做法一致。
  */
@@ -111,7 +103,7 @@ export function shouldRefreshNow(expiresAtMs: number | undefined, nowMs = Date.n
 export async function syncAccountExpiry<TCredential>(params: {
   /** 账号池；未提供时静默跳过（兼容不传 pool 的既有调用方）。 */
   pool: ExpirySyncPool | undefined
-  /** 账号池里该 provider 的 id，如 `'cline'` / `'codearts'`。 */
+
   provider: string
   /** 已从凭据算好的过期信息。 */
   credential: TCredential

@@ -33,7 +33,7 @@ export async function verifyChannelModelActions() {
   let fail = false, release
   let hold = false
   const props = {
-    channel: { id: 'codearts', name: 'CodeArts', org: '测试', accent: '#C7000B' },
+    channel: { id: 'lobsterai', name: 'LobsterAI', org: '测试', accent: '#C7000B' },
     status: { accounts: { total: 0, enabled: 0 }, models: { total: 2, disabled: 1 } },
     t: key => DICT.zh[key],
     onChanged: () => { changed++ },
@@ -74,7 +74,7 @@ export async function verifyChannelModelActions() {
   button('全部关闭').props.onClick()
   button('全部开启').props.onClick()
   assert.equal(calls.length, 1, '同一批操作完成前重复点击只能发送一次请求')
-  assert.deepEqual(calls[0], { method: 'model.setAllDisabled', payload: { provider: 'codearts', disabled: true } })
+  assert.deepEqual(calls[0], { method: 'model.setAllDisabled', payload: { provider: 'lobsterai', disabled: true } })
   const busy = render()
   assert.ok(buttons(busy).every(node => node.props.className === 'ofm_foldtoggle' || node.props.disabled),
     '批量请求期间禁用单模型和其他写入按钮')

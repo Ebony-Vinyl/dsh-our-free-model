@@ -140,23 +140,23 @@ const rpcMethods = {
     enabled: true, running: true, blockedByEnv: false,
     address: { host: '127.0.0.1', port: 8326 },
     apiKey: { value: 'gw-key-abcdef', fromEnv: false, path: 'C:/x/api-key' },
-    models: [{ provider: 'buddy', id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash' }],
+    models: [{ provider: 'lobsterai', id: 'deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash' }],
     modelsSource: 'catalog',
   },
-  'provider.status': { statuses: { codearts: { models: { total: 9, disabled: 0 }, accounts: { total: 1, enabled: 1 }, closed: false } } },
-  'account.list': { accounts: [{ id: 'codearts-1', provider: 'codearts', nickname: 'probe', enabled: true, refreshable: true, expiresAt: Date.now() + 86400000 }] },
+  'provider.status': { statuses: { lobsterai: { models: { total: 9, disabled: 0 }, accounts: { total: 1, enabled: 1 }, closed: false } } },
+  'account.list': { accounts: [{ id: 'lobsterai-1', provider: 'lobsterai', nickname: 'probe', enabled: true, refreshable: true, expiresAt: Date.now() + 86400000 }] },
   'model.list': { models: [{ id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', disabled: false, dead: false }] },
   'usage.tokenLedger': {
     snapshot: {
-      channels: [{ channel: 'direct', providers: [{ provider: 'codearts', accounts: [{ accountId: 'codearts-1', models: [{ model: 'deepseek-v4.1-flash', requests: 12, reportedRequests: 12, inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 400, errors: 1, avgTtftMs: 320, avgTps: 41.5 }], totals: { requests: 12, reportedRequests: 12, inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 400, errors: 1, avgTtftMs: 320, avgTps: 41.5 } }] }] }],
+      channels: [{ channel: 'direct', providers: [{ provider: 'lobsterai', accounts: [{ accountId: 'lobsterai-1', models: [{ model: 'deepseek-v4.1-flash', requests: 12, reportedRequests: 12, inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 400, errors: 1, avgTtftMs: 320, avgTps: 41.5 }], totals: { requests: 12, reportedRequests: 12, inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 400, errors: 1, avgTtftMs: 320, avgTps: 41.5 } }] }] }],
       totals: { requests: 12, reportedRequests: 12, inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 300, cacheWriteTokens: 0, reasoningTokens: 400, errors: 1, avgTtftMs: 320, avgTps: 41.5 },
       entries: [
-        { ts: Date.now() - 60000, channel: 'direct', provider: 'codearts', model: 'deepseek-v4.1-flash', accountId: 'codearts-1', usageReported: true, inputTokens: 120, outputTokens: 300, cacheReadTokens: 40, reasoningTokens: 50, ttftMs: 310, tps: 40.2, durationMs: 4200 },
-        { ts: Date.now() - 120000, channel: 'gateway', provider: 'buddy', model: 'kimi-k3', accountId: '', usageReported: false, inputTokens: 0, outputTokens: 0, durationMs: 88, error: 'insufficient quota' },
+        { ts: Date.now() - 60000, channel: 'direct', provider: 'lobsterai', model: 'deepseek-v4.1-flash', accountId: 'lobsterai-1', usageReported: true, inputTokens: 120, outputTokens: 300, cacheReadTokens: 40, reasoningTokens: 50, ttftMs: 310, tps: 40.2, durationMs: 4200 },
+        { ts: Date.now() - 120000, channel: 'gateway', provider: 'lobsterai', model: 'kimi-k3', accountId: '', usageReported: false, inputTokens: 0, outputTokens: 0, durationMs: 88, error: 'insufficient quota' },
       ],
     },
   },
-  'usage.autoCheckin': { autoCheckin: { enabled: true, lastDate: '2026-10-06', ranToday: true, running: false, lastResult: 'ok', lastAt: Date.now(), channels: [{ provider: 'buddy', text: 'ok' }], dismissed: false } },
+  'usage.autoCheckin': { autoCheckin: { enabled: true, lastDate: '2026-10-06', ranToday: true, running: false, lastResult: 'ok', lastAt: Date.now(), channels: [{ provider: 'lobsterai', text: 'ok' }], dismissed: false } },
   'usage.tokenLedgerHistory': { history: [], totals: { requests: 120, reportedRequests: 118, inputTokens: 9000, outputTokens: 21000, cacheReadTokens: 4200, cacheWriteTokens: 0, reasoningTokens: 5000, errors: 3, avgTtftMs: 300, avgTps: 44 } },
 }
 const ctx = {

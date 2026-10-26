@@ -1,11 +1,6 @@
 /**
  * LobsterAI（有道龙虾）每日签到与积分余额。
  *
- * 与 `src/credits.ts`（CodeBuddy 版）**刻意分开**：两者协议没有一处共用，
- * 硬合并只会让那个文件出现大量 `if (provider === 'lobsterai')` 分支。
- * 但**复用它的两个类型**（`ClaimOutcome` / `CheckinStatus` 风格的判别联合），
- * 让 `computeClaimSummary` 与 Channel Pack 的结果摘要 UI 一行都不用改。
- *
  * ## 协议（三步，来源 `lobsterai2api/sigin.py:51-67`）
  *
  * ```
@@ -15,15 +10,7 @@
  * 3) 签到        POST /api/client-activities/{activityCode}/actions/check_in
  * ```
  *
- * 认证是**纯 Bearer，无签名**（`sigin.py:32-48`）—— 与 CodeBuddy 那套
- * `X-Domain` / `X-Product` / `X-Enterprise-Id` 头族毫无关系。
- *
  * ## 幂等
- *
- * 与 CodeBuddy 靠服务端 `code:10001` 不同，LobsterAI 是**客户端幂等**：
- * 请求带 `idempotencyKey`（UUID4），且签到前先查 `context` 的
- * `state.claimedToday` 与 `actions` 是否含 `check_in`。
- * 两步预检查都要做 —— 只看 `claimedToday` 会漏掉「活动有但今天不该领」的情形。
  */
 
 import { randomUUID } from 'node:crypto'
@@ -287,7 +274,7 @@ export async function claimLobsteraiDailyCheckin(
   return {
     kind: 'claimed',
     credit,
-    // LobsterAI 的签到响应不含连续天数概念（那是 CodeBuddy 的活动机制）。
+
     streakDays: 0,
     isStreakDay: false,
     ...message.length > 0 ? { delayedMessage: message } : {},

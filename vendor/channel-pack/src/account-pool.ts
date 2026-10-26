@@ -1,13 +1,11 @@
 import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import type { BuddyCredential } from './buddy.js'
-import type { BuddyProduct } from './product.js'
+import type { StoredTokenCredential } from './credential-expiry.js'
 import { createChannelPackStore, mergeLegacyLoomyLock, sanitizeAccounts, sanitizeDisabledModels, sanitizePermanentLocks } from './channel-pack-store.js'
 import type { ChannelPackStore, ChannelPackState, ModelDisableMap, PermanentLockMap } from './channel-pack-store.js'
 import { createPermanentLockStore } from './permanent-lock-store.js'
 import type { PermanentLockStore } from './permanent-lock-store.js'
 import type {
-  CodeArtsCredential,
   ProviderAccountEntry,
   ProviderAccountStatus,
 } from './types.js'
@@ -35,8 +33,7 @@ const EMPTY_MODEL_SET: ReadonlySet<string> = new Set<string>()
  *
  * ## 为什么需要它
  *
- * 选号按 `modelRateLimits[modelId]` 过滤候选（见本类的 `getAvailableAccount`
- * 与 `src/index.ts` 的 `pickBuddyCredential`）。当一个 provider 只有**一个**
+ * 选号按 `modelRateLimits[modelId]` 过滤候选（见本类的 `getAvailableAccount`）。当一个 provider 只有**一个**
  * 启用账号、而它恰好被标记了该模型的限流时，候选集变成空集，调用链一路
  * 返回 `undefined`，最终由适配器抛出「no usable credential; log in from the
  * Channel Pack panel first」—— 而**凭据其实是好的、账号也是启用的**，用户被指去
@@ -112,9 +109,6 @@ export class AccountPool {
   private modelCache: ModelDisableMap = {}
   /**
    * 「锁定永久积分」开关表的**权威进程内副本**（与 {@link cache} 同理）。
-   *
-   * ⚠️ 每个 provider 一项（Loomy / CodeBuddy / WorkBuddy 各自独立），
-   * **只记录已锁定的**（缺键 = 未锁定）。
    *
    * ⚠️ 它的落盘位置与账号池**不是同一份文档**：住在
    * `$DSH_HOME/channel-pack/permanent-locks.json`，因为 state.json 是同机多 profile
@@ -557,9 +551,6 @@ export class AccountPool {
    * 锁定后选号**只允许消耗会近期作废的积分**，永久积分不参与 ——
    * 只剩永久积分的账号在锁定期间等同于不可用（用户语义：「没有临时积分后
    * 找可用账号就是没有可用账号」）。
-   *
-   * ⚠️ 「什么算永久积分」各 provider 不同（Loomy 看服务端给的每日池；两个 buddy
-   * 看资源包的扣费截止距今是否满 15 天），但**开关本身是同一件事**，故共用本表。
    */
   permanentLocked(provider: string): boolean {
     this.ensureLoaded()
@@ -646,43 +637,6 @@ export class AccountPool {
     return this.readAccounts()
   }
 
-  /**
-   * 清理「凭据域名与当前产品配置不符」的账号。
-   *
-   * 用途：WorkBuddy provider 从中国版（copilot.tencent.com）改造为国际版
-   * （www.workbuddy.ai）后，旧账号存的仍是中国版凭据 —— 它们的
-   * `token.domain` 指向旧端点，用新 endpoint 发请求必然失败（且会一直续期失败）。
-   * 这类条目已无修复价值，直接删除，让用户在 Channel Pack 重新登录。
-   *
-   * 判据是**凭据里记录的 domain 与产品配置的 apiDomain 不一致**（而不是简单按
-   * provider 名删），这样只清理真正失配的条目，不会误删已在新端点登录的账号。
-   *
-   * @returns 被删除的账号 id 列表（供调用方记日志）。
-   */
-  async pruneAccountsWithForeignDomain(product: BuddyProduct): Promise<string[]> {
-    const removed: string[] = []
-    for (const entry of this.readAccounts()) {
-      if (entry.provider !== product.id) continue
-      let domain = ''
-      try {
-        const resolved = await this.ctx.credentials.resolve(credentialRef(entry.credentialRef))
-        if (resolved === undefined) continue
-        const parsed = JSON.parse(resolved.value) as { domain?: unknown }
-        domain = typeof parsed.domain === 'string' ? parsed.domain : ''
-      } catch {
-        // 凭据缺失或损坏：留给「凭据未配置」的正常报错路径处理，这里不删
-        continue
-      }
-      // domain 为空表示历史凭据未记录域名，无法判定，保守保留。
-      if (domain.length === 0) continue
-      if (domain !== product.apiDomain) {
-        await this.removeAccount(entry.id)
-        removed.push(entry.id)
-      }
-    }
-    return removed
-  }
-
   /** 添加新账号（登录成功后调用） */
   async addAccount(entry: ProviderAccountEntry): Promise<void> {
     const accounts = [...this.readAccounts(), entry]
@@ -731,9 +685,6 @@ export class AccountPool {
    * 账号存在**一个全局数组**里（各 provider 混排，靠 `provider` 字段区分），
    * 而设置页是按 provider 分组渲染的。因此这里取「该 provider 账号原本占用的
    * 那些下标」，把新顺序填回这些下标 —— 其他 provider 的账号**位置不变**。
-   *
-   * 不这么做（例如把该 provider 的账号整体挪到数组头部）会让拖拽 CodeArts
-   * 的顺序顺带改变 Buddy 账号的相对位置，属于跨面板的意外副作用。
    *
    * ## 校验：必须是同一集合的一个排列
    *
@@ -784,18 +735,11 @@ export class AccountPool {
 
   /**
    * 按凭据内容反查账号 id（供适配器记录"当前用的是哪个账号"）。
-   *
-   * 适配器不持有 ctx，也不该直接访问本类的私有凭据存储，
-   * 因此这里集中做「遍历已启用账号 → 解析凭据 → 比对标识字段」。
-   * @param provider - provider 名称（'buddy' | 'workbuddy' | 'codearts'）。
-   * @param identity - 比对用的标识值：CodeBuddy 系传 access_token，CodeArts 传 access_key_id。
-   * @returns 匹配到的账号 id；无匹配返回空串。
    */
   async findAccountIdByCredential(provider: string, identity: string): Promise<string> {
     if (identity.length === 0) return ''
-    // 凭据中的唯一标识字段：CodeBuddy 系（buddy / workbuddy）用 access_token，
-    // CodeArts 用 access_key_id。选错字段会导致匹配恒失败，限流记录无法归属账号。
-    const identifierKey = provider === 'codearts' ? 'access_key_id' : 'access_token'
+
+    const identifierKey = 'access_token'
     for (const entry of this.readAccounts()) {
       if (entry.provider !== provider || !entry.enabled) continue
       const resolved = await this.resolveCredentialByRef(entry.credentialRef)
@@ -821,11 +765,6 @@ export class AccountPool {
    * 按凭据里的**任意身份字段**查找同 provider 的已有账号。
    *
    * ## 与 {@link findAccountIdByCredential} 的区别
-   *
-   * 那个是**限流记录归属**专用，写死了「codearts 用 access_key_id、
-   * 其余用 access_token」两套字段名，且**只看已启用账号**。
-   * 本方法是**通用去重**用：调用方给字段名与值，且**不看 `enabled`** ——
-   * 停用的账号同样占着一个条目的位置，重复添加它仍是重复。
    *
    * ## 为什么必须容忍「字段缺失」
    *
@@ -910,12 +849,12 @@ export class AccountPool {
    */
   async resolveCredentialForAccount(
     id: string,
-  ): Promise<CodeArtsCredential | BuddyCredential | undefined> {
+  ): Promise<StoredTokenCredential | undefined> {
     const entry = this.findAccount(id)
     if (entry === undefined) return undefined
     const parsed = await this.resolveCredentialByRef(entry.credentialRef)
     if (parsed === undefined) return undefined
-    return parsed as unknown as CodeArtsCredential | BuddyCredential
+    return parsed as unknown as StoredTokenCredential
   }
 
   /**
@@ -983,7 +922,7 @@ export class AccountPool {
     provider: string,
     modelId: string,
     excludeAccountIds?: ReadonlySet<string>,
-  ): Promise<{ entry: ProviderAccountEntry; credential: CodeArtsCredential | BuddyCredential } | null> {
+  ): Promise<{ entry: ProviderAccountEntry; credential: StoredTokenCredential } | null> {
     const candidates = this.readAccounts()
       .filter(a => a.provider === provider && a.enabled)
       .filter(a => excludeAccountIds === undefined || !excludeAccountIds.has(a.id))
@@ -1021,7 +960,7 @@ export class AccountPool {
         continue
       }
       try {
-        const credential = JSON.parse(resolved.value) as CodeArtsCredential | BuddyCredential
+        const credential = JSON.parse(resolved.value) as StoredTokenCredential
         if (failures.length > 0) {
           this.ctx.logger?.warn?.(
             `[channel-pack] ${failures.length} 个 ${provider} 账号不可用，已跳过：${failures.join('; ')}`,
@@ -1302,15 +1241,6 @@ export class AccountPool {
  * 仍能 `resolveModel` / 正常收发。
  *
  * ## 判定语义
- *
- * - **默认开启**（`DSH_HIDE_MODELS_WITHOUT_ACCOUNT=0` 可关）：与
- *   `DSH_TRAE_MAX_MODE` 同为「默认开、显式假值才关」的语义，故单列解析函数。
- * - `accountPool` 缺失（headless / CLI / 单测）或替身未实现
- *   `hasLoggedInAccount` 时**视为可见** —— 门控是**展示优化而非安全边界**，
- *   判定不可用时宁多勿少（否则会让整个 provider 的模型凭空消失）。
- * - **六个 provider 判据完全一致**：都只看账号池。早期 CodeArts 有一个「单凭据
- *   例外」（额外认固定 ref `CODEARTS_ACCESS_TOKEN`），该模式已移除，故
- *   `extraCredentialRefs` 参数也一并删除，避免留下无人使用的分支。
  *
  * @param accountPool - 适配器的账号池（可能为 undefined）。
  * @param provider - provider id。

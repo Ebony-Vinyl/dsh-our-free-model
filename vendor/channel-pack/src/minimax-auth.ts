@@ -73,7 +73,7 @@ export class MinimaxRefreshTokenExpiredError extends Error {
     // 八个既有 provider 的同类类**一律**用 `'RefreshTokenExpiredError'`
     // （`cline-auth.ts:79`、`qoder-auth.ts:83`、`lobsterai-auth.ts:88`、
     // `loomy-auth.ts:78`、`raccoon-auth.ts:79`、`trae-auth.ts:81`、
-    // `buddy-oauth.ts:335`、`oauth.ts:91`）—— 本 provider 不应破例。
+
     // 之所以能跨模块这样判，是因为判据是**字符串**而非 `instanceof`
     //（各模块的同名类是不同 identity，`instanceof` 会穿透）。
     this.name = 'RefreshTokenExpiredError'
@@ -265,12 +265,6 @@ export class MinimaxAuth extends Service {
 
   /**
    * 批量续期：**只按 `refreshable` 过滤，不看 `enabled`**。
-   *
-   * ⚠️ **必须走共享实现 `refreshAccountWithReconcile`**（`src/expiry-sync.ts`），
-   * **不要**手写对账逻辑。九个既有 provider 里**八个**都用它
-   *（buddy / cline / lobsterai / qoder / service / trae / loomy / raccoon 的部分路径）；
-   * 手写版本会在「凭据仍有效」的分支漏掉池值对账，导致 UI **永远**显示「已过期」
-   * —— 那正是 `src/expiry-sync.ts` 模块注释记录的真实缺陷。
    *
    * 照 `src/cline-auth.ts` 的 `refreshAll` 形态（它是最规范的一份）。
    */

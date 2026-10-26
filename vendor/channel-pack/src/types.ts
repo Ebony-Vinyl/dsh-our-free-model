@@ -1,30 +1,6 @@
-import type { DpopPrivateJwk } from './oauth.js'
+
 import type { BadgePreference } from './badge-preferences.js'
 import type { TokenLedgerSnapshot, TokenLedgerHistoryDay, TokenLedgerModelRow } from './token-ledger.js'
-
-/** snap-manager ticket 端点响应的传输格式。 */
-export interface CodeArtsCredentialResponse {
-  credential?: {
-    access?: string
-    secret?: string
-    securitytoken?: string
-    securityToken?: string
-    expires_at?: string
-    expiresAt?: string
-  }
-  result?: {
-    accessKeyId?: string
-    secretAccessKey?: string
-    securityToken?: string
-    expiration?: string
-    expiresAt?: string
-  }
-  domain_id?: string
-  user_id?: string
-  user_name?: string
-  error_code?: string
-  error_msg?: string
-}
 
 /**
  * ========================================
@@ -42,15 +18,15 @@ export interface RateLimitInfo {
 
 /** 账号索引条目（存于 ctx.settings，非 credentials） */
 export interface ProviderAccountEntry {
-  /** 账号唯一标识：{provider}-{shortid}（如 'codearts-a1b2c3d4'） */
+
   id: string
-  /** provider 名称：'codearts' | 'buddy' */
+
   provider: string
   /** 用户可读昵称 */
   nickname: string
   /** 是否启用（停用不参与自动切换） */
   enabled: boolean
-  /** 对应的 credential ref 名称：{PROVIDER}_ACCOUNT_{UUID_SHORT}（如 'CODEARTS_ACCOUNT_A1B2C3D4'） */
+
   credentialRef: string
   /** 创建时间（毫秒时间戳） */
   createdAt: number
@@ -272,14 +248,6 @@ export interface ProbeModelResult {
   message?: string
   /**
    * 探测发现「仍受限」时，上游给出的**新重置时刻**（epoch ms）。
-   *
-   * [patch-codearts-probe-ratelimit] 为什么必须带出来：限流是**滚动窗口**，
-   * 每次撞到都会把重置时间往后推。探针若只报「仍受限」而不回传该时刻，
-   * 存储里会一直留着**第一次**的旧时刻；旧时刻一旦过期，UI 的
-   * `modelRateLimits[v] > Date.now()` 就判为已过期而**不渲染「限额重置」**，
-   * 于是出现「重测弹窗说仍受限、账号卡片却一条都不显示」的矛盾，
-   * 且选号逻辑也会误以为该账号可用。实测偏差可达数小时
-   * （如存储 09-23 16:33 vs 上游 09-24 08:31）。
    */
   resetTimeMs?: number
 }
@@ -479,19 +447,10 @@ export interface RpcLoomyPermanentLockResponse {
  *
  * 「锁定永久积分」这件事**三个 provider 都有**，但「什么算永久积分」各不相同：
  *
- * | provider | 临时积分 | 永久积分 |
- * |---|---|---|
- * | Loomy | `dailyBalance`（**当日**到期，次日重新发放） | `balance`（注册奖励 + 新手任务） |
- * | CodeBuddy / WorkBuddy | 资源包中**扣费截止距今 < 15 天**者（实测 14/30/365 天） | 其余包（实测套餐的扣费截止在 8 年后） |
- *
- * ⚠️ 判据不同但**开关语义相同**（「只消耗会近期作废的积分」），故共用一个端点
- * 与一张持久化表，而不是每个 provider 加一条 case —— 平行分支越多，漏接概率越高
- * （`account.refresh` 端点对 workbuddy 漏接 case 就是这么一直坏着的）。
- *
  * `locked` 省略表示**只读查询**；给出布尔值表示写入。
  */
 export interface RpcPermanentLockRequest {
-  /** provider id（`loomy` / `buddy` / `workbuddy`）。 */
+
   provider: string
   locked?: boolean
 }
@@ -502,13 +461,7 @@ export interface RpcPermanentLockResponse {
   provider: string
   /** 当前是否已锁定。 */
   locked: boolean
-  /**
-   * 当前生效的「临时积分」窗口（天）—— **仅两个 buddy 返回**。
-   *
-   * ⚠️ 必须回传而不是让前端写死：窗口可被 `DSH_BUDDY_EXPIRING_WINDOW_DAYS`
-   * 覆盖，前端写死 15 就会出现「提示说只烧 15 天内的，实际按 31 天筛号」。
-   * Loomy 没有窗口概念（它看服务端的当日池），故不带该字段。
-   */
+
   windowDays?: number
 }
 
@@ -558,19 +511,9 @@ export interface RpcCreditsBalanceExtra {
 export interface RpcCreditsBalancesResponse {
   accounts: RpcCreditsBalanceAccount[]
   /**
-   * 当前生效的「临时积分」窗口（天）—— **CodeBuddy / WorkBuddy / TRAE /
-   * LobsterAI 返回**。
-   *
    * 面板据此把每个资源包分成临时 / 长期两桶显示（`credit-expiry.js`），
    * 且必须在**渲染时**用当前时刻现算 —— 分类是时间的函数，把结果存下来就会
    * 让越线的包继续被当成长期（宿主长期开着，时间只向前流）。
-   *
-   * ⚠️ 为什么由后端回传而不是前端写死：窗口可被
-   * `DSH_BUDDY_EXPIRING_WINDOW_DAYS` 覆盖，前端写死就会出现
-   * 「提示说只烧 15 天内的、实际按 31 天筛号」。
-   * Loomy / Raccoon **不带**该字段：它们的积分由服务端按语义分成多个池下发
-   * （其中有「每日刷新」池），走的是**池名分桶**（`formatPoolSplitLine`），
-   * 不是到期时间分桶。Qoder 虽有包到期字段但未接入分桶展示（仅 hover 明细）。
    */
   windowDays?: number
 }
@@ -1067,10 +1010,6 @@ export interface RpcGatewayModel {
   provider: string
   /**
    * provider **内部**的模型名（不含 `<provider>/` 前缀）。
-   *
-   * 卡片头已经把供应商写清楚了，行内再重复一遍前缀只是噪声：实测
-   * `codearts/deepseek-v4.1-flash` 这类 id 会占满整行，窄面板下被截成
-   * `codearts/deepse…` —— 用户既看不出模型名，也读不到能复制的 ID。
    */
   model: string
   /** 模型展示名，仅供人辨认。 */
@@ -1125,52 +1064,7 @@ export interface RpcGatewayApiKey {
   path: string | null
 }
 
-/** 存储在 CODEARTS_ACCESS_TOKEN 下的归一化临时凭据。 */
-export interface CodeArtsCredential {
-  access_key_id: string
-  secret_access_key: string
-  security_token: string
-  expires_at: string
-  domain_id?: string
-  user_id?: string
-  user_name?: string
-  /** 刷新令牌（新式 IAM OAuth 流程签发；缺失表示旧 ticket 凭据，不可静默刷新）。 */
-  refresh_token?: string
-  /** PKCE 验证器，刷新换取时与 refresh_token 一起提交。 */
-  code_verifier?: string
-  /** DPoP ES256 私钥 JWK（随凭据持久化，刷新换取时签发 DPoP JWS）。 */
-  dpop_private_key_jwk?: DpopPrivateJwk
-  /** 模型速率限制/重置时间（框架层附加的运行时元数据，刷新凭据时需保留）。 */
-  model_rate_limits?: Record<string, unknown>
-}
-
-/** 一次登录流程的结果：已存储的凭据值及其过期时间。 */
-export interface LoginFlowResult {
-  /** 原始令牌（token/fingerprint 分支）或 JSON.stringify(CodeArtsCredential)（轮询分支）。 */
-  access: string
-  /** 凭据过期的毫秒时间戳。 */
-  expires: number
-  /** 展示给用户的登录 URL。 */
-  loginUrl: string
-}
-
-/** runLoginFlow 和 startCallbackServer 接受的选项。 */
-export interface LoginFlowOptions {
-  /** pollForCredential 使用的 fetch 实现；默认为全局 fetch。 */
-  fetcher?: typeof fetch
-  /** 在浏览器中打开登录 URL；默认使用平台打开器。 */
-  openBrowser?: (url: string) => void | Promise<void>
-  /** 轮询尝试次数上限；默认为 120。 */
-  maxAttempts?: number
-  /** 登录流程选择：'oauth'（默认）或 'ticket'（旧流程回退）。 */
-  flow?: 'oauth' | 'ticket'
-}
-
-/**
- * buddy (腾讯 CodeBuddy) 凭据，存储在 BUDDY_ACCESS_TOKEN 下。
- * 定义与解析工具放在 buddy.ts（与 CodeBuddy 协议常量同处一处）。
- */
-export type { BuddyCredential } from './buddy.js'
+export type { StoredTokenCredential } from './credential-expiry.js'
 
 /**
  * ========================================
@@ -1179,7 +1073,7 @@ export type { BuddyCredential } from './buddy.js'
  */
 
 /** 备份文件格式标识（自包含，与 DSH 版本无关）。 */
-export const BACKUP_FORMAT = 'dsh-codearts-auth/backup'
+export const BACKUP_FORMAT = 'channel-pack/backup'
 
 /** 备份格式版本：格式演进时递增并保留迁移逻辑。 */
 export const BACKUP_VERSION = 1
@@ -1197,7 +1091,8 @@ export const BACKUP_VERSION = 1
  *   换版本后导入时按**当前版本**的存储契约重建。
  */
 export interface BackupPayload {
-  format: typeof BACKUP_FORMAT
+  /** 支持当前及旧命名空间的备份标识，版本与结构仍严格校验。 */
+  format: string
   version: typeof BACKUP_VERSION
   /** 导出时间（ISO 8601），用于展示与可选的新旧校验。 */
   exportedAt: string
@@ -1248,12 +1143,7 @@ export interface RpcBackupImportResponse {
   accountsImported: number
   /** 跳过的凭据 ref（非法 ref 等）。 */
   skipped: string[]
-  /**
-   * 导入的账号中「凭据已过期」的条数（账号条目的 `expiresAt <= 当前时刻`）。
-   * 这类账号即使 refresh_token 尚有效也会在下一次请求时先静默续期；若
-   * refresh_token 也已失效（导出后搁置过久 / CodeArts 一次性轮换），则需
-   * 重新登录。前端据此提示用户。
-   */
+
   expiredAccounts: number
   /**
    * 导入的账号中「凭据缺失」的条数：账号条目存在，但其 credentialRef 不在
@@ -1389,7 +1279,6 @@ export interface RpcUsageBadgePlanAccount {
   error?: string
 }
 
-/** 订阅读数：窗口（Cline）或套餐（Qoder / ZCode / 两个 buddy）。 */
 export type RpcUsageBadgeSubscription =
   | { kind: 'windows'; accounts: RpcClineQuotaAccount[] }
   | { kind: 'plan'; accounts: RpcUsageBadgePlanAccount[] }

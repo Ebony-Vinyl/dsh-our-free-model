@@ -145,7 +145,9 @@ export function bustCdnCache(url, now = Date.now()) {
 
 const MAX_MANIFEST_BYTES = 256 * 1024
 const MAX_FILE_BYTES = 4 * 1024 * 1024
-const MAX_FILES = 80
+const MAX_ENGINE_BYTES = 128 * 1024 * 1024
+const MAX_FILES = 128
+const ENGINE_BINARY = /^vendor\/magpie\/bin\/magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/
 const SHA_RE = /^[0-9a-f]{64}$/
 // Hot reload evaluates a fresh updater module before the old request finishes.
 // A process-wide lock keeps the successor from starting a second transaction.
@@ -240,7 +242,8 @@ function parseFileEntry(row) {
   const sha256 = typeof row?.sha256 === 'string' ? row.sha256.toLowerCase() : ''
   if (!SHA_RE.test(sha256)) throw new Error(`manifest entry "${normalized}" has no valid sha256`)
   const size = row?.size
-  if (!Number.isInteger(size) || size <= 0 || size > MAX_FILE_BYTES) {
+  const limit = ENGINE_BINARY.test(normalized) ? MAX_ENGINE_BYTES : MAX_FILE_BYTES
+  if (!Number.isInteger(size) || size <= 0 || size > limit) {
     throw new Error(`manifest entry "${normalized}" has an out-of-range size`)
   }
   return { path: normalized, sha256, size }
@@ -436,7 +439,7 @@ function sha256File(file) {
 
 /**
  * Download and hash-verify the whole release into `stageDir`.
- * @returns {Promise<{bytes: number, files: number}>}
+ * @returns {Promise<{bytes: number, files: number, reused: boolean}>}
  */
 const STAGE_ATTEMPTS = 3
 const STAGE_BACKOFF_MS = 700
@@ -454,19 +457,57 @@ function isTransientDownloadError(error) {
 /** jsDelivr's primary edge can redirect documentation files to raw, which is
  *  unavailable on some client networks. Try its gcore edge at the exact same
  *  SHA/path, never an arbitrary Location or a mutable branch. Size/hash checks
- *  remain outside the transport fallback and cannot authorize another body. */
+ *  remain outside the transport fallback and cannot authorize another body.
+ *
+ *  jsDelivr also refuses to serve any file above its own size ceiling (measured
+ *  2026-10-25: a 65 MB vendored engine binary answered `403 Forbidden` while
+ *  every ordinary file on the same commit answered 200). A release file that
+ *  large is therefore unreachable through jsDelivr on every edge, so a pinned
+ *  commit falls back to the same commit on raw and through the raw proxy — the
+ *  same SHA, a different transport. Only pinned commits get that fallback: a
+ *  mutable branch's raw bytes could move between the manifest read and the file
+ *  download, which is exactly what pinning exists to prevent.
+ *
+ *  Both jsDelivr edges are recognized as origins here, because the manifest may
+ *  itself have been discovered on either one: a gcore-sourced manifest composes
+ *  gcore file URLs, and those need the same fallbacks. */
 function stagedFileSources(manifestUrl, manifest, relativePath) {
   const file = fileUrlOf(manifestUrl, manifest, relativePath)
   const url = new URL(file)
   const prefix = `/gh/${REPO}@`
-  if (url.protocol !== 'https:' || url.hostname !== 'cdn.jsdelivr.net' || url.port
+  const jsdelivr = url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'gcore.jsdelivr.net'
+  if (url.protocol !== 'https:' || !jsdelivr || url.port
     || url.username || url.password || !url.pathname.startsWith(prefix)
     || !/^[a-f0-9]{40}\//.test(url.pathname.slice(prefix.length))) return [file]
-  url.hostname = 'gcore.jsdelivr.net'
-  return [file, url.href]
+  const sha = url.pathname.slice(prefix.length).split('/')[0]
+  const rest = url.pathname.slice(prefix.length + sha.length + 1)
+  const cdn = new URL(url)
+  cdn.hostname = 'cdn.jsdelivr.net'
+  const gcore = new URL(url)
+  gcore.hostname = 'gcore.jsdelivr.net'
+  const raw = `https://raw.githubusercontent.com/${REPO}/${sha}/${rest}`
+  // Keep the origin that was actually asked first, then the other edge, then the
+  // two raw transports at the same pinned commit.
+  const others = [cdn.href, gcore.href].filter(href => href !== file)
+  return [file, ...others, raw, viaRawProxy(`${REPO}/${sha}/${rest}`)]
 }
 
 export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl = fetch, concurrency = 4, onProgress = () => {}, timeoutMs = 30000 }) {
+  // A retry after a failure in a later phase — the backup rename, the swap —
+  // would otherwise wipe a staging copy that already verified and re-download
+  // the whole release. On a slow CN egress that turns one transient refusal into
+  // minutes of spinner, which is what "the update is stuck on loading" looks like
+  // from the settings page. An existing copy is only kept when it hashes clean
+  // against *this* manifest, so a stage left over from another release is wiped.
+  try {
+    verifyStaged(stageDir, manifest)
+    onProgress({ phase: 'download', reused: true, done: manifest.files.length, total: manifest.files.length })
+    return {
+      bytes: manifest.files.reduce((sum, file) => sum + file.size, 0),
+      files: manifest.files.length,
+      reused: true,
+    }
+  } catch { /* nothing to reuse; stage from scratch below */ }
   fs.rmSync(stageDir, { recursive: true, force: true })
   fs.mkdirSync(stageDir, { recursive: true })
   let done = 0
@@ -491,7 +532,15 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
               break
             } catch (error) {
               const status = /^HTTP (\d{3})$/.exec(String(error?.message ?? ''))?.[1]
-              const canFallback = status ? /^(3\d\d|404|429|5\d\d)$/.test(status) : isTransientDownloadError(error)
+              // A 403 is an authorization refusal, and switching hosts on it
+              // would look like a way around one. The single exception is a file
+              // jsDelivr structurally cannot serve: its size ceiling answers 403
+              // for the vendored engine binary, so the same pinned commit's raw
+              // transport is tried instead. Any other 403 still stops here.
+              const oversized = status === '403' && ENGINE_BINARY.test(file.path)
+              const canFallback = status
+                ? /^(3\d\d|404|429|5\d\d)$/.test(status) || oversized
+                : isTransientDownloadError(error)
               if (!canFallback || mirror === sources.length - 1 || signal?.aborted) throw error
             }
           }
@@ -518,10 +567,12 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
   })
   await Promise.all(workers)
   if (failures.length > 0) {
+    // A half-written stage must never be the one a later retry hashes clean
+    // against, so it is removed here rather than left for reuse.
     fs.rmSync(stageDir, { recursive: true, force: true })
     throw new Error(`staging failed: ${failures.join('; ')}`)
   }
-  return { bytes, files: done }
+  return { bytes, files: done, reused: false }
 }
 
 /** The staged copy is checked against the manifest before install touches anything. */
@@ -556,6 +607,9 @@ const VENDOR_RUNTIME_FILES = [
   'vendor/channel-pack/qoder-auth-wasm.wasm',
   'vendor/channel-pack/NOTICE.md',
   'vendor/channel-pack/LICENSE',
+  'vendor/magpie/engine.json',
+  'vendor/magpie/LICENSE',
+  'vendor/magpie/NOTICE.md',
 ]
 
 /**
@@ -583,14 +637,27 @@ export function listPackageFiles(dir) {
     const target = path.join(dir, ...rel.split('/'))
     if (fs.existsSync(target) && fs.lstatSync(target).isFile()) out.push(rel)
   }
+  const engineDir = path.join(dir, 'vendor/magpie/bin')
+  if (fs.existsSync(engineDir) && fs.lstatSync(engineDir).isDirectory()) {
+    for (const entry of fs.readdirSync(engineDir, { withFileTypes: true })) {
+      if (entry.isFile() && /^magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/.test(entry.name)) {
+        out.push(`vendor/magpie/bin/${entry.name}`)
+      }
+    }
+  }
   return out
 }
 
 /**
  * Copy the current package aside so a failed swap can be undone.
- * @returns {number} files backed up
+ *
+ * The two directory renames move a tree that was just written, which is exactly
+ * what a real-time scanner or indexer holds open on Windows: they go through
+ * `renameWithRetry`, the same seam the file swap uses, so one transient EPERM
+ * does not abort a transaction that has not touched the installed package yet.
+ * @returns {Promise<number>} files backed up
  */
-export function backupPackage(pkgDir, backupDir) {
+export async function backupPackage(pkgDir, backupDir) {
   const snapshot = packageSnapshot(pkgDir)
   const pending = `${backupDir}.pending-${crypto.randomUUID()}`
   const previous = `${backupDir}.previous-${crypto.randomUUID()}`
@@ -608,13 +675,13 @@ export function backupPackage(pkgDir, backupDir) {
     verifySnapshot(pkgDir, snapshot)
     fs.writeFileSync(path.join(pending, '.ofm-backup.json'), JSON.stringify(snapshot))
     if (fs.existsSync(backupDir)) {
-      fs.renameSync(backupDir, previous)
+      await renameWithRetry(backupDir, previous)
       movedPrevious = true
     }
     try {
-      fs.renameSync(pending, backupDir)
+      await renameWithRetry(pending, backupDir)
     } catch (error) {
-      if (movedPrevious) fs.renameSync(previous, backupDir)
+      if (movedPrevious) await renameWithRetry(previous, backupDir)
       throw error
     }
     // Failure to clean an older copy does not invalidate the new verified copy.
@@ -967,7 +1034,7 @@ export class PluginUpdater {
       verifyStaged(this.stageDir, manifest)
 
       onProgress({ phase: 'install' })
-      const backedUp = backupPackage(this.deps.pkgDir, this.backupDir)
+      const backedUp = await backupPackage(this.deps.pkgDir, this.backupDir)
       state = { from: previous, to: manifest.version, at: Date.now(), phase: 'installing' }
       // Persist the intent before the first installed byte changes.
       this.saveUpgradeState(state)
@@ -1009,7 +1076,7 @@ export class PluginUpdater {
       }
       this.saveUpgradeState({ ...state, phase: 'complete', activated })
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
-      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated }
+      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused }
       this.recordHistory(record)
       this.checkedAt = Date.now()
       this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)

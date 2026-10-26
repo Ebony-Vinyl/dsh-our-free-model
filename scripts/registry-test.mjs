@@ -49,9 +49,10 @@ const raw = fs.readFileSync(path.join(repo, 'src/providers/registry.json'), 'utf
 // The `free` category is empty on purpose: OpenCode's keyless pool needs a
 // per-request fingerprint the aggregate transport cannot carry, so it is not a
 // row here (see README's aggregate section) — the free lane serves it instead.
-const EXPECTED_PROVIDERS = 75
-const EXPECTED_BY_CATEGORY = { apikey: 60, 'free-tier': 10, local: 3, oauth: 2 }
-const EXPECTED_MODELS = 500
+const EXPECTED_PROVIDERS = 76
+const EXPECTED_BY_CATEGORY = { apikey: 61, 'free-tier': 10, local: 3, oauth: 2 }
+const EXPECTED_MODELS = 502
+const FLEETRELAY_MODELS = ['deepseek-v4.1-flash-free', 'gpt-6-astra']
 
 const byCategory = {}
 for (const provider of PROVIDERS) byCategory[provider.category] = (byCategory[provider.category] ?? 0) + 1
@@ -90,7 +91,7 @@ check('every record has the required fields with valid enum values', () => {
     assert.ok(nonEmpty(provider.notes), `${provider.id}: notes`)
     assert.ok(nonEmpty(provider.website), `${provider.id}: website`)
     assert.equal(typeof provider.local, 'boolean', `${provider.id}: local`)
-    assert.ok(['fcc', '9router'].includes(provider.source), `${provider.id}: source ${provider.source}`)
+    assert.ok(['fcc', '9router', 'custom'].includes(provider.source), `${provider.id}: source ${provider.source}`)
     assert.equal(provider.local, provider.category === 'local', `${provider.id}: local must track category "local"`)
   }
 })
@@ -254,6 +255,24 @@ check('chatEndpoint covers the three formats on real records', () => {
   assert.equal(chatEndpoint('no-such-provider'), null)
 })
 
+check('the FleetRelay gateway exposes only its live public model catalog', () => {
+  const provider = getProvider('fleetrelay_t1')
+  assert.ok(provider, 'fleetrelay_t1 is missing')
+  assert.equal(provider.category, 'apikey')
+  assert.equal(provider.auth.kind, 'apiKey')
+  assert.equal(provider.baseUrl, 'https://vpn2.asigo.top:8443/v1')
+  assert.equal(provider.format, 'openai-responses')
+  assert.equal(provider.source, 'custom')
+  assert.deepEqual(provider.models.map(model => model.id), FLEETRELAY_MODELS)
+  assert.equal(chatEndpoint(provider), 'https://vpn2.asigo.top:8443/v1/responses')
+  assert.equal(modelsEndpoint(provider), 'https://vpn2.asigo.top:8443/v1/models')
+})
+
+check('the unapproved 0d relay is not directly configurable in OurFreeModel', () => {
+  assert.equal(getProvider('third_party_0d'), null)
+  assert.equal(parseProviderModelId('third_party_0d/glm-5.3'), null)
+})
+
 check('modelsEndpoint returns a declared listing URL or null', () => {
   assert.equal(modelsEndpoint('nvidia_nim'), 'https://integrate.api.nvidia.com/v1/models')
   assert.equal(modelsEndpoint('groq'), 'https://api.groq.com/openai/v1/models')
@@ -310,7 +329,7 @@ check('listProviders filters by category, format and auth kind', () => {
     assert.ok(rows.every(provider => provider.category === category), `category ${category} leaked`)
   }
   const responses = listProviders({ format: 'openai-responses' })
-  assert.deepEqual(responses.map(provider => provider.id).sort(), ['openai', 'openai_api'])
+  assert.deepEqual(responses.map(provider => provider.id).sort(), ['fleetrelay_t1', 'openai', 'openai_api'])
   const messages = listProviders({ format: 'anthropic-messages' })
   assert.deepEqual(messages.map(provider => provider.id).sort(), ['anthropic', 'glm', 'minimax-cn'])
   const keyless = listProviders({ authKind: 'none' })
