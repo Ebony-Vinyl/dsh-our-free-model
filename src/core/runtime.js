@@ -13,6 +13,7 @@ import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
 import { sessionForConversation } from '../upstream.js'
 import { createForwardCompletion, publicModelRows } from './completion.js'
+import { isSubscriptionEntry, subscriptionCatalog } from '../subscription-adapter.js'
 
 const FALLBACK_CATALOG = buildCatalog([
   'mimo-v2.6-flash-free', 'mimo-v2.5-free', 'ling-3.0-flash-fin-free',
@@ -54,6 +55,8 @@ export function createRuntimeStores({ dataDir, logger = console }) {
 /**
  * 两个产品共同使用的模型运行时。宿主仅注入能力，不传入 Cordis ctx。
  * 创建不启动网络任务；入口先绑定本地监听器，再决定何时刷新和探测。
+ * Optional subscriptionRuntime supplies catalog() and complete(request, onChunk);
+ * its helper owns accounting. Call syncAggregateCatalog() after account mutations.
  */
 export function createModelRuntime({
   settings, stats, availability, catalogStore,
@@ -63,6 +66,7 @@ export function createModelRuntime({
   sealedCredential = () => null,
   onSealedUnavailable = () => {},
   onTopology = () => {},
+  subscriptionRuntime,
 }) {
   let catalog = materializeCatalog(catalogStore.get().entries ?? [])
   let sealedCatalog = sealedCredential() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
@@ -70,6 +74,7 @@ export function createModelRuntime({
   /** The aggregate lane: one row per enabled provider/model the user configured.
    *  Derived from settings, not from a listing, so it is rebuilt on every merge. */
   let aggregateCatalog = []
+  let subscriptionEntries = []
   /** The virtual rows a combo contributes; rebuilt last, after every real lane. */
   let comboCatalog = []
   /** The free lane's own roster: the base every other lane is merged onto. */
@@ -95,7 +100,7 @@ export function createModelRuntime({
   const rebuildCatalog = () => {
     const seen = new Set()
     const merged = []
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...subscriptionEntries]) {
       if (entry === null || entry === undefined || seen.has(entry.id)) continue
       seen.add(entry.id)
       merged.push(entry)
@@ -112,6 +117,7 @@ export function createModelRuntime({
   }
   const mergeCatalogs = () => {
     aggregateCatalog = buildAggregateCatalog(settings.get().aggregate ?? {})
+    subscriptionEntries = subscriptionCatalog(subscriptionRuntime)
     rebuildCatalog()
   }
   mergeCatalogs()
@@ -120,11 +126,16 @@ export function createModelRuntime({
     membership: computeMembership(catalog, availability.get(), settings.get()),
     settings: settings.get(),
     attributionUserAgent,
+    routing: {
+      quota: subscriptionRuntime?.routingQuota?.() ?? {},
+      usage: Object.fromEntries(catalog.map(row => [row.id, stats.get().models?.[row.id]?.calls ?? 0])),
+    },
   })
   const emitTopology = () => { if (!disposed) onTopology() }
   const adapter = new FreeModelAdapter({
     state,
     resolveImage,
+    subscriptionRuntime,
     sealedCredential,
     recordUsage: record => {
       if (disposed) return
@@ -268,7 +279,7 @@ export function createModelRuntime({
     // (whether a key is configured). A combo is excluded because it has no
     // endpoint of its own: probing one would send the chain's own id to the free
     // lane as a model name, spending quota to collect a verdict about nothing.
-    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry))
+    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry) && !isSubscriptionEntry(entry))
     const results = await probeCatalog(probeable, { attributionUserAgent, signal: lifetime.signal }, (id, result) => {
       if (disposed || generation !== egressGeneration) return
       availability.edit(value => ({
@@ -390,8 +401,8 @@ export function createModelRuntime({
     }),
     publicModelRows: () => publicModelRows(state()),
     // A settings write that changes the aggregate lane or the chains (a key
-    // saved, a provider switched off, a combo edited) rebuilds the merged view
-    // without a listing round: the aggregate rows come from settings alone.
+    // saved, a subscription imported/toggled/removed, a combo edited) rebuilds
+    // the merged view without an upstream listing round.
     syncAggregateCatalog() {
       if (disposed) return catalog
       mergeCatalogs()

@@ -31,7 +31,7 @@ export function Overview({ summary, stats, host }: Snapshot & { host: Host }) {
   const failures = [...stats.samples].reverse().filter(row => row.ok === false).slice(0, 4)
   const sources = [
     { name: '匿名与 Kilo', sub: '无需账号的免费模型', icon: Zap, count: summary.catalog.filter(row => row.channel === 'anonymous' || row.channel === 'kilo').length, page: 'models' as const },
-    { name: '免费账号渠道', sub: `${providers.length} 个供应商，独立账号池`, icon: Network, count: summary.catalog.filter(row => !['anonymous', 'kilo', 'eac'].includes(row.channel)).length, page: 'channels' as const },
+    { name: 'EAC router', sub: `${providers.length} 个供应商，独立账号池`, icon: Network, count: summary.catalog.filter(row => !['anonymous', 'kilo', 'eac'].includes(row.channel)).length, page: 'channels' as const },
     { name: 'EAC 协付渠道', sub: summary.eacAuth?.local ? '已保存本机授权' : '尚未保存本机授权', icon: Handshake, count: summary.catalog.filter(row => row.channel === 'eac').length, page: 'eac' as const },
   ]
 

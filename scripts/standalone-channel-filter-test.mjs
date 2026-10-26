@@ -28,15 +28,15 @@ export function verifyChannelFilters() {
     pending: { accounts: { total: 1, enabled: 0 } },
     closed: { closed: true, accounts: { total: 1, enabled: 1 } },
   }
-  for (const [filter, expectedRows] of [['all', 4], ['connected', 1], ['pending', 2]]) {
+  for (const [filter, expectedRows] of [['all', 4], ['connected', 1], ['pending', 3]]) {
     const view = filterChannels(statuses, filter)
-    assert.deepEqual(Array.from(view.labels), [4, 1, 2], '分类数量不得随选中的筛选项变化')
+    assert.deepEqual(Array.from(view.labels), [4, 1, 3], '分类数量不得随选中的筛选项变化')
     assert.equal(view.rows.length, expectedRows)
   }
   const searched = filterChannels(statuses, 'pending', '关闭')
   assert.equal(searched.rows.length, 1)
   assert.equal(searched.rows[0].id, 'closed')
-  assert.deepEqual(Array.from(searched.labels), [4, 1, 2], '分类标签显示全量统计，搜索结果数由结果栏展示')
-  assert.deepEqual(Array.from(filterChannels({}, 'all').labels), [4, 0, 0], '未读取的渠道不能计入待接入')
+  assert.deepEqual(Array.from(searched.labels), [4, 1, 3], '分类标签显示全量统计，搜索结果数由结果栏展示')
+  assert.deepEqual(Array.from(filterChannels({}, 'all').labels), [4, 0, 4], '没有账号状态的渠道也显示为未连接')
   assert.deepEqual(Array.from(filterChannels(undefined, 'all').labels), [4, '—', '—'], '状态加载前不显示虚构的分类数量')
 }

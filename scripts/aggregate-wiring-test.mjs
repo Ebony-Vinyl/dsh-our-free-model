@@ -421,7 +421,7 @@ let boundPort = 0
   check('the combo editor answers', combos.status, 200)
   check('with the stored chain', combos.json.combos[0].id, 'combo:never-fails')
   checkThat('and a model list to pick from', combos.json.models.length >= 3, String(combos.json.models.length))
-  check('offering both strategies', combos.json.strategies, ['fallback', 'round-robin'])
+  check('offering supported routing strategies', combos.json.strategies, ['fallback', 'round-robin', 'smart', 'usage', 'pace'])
   checkThat('model picker projection preserves context and output limits',
     combos.json.models.every(row => Number.isFinite(row.contextWindow) && Number.isFinite(row.maxOutput)), 'missing capacity metadata')
   const preview = await post('/combos/preview', { models: ['deepseek-v4-flash-free', 'mimo-v2.6-flash-free'] })
