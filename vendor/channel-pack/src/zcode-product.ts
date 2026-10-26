@@ -3,12 +3,6 @@
  *
  * ## 为什么新建 `ZcodeProduct` 而不复用既有类型
  *
- * `BuddyProduct` / `QoderProduct` / `RaccoonProduct` 的字段全部围绕各自
- * 的远端协议设计（归属头、refresh 载荷、WASM 签名、加密密钥…），
- * 对 ZCode 无一有意义。ZCode 需要的是：一个上游 origin、若干超时、
- * 一张兜底模型表。故定义**平行**的接口 —— 共用的是架构**模式**
- * （产品差异收敛到单一真相源），不是那个类型。
- *
  * ## 数据来源（全部实测，非推测）
  *
  * - 模型池：`GET /api/v1/client/configs` 的 `offPeak.allowed_models`

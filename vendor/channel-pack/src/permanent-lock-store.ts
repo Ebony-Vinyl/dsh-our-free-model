@@ -9,13 +9,6 @@
  *
  * 而本插件的存储是**整体替换**语义（`store.save(全量 state)`）。于是：
  *
- * | 步骤 | 发生什么 |
- * |---|---|
- * | 1 | desktop 侧（新代码）写入 `permanentLocks: { buddy: true }` |
- * | 2 | 用户在 web 侧（**旧代码，不认识该字段**）触发任意一次整体写入：加删账号、改模型开关、命中限流标记 |
- * | 3 | 旧代码全量重写 state.json，只带它认识的键 ⇒ `permanentLocks` **被抹掉** |
- * | 4 | desktop 侧读回 ⇒ CodeBuddy / WorkBuddy **静默解锁** |
- *
  * ⚠️ 后果不是显示问题，而是**行为**问题：解锁后选号继续消耗永久积分，
  * 而积分烧掉**不可撤回**。这与本文件反复记录的那类缺陷（"整体写入漏带字段
  * 就会被静默抹掉"）同源，区别只是这次漏带的一方是**另一条工作区里我们无法
@@ -108,13 +101,10 @@ class FileLockStore implements PermanentLockStore {
   }
 }
 
-const SCHEMA = 'dsh-codearts-auth/permanent-locks/v1'
+const SCHEMA = 'channel-pack/permanent-locks/v1'
 
 /**
  * 取出文档里的锁定表字段，同时兼容**裸表**形态。
- *
- * 裸表（顶层直接 `{ buddy: true }`）不是本实现写出的形态，但状态文档可能被
- * 手工编辑过；认它比把它当空表更安全（后者会让用户的锁定凭空消失）。
  */
 function locksFieldOf(parsed: unknown): unknown {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return parsed

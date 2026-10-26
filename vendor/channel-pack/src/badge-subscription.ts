@@ -10,37 +10,10 @@
  *
  * ## 用户定的口径：窗口 > 套餐包 > 积分（2026-10-01）
  *
- * | provider | 订阅形态 | 判据 |
- * |---|---|---|
- * | `cline` | **窗口**（5 小时 / 周 / 月 + 已用百分比） | `cline.quota`（见 `usage-badge.ts`，本文件不涉及） |
- * | `qoder` / `qodercn` | 套餐包 | 包名 === {@link QODER_PLAN_PACKAGE}（本仓库合成的固定名） |
- * | `zcode` | 套餐 = **整个余额** | 端点本身就是 `zcode-plan/billing/balance`，每个桶都是这个 plan 的额度 |
- * | `buddy` / `workbuddy` | 套餐包 | 包名匹配 {@link PLAN_PACKAGE_PATTERN}（窄正则） |
- * | 其余 | 无 | 未登记即无 |
- *
- * ## ⚠️ 为什么 buddy 系只能靠**包名**判（并且正则必须窄）
- *
- * 两个 buddy 的资源包名由**服务端**下发，实测形态：
- * `Bonus Pack`（拉新权益，十几/几十天到期）、`Free Plan Subscription`（扣费截止
- * 在 8 年后）、`CodeBuddy个人体验版`、`国内运营裂变包`。其中只有带
- * Plan / Subscription / 体验版 的那类是「订阅套餐」。
- *
  * 正则**必须窄**，理由与本仓库 `looksLikeBillingError` 那条同源：泛词（`pack` /
  * `bonus` / `额度`）会把发放型权益错认成订阅，于是一个「只有一批月底作废的拉新
  * 积分」的账号会被显示成「有订阅」—— 比不显示订阅更糟。误判的兜底是用户把偏好
  * 切成「优先积分」（见 `badge-preferences.ts`），以及本文件的单测正反例。
- *
- * ## ⚠️ 为什么不登记 `codearts` / `trae` / `raccoon` 等
- *
- * - `codearts`：`packageName` / `specCode` 只是**套餐标识**（如
- *   `codearts.agent.enterprise.ultimate_pro`），没有独立的订阅额度读数 ——
- *   它的额度就是积分本身。
- * - `trae`：包名来自服务端 `display_desc`（如「资源包」），有效期规则是
- *   「起始 + 31 天」，属发放批次而非订阅窗口。
- * - `raccoon`：`会员积分` 是**会员权益发放**的积分池，不是订阅额度；把它当订阅
- *   会误导用户去核对一个并不存在的订阅。
- * - `loomy` / `lobsterai` / `minimax`：包是每日赠送 / 发放批次，或 `packages`
- *   恒为空（minimax 只有 `total`）。
  *
  * 一律**默认关闭**：将来新增渠道若忘记登记，最坏表现是「徽标显示积分」，
  * 而不是「显示一个不存在的订阅」。
@@ -149,13 +122,6 @@ export function badgePlanFor(provider: string, balance: CreditBalance | null): R
  *
  * ⚠️ 与客户端 `credits-format.js` 的 `unitLabel` 同一取舍：**以首个声明了单位的
  * 包为准**。同一渠道的包单位语义一致（ZCode 全是 token，其余全是积分）。
- *
- * ⚠️ **但拼法会不一致**（真实缺陷，2026-10-03）：WorkBuddy 国际版实测同一个账号
- * 的两个包就分别是 `CapacityUnit: 'credit'` 与 `'credits'`，另一个账号是
- * `'credits'`。原值直接下发会让客户端把同一份套餐按两种拼法拆成两组
- * （`planGroupsOf` 的键含单位）⇒ 「2 个账号合计」变成每个账号一行。
- * 故这里**下发前先归一**（{@link normalizeCreditUnit}），客户端再做同样的归一，
- * 两侧幂等。
  */
 function unitOf(packages: readonly CreditPackage[]): string {
   const raw = packages.find((pkg) => typeof pkg.unit === 'string' && pkg.unit.length > 0)?.unit ?? ''

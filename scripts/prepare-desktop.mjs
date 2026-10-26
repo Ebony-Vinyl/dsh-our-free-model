@@ -7,7 +7,7 @@ export const repositoryRoot = fileURLToPath(new URL('..', import.meta.url))
 export const resourceDirectory = path.join(repositoryRoot, 'packages/desktop/src-tauri/resources')
 
 /** 明确选择应用资源，排除用户目录、工具索引、依赖及构建缓存。 */
-export function stageDesktopService(destination) {
+export function stageDesktopService(destination, { requireWorkspace = false } = {}) {
   fs.mkdirSync(destination, { recursive: true })
   const copy = (relative, target = relative) => {
     const source = path.join(repositoryRoot, relative)
@@ -24,12 +24,38 @@ export function stageDesktopService(destination) {
     }
   }
   tree('src', file => /\.(js|json)$/.test(file))
-  for (const name of ['cli', 'service', 'management', 'login-terminal', 'open-external', 'eac']) copy(`packages/standalone/${name}.mjs`)
+  for (const name of ['cli', 'service', 'management', 'desktop-update', 'login-terminal', 'open-external', 'eac', 'workbench', 'providers', 'library', 'client-terminal', 'routing']) copy(`packages/standalone/${name}.mjs`)
   tree('packages/standalone/channels', file => file.endsWith('.mjs'))
-  tree('packages/standalone/web', file => /\.(html|js|css|json)$/.test(file))
+  const web = 'packages/standalone/web'
+  const assets = JSON.parse(fs.readFileSync(path.join(repositoryRoot, web, 'assets.json'), 'utf8'))
+  if (!Array.isArray(assets) || assets.length === 0
+    || assets.some(name => typeof name !== 'string' || !/^[\w-]+\.(js|css)$/.test(name))
+    || new Set(assets).size !== assets.length) {
+    throw new Error('桌面端资源清单无效')
+  }
+  for (const name of ['index.html', 'splash.html', 'assets.json', ...assets]) copy(`${web}/${name}`)
   copy('packages/standalone/package.json')
   copy('packages/desktop/service-host.mjs')
   for (const name of ['qoder-auth-wasm.wasm', 'LICENSE', 'NOTICE.md']) copy(`vendor/channel-pack/${name}`)
+  // The model workspace runs the same pinned engine the plugin ships, so the
+  // desktop build carries that binary and its manifest. `src/magpie-engine.js`
+  // resolves `../vendor/magpie/` from its own directory, which inside this
+  // staged tree is `resources/vendor/magpie/`.
+  for (const name of ['engine.json', 'LICENSE', 'NOTICE.md']) copy(`vendor/magpie/${name}`, `../vendor/magpie/${name}`)
+  const target = `${process.platform}-${process.arch}`
+  const binaries = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'vendor/magpie/engine.json'), 'utf8')).binaries ?? {}
+  const binary = binaries[target]
+  if (binary && typeof binary.path === 'string') {
+    copy(`vendor/magpie/${binary.path}`, `../vendor/magpie/${binary.path}`)
+  } else if (requireWorkspace) {
+    // A real installer without the engine ships a workspace page that can never
+    // start, so packaging refuses. Staging alone (tests, source inspection) may
+    // run on a platform with no pinned build.
+    throw new Error(`模型工作台需要 ${target} 的引擎二进制；先运行 node scripts/build-magpie-engine.mjs`)
+  } else {
+    console.log(`提示：${target} 没有引擎二进制，本次只生成不含模型工作台的服务资源`)
+  }
+  copy('icon.svg', '../icon.svg')
   copy('LICENSE')
   copy('scripts/standalone-third-party.txt', 'THIRD_PARTY_NOTICES.txt')
   fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ private: true, type: 'module' }) + '\n')
@@ -61,7 +87,8 @@ export async function prepareDesktop({ nodeExecutable = process.execPath, nodeLi
   fs.writeFileSync(cache, license)
   // 只清理固定生成目录，绝不触及用户数据目录。
   fs.rmSync(resourceDirectory, { recursive: true, force: true })
-  stageDesktopService(path.join(resourceDirectory, 'service'))
+  // Packaging an installer: the workspace has to work, so the engine is required.
+  stageDesktopService(path.join(resourceDirectory, 'service'), { requireWorkspace: true })
   fs.mkdirSync(path.join(resourceDirectory, 'runtime'), { recursive: true })
   fs.copyFileSync(nodeExecutable, path.join(resourceDirectory, 'runtime', process.platform === 'win32' ? 'node.exe' : 'node'))
   fs.writeFileSync(path.join(resourceDirectory, 'runtime/LICENSE'), license)

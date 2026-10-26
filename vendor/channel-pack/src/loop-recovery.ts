@@ -260,7 +260,7 @@ export function createLoopResumeController(
       state.pending = false
       if (state.attempts > policy.maxResumes) {
         log.warn(
-          `[codearts-auth] ${agent.id} 连续第 ${state.attempts} 次思考陷入重复，`
+          `[channel-pack] ${agent.id} 连续第 ${state.attempts} 次思考陷入重复，`
           + `已达到自动续跑上限（${policy.maxResumes} 次），不再自动续跑 —— `
           + '建议降低思考档位或更换模型。',
         )
@@ -290,11 +290,11 @@ export function createLoopResumeController(
         deliver(agent, message)
       } catch (error: unknown) {
         if (injectedId !== undefined) state.injected.delete(injectedId)
-        log.warn(`[codearts-auth] 自动续跑投递失败（${agent.id}）：${String(error)}`)
+        log.warn(`[channel-pack] 自动续跑投递失败（${agent.id}）：${String(error)}`)
         return false
       }
       log.info(
-        `[codearts-auth] ${agent.id} 思考陷入重复被中止，已自动续跑`
+        `[channel-pack] ${agent.id} 思考陷入重复被中止，已自动续跑`
         + `（第 ${state.attempts}/${policy.maxResumes} 次）。`,
       )
       return true
@@ -339,7 +339,7 @@ export function installLoopResume(ctx: Context): void {
   const policy = resolveLoopResumePolicy()
   if (!policy.enabled || policy.maxResumes === 0) {
     ctx.logger.info(
-      `[codearts-auth] 思考循环后的自动续跑未启用（${LOOP_RESUME_FLAG_ENV} / ${LOOP_RESUME_MAX_ENV}）。`,
+      `[channel-pack] 思考循环后的自动续跑未启用（${LOOP_RESUME_FLAG_ENV} / ${LOOP_RESUME_MAX_ENV}）。`,
     )
     return
   }

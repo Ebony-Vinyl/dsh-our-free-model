@@ -1,20 +1,7 @@
 /**
  * Qoder 产品配置。
  *
- * ## 为什么不复用 `BuddyProduct` / `LobsteraiProduct`
- *
  * Qoder 的协议与现有四个 provider **都不同源**：
- *
- * | 维度 | codearts | buddy/workbuddy | lobsterai | qoder |
- * |------|----------|-----------------|-----------|-------|
- * | 登录 | OAuth 回调 | external-link 轮询 | 本地回调 + authCode | PKCE 设备码轮询 |
- * | 续期 | refresh_token | refresh_token | refresh_token + 身份字段 | refresh_token + machine_id |
- * | 签名 | HMAC-SHA256 | 无 | 无 | 无（推理） |
- *
- * 且 `BuddyProduct.id` 是字面量联合 `'buddy' | 'workbuddy'`，加值会牵动
- * `productById` / `registerBuddyLlm` 一串调用点。故这里定义**平行**的
- * `QoderProduct` —— 共用的是架构**模式**（产品差异收敛到单一真相源），
- * 不是那个类型。
  *
  * ## 数据来源
  *
@@ -29,7 +16,6 @@
 /** 兜底模型目录中的一个条目（字段口径见下方 `QODER_FALLBACK_MODELS` 的注释）。 */
 export interface QoderFallbackModel {
   /** 模型目录 **key**（如 `qfmodel`）。
-
    * ⚠️ **必须走加密端点** `agent_chat_generation` —— 公开的
    * `/model/v1/chat/completions` 不认这些 key（见 `src/qoder-wasm.ts`）。 */
   id: string
@@ -155,19 +141,12 @@ export interface QoderModelPromotion {
   windowEnd?: string
   /**
    * 中文角标文案（远端 `badge.zh`，如「错峰 4 折」）。
-   *
-   * ⚠️ **当前不参与展示**：Qoder 的折扣已统一为「原价→折后价」箭头形态
-   * （与 TRAE / buddy 一致），角标与箭头信息**冗余**（0.2/0.5 本就是 4 折）。
-   * 字段保留是因为它是目录下发的原始数据，重新采集时仍可对照；
-   * 若将来要恢复角标，改 `qoderDisplayName` 即可。
    */
   badgeZh?: string
 }
 
 /**
  * Qoder 产品配置。
- *
- * 与 `BuddyProduct` / `LobsteraiProduct` 平行，字段全部为 Qoder 实际需要的。
  */
 export interface QoderProduct {
   /**
@@ -278,11 +257,6 @@ export interface QoderProduct {
   defaultCredentialRef: string
   /**
    * 单张请求图片的像素预算（issue !IKITT9）。
-   *
-   * ⚠️ qoder 撞的**不是**腾讯那道「图片视觉 token 预算」，而是**请求体体积**：
-   * 实测 8 张 2560×1600 原图能过、15 张（≈57 MiB）直接 `TRANSPORT: fetch failed`。
-   * 两种约束只有「缩放图片」这一个共同解法，所以这里同样要配预算。
-   * 未配置时适配器用 `DEFAULT_IMAGE_PIXEL_BUDGET`。
    */
   imagePixelBudget?: number
   /**
@@ -641,9 +615,6 @@ export const ALL_QODER_PRODUCTS: readonly QoderProduct[] = [QODER, QODER_CN]
 
 /**
  * 按 provider id 取 Qoder 产品配置；未知 id 返回 undefined。
- *
- * 与 `productById`（CodeBuddy 系）/ `lobsteraiProductById` 分开：
- * 三者返回**不同类型**，合并会让调用方拿到联合类型后不得不做类型收窄。
  */
 export function qoderProductById(id: string): QoderProduct | undefined {
   return ALL_QODER_PRODUCTS.find((product) => product.id === id)

@@ -16,27 +16,6 @@
  *
  * ## 与 `/v1/chat/completions` 的**有意差异**（改这个文件前先读）
  *
- * 1. **文本以 `block-end` 的组装块为权威**（见 {@link applyItemChunk}）。
- *    DSH 的 `block-end` 是**权威覆盖**（`openai-compat.ts` / `buddy-adapter.ts`
- *    的注释与 `scripts/verify-blockend-override.ts` 都写明这一点：死循环截断、
- *    泄漏清洗都只在 block-end 上生效），而 delta 累积只是「过程量」。
- *    Chat 路径忽略 block-end、只累加 delta，于是在上游触发正文死循环截断时
- *    会把重复正文一并交给客户端；本模块按协议本意取 block-end。
- *    ⚠️ 代价：同一个上游响应，两个端点在「正文死循环被截断」这种少数情况下
- *    会给出不同的文本。**这是本端点更正确**，不是缺陷；Chat 路径保持原样是
- *    因为「不顺手改既有端点的行为」。
- * 2. **`usage` 的字段口径与 Chat 路径一致**（`input_tokens` 是**含缓存命中**
- *    的总输入，命中部分单列在 `input_tokens_details.cached_tokens`）。
- *    这正是 OpenAI 官方口径，也是 Codex 的判据（它算 `input_tokens - cached`
- *    得未命中量，见 `usage.ts`）。
- *    ⚠️ **这里曾经写反过**：初版刻意发 DSH 的互斥口径（`input_tokens` 只含
- *    未命中），理由是「同一请求在两个端点上的数字必须能直接对比」。方向没错
- *    —— 错在**统一到了错误的那一边**：OpenAI 官方 `input_tokens` 本就含缓存，
- *    发不含缓存的会让标准客户端（Codex）把缓存量当成负输入而夹到 0，
- *    上下文占用被少算上百倍，自动压缩永不触发。
- *    现在两端都统一到**官方口径**，可对比性同样成立。
- *    完整事故记录与实测数据见 `usage.ts` 文件头。
- *
  * ## 明确**接受但不生效**的字段
  *
  * `store` / `include` / `prompt_cache_key` / `metadata` / `user` /
@@ -870,12 +849,6 @@ function statusOf(state: Accumulated): 'completed' | 'incomplete' {
 
 /**
  * 组装最终的 `output[]`。
- *
- * ⚠️ **必须按 `outputIndex` 排序**（2026-10-04 修）：`output_index` 的语义就是
- * 「本项在 `output` 数组里的下标」。而项落进 `items` 的顺序取决于**收尾顺序**
- * （buddy 等适配器先发工具块的 `block-end`、后发正文块），与**开启顺序**不一致
- * —— 于是正文可能排在自己的工具调用之后，客户端把助手这一轮的历史读成「先调工具、
- * 后说话」，与模型真实产出相反。
  */
 function outputOf(
   items: readonly ResponsesItemState[],
@@ -1160,7 +1133,7 @@ export async function* toResponsesSse(
       // **并行工具调用会同时开着多个块** —— 上游依次发
       // `block-start[0] tool-call` / `delta[0]` / `block-start[1] tool-call` /
       // `delta[1]`，而全部 `block-end` 要等流末尾才到（各适配器都在收尾循环里
-      // 统一补发，见 `buddy-adapter.ts` 的 `toolOrder` 段）。于是 `block-start[1]`
+
       // 到达时 [0] **在参数只到一半时就被收尾**并从 `open` 删除；等真正的
       // `block-end[0]` 到达，下面的 `block-end` 分支找不到它，就**新建了一个
       // 同索引项** ⇒ 同一次工具调用发出**两个** `function_call`、共用同一个

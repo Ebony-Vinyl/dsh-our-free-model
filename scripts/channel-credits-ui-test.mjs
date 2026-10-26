@@ -62,7 +62,7 @@ export async function verifyChannelCreditsUi() {
     subscribe()
     return { calls, errors, cells, button, text, cleanup, events }
   }
-  const claimable = new Set(['codearts', 'lobsterai', 'qoder', 'qodercn', 'trae', 'loomy', 'minimax', 'zcode'])
+  const claimable = new Set(['lobsterai', 'qoder', 'qodercn', 'trae', 'loomy', 'minimax', 'zcode'])
   for (const provider of [...claimable, 'cline', 'raccoon', 'gemini']) {
     const app = mount(provider, async () => ({ accounts: [] }))
     await settle()

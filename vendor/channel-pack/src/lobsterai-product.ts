@@ -1,21 +1,6 @@
 /**
  * LobsterAI（有道龙虾）产品配置。
  *
- * ## 为什么不复用 `BuddyProduct`
- *
- * `src/product.ts` 的 `BuddyProduct` 是**围绕 CodeBuddy 系协议**设计的，
- * 它的这些字段对 LobsterAI 完全无意义：
- *
- * - `productCode` / `attributionName` / `clientVersion` / `cliVersion`
- *   —— LobsterAI 不发 `X-Product*` / `X-IDE-*` 归属头，
- *   只发 `X-LobsterAI-Client-*`；
- * - `apiDomain`（`X-Domain` 头）—— 无此头；
- * - `userAgentByModelFamily` —— 那是腾讯后台按 UA 归因的机制；
- * - `appendSessionParams` / `pluginVersion` —— WorkBuddy 登录 URL 的后缀参数。
- *
- * 且 `BuddyProduct.id` 是字面量联合 `'buddy' | 'workbuddy'`，加第三个值会牵动
- * `productById` / `registerBuddyLlm` / `reconcileWithFallback` 一串调用点。
- *
  * 因此这里定义**平行**的 `LobsteraiProduct`：共用的是架构**模式**
  * （产品差异收敛到单一真相源），不是那个类型。
  *
@@ -30,12 +15,6 @@
 
 /**
  * 兜底模型目录中的一个条目。
- *
- * 与 `BuddyFallbackModel` 分开定义。注意**不要把这里的 `contextWindow` 当成
- * 远端权威值**：远端 `GET /api/models/available` 其实**会**返回
- * `contextWindow`（2026-09-17 实测多数为 `1000000`），只是本适配器当前尚未
- * 解析消费它（见 `LobsteraiRemoteModel` 的说明）。因此这里的值是**纯本地
- * 估计值**，且只在本表被用到时（远端整体失败）才生效。
  */
 export interface LobsteraiFallbackModel {
   /** 模型 ID（传给 `POST /api/proxy/v1/chat/completions` 的 `model`）。 */
@@ -130,8 +109,6 @@ export const LOBSTERAI_USER_AGENT = 'LobsterAI/0.1.0'
 
 /**
  * LobsterAI 产品配置。
- *
- * 与 `BuddyProduct` 平行，字段全部为 LobsterAI 实际需要的。
  */
 export interface LobsteraiProduct {
   /** provider 标识：注册到 `ctx.llm` 的路由名，也是账号列表的 provider 字段值。 */
@@ -154,12 +131,6 @@ export interface LobsteraiProduct {
   defaultCredentialRef: string
   /**
    * 单张请求图片的像素预算（issue !IKITT9）。
-   *
-   * ⚠️ LobsterAI 撞的是**请求体体积**：实测 12 张 2560×1600 原图能过、
-   * 13 张（≈50 MiB）回 `SERVER code=500 服务器内部错误`。
-   * 那**不是**准入报文（腾讯会明确回 `prompt is too long: N tokens > M maximum`），
-   * 所以别把它当成「图片 token 预算」来定值 —— 它是体积压垮了上游。
-   * 未配置时适配器用 `DEFAULT_IMAGE_PIXEL_BUDGET`。
    */
   imagePixelBudget?: number
   /** 单张请求图片的编码字节目标（未配置用 1 MiB，见 `src/image-budget.ts`）。 */
@@ -204,9 +175,6 @@ const LOBSTERAI_FALLBACK_MODELS: readonly LobsteraiFallbackModel[] = [
 
 /**
  * LobsterAI provider 配置。
- *
- * 与 CodeBuddy / WorkBuddy 并列的第三个产品线，但**协议完全不同**：
- * 它不走腾讯的 external-link 轮询登录，而是本地回调 + `authCode` 换 token。
  */
 export const LOBSTERAI: LobsteraiProduct = {
   id: 'lobsterai',
@@ -226,9 +194,6 @@ export const ALL_LOBSTERAI_PRODUCTS: readonly LobsteraiProduct[] = [LOBSTERAI]
 
 /**
  * 按 provider id 取 LobsterAI 产品配置；未知 id 返回 undefined。
- *
- * 与 `productById`（CodeBuddy 系）分开：两者返回**不同类型**，
- * 合并成一个函数会让调用方拿到联合类型后再也不得不做类型收窄。
  */
 export function lobsteraiProductById(id: string): LobsteraiProduct | undefined {
   return ALL_LOBSTERAI_PRODUCTS.find((product) => product.id === id)

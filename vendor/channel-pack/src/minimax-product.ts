@@ -3,13 +3,6 @@
  *
  * ## 为什么新建 `MinimaxProduct` 而不复用既有类型
  *
- * `BuddyProduct` / `LobsteraiProduct` / `QoderProduct` / `LoomyProduct` /
- * `RaccoonProduct` 的字段全部围绕各自协议设计（归属头、WASM 签名参数、
- * 手机号加密密钥、倍率…），对 MiniMax 无一有意义。
- * MiniMax 需要的是：**一组 OAuth 端点 + 目录 region/buildEnv + 兜底模型表**。
- * 故定义**平行**接口 —— 共用的是架构**模式**（产品差异收敛到单一真相源），
- * 不是那个类型。
- *
  * ## 数据来源（全部实测或 asar 源码直读，见 docs/minimax-protocol-notes.md）
  *
  * - 主机：asar `@mavis/config/dist/config.js` 的 `PRESET_BASE_URLS['cn-prod']`

@@ -123,8 +123,8 @@ process.execArgv.push('--import', fixtureImport)
 await import('./lib/standalone-channel-fixture.mjs')
 const { startStandalone } = await import('../packages/standalone/service.mjs')
 fs.mkdirSync(path.join(dataDir, 'channel-pack'), { recursive: true })
-const retiredProviders = ['buddy', 'workbuddy']
-const retiredAccounts = retiredProviders.map(provider => ({
+const unsupportedProviders = ['unsupported-alpha', 'unsupported-beta']
+const unsupportedAccounts = unsupportedProviders.map(provider => ({
   id: `${provider}-fixture`, provider, nickname: '历史账号保留', enabled: true, refreshable: false,
   createdAt: Date.now(), expiresAt: Date.now() + 86400000, credentialRef: `${provider.toUpperCase()}_ACCOUNT_FIXTURE`,
 }))
@@ -133,20 +133,20 @@ const activeAccounts = ['cline', 'loomy'].map(provider => ({
   createdAt: Date.now(), expiresAt: Date.now() + 86400000, credentialRef: `${provider.toUpperCase()}_ACCOUNT_FIXTURE`,
 }))
 fs.writeFileSync(path.join(dataDir, 'channel-pack', 'state.json'), JSON.stringify({
-  accounts: [...retiredAccounts, ...activeAccounts], disabledModels: {},
+  accounts: [...unsupportedAccounts, ...activeAccounts], disabledModels: {},
 }))
-const retiredCredentials = Object.fromEntries(retiredAccounts.map(account => [account.credentialRef,
-  JSON.stringify(token(account.provider === 'buddy' ? 'copilot.tencent.com' : 'www.workbuddy.ai'))]))
+const unsupportedCredentials = Object.fromEntries(unsupportedAccounts.map(account => [account.credentialRef,
+  JSON.stringify(token(account.provider === 'unsupported-alpha' ? 'unsupported.invalid' : 'unsupported-beta.invalid'))]))
 const seed = createCredentials(dataDir)
-for (const [ref, value] of Object.entries(retiredCredentials)) await seed.set(ref, value)
+for (const [ref, value] of Object.entries(unsupportedCredentials)) await seed.set(ref, value)
 await seed.set('CLINE_ACCOUNT_FIXTURE', JSON.stringify({ access_token: 'workos:fixture-cline', expire_time: Date.now() + 86400000, account_id: 'fixture-user' }))
 await seed.set('LOOMY_ACCOUNT_FIXTURE', JSON.stringify({ access_token: 'fixture-loomy', userid: 'fixture-user', phone: '13000000000', expires_at: String(Date.now() + 86400000) }))
 seed.dispose()
-const assertRetiredDataPreserved = () => {
+const assertUnsupportedDataPreserved = () => {
   const state = JSON.parse(fs.readFileSync(path.join(dataDir, 'channel-pack/state.json'), 'utf8'))
   const credentials = JSON.parse(fs.readFileSync(path.join(dataDir, 'channel-credentials.json'), 'utf8'))
-  for (const account of retiredAccounts) assert.deepEqual(state.accounts.find(row => row.id === account.id), account)
-  for (const [ref, value] of Object.entries(retiredCredentials)) assert.equal(credentials[ref], value)
+  for (const account of unsupportedAccounts) assert.deepEqual(state.accounts.find(row => row.id === account.id), account)
+  for (const [ref, value] of Object.entries(unsupportedCredentials)) assert.equal(credentials[ref], value)
 }
 
 let key
@@ -169,8 +169,8 @@ try {
   service = await startStandalone({ dataDir, port: 0, refresh: false, logger: { warn: message => warnings.push(message), info() {} } })
   await service.ready
   key = JSON.parse(fs.readFileSync(service.keyFile)).forwardKey
-  await check('十一个真实渠道注册，独立目录、统一模型目录和机读能力可用', async () => {
-    assert.equal(service.channels.providers.length, 11)
+  await check('十个真实渠道注册，独立目录、统一模型目录和机读能力可用', async () => {
+    assert.equal(service.channels.providers.length, 10)
     assert.equal(service.channels.providers.includes('opencode'), false)
     assert.equal((await rpc('account.list', { provider: 'cline' })).accounts.length, 1)
     const { value } = await api('/v1/models')
@@ -188,15 +188,15 @@ try {
     assert.equal(fs.existsSync(path.join(dshHome, 'channel-pack')), false)
     assert.equal((await api('/api/management/eac/status')).value.local, false)
   })
-  await check('退役渠道保留历史账号与凭据，但不注册、不列模型、不允许旧 RPC 或网关请求', async () => {
-    assertRetiredDataPreserved()
+  await check('未知渠道保留历史账号与凭据，但不注册、不列模型、不允许旧 RPC 或网关请求', async () => {
+    assertUnsupportedDataPreserved()
     const models = (await api('/v1/models')).value.data
-    for (const provider of retiredProviders) {
+    for (const provider of unsupportedProviders) {
       assert.equal(service.channels.providers.includes(provider), false)
       assert.equal(models.some(row => row.id.startsWith(`${provider}/`)), false)
     }
     const before = requests.length
-    for (const provider of retiredProviders) {
+    for (const provider of unsupportedProviders) {
       const accountId = `${provider}-fixture`
       for (const [method, payload] of [
         ['account.list', { provider }], ['account.create', { provider }],
@@ -208,16 +208,16 @@ try {
         const reply = await api('/api/management/channels/rpc', { method, payload })
         assert.equal(reply.response.status, 200)
         assert.equal(reply.value.ok, false, `${provider} ${method}: ${JSON.stringify(reply.value)}`)
-        assert.equal(reply.value.error.code, 'provider-retired', `${provider} ${method}`)
+        assert.equal(reply.value.error.code, 'provider-unsupported', `${provider} ${method}`)
       }
       for (const [endpoint, payload] of [
-        ['/v1/chat/completions', { messages: [{ role: 'user', content: 'retired fixture' }] }],
-        ['/v1/responses', { input: 'retired fixture' }],
-        ['/v1/messages', { max_tokens: 16, messages: [{ role: 'user', content: 'retired fixture' }] }],
+        ['/v1/chat/completions', { messages: [{ role: 'user', content: 'unsupported fixture' }] }],
+        ['/v1/responses', { input: 'unsupported fixture' }],
+        ['/v1/messages', { max_tokens: 16, messages: [{ role: 'user', content: 'unsupported fixture' }] }],
       ]) assert.equal((await api(endpoint, { model: `${provider}/fixture-free`, ...payload })).response.status, 404)
     }
-    assert.equal(requests.length, before, '退役请求不得触达任何上游端点')
-    assertRetiredDataPreserved()
+    assert.equal(requests.length, before, '未知渠道请求不得触达任何上游端点')
+    assertUnsupportedDataPreserved()
   })
   await check('同源鉴权覆盖渠道与 EAC 操作，跨域和无密钥访问失败', async () => {
     for (const endpoint of ['/api/management/eac/status', '/api/management/channels/rpc']) {
@@ -373,7 +373,7 @@ try {
     assert.equal((await rpc('account.list', { provider: 'cline' })).accounts.length, 1)
     await rpc('backup.import', { payload: backup.payload })
     assert.equal((await rpc('account.list', { provider: 'cline' })).accounts[0].nickname, '新昵称')
-    assertRetiredDataPreserved()
+    assertUnsupportedDataPreserved()
   })
   await check('并行独立实例不共享账号、目录、授权或账本，重启保存设置', async () => {
     other = await startStandalone({ dataDir: otherDir, port: 0, refresh: false, logger: { warn() {}, info() {} } })
@@ -386,9 +386,9 @@ try {
     key = JSON.parse(fs.readFileSync(service.keyFile)).forwardKey
     assert.equal((await rpc('account.list', { provider: 'cline' })).accounts[0].nickname, '新昵称')
     assert.equal((await rpc('credits.permanentLock', { provider: 'loomy' })).locked, true)
-    assertRetiredDataPreserved()
-    assert.equal(service.channels.providers.some(provider => retiredProviders.includes(provider)), false)
-    assert.equal((await api('/v1/models')).value.data.some(row => retiredProviders.some(provider => row.id.startsWith(`${provider}/`))), false)
+    assertUnsupportedDataPreserved()
+    assert.equal(service.channels.providers.some(provider => unsupportedProviders.includes(provider)), false)
+    assert.equal((await api('/v1/models')).value.data.some(row => unsupportedProviders.some(provider => row.id.startsWith(`${provider}/`))), false)
   })
   await check('客户端取消传播到真实渠道网络请求，服务关闭不会迟到写入凭据', async () => {
     const controller = new AbortController()

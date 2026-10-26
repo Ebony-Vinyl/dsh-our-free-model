@@ -138,6 +138,7 @@ try {
     assert.equal((await management('/settings', { key: '', body: { standaloneLanEnabled: true } })).status, 401)
   })
   await check('unknown, malicious and malformed LAN fields are rejected atomically', async () => {
+    await settings({ standaloneLanEnabled: false })
     const before = fs.readFileSync(service.keyFile, 'utf8')
     for (const body of [
       { standaloneLanEnabled: 'true' }, { standaloneLanEnabled: 1 }, { standaloneLanEnabled: null },

@@ -3,13 +3,6 @@
  *
  * ## 与其它 provider 的差异
  *
- * | provider | 登录方式 | 是否需要本地端口 |
- * |---|---|---|
- * | CodeArts / LobsterAI | 本地回调服务器收 code | 是 |
- * | Qoder | PKCE 设备码轮询（`404` = 尚未授权） | 否 |
- * | TRAE | 回调直接回传 token（并存 PKCE 新流程） | 是 |
- * | **Cline** | **WorkOS 设备码轮询**（`authorization_pending` = 尚未授权） | **否** |
- *
  * Cline 官方桌面端在 prod 下走的就是设备码分支
  * （源码 `loginClineOAuth` → `useWorkOSDeviceAuth ?? true`），
  * 与「本地回调 + 端口 48801-48811」那条分支并存。本插件只实现前者：
@@ -46,12 +39,6 @@
  * 否则会被 WorkOS 持续限流。
  *
  * ## 两步式的必要性
- *
- * 浏览器只在用户点击后的短暂窗口（transient activation，约 5 秒）内允许
- * `window.open`。若把「拿设备码 → 打开页面 → 等授权」做成一次阻塞调用，
- * 调用方拿到 URL 时手势已过期，弹窗被拦截（返回 null），前端兜底若执行
- * `window.location.href = loginUrl` 会把**整个设置页**导航走（真实缺陷，
- * 已在 CodeArts / LobsterAI / Qoder 三处修过）。
  *
  * 故提供 {@link startClineLoginFlow} 立即返回 URL，由前端先开窗再等结果。
  */
@@ -354,9 +341,8 @@ function toLoginFlowResult(
   }
 }
 
-/** 默认的平台浏览器打开器（延迟 import 以复用 CodeArts 的既有实现）。 */
 async function defaultOpenBrowser(url: string): Promise<void> {
-  const { openBrowser } = await import('./login.js')
+  const { openBrowser } = await import('./open-browser.js')
   openBrowser(url)
 }
 

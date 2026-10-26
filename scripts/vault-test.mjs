@@ -780,7 +780,7 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
     check('analytics counted every request including the refused one', [feedRow?.req, feedRow?.rej], [3, 1])
     check('usage parsed from relayed SSE frames feeds the token totals', [feedRow?.in, feedRow?.out], [18, 8])
     check('the concurrency peak stuck at the gate ceiling', feedRow?.concMax, 2)
-    check('the hourly curve recorded the burst', ((feedJson.hourly ?? [])[0]?.[1] ?? 0) >= 3, true)
+    check('the hourly curve recorded the burst', (feedJson.hourly ?? []).reduce((sum, row) => sum + (row[1] ?? 0), 0) >= 3, true)
 
     const dashboardPage = await fetch(`http://127.0.0.1:${concServer.address().port}/stats?t=${encodeURIComponent('test-admin-token-0123456789')}`)
     const pageText = await dashboardPage.text()

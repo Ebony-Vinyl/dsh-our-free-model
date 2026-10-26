@@ -14,12 +14,6 @@
  * | 输入 | `inputTokens` **只含未命中缓存**的部分；命中单列 `cacheReadTokens` | `prompt_tokens` / `input_tokens` 是**含缓存**的总输入 |
  * | 明细 | 无 | `prompt_tokens_details.cached_tokens` 是上者的**子集**（不是并列项） |
  *
- * DSH 侧口径见 `src/types.ts` 的注释「输入 token（未命中缓存的部分）」，
- * 以及各适配器统一在做的那一步减法（`openai-compat.ts:892`、`buddy-adapter.ts:1988`、
- * `lobsterai-adapter.ts:1488`、`llm-adapter.ts:1797`、`gemini-messages.ts:455`）——
- * 它们把上游**含缓存**的 `prompt_tokens` 减成 DSH 的互斥口径。
- * 网关这一跳必须**减回去**，否则就是下面的缺陷。
- *
  * ## ⚠️ 真实缺陷（用户报障，2026-10-04）：接入 Codex 后上下文占用被少算上百倍
  *
  * 现象：同一个会话，用 `raccoon` 时 Codex 的上下文进度条「搞半天只占 5%」，
@@ -57,10 +51,6 @@
  * `tokens_in_context_window()`。计量恒定在 0.1%~5% ⇒
  * `model_auto_compact_token_limit` **永远不会触发**，真实上下文会一路涨到
  * 撞上模型硬限直接报错，而不是优雅地压缩。
- *
- * ⚠️ **受影响的是「所有开前缀缓存的 provider」**（raccoon / buddy / workbuddy /
- * lobsterai / qoder / qodercn / cline / loomy / opencode / minimax / zcode /
- * gemini / codearts），**只有 trae 因为不报缓存而幸免**。
  *
  * ⚠️ 这是 `6f352ca`（Chat 出口）与 `c19917a`（Responses 出口）就带着的既有缺陷，
  * 不是第 7、8 轮引入的；只是**接入 Codex 用 Responses 端点之后才暴露** ——

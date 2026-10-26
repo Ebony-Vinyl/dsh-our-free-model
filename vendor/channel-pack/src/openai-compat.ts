@@ -3,35 +3,9 @@
  *
  * ## 为什么单独成模块
  *
- * `src/buddy-adapter.ts` 与 `src/lobsterai-adapter.ts` 各自内联了一套**完全同源**
- * 的逻辑（消息序列化约 200 行、SSE 消费约 230 行），差异只在 URL、请求头与
- * 少数厂商特有字段上。第三个 OpenAI 兼容 provider（qoder）若再复制一份，
- * 这三份实现会在后续修 bug 时逐渐分叉 —— 而它们处理的都是
- * **OpenAI 协议层的通用陷阱**（工具配对、null 字段、分片合并），与厂商无关。
- *
  * 因此本模块把这部分抽出来给 **qoder 适配器**使用。
  *
- * ⚠️ **既有适配器（buddy / lobsterai）刻意不改用它**：那两份实现已被大量
- * 单测与线上流量验证过，重构它们属于与本任务无关的高风险改动。若将来要
- * 统一，应作为独立任务并配以逐条对拍测试。
- *
  * ## 本模块承载的实测教训（逐条都有真实缺陷背景）
- *
- * - **`typeof x === 'string'` 而非 `!== undefined`**：真实 SSE 里一个模型要么走
- *   `content`、要么走 `reasoning_content`，**另一侧恒为 `null`**。只判 undefined
- *   会让 `.length` 在 null 上崩溃（表现为每轮对话第一帧就报
- *   `Cannot read properties of null`）。
- * - **思考字段有两个名字**：`reasoning_content`（Qoder / buddy）与
- *   `reasoning`（**Cline**，实测形如
- *   `{"delta":{"reasoning":"The","reasoning_details":[…]}}`）。只认前者会让
- *   Cline 的思考内容被静默丢弃（表现为「模型不思考」）。两者语义相同，
- *   由同一分支经 `??` 合并处理。
- * - **工具配对剔除**：孤儿 tool_call / tool_result 会让后端 400，且坏历史被每次
- *   请求原样重放 —— 会话彻底报废。发出前剔除可让会话自愈。
- * - **`function.name` 只允许非空覆盖**：后续分片带空串 `""` 会清空已解析出的
- *   工具名 → `unknown tool ""`。
- * - **残缺参数不补 `{}`**：那会伪造出合法外观，让 harness 报 schema 错误而非
- *   重试；正确做法是判 `max-tokens` 让 dsh 重试。
  */
 
 import { LlmError, ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -67,7 +41,6 @@ export function contentToText(content: unknown): string {
     .join('')
 }
 
-/** 工具结果内嵌图片的载体文本（与 buddy / lobsterai 适配器同名同义）。 */
 export const TOOL_RESULT_IMAGE_TEXT = 'Attached image(s) from tool result:'
 
 /**
@@ -435,11 +408,6 @@ export async function* consumeOpenAiSse(
    *
    * ## 真实缺陷（用户报障，2026-09-25）
    *
-   * 唯一活动 session（`lilishop-go` / `workbuddy/hy4-preview-f`）出现**正文**循环。
-   * 旧实现只在 reasoning 分支调 `observe`，正文分支从不调用 → 正文循环**完全
-   * 看不见**。用真实检测器回放该会话正文，三段全部命中（去重率 0.0412 /
-   * 0.0938 / 0.1745，阈值 < 0.35）—— **不是循环不够长，是通道没接**。
-   *
    * ## ⚠️ 为什么必须与 `loopGuard` **分成两个实例**
    *
    * 判据看的是**尾部 3000 字符窗口**的行去重率。两条通道的文本若混进同一
@@ -588,13 +556,6 @@ export async function* consumeOpenAiSse(
               reasoning_content?: string | null
               /**
                * 思考增量的**另一种字段名**（Cline 用这个）。
-               *
-               * ⚠️ Cline 的实测 SSE 是
-               * `{"delta":{"reasoning":"The","reasoning_details":[…]}}`，
-               * **不是** `reasoning_content`（后者是 Qoder / buddy 的形态）。
-               * 只认 `reasoning_content` 会让 Cline 的思考内容被静默丢弃
-               * （表现为「模型不思考」，且 reasoning 档位看似无效）。
-               * 两者由下方同一分支处理（同一帧只会出现其中一个）。
                */
               reasoning?: string | null
               tool_calls?: Array<{
@@ -793,7 +754,7 @@ export async function* consumeOpenAiSse(
         }
         // 同样必须用 `typeof === 'string'`：reasoning_content 也会显式返回 null。
         //
-        // ⚠️ **两个字段名都要认**：Qoder / buddy 用 `reasoning_content`，
+
         // **Cline 用 `reasoning`**（实测 SSE 形如
         // `{"delta":{"reasoning":"The","reasoning_details":[…]}}`）。
         // 只认前者会让 Cline 的思考内容被静默丢弃 —— 用户看到「模型不思考」，
@@ -860,7 +821,7 @@ export async function* consumeOpenAiSse(
           // （实测 seq=693：`{index:2, id:'call_25e9…', args:[""]}`）——
           // 于是 `BlockAssembler` 为它建了一个 partial，收尾时组装出
           // `{type:'tool-call', name:''}`。这条空名字块被 harness 执行成
-          // `unknown tool ""`、**持久化进会话**，之后切到 workbuddy 时被每次
+
           // 请求原样重放 → **HTTP 400 code 11133**，整条会话报废。
           //
           // 注意：**只跳过收尾的 `block-end` 是不够的** —— 上游
