@@ -8,7 +8,7 @@
  * Run: node scripts/trust-test.mjs
  */
 import assert from 'node:assert/strict'
-import { rejectionFor, structuralRejection, connectionAdmissionView } from '../src/trust.js'
+import { isLoopbackHost, rejectionFor, structuralRejection, connectionAdmissionView } from '../src/trust.js'
 
 let failures = 0
 const check = (name, fn) => {
@@ -17,6 +17,18 @@ const check = (name, fn) => {
 }
 
 const req = headers => ({ headers })
+
+// ── the bind-host check ──────────────────────────────────────────────────────
+// The listener's bind guard accepts every spelling a loopback address has,
+// including the bare IPv6 literal the service's own URL formatter supports.
+check('a bare IPv6 loopback literal is a valid bind host', () => {
+  for (const host of ['127.0.0.1', 'localhost', '[::1]', '::1']) {
+    assert.equal(isLoopbackHost(host), true, host)
+  }
+  for (const host of ['0.0.0.0', '192.168.1.2', 'evil.example', '', undefined]) {
+    assert.equal(isLoopbackHost(host), false, String(host))
+  }
+})
 
 // ── the structural fence ─────────────────────────────────────────────────────
 check('same-origin loopback request passes', () => {

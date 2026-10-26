@@ -1,0 +1,1675 @@
+/* ============================================
+   用量统计页面样式 — 呼吸感纸面（昼）+ 深海仪器（夜）
+   同时包含 Overview 页面的 ov- 前缀样式
+   ============================================ */
+
+/* ---- 昼主题变量 ---- */
+:root {
+  --us-surface: #fffdfa;
+  --us-surface-raised: #f7f3eb;
+  --us-surface-sunken: #f5f1e8;
+  --us-line: #e9e4db;
+  --us-line-soft: #ece6db;
+  --us-line-strong: #d8d2c7;
+  --us-ink: #262320;
+  --us-ink-secondary: #4b453d;
+  --us-ink-tertiary: #6b655c;
+  --us-ink-muted: #766f63;
+  --us-accent: var(--amber, #b45309);
+  --us-accent-soft: var(--amber-soft, #fdf6ec);
+  --us-accent-border: var(--amber-line, #eedfc6);
+  --us-accent-strong: #8a4b06;
+  --us-success: #177552;
+  --us-success-soft: #eff7f2;
+  --us-success-border: #cfe6da;
+  --us-warning: #8a6215;
+  --us-warning-soft: #fbf6ea;
+  --us-warning-border: #e9ddc0;
+  --us-error: #9c3343;
+  --us-error-soft: #fdf5f5;
+  --us-shadow-card: 0 1px 2px rgba(72, 58, 42, 0.05), 0 0 1px rgba(72, 58, 42, 0.05);
+  --us-shadow-card-hover: 0 2px 4px -1px rgba(72, 58, 42, 0.05), 0 10px 28px -10px rgba(72, 58, 42, 0.12), 0 0 1px rgba(72, 58, 42, 0.05);
+  --us-shadow-metric-hover: 0 10px 26px -8px rgba(72, 58, 42, 0.16), 0 3px 10px -3px rgba(72, 58, 42, 0.08);
+  --us-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --us-duration-fast: 120ms;
+  --us-duration-normal: 220ms;
+  --us-duration-slow: 380ms;
+  --us-grid-line: rgba(86, 52, 10, 0.07);
+}
+
+/* ---- 夜主题变量 ---- */
+[data-theme="dark"] {
+  --us-surface: #11161f;
+  --us-surface-raised: #151b26;
+  --us-surface-sunken: #0b1018;
+  --us-line: rgba(255, 255, 255, 0.07);
+  --us-line-soft: rgba(255, 255, 255, 0.045);
+  --us-line-strong: rgba(255, 255, 255, 0.12);
+  --us-ink: #edf2f8;
+  --us-ink-secondary: #a8b3c4;
+  --us-ink-tertiary: #8b95a5;
+  --us-ink-muted: #7e8ba1;
+  --us-accent: var(--cp-cyan, #00d0c0);
+  --us-accent-soft: var(--cp-cyan-soft, rgba(0, 208, 192, 0.14));
+  --us-accent-border: var(--cp-cyan-line, rgba(0, 208, 192, 0.28));
+  --us-accent-strong: color-mix(in srgb, var(--cp-cyan, #00d0c0) 72%, #ffffff);
+  --us-success: #58ddb0;
+  --us-success-soft: rgba(88, 221, 176, 0.1);
+  --us-success-border: rgba(88, 221, 176, 0.22);
+  --us-warning: #f4b46f;
+  --us-warning-soft: rgba(242, 166, 90, 0.1);
+  --us-warning-border: rgba(242, 166, 90, 0.26);
+  --us-error: #ef8585;
+  --us-error-soft: rgba(227, 106, 106, 0.1);
+  --us-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.38);
+  --us-shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 46px -30px rgba(0, 0, 0, 0.92), 0 2px 8px rgba(0, 0, 0, 0.34);
+  --us-shadow-metric-hover: 0 12px 34px -10px rgba(0, 0, 0, 0.62), 0 0 26px -14px color-mix(in srgb, var(--cp-cyan, #00d0c0) 50%, transparent);
+  --us-grid-line: var(--cp-grid, rgba(0, 208, 192, 0.055));
+}
+
+/* ============================================
+   Overview 页面样式（ov- 前缀）
+   ============================================ */
+
+/* ---- 指标卡图标容器 ---- */
+.ov-metric-icon {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border-radius: 8px; flex-shrink: 0;
+  transition: transform var(--us-duration-normal) var(--us-ease-out), box-shadow var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-metric:hover .ov-metric-icon {
+  transform: translateY(-1px);
+}
+
+/* 昼主题：纸面上的彩色印章 */
+:root .ov-metric:nth-child(1) .ov-metric-icon { background: var(--amber-soft, #fdf6ec); color: var(--amber, #b45309); }
+:root .ov-metric:nth-child(2) .ov-metric-icon { background: #eff7f2; color: #177552; }
+:root .ov-metric:nth-child(3) .ov-metric-icon { background: #fbf6ea; color: #8a6215; }
+:root .ov-metric:nth-child(4) .ov-metric-icon { background: #f7f0f5; color: #875a7d; }
+:root .ov-metric:nth-child(5) .ov-metric-icon { background: #fdf5f5; color: #9c3343; }
+:root .ov-metric:nth-child(6) .ov-metric-icon { background: #eaf5f6; color: #0f7285; }
+
+/* 夜主题：仪器上的指示灯 */
+[data-theme="dark"] .ov-metric:nth-child(1) .ov-metric-icon { background: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12)); color: var(--cp-cyan, #00d0c0); box-shadow: 0 0 8px color-mix(in srgb, var(--cp-cyan, #00d0c0) 10%, transparent); }
+[data-theme="dark"] .ov-metric:nth-child(2) .ov-metric-icon { background: rgba(88, 221, 176, 0.11); color: #58ddb0; box-shadow: 0 0 8px rgba(88, 221, 176, 0.06); }
+[data-theme="dark"] .ov-metric:nth-child(3) .ov-metric-icon { background: rgba(242, 166, 90, 0.11); color: #f4b46f; box-shadow: 0 0 8px rgba(242, 166, 90, 0.06); }
+[data-theme="dark"] .ov-metric:nth-child(4) .ov-metric-icon { background: rgba(155, 91, 137, 0.12); color: #c88bbd; box-shadow: 0 0 8px rgba(155, 91, 137, 0.06); }
+[data-theme="dark"] .ov-metric:nth-child(5) .ov-metric-icon { background: rgba(227, 106, 106, 0.11); color: #ef8585; box-shadow: 0 0 8px rgba(227, 106, 106, 0.06); }
+[data-theme="dark"] .ov-metric:nth-child(6) .ov-metric-icon { background: rgba(76, 196, 224, 0.11); color: #4cc4e0; box-shadow: 0 0 8px rgba(76, 196, 224, 0.06); }
+
+/* 指标卡 hover 浮起 */
+.ov-metric {
+  transition: transform var(--us-duration-normal) var(--us-ease-out), box-shadow var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-metric:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--us-shadow-metric-hover);
+}
+
+/* ---- Overview 图表增强 ---- */
+.ov-chart-panel { position: relative; }
+.ov-chart-total { font-variant-numeric: tabular-nums; }
+.ov-chart-col { position: relative; }
+.ov-chart-col::after {
+  content: attr(data-value);
+  position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+  background: var(--us-ink); color: var(--us-surface);
+  font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  white-space: nowrap; opacity: 0; pointer-events: none;
+  transition: opacity var(--us-duration-fast) var(--us-ease-out);
+  font-variant-numeric: tabular-nums;
+}
+.ov-chart-col:hover::after { opacity: 1; }
+
+/* 图表柱子圆角增强 */
+.ov-chart .dashboard-chart-bar {
+  border-radius: 4px 4px 0 0;
+  transition: background var(--us-duration-fast) var(--us-ease-out), transform var(--us-duration-fast) var(--us-ease-out), box-shadow var(--us-duration-fast) var(--us-ease-out);
+}
+.ov-chart .dashboard-chart-column:hover .dashboard-chart-bar {
+  transform: scaleY(1.02);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--amber, #b45309) 16%, transparent);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cp-cyan, #00d0c0) 24%, transparent);
+}
+
+/* 空态插画感 */
+.ov-chart-empty {
+  background: var(--us-surface) !important;
+  border-radius: 8px;
+}
+.ov-chart-empty svg { opacity: 0.4; }
+
+/* ---- Overview 快速接入 ---- */
+.ov-quick-icon {
+  width: 40px; height: 40px; display: grid; place-items: center;
+  border-radius: 10px; margin-bottom: 12px;
+}
+:root .ov-quick-icon { background: var(--amber-soft, #fdf6ec); color: var(--amber, #b45309); }
+[data-theme="dark"] .ov-quick-icon { background: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12)); color: var(--cp-cyan, #00d0c0); box-shadow: 0 0 10px color-mix(in srgb, var(--cp-cyan, #00d0c0) 10%, transparent); }
+
+.ov-endpoint {
+  background: var(--us-surface-sunken);
+  border: 1px solid var(--us-line);
+  border-radius: 6px; padding: 8px 12px !important;
+  transition: border-color var(--us-duration-fast) var(--us-ease-out);
+}
+.ov-endpoint:hover { border-color: var(--us-line-strong); }
+.ov-endpoint code {
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px; color: var(--us-accent);
+}
+[data-theme="dark"] .ov-endpoint { background: #0a0c10; }
+
+/* 复制按钮成功态 */
+.ov-copied {
+  color: var(--us-success) !important;
+  background: var(--us-success-soft) !important;
+  border-radius: 6px;
+}
+
+/* ---- Overview 来源渠道 ---- */
+.ov-source-row {
+  animation: us-fade-in-up var(--us-duration-slow) var(--us-ease-out) both;
+  transition: background var(--us-duration-normal) var(--us-ease-out), transform var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-source-row:hover {
+  background: var(--us-accent-soft);
+  transform: translateX(2px);
+}
+[data-theme="dark"] .ov-source-row:hover { background: rgba(255, 255, 255, 0.03); }
+
+/* ---- Overview 失败样本 ---- */
+.ov-failure-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 11px; padding: 6px 0;
+  border-bottom: 1px solid var(--us-line-soft);
+  transition: background var(--us-duration-fast) var(--us-ease-out);
+}
+.ov-failure-row:last-child { border-bottom: 0; }
+.ov-failure-row:hover { background: var(--us-error-soft); }
+.ov-failure-row span { color: var(--us-ink-secondary); }
+.ov-failure-row small { color: var(--us-ink-muted); }
+[data-theme="dark"] .ov-failure-row:hover { background: rgba(227, 106, 106, 0.06); }
+
+/* 空态运行检查 */
+.ov-runtime-empty {
+  display: flex; align-items: center; gap: 8px;
+  padding: 20px 0; color: var(--us-success);
+}
+.ov-runtime-empty svg { flex-shrink: 0; }
+.ov-runtime-empty span { color: var(--us-ink-tertiary); }
+
+/* ============================================
+   用量统计页面样式
+   ============================================ */
+
+/* ---- 指标卡区域 ---- */
+.usage-metrics {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px;
+}
+
+/* ---- 统计范围说明 ---- */
+.usage-scope {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 24px;
+  margin-bottom: 20px; color: var(--us-ink-tertiary); font-size: 12px;
+}
+.usage-scope strong { font-weight: 500; color: var(--us-ink-secondary); margin-left: 5px; font-variant-numeric: tabular-nums; }
+
+/* ---- 反馈消息 ---- */
+.usage-feedback { margin-bottom: 20px; font-size: 12px; color: var(--us-success); }
+
+/* ---- 估算提示 ---- */
+.usage-estimated {
+  display: flex; align-items: flex-start; gap: 8px; font-size: 12px;
+  color: var(--us-warning); margin: 0 0 20px;
+  background: var(--us-warning-soft); border: 1px solid var(--us-warning-border);
+  padding: 11px 14px; border-radius: 10px;
+}
+.usage-estimated svg { margin-top: 2px; flex-shrink: 0; }
+.usage-estimated span { color: var(--us-ink-secondary); }
+
+/* ---- 趋势图卡片 ---- */
+.usage-trend { margin-bottom: 24px; }
+.usage-trend .channel-filters button {
+  font-size: 12px; padding: 6px 11px;
+  transition: background var(--us-duration-fast) var(--us-ease-out), color var(--us-duration-fast) var(--us-ease-out);
+}
+
+/* ---- 窗口总量 ---- */
+.usage-window-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 18px 0 14px; }
+.usage-window-total strong {
+  font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15;
+  color: var(--us-ink); letter-spacing: -0.01em;
+}
+.usage-window-total span { color: var(--us-ink-muted); font-size: 11px; }
+
+/* ---- 趋势图 ---- */
+.usage-trend-scroll { overflow-x: auto; margin-bottom: 16px; padding: 6px 4px 2px; }
+.usage-scroll-hint { font-size: 11px; color: var(--us-ink-tertiary); padding: 0 0 8px; letter-spacing: 0.01em; }
+.usage-trend-chart {
+  display: flex; align-items: stretch; height: 190px; gap: 10px;
+  border-bottom: 1px solid var(--us-line-soft);
+}
+.usage-day {
+  flex: 1; min-width: 0; display: flex; align-items: center; flex-direction: column; gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-day:focus-visible { outline: 2px solid var(--us-accent); outline-offset: 2px; }
+.usage-day-track {
+  height: 154px; width: 100%; display: flex; align-items: flex-end; justify-content: center;
+}
+.usage-day-bar {
+  width: 50%; max-width: 32px; min-width: 6px;
+  background: var(--us-accent); border-radius: 4px 4px 0 0; min-height: 2px;
+  transition: background var(--us-duration-fast) var(--us-ease-out), transform var(--us-duration-fast) var(--us-ease-out), box-shadow var(--us-duration-fast) var(--us-ease-out);
+}
+.usage-day-bar.zero { background: var(--us-line-strong); }
+.usage-day:hover .usage-day-bar, .usage-day:focus .usage-day-bar {
+  background: var(--us-accent-strong);
+  transform: scaleY(1.02);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--amber, #b45309) 16%, transparent);
+}
+[data-theme="dark"] .usage-day:hover .usage-day-bar {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cp-cyan, #00d0c0) 24%, transparent);
+}
+.usage-day span { color: var(--us-ink-tertiary); font-size: 10px; white-space: nowrap; }
+
+/* ---- 空态提示 ---- */
+.usage-window-empty { font-size: 12px; padding: 0 0 16px; color: var(--us-ink-tertiary); }
+
+/* ---- 按模型统计面板 ---- */
+.usage-model-filters {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 16px 0;
+}
+.usage-model-search { position: relative; min-width: 0; flex: 1; }
+.usage-model-search > svg {
+  position: absolute; left: 12px; top: 12px;
+  color: var(--us-ink-tertiary); pointer-events: none;
+}
+.usage-model-search input {
+  width: 100%; height: 40px; padding-left: 37px; font-size: 13px;
+  border: 1px solid var(--us-line); border-radius: 9px;
+  background: var(--us-surface); color: var(--us-ink);
+  transition: border-color var(--us-duration-fast) var(--us-ease-out), box-shadow var(--us-duration-fast) var(--us-ease-out);
+}
+.usage-model-search input:hover { border-color: var(--us-line-strong); }
+.usage-model-search input:focus {
+  border-color: var(--us-accent); outline: none;
+  box-shadow: 0 0 0 3px var(--us-accent-soft);
+}
+.usage-model-search input::placeholder { color: var(--us-ink-muted); }
+.usage-model-filters select {
+  height: 40px; font-size: 13px;
+  border: 1px solid var(--us-line); border-radius: 9px;
+  background: var(--us-surface); color: var(--us-ink);
+  transition: border-color var(--us-duration-fast) var(--us-ease-out), box-shadow var(--us-duration-fast) var(--us-ease-out);
+}
+.usage-model-filters select:hover { border-color: var(--us-line-strong); }
+.usage-model-filters select:focus {
+  border-color: var(--us-accent); outline: none;
+  box-shadow: 0 0 0 3px var(--us-accent-soft);
+}
+
+/* ---- 统计表格 ---- */
+.usage-model-scroll { overflow-x: auto; }
+.usage-model-table { min-width: 1000px; font-variant-numeric: tabular-nums; border-collapse: separate; border-spacing: 0; width: 100%; }
+.usage-model-table th {
+  background: var(--us-surface-raised); white-space: nowrap; font-size: 11px;
+  font-weight: 500; letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--us-line);
+  position: sticky; top: 0; z-index: 5;
+}
+.usage-model-table th, .usage-model-table td { padding: 13px 10px; }
+.usage-model-table th:first-child { width: 25%; }
+.usage-model-table td:first-child { min-width: 200px; max-width: 300px; }
+.usage-model-table td:first-child strong { display: block; font-weight: 550; font-size: 12px; color: var(--us-ink); }
+.usage-model-table td:first-child code {
+  display: block; color: var(--us-ink-tertiary); font-size: 11px; margin-top: 3px;
+  overflow-wrap: anywhere;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+}
+.usage-model-table td {
+  border-bottom: 1px solid var(--us-line-soft);
+  color: var(--us-ink-secondary); font-size: 12px;
+  text-align: right;
+}
+.usage-model-table td:first-child { text-align: left; }
+.usage-model-table td small { display: block; margin-top: 3px; font-size: 10px; color: var(--us-ink-muted); }
+.usage-model-table tbody tr {
+  transition: background var(--us-duration-normal) var(--us-ease-out);
+}
+.usage-model-table tbody tr:hover { background: var(--us-accent-soft); }
+[data-theme="dark"] .usage-model-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+
+/* ---- 空态 ---- */
+.usage-empty {
+  padding: 46px 20px 50px; text-align: center;
+  border-top: 1px solid var(--us-line);
+}
+.usage-empty > svg { color: var(--us-ink-muted); margin: 0 auto 12px; opacity: 0.6; }
+.usage-empty h3 { font-size: 15px; color: var(--us-ink); }
+.usage-empty p { font-size: 12px; margin-top: 7px; color: var(--us-ink-tertiary); }
+
+/* ---- 分页器 ---- */
+.usage-pagination {
+  display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+  gap: 10px; padding-top: 16px; font-size: 11px; color: var(--us-ink-tertiary);
+}
+.usage-pagination > span:first-child { margin-right: auto; font-variant-numeric: tabular-nums; }
+
+/* ---- 入场动画 ---- */
+@keyframes us-fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.usage-metrics, .usage-scope, .usage-trend, .usage-model-panel {
+  animation: us-fade-in-up var(--us-duration-slow) var(--us-ease-out) both;
+}
+.usage-metrics { animation-delay: 0ms; }
+.usage-scope { animation-delay: 40ms; }
+.usage-trend { animation-delay: 80ms; }
+.usage-model-panel { animation-delay: 120ms; }
+
+/* ---- 响应式 ---- */
+@media (max-width: 950px) {
+  .usage-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+}
+@media (max-width: 700px) {
+  .usage-metrics { gap: 10px; }
+  .usage-metrics .dashboard-metric { padding: 16px 13px; }
+  .usage-metrics .dashboard-metric strong { font-size: 25px; }
+  .usage-metrics .dashboard-metric p { font-size: 10px; }
+  .usage-metrics .dashboard-metric svg { width: 15px; }
+  .usage-metrics .ov-metric-icon { width: 28px; height: 28px; }
+  .usage-scope { gap: 7px 18px; font-size: 11px; }
+  .usage-trend .card-heading { flex-wrap: wrap; }
+  .usage-trend-chart { gap: 8px; }
+  .usage-model-search { flex-basis: 100%; }
+  .usage-pagination { gap: 8px; }
+  .usage-pagination > span:first-child { flex-basis: 100%; }
+}
+
+/* ============================================
+   打磨层 — 精密仪表盘 · 编辑级排版
+   本节只做增强：全部为新增选择器与新增关键帧，
+   不改动上方任何既有 class 名、DOM 契约或关键帧名称。
+   动效只使用 transform / opacity 两个属性。
+   ============================================ */
+
+@keyframes us-grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes us-chart-breathe {
+  0%, 100% { opacity: 0.45; transform: translateY(0); }
+  50% { opacity: 0.8; transform: translateY(-2px); }
+}
+
+/* ---- 指标卡：按位次建立四色家族（蓝 / 绿 / 黄 / 紫） ---- */
+.ov-metric {
+  --ov-accent: var(--us-accent);
+  --ov-accent-soft: var(--us-accent-soft);
+  --ov-icon-ring: rgba(255, 255, 255, 0.6) 0 0 0 1px inset;
+  --ov-icon-glow: transparent 0 0 0 0;
+  --ov-card-hover-shadow:
+    0 10px 26px -6px color-mix(in srgb, var(--ov-accent) 20%, transparent),
+    0 3px 10px -3px rgba(32, 35, 41, 0.08),
+    0 0 0 1px inset color-mix(in srgb, var(--ov-accent) 12%, transparent);
+}
+.ov-metric:nth-child(1) { --ov-accent: var(--amber, #b45309); --ov-accent-soft: var(--amber-soft, #fdf6ec); }
+.ov-metric:nth-child(2) { --ov-accent: #177552; --ov-accent-soft: #eff7f2; }
+.ov-metric:nth-child(3) { --ov-accent: #8a6215; --ov-accent-soft: #fbf6ea; }
+.ov-metric:nth-child(4) { --ov-accent: #875a7d; --ov-accent-soft: #f7f0f5; }
+.ov-metric:nth-child(5) { --ov-accent: #9c3343; --ov-accent-soft: #fdf5f5; }
+.ov-metric:nth-child(6) { --ov-accent: #0f7285; --ov-accent-soft: #eaf5f6; }
+
+/* 数据主角：数字用等宽数字 + 紧凑字距，hover 时轻微提亮 */
+.ov-metric strong {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.015em;
+  transition: color var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-metric:hover strong { color: var(--ov-accent); }
+
+/* 指标名：小号大写感的精密标签 */
+.ov-metric > div > span {
+  font-weight: 500;
+  color: var(--us-ink-secondary);
+}
+
+/* 图标容器升级：色彩印章 + 内描边，hover 有呼应 */
+.ov-metric-icon {
+  border-radius: 9px;
+  box-shadow: var(--ov-icon-ring), var(--ov-icon-glow), 0 1px 2px rgba(32, 35, 41, 0.05);
+}
+.ov-metric:hover .ov-metric-icon {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    var(--ov-icon-ring),
+    color-mix(in srgb, var(--ov-accent) 32%, transparent) 0 3px 11px -2px;
+}
+
+/* 卡片 hover：色相染过的柔和光晕，而不是纯黑阴影 */
+.ov-metric:hover { box-shadow: var(--ov-card-hover-shadow); }
+
+/* 递减的卡片级联入场 */
+.usage-metrics .ov-metric {
+  animation: us-fade-in-up var(--us-duration-slow) var(--us-ease-out) both;
+}
+.usage-metrics .ov-metric:nth-child(1) { animation-delay: 0ms; }
+.usage-metrics .ov-metric:nth-child(2) { animation-delay: 45ms; }
+.usage-metrics .ov-metric:nth-child(3) { animation-delay: 90ms; }
+.usage-metrics .ov-metric:nth-child(4) { animation-delay: 135ms; }
+.usage-metrics .ov-metric:nth-child(5) { animation-delay: 180ms; }
+.usage-metrics .ov-metric:nth-child(6) { animation-delay: 225ms; }
+
+/* ---- 趋势图：柱子生长 + 呼吸式 hover ---- */
+.usage-day-bar,
+.ov-chart .dashboard-chart-bar {
+  transform-origin: bottom center;
+}
+.usage-day-bar {
+  background: linear-gradient(180deg, #f0bb63 0%, #d98b2b 46%, #9c5a10 100%);
+  min-height: 3px;
+}
+.usage-day-bar:not(.zero),
+.ov-chart .dashboard-chart-bar:not(.zero) {
+  animation: us-grow-y 680ms var(--us-ease-out) backwards;
+}
+.usage-day:nth-child(1) .usage-day-bar { animation-delay: 60ms; }
+.usage-day:nth-child(2) .usage-day-bar { animation-delay: 70ms; }
+.usage-day:nth-child(3) .usage-day-bar { animation-delay: 80ms; }
+.usage-day:nth-child(4) .usage-day-bar { animation-delay: 90ms; }
+.usage-day:nth-child(5) .usage-day-bar { animation-delay: 100ms; }
+.usage-day:nth-child(6) .usage-day-bar { animation-delay: 110ms; }
+.usage-day:nth-child(7) .usage-day-bar { animation-delay: 120ms; }
+.usage-day:nth-child(8) .usage-day-bar { animation-delay: 130ms; }
+.usage-day:nth-child(9) .usage-day-bar { animation-delay: 140ms; }
+.usage-day:nth-child(10) .usage-day-bar { animation-delay: 150ms; }
+.usage-day:nth-child(n+11) .usage-day-bar { animation-delay: 160ms; }
+.usage-day:nth-child(n+21) .usage-day-bar { animation-delay: 190ms; }
+.ov-chart-col:nth-child(2) .dashboard-chart-bar { animation-delay: 60ms; }
+.ov-chart-col:nth-child(3) .dashboard-chart-bar { animation-delay: 100ms; }
+.ov-chart-col:nth-child(4) .dashboard-chart-bar { animation-delay: 140ms; }
+.ov-chart-col:nth-child(5) .dashboard-chart-bar { animation-delay: 180ms; }
+.ov-chart-col:nth-child(6) .dashboard-chart-bar { animation-delay: 220ms; }
+.ov-chart-col:nth-child(7) .dashboard-chart-bar { animation-delay: 260ms; }
+.ov-chart-col:nth-child(8) .dashboard-chart-bar { animation-delay: 300ms; }
+
+/* hover / 键盘聚焦：提亮 + 轻微放大 + 柔和光晕 */
+.usage-day:hover .usage-day-bar,
+.usage-day:focus .usage-day-bar,
+.usage-day:focus-visible .usage-day-bar {
+  transform: scaleY(1.025);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 6px 16px -6px color-mix(in srgb, var(--amber, #b45309) 24%, transparent);
+}
+.usage-day:hover .usage-day-bar:not(.zero) {
+  background: linear-gradient(180deg, #ffd89a 0%, #e9a83f 42%, #b45309 100%);
+}
+.usage-day span {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  transition: color var(--us-duration-fast) var(--us-ease-out);
+}
+.usage-day:hover span,
+.usage-day:focus span,
+.usage-day:focus-visible span { color: var(--us-ink-secondary); }
+
+/* ---- 图表提示气泡：加边框与阴影，读起来更像仪表读数 ---- */
+.ov-chart-col::after {
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 12px -3px rgba(32, 35, 41, 0.28);
+}
+
+/* ---- 空态：不只是灰字，给引导容器 ---- */
+.ov-chart-empty svg {
+  animation: us-chart-breathe 2.6s ease-in-out infinite;
+}
+.ov-chart-empty span {
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+.ov-chart-empty small {
+  color: var(--us-ink-muted);
+}
+.usage-empty > svg {
+  border-radius: 999px;
+  padding: 10px;
+  background: var(--us-surface-sunken);
+  border: 1px solid var(--us-line-soft);
+}
+.usage-empty h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.usage-window-empty {
+  padding: 13px 16px;
+  border: 1px dashed var(--us-line);
+  border-radius: 10px;
+  background: var(--us-surface-sunken);
+  line-height: 1.7;
+}
+.usage-empty p,
+.usage-window-empty {
+  text-wrap: pretty;
+}
+
+/* ---- 表格：数字列对齐、表头更有秩序 ---- */
+.usage-model-table th:not(:first-child) { text-align: right; }
+.usage-model-table th { color: var(--us-ink-secondary); }
+.usage-model-table td { font-variant-numeric: tabular-nums; }
+.usage-model-table td:first-child strong { letter-spacing: -0.005em; }
+.usage-model-table td small {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* ---- 筛选与搜索：统一圆角与图标对齐，聚焦反馈更明确 ---- */
+.usage-model-search { display: flex; align-items: center; }
+.usage-model-search > svg { top: auto; }
+.usage-model-search input {
+  height: 40px;
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-model-search input:hover { background: var(--us-surface-raised); }
+.usage-model-search input:focus {
+  background: var(--us-surface);
+  box-shadow: 0 0 0 3px var(--us-accent-soft), inset 0 0 0 1px var(--us-accent-border);
+}
+.usage-model-filters select {
+  height: 40px;
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-model-filters select:hover { background: var(--us-surface-raised); }
+.usage-model-filters select:focus {
+  background: var(--us-surface);
+  box-shadow: 0 0 0 3px var(--us-accent-soft), inset 0 0 0 1px var(--us-accent-border);
+}
+.channel-filters button { font-variant-numeric: tabular-nums; }
+.channel-filters button[aria-pressed="true"] {
+  transition: background var(--us-duration-fast) var(--us-ease-out), color var(--us-duration-fast) var(--us-ease-out), transform var(--us-duration-fast) var(--us-ease-out);
+}
+.channel-filters button[aria-pressed="true"]:hover { transform: translateY(-1px); }
+
+/* ---- 其他细节 ---- */
+.usage-scroll-hint { color: var(--us-ink-tertiary); text-wrap: pretty; }
+.usage-feedback {
+  display: inline-block;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--us-success-soft);
+  border: 1px solid var(--us-success-border);
+  font-weight: 500;
+}
+.usage-pagination { font-variant-numeric: tabular-nums; }
+.ov-failure-row:hover { transform: translateX(2px); }
+.ov-failure-row {
+  transition: background var(--us-duration-fast) var(--us-ease-out), transform var(--us-duration-fast) var(--us-ease-out);
+}
+.ov-endpoint code { font-variant-numeric: tabular-nums; }
+.ov-quick .ov-endpoint { border-radius: 8px; }
+
+/* ============================================
+   深色主题：同样的家族色彩，换成仪表指示灯
+   ============================================ */
+[data-theme="dark"] .ov-metric {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 3px rgba(4, 6, 10, 0.35);
+  --ov-icon-ring: rgba(255, 255, 255, 0.05) 0 0 0 1px inset;
+  --ov-icon-glow: color-mix(in srgb, var(--ov-accent) 20%, transparent) 0 0 10px 0;
+  --ov-card-hover-shadow:
+    0 12px 34px -10px rgba(0, 0, 0, 0.62),
+    0 0 24px -14px color-mix(in srgb, var(--ov-accent) 55%, transparent),
+    0 0 0 1px inset color-mix(in srgb, var(--ov-accent) 18%, transparent);
+}
+[data-theme="dark"] .ov-metric:nth-child(1) { --ov-accent: var(--cp-cyan, #00d0c0); --ov-accent-soft: var(--cp-cyan-soft, rgba(0, 208, 192, 0.14)); }
+[data-theme="dark"] .ov-metric:nth-child(2) { --ov-accent: #58ddb0; --ov-accent-soft: rgba(88, 221, 176, 0.11); }
+[data-theme="dark"] .ov-metric:nth-child(3) { --ov-accent: #f4b46f; --ov-accent-soft: rgba(242, 166, 90, 0.11); }
+[data-theme="dark"] .ov-metric:nth-child(4) { --ov-accent: #c88bbd; --ov-accent-soft: rgba(155, 91, 137, 0.14); }
+[data-theme="dark"] .ov-metric:nth-child(5) { --ov-accent: #ef8585; --ov-accent-soft: rgba(227, 106, 106, 0.11); }
+[data-theme="dark"] .ov-metric:nth-child(6) { --ov-accent: #4cc4e0; --ov-accent-soft: rgba(76, 196, 224, 0.11); }
+
+/* 图表 hover 光晕跟随卡片色相（蓝色家族）而不是纯黑 */
+[data-theme="dark"] .ov-metric:hover .ov-metric-icon {
+  box-shadow:
+    rgba(255, 255, 255, 0.06) 0 0 0 1px inset,
+    color-mix(in srgb, var(--ov-accent) 40%, transparent) 0 0 14px 0;
+}
+[data-theme="dark"] .usage-day:hover .usage-day-bar,
+[data-theme="dark"] .usage-day:focus .usage-day-bar,
+[data-theme="dark"] .usage-day:focus-visible .usage-day-bar {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 16px -2px color-mix(in srgb, var(--cp-cyan, #00d0c0) 50%, transparent);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar {
+  box-shadow: 0 0 14px -2px color-mix(in srgb, var(--cp-cyan, #00d0c0) 45%, transparent);
+}
+[data-theme="dark"] .usage-day-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 84%, #ffffff) 0%, var(--cp-cyan, #00d0c0) 56%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 62%, #041014) 100%);
+}
+[data-theme="dark"] .usage-day-bar.zero {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.045));
+}
+[data-theme="dark"] .usage-day:hover .usage-day-bar:not(.zero) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 68%, #ffffff) 0%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 86%, #ffffff) 56%, var(--cp-cyan, #00d0c0) 100%);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 84%, #ffffff) 0%, var(--cp-cyan, #00d0c0) 56%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 62%, #041014) 100%);
+}
+[data-theme="dark"] .ov-chart .dashboard-chart-bar.zero {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.045));
+}
+
+/* 图表格线：更轻，让柱子成为主角 */
+.chart-grid-lines span,
+.usage-trend-chart {
+  border-color: var(--us-line-soft);
+}
+[data-theme="dark"] .chart-grid-lines span { border-color: rgba(255, 255, 255, 0.03); }
+[data-theme="dark"] .usage-trend-chart { border-bottom-color: rgba(255, 255, 255, 0.03); }
+
+/* 深色下的空态与标签 */
+[data-theme="dark"] .usage-empty > svg {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .usage-window-empty {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+[data-theme="dark"] .usage-model-table th { color: var(--dsw-alias-label-secondary); }
+[data-theme="dark"] .usage-model-search input:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+[data-theme="dark"] .usage-model-filters select:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+[data-theme="dark"] .usage-model-search input:focus {
+  background: #13161d;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cp-cyan, #00d0c0) 16%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--cp-cyan, #00d0c0) 35%, transparent);
+}
+[data-theme="dark"] .usage-model-filters select:focus {
+  background-color: #0d141f;
+}
+[data-theme="dark"] .ov-chart-col::after {
+  background: #e8ecf1;
+  color: #13161d;
+  box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.6);
+}
+[data-theme="dark"] .ov-endpoint code { color: var(--cp-cyan, #00d0c0); }
+[data-theme="dark"] .ov-failure-row:hover { background: rgba(227, 106, 106, 0.08); }
+
+/* ---- 窄屏微调 ---- */
+@media (max-width: 700px) {
+  .usage-metrics .ov-metric strong { letter-spacing: -0.01em; }
+  .ov-metric-icon { border-radius: 8px; }
+  .usage-day-bar { max-width: 26px; }
+}
+@media (max-width: 420px) {
+  .usage-trend-chart { gap: 6px; }
+}
+
+/* ---- 减少动画 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .usage-metrics, .usage-scope, .usage-trend, .usage-model-panel,
+  .ov-source-row, .ov-metric, .usage-day-bar, .ov-chart .dashboard-chart-bar,
+  .ov-chart-empty svg {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ov-chart-col::after { display: none; }
+  .usage-metrics .ov-metric:hover,
+  .ov-metric:hover,
+  .ov-metric:hover .ov-metric-icon,
+  .ov-failure-row:hover,
+  .usage-day:hover .usage-day-bar,
+  .usage-day:focus .usage-day-bar,
+  .usage-day:focus-visible .usage-day-bar,
+  .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar {
+    transform: none !important;
+  }
+}
+
+
+/* ==========================================================================
+   逐元素精修层 · 用量页 + 数据可视化（ov-）
+   约束遵守：不删类名 / 不改 DOM 契约 / 不改既有 keyframe 名；
+   新增关键帧（us-toast-in）只使用 transform 与 opacity。
+   ========================================================================== */
+
+/* ---------- 1. 浏览器表面：选区 / 插入符 / 滚动条 / 焦点 ---------- */
+.usage-browser ::selection { background: color-mix(in srgb, var(--amber, #b45309) 18%, transparent); color: var(--us-ink); }
+:root[data-theme="dark"] .usage-browser ::selection { background: color-mix(in srgb, var(--cp-cyan, #00d0c0) 28%, transparent); }
+.usage-browser .usage-model-search input,
+.usage-browser .usage-model-filters select { caret-color: var(--us-accent); }
+.usage-browser .usage-model-search input[type="search"]::-webkit-search-cancel-button { appearance: none; -webkit-appearance: none; }
+:root .usage-trend-scroll, :root .usage-model-scroll { scrollbar-width: thin; scrollbar-color: var(--us-line-strong) transparent; }
+:root .usage-trend-scroll::-webkit-scrollbar, :root .usage-model-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+:root .usage-trend-scroll::-webkit-scrollbar-track, :root .usage-model-scroll::-webkit-scrollbar-track { background: transparent; }
+:root .usage-trend-scroll::-webkit-scrollbar-thumb, :root .usage-model-scroll::-webkit-scrollbar-thumb {
+  background: var(--us-line-strong);
+  border: 2px solid transparent; border-radius: 999px; background-clip: content-box;
+}
+:root .usage-trend-scroll::-webkit-scrollbar-thumb:hover, :root .usage-model-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--us-ink-muted); border: 2px solid transparent; background-clip: content-box;
+}
+.usage-model-scroll:focus-visible { outline: 2px solid var(--us-accent); outline-offset: 3px; border-radius: 8px; }
+
+/* ---------- 2. 指标卡：夜主题六色图标不再被全局灰色 svg 规则吞掉 ---------- */
+:root[data-theme="dark"] .ov-metric .ov-metric-icon svg { color: inherit; }
+:root[data-theme="dark"] .ov-metric .ov-metric-icon {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 10px -2px color-mix(in srgb, var(--ov-accent) 26%, transparent);
+}
+:root[data-theme="dark"] .ov-metric:hover .ov-metric-icon {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 3px 14px -2px color-mix(in srgb, var(--ov-accent) 42%, transparent);
+}
+.ov-metric > div > span { letter-spacing: 0.01em; }
+
+/* ---------- 3. 趋势图：刻度网格 / 柱体质感 / 日期标签 ---------- */
+.usage-day-track { background-image: repeating-linear-gradient(to top, var(--us-grid-line) 0 1px, transparent 1px 25%); }
+.usage-day-bar, .ov-chart .dashboard-chart-bar { border-radius: 5px 5px 0 0; }
+:root:not([data-theme="dark"]) .usage-day-bar {
+  background: linear-gradient(180deg, #f0bb63 0%, #d98b2b 46%, #9c5a10 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+:root:not([data-theme="dark"]) .usage-day-bar.zero { background: var(--us-line-strong); box-shadow: none; }
+:root:not([data-theme="dark"]) .usage-day:hover .usage-day-bar:not(.zero) {
+  background: linear-gradient(180deg, #ffd89a 0%, #e9a83f 42%, #b45309 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 6px 16px -6px color-mix(in srgb, var(--amber, #b45309) 24%, transparent);
+}
+:root:not([data-theme="dark"]) .ov-chart .dashboard-chart-bar {
+  background: linear-gradient(180deg, #f0bb63 0%, #d98b2b 46%, #9c5a10 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+:root:not([data-theme="dark"]) .ov-chart .dashboard-chart-bar.zero { background: var(--us-line-strong); box-shadow: none; }
+:root[data-theme="dark"] .usage-day-bar, :root[data-theme="dark"] .ov-chart .dashboard-chart-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 84%, #ffffff) 0%, var(--cp-cyan, #00d0c0) 56%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 62%, #041014) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 12px -6px color-mix(in srgb, var(--cp-cyan, #00d0c0) 70%, transparent);
+}
+:root[data-theme="dark"] .usage-day-bar.zero, :root[data-theme="dark"] .ov-chart .dashboard-chart-bar.zero {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.045));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+:root[data-theme="dark"] .usage-day:hover .usage-day-bar:not(.zero) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 68%, #ffffff) 0%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 86%, #ffffff) 56%, var(--cp-cyan, #00d0c0) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 0 18px -3px color-mix(in srgb, var(--cp-cyan, #00d0c0) 55%, transparent);
+}
+.usage-day span { font-weight: 500; }
+:root[data-theme="dark"] .usage-trend-chart { border-bottom-color: rgba(255, 255, 255, 0.055); }
+
+/* ---------- 4. 窗口汇总与范围说明 ---------- */
+.usage-window-total strong { letter-spacing: -0.02em; line-height: 1.15; }
+.usage-window-total span { font-weight: 500; }
+.usage-scope strong[data-testid="usage-request-failures"] { color: var(--us-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- 5. 模型表：冻结首列 / 行悬停 / 数字列 ---------- */
+.usage-model-table th:first-child, .usage-model-table td:first-child { position: sticky; left: 0; }
+.usage-model-table th:first-child { z-index: 6; border-right: 1px solid var(--us-line); }
+.usage-model-table td:first-child { z-index: 2; background: var(--us-surface); border-right: 1px solid var(--us-line-soft); }
+:root:not([data-theme="dark"]) .usage-model-table tbody tr:hover td { background: var(--us-accent-soft); }
+:root[data-theme="dark"] .usage-model-table tbody tr:hover td {
+  background: var(--us-surface-raised);
+  background: color-mix(in srgb, #ffffff 4%, var(--us-surface));
+}
+.usage-model-table td:not(:first-child), .usage-model-table th:not(:first-child) { white-space: nowrap; }
+.usage-model-table td:first-child strong { overflow-wrap: anywhere; }
+:root:not([data-theme="dark"]) .usage-model-table th { color: var(--us-ink-secondary); }
+:root[data-theme="dark"] .usage-model-table th { background: var(--us-surface-raised); color: var(--us-ink-secondary); }
+:root[data-theme="dark"] .usage-model-table td { color: var(--us-ink-secondary); }
+:root[data-theme="dark"] .usage-model-table td:first-child strong { color: var(--us-ink); }
+:root[data-theme="dark"] .usage-model-table td:first-child code,
+:root[data-theme="dark"] .usage-model-table td small { color: var(--us-ink-muted); }
+
+/* ---------- 6. 筛选、搜索与分页 ---------- */
+:root:not([data-theme="dark"]) .usage-model-filters select {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b655c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 10px 6px;
+  padding-right: 32px; padding-left: 11px;
+}
+:root:not([data-theme="dark"]) .usage-model-search input:focus {
+  background: var(--us-surface);
+  box-shadow: 0 0 0 3px var(--us-accent-soft), inset 0 0 0 1px var(--us-accent-border);
+}
+:root[data-theme="dark"] .usage-model-search input:focus {
+  background: linear-gradient(180deg, #0d141f 0%, #0c121b 100%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cp-cyan, #00d0c0) 16%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--cp-cyan, #00d0c0) 32%, transparent);
+}
+:root[data-theme="dark"] .usage-model-filters select:focus {
+  background-color: #0d141f;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cp-cyan, #00d0c0) 16%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--cp-cyan, #00d0c0) 32%, transparent);
+}
+:root[data-theme="dark"] .usage-model-search input::placeholder { color: var(--us-ink-muted); opacity: 1; }
+:root:not([data-theme="dark"]) .usage-model-search input:focus-visible,
+:root:not([data-theme="dark"]) .usage-model-filters select:focus-visible,
+:root[data-theme="dark"] .usage-model-search input:focus-visible,
+:root[data-theme="dark"] .usage-model-filters select:focus-visible {
+  outline: 2px solid var(--us-accent);
+  outline-offset: 2px;
+  border-radius: 9px;
+}
+.usage-pagination > span[data-testid="usage-model-count"] { font-weight: 550; color: var(--us-ink-secondary); font-variant-numeric: tabular-nums; }
+.usage-pagination > span { white-space: nowrap; }
+:root:not([data-theme="dark"]) .usage-pagination .ui-button,
+:root[data-theme="dark"] .usage-pagination .ui-button { min-height: 34px; padding: 7px 12px; }
+.usage-trend .channel-filters button:focus-visible { outline: 2px solid var(--us-accent); outline-offset: 2px; }
+:root:not([data-theme="dark"]) .usage-trend .channel-filters button:not([aria-pressed="true"]):hover { color: var(--us-ink); }
+
+/* ---------- 7. 空态 / 反馈 / 错误 ---------- */
+.usage-empty p { margin: 7px auto 0; max-width: 46ch; line-height: 1.75; }
+.usage-empty > svg { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+:root[data-theme="dark"] .usage-empty > svg { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045); }
+:root[data-theme="dark"] .usage-window-empty {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: var(--us-line);
+  color: var(--us-ink-tertiary);
+}
+@keyframes us-toast-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+.usage-feedback { animation: us-toast-in 240ms var(--us-ease-out) both; }
+.usage-browser .channel-error { animation: us-toast-in 240ms var(--us-ease-out) both; border-radius: 10px; padding: 10px 12px; }
+.usage-browser .channel-error > svg { flex-shrink: 0; }
+.usage-browser .channel-error > span { line-height: 1.6; }
+
+/* ---------- 8. ov- 数据可视化细部 ---------- */
+.ov-chart-col:not([data-value])::after { display: none; }
+.ov-chart-total { letter-spacing: -0.02em; }
+.ov-endpoint code { overflow-wrap: anywhere; }
+.ov-failure-list .ov-failure-row { padding: 6px 8px; margin: 0 -8px; border-radius: 7px; }
+.ov-source-row:focus-visible { outline: 2px solid var(--us-accent); outline-offset: -2px; border-radius: 8px; }
+:root:not([data-theme="dark"]) .ov-source-row:hover { background: var(--us-accent-soft); }
+:root[data-theme="dark"] .ov-source-row:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 8%, transparent), rgba(255, 255, 255, 0.02)); }
+:root[data-theme="dark"] .ov-failure-row:hover { background: rgba(227, 106, 106, 0.08); }
+
+/* ---------- 9. 响应式细部 ---------- */
+@media (max-width: 700px) {
+  .usage-model-table th, .usage-model-table td { padding: 11px 9px; }
+  .usage-window-total { margin: 16px 0 12px; }
+  .usage-window-total strong { font-size: 25px; }
+  .usage-day-track { height: 138px; }
+  .usage-trend-chart { height: 172px; }
+  .usage-empty { padding: 38px 16px 42px; }
+  .usage-model-filters { padding: 14px 0 12px; gap: 8px; }
+}
+@media (max-width: 420px) {
+  .usage-model-table { min-width: 880px; }
+  .usage-window-total strong { font-size: 23px; }
+}
+
+/* ---------- 10. 减少动画：新加入场同样降级 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .usage-feedback, .usage-browser .channel-error { animation: none !important; }
+}
+/* ==========================================================================
+   质感彩蛋层 · 微交互与精致细节（只新增，不改动上方任何内容）
+   约束：仅新增选择器 / 新增关键帧；动画只使用 transform 与 opacity；
+        全部彩蛋在昼主题与夜主题下同时成立。
+   ========================================================================== */
+
+/* 新关键帧：空态插画的“安静浮动” */
+@keyframes us-drift-soft {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.62; }
+  50% { transform: translateY(-3px) scale(1.02); opacity: 0.82; }
+}
+
+/* 新关键帧：复制成功的“按一下”回弹确认 */
+@keyframes us-copy-pop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+/* 新关键帧：表格行进入的极轻淡入（只作用于行内文本，不动 sticky 单元格） */
+@keyframes us-row-fade {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+/* 新关键帧：空态状态点的低幅呼吸 */
+@keyframes us-dot-breathe {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.42; }
+  50% { transform: translateY(-1px) scale(1.08); opacity: 0.66; }
+}
+
+/* ---- 1. 指标卡 / 图表：图标与数字的弹性联动 ---- */
+.ov-metric-icon,
+.ov-metric:hover .ov-metric-icon {
+  transition: transform var(--us-duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow var(--us-duration-normal) var(--us-ease-out),
+    color var(--us-duration-normal) var(--us-ease-out),
+    background-color var(--us-duration-normal) var(--us-ease-out);
+}
+.ov-metric:hover strong {
+  color: var(--ov-accent, var(--us-accent));
+  transition: color var(--us-duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---- 2. 趋势图柱子：顶部高光的“抬眸” ---- */
+.usage-day-bar {
+  position: relative;
+}
+.usage-day-bar::before,
+.ov-chart .dashboard-chart-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0) 58%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--us-duration-normal) var(--us-ease-out);
+}
+.usage-day:hover .usage-day-bar::before,
+.usage-day:focus .usage-day-bar::before,
+.usage-day:focus-visible .usage-day-bar::before,
+.ov-chart .dashboard-chart-column:hover .dashboard-chart-bar::before {
+  opacity: 1;
+}
+[data-theme="dark"] .usage-day-bar::before,
+[data-theme="dark"] .ov-chart .dashboard-chart-bar::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 62%);
+}
+.usage-day span {
+  transition: color var(--us-duration-normal) cubic-bezier(0.16, 1, 0.3, 1),
+    transform var(--us-duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.usage-day:hover span,
+.usage-day:focus span,
+.usage-day:focus-visible span {
+  transform: translateY(-1px);
+}
+
+/* ---- 3. 空态：图标轻轻漂浮 + 呼吸 ---- */
+.usage-empty > svg,
+.ov-chart-empty svg {
+  animation: us-drift-soft 3.4s ease-in-out infinite;
+}
+.usage-empty > svg { animation-delay: 120ms; }
+.ov-chart-empty svg { animation-delay: 0ms; }
+.usage-window-empty::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 9px;
+  border-radius: 999px;
+  background: var(--us-accent);
+  opacity: 0.5;
+  animation: us-dot-breathe 3s ease-in-out infinite;
+}
+
+/* ---- 4. 复制反馈：成功时按钮“按一下” ---- */
+.ov-copied {
+  animation: us-copy-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ---- 5. 表格行：细微淡入，翻页与搜索切换更顺滑 ---- */
+.usage-model-table tbody tr {
+  animation: us-row-fade 200ms var(--us-ease-out) backwards;
+}
+.usage-model-table tbody tr:nth-child(n+1) { animation-delay: 0ms; }
+.usage-model-table tbody tr:nth-child(n+6) { animation-delay: 20ms; }
+.usage-model-table tbody tr:nth-child(n+11) { animation-delay: 40ms; }
+.usage-model-table tbody tr:nth-child(n+16) { animation-delay: 60ms; }
+.usage-model-table tbody tr strong,
+.usage-model-table tbody tr code {
+  display: inline-block;
+  transition: transform var(--us-duration-normal) cubic-bezier(0.16, 1, 0.3, 1);
+}
+.usage-model-table tbody tr:hover td:first-child strong,
+.usage-model-table tbody tr:hover td:first-child code {
+  transform: translateX(2px);
+}
+
+/* ---- 6. 更新按钮：等待时图标轻微“醒来” ---- */
+.usage-browser .dashboard-heading .ui-button svg,
+.usage-browser header .ui-button svg {
+  transition: opacity var(--us-duration-normal) var(--us-ease-out);
+}
+.usage-browser .dashboard-heading .ui-button:disabled svg,
+.usage-browser header .ui-button:disabled svg {
+  opacity: 0.82;
+}
+.usage-browser .dashboard-heading .ui-button:hover svg,
+.usage-browser header .ui-button:hover svg {
+  opacity: 1;
+}
+
+/* ---- 7. 减少动画：新层同样完整降级 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .usage-empty > svg,
+  .ov-chart-empty svg,
+  .usage-window-empty::before,
+  .ov-copied,
+  .usage-model-table tbody tr {
+    animation: none !important;
+  }
+  .ov-metric-icon,
+  .ov-metric:hover .ov-metric-icon,
+  .ov-metric:hover strong,
+  .usage-day span,
+  .usage-day-bar::before,
+  .ov-chart .dashboard-chart-bar::before,
+  .usage-model-table tbody tr strong,
+  .usage-model-table tbody tr code,
+  .usage-browser .dashboard-heading .ui-button svg,
+  .usage-browser header .ui-button svg {
+    transition: none !important;
+  }
+  .usage-day:hover span,
+  .usage-day:focus span,
+  .usage-day:focus-visible span,
+  .usage-model-table tbody tr:hover td:first-child strong,
+  .usage-model-table tbody tr:hover td:first-child code {
+    transform: none !important;
+  }
+}
+
+/* ===== 世界观注入 · usage ===== */
+/* 本层只按圣经的“物理身份”重写用量页与 ov- 数据可视化：
+   夜=终端 / 扫描 / 故障；昼=纸面 / 阳光 / 黄铜。
+   只新增选择器与 keyframe；不改上方任何 class / DOM 契约 / data-testid。
+   新动画只使用 transform / opacity / clip-path；图表柱“长高”只用 transform，不动 height。 */
+
+/* ---------- 新增 keyframe（us- 前缀，不与既有重名） ---------- */
+@keyframes us-glow-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+@keyframes us-ink-spread {
+  0% { opacity: 0.55; transform: scale(0.28); }
+  68% { opacity: 0.30; }
+  100% { opacity: 0; transform: scale(1.70); }
+}
+@keyframes us-stamp-in {
+  0% { opacity: 0; transform: scale(1.55) rotate(-5deg); }
+  62% { opacity: 1; transform: scale(0.94) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* ---------- 两主题共同底座：只动几何，不设颜色 ---------- */
+.usage-day-bar,
+.ov-chart .dashboard-chart-bar {
+  transform-origin: bottom;
+}
+.usage-window-total strong,
+.usage-total {
+  position: relative;
+}
+.usage-feedback,
+.copy-feedback {
+  position: relative;
+}
+
+/* ============================================================
+   夜 · 赛博终端
+   ============================================================ */
+
+/* --- 1. 总量：大的等宽终端读数 + 极轻呼吸微光 + 扫描光标 --- */
+:root[data-theme="dark"] .usage-total,
+:root[data-theme="dark"] .usage-browser .usage-window-total strong {
+  font-family: Consolas, "Cascadia Mono", "SF Mono", "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--cp-amber, #e8a33d);
+  letter-spacing: 0.02em;
+  text-shadow:
+    0 0 12px color-mix(in srgb, var(--cp-amber, #e8a33d) 34%, transparent),
+    0 0 2px color-mix(in srgb, var(--cp-amber, #e8a33d) 55%, transparent);
+  animation: us-glow-breathe 3.6s ease-in-out infinite;
+}
+:root[data-theme="dark"] .usage-browser .usage-window-total strong {
+  font-size: 32px;
+}
+:root[data-theme="dark"] .usage-browser .usage-window-total strong::after {
+  content: "▌";
+  margin-left: 0.16em;
+  color: var(--cp-cyan, #00d0c0);
+  font-size: 0.62em;
+  vertical-align: 0.07em;
+  opacity: 0.62;
+  animation: us-glow-breathe 1.9s steps(2, end) infinite;
+}
+:root[data-theme="dark"] .usage-total span {
+  text-shadow: none;
+  color: var(--cp-cyan, #00d0c0);
+  opacity: 0.72;
+  font-family: inherit;
+}
+
+/* --- 2. 指标卡：青主色 / 琥珀数据 / 红只留给失败；数字走 Consolas --- */
+:root[data-theme="dark"] .ov-metric:nth-child(1) { --ov-accent: var(--cp-cyan, #00d0c0); --ov-accent-soft: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12)); }
+:root[data-theme="dark"] .ov-metric:nth-child(2) { --ov-accent: #63e8da; --ov-accent-soft: rgba(0, 208, 192, 0.09); }
+:root[data-theme="dark"] .ov-metric:nth-child(3) { --ov-accent: var(--cp-amber, #e8a33d); --ov-accent-soft: rgba(232, 163, 61, 0.12); }
+:root[data-theme="dark"] .ov-metric:nth-child(4) { --ov-accent: #f0b75e; --ov-accent-soft: rgba(232, 163, 61, 0.10); }
+:root[data-theme="dark"] .ov-metric:nth-child(5) { --ov-accent: var(--cp-red, #e94542); --ov-accent-soft: var(--cp-red-soft, rgba(233, 69, 66, 0.13)); }
+:root[data-theme="dark"] .ov-metric:nth-child(6) { --ov-accent: var(--cp-cyan, #00d0c0); --ov-accent-soft: rgba(0, 208, 192, 0.08); }
+:root[data-theme="dark"] .ov-metric:nth-child(1) .ov-metric-icon { background: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12)); color: var(--cp-cyan, #00d0c0); box-shadow: 0 0 10px -3px var(--cp-glow, rgba(0, 208, 192, 0.16)); }
+:root[data-theme="dark"] .ov-metric:nth-child(2) .ov-metric-icon { background: rgba(0, 208, 192, 0.08); color: #63e8da; box-shadow: 0 0 8px -3px var(--cp-glow, rgba(0, 208, 192, 0.16)); }
+:root[data-theme="dark"] .ov-metric:nth-child(3) .ov-metric-icon { background: rgba(232, 163, 61, 0.12); color: var(--cp-amber, #e8a33d); box-shadow: 0 0 8px -3px rgba(232, 163, 61, 0.22); }
+:root[data-theme="dark"] .ov-metric:nth-child(4) .ov-metric-icon { background: rgba(232, 163, 61, 0.10); color: #f0b75e; box-shadow: 0 0 8px -3px rgba(232, 163, 61, 0.18); }
+:root[data-theme="dark"] .ov-metric:nth-child(5) .ov-metric-icon { background: var(--cp-red-soft, rgba(233, 69, 66, 0.13)); color: var(--cp-red, #e94542); box-shadow: 0 0 8px -3px rgba(233, 69, 66, 0.22); }
+:root[data-theme="dark"] .ov-metric:nth-child(6) .ov-metric-icon { background: rgba(0, 208, 192, 0.09); color: var(--cp-cyan, #00d0c0); box-shadow: 0 0 8px -3px var(--cp-glow, rgba(0, 208, 192, 0.16)); }
+:root[data-theme="dark"] .usage-browser .ov-metric strong,
+:root[data-theme="dark"] .usage-browser .dashboard-metric strong {
+  font-family: Consolas, "Cascadia Mono", "SF Mono", "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+}
+:root[data-theme="dark"] .usage-browser .ov-metric:hover strong {
+  color: var(--ov-accent, var(--cp-cyan, #00d0c0));
+  text-shadow: 0 0 12px color-mix(in srgb, var(--ov-accent, var(--cp-cyan, #00d0c0)) 30%, transparent);
+}
+:root[data-theme="dark"] .usage-browser .ov-metric:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 12px 34px -14px rgba(0, 0, 0, 0.78),
+    0 0 24px -12px color-mix(in srgb, var(--ov-accent, var(--cp-cyan, #00d0c0)) 55%, transparent);
+}
+
+/* --- 3. 图表柱：扫描青 + 柱面扫描线；hover 从底部 scaleY 长高约 2px --- */
+:root[data-theme="dark"] .usage-browser .usage-day-bar,
+:root[data-theme="dark"] .ov-chart .dashboard-chart-bar {
+  background-color: var(--cp-cyan, #00d0c0);
+  background-image:
+    repeating-linear-gradient(180deg, rgba(234, 255, 253, 0.20) 0 1px, rgba(234, 255, 253, 0) 1px 4px),
+    linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 84%, #ffffff) 0%, var(--cp-cyan, #00d0c0) 56%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 62%, #041014) 100%);
+  border-radius: 0;
+  box-shadow: inset 0 1px 0 rgba(234, 255, 253, 0.35), 0 0 14px -8px var(--cp-glow, rgba(0, 208, 192, 0.16));
+}
+:root[data-theme="dark"] .usage-browser .usage-day-bar.zero,
+:root[data-theme="dark"] .ov-chart .dashboard-chart-bar.zero {
+  background-color: rgba(255, 255, 255, 0.035);
+  background-image: repeating-linear-gradient(180deg, rgba(0, 208, 192, 0.10) 0 1px, rgba(0, 208, 192, 0) 1px 5px);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+:root[data-theme="dark"] .usage-browser .usage-day:hover .usage-day-bar:not(.zero),
+:root[data-theme="dark"] .usage-browser .usage-day:focus .usage-day-bar:not(.zero),
+:root[data-theme="dark"] .usage-browser .usage-day:focus-visible .usage-day-bar:not(.zero),
+:root[data-theme="dark"] .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) {
+  transform: scaleY(1.013);
+  transform-origin: bottom;
+  background-image:
+    repeating-linear-gradient(180deg, rgba(234, 255, 253, 0.32) 0 1px, rgba(234, 255, 253, 0) 1px 4px),
+    linear-gradient(180deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 58%, #ffffff) 0%, color-mix(in srgb, var(--cp-cyan, #00d0c0) 90%, #ffffff) 52%, var(--cp-cyan, #00d0c0) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(234, 255, 253, 0.55),
+    0 0 20px -4px color-mix(in srgb, var(--cp-cyan, #00d0c0) 55%, transparent),
+    0 0 34px -16px var(--cp-glow, rgba(0, 208, 192, 0.16));
+}
+:root[data-theme="dark"] .usage-browser .usage-day span {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  color: color-mix(in srgb, var(--cp-cyan, #00d0c0) 42%, #7e8ba1);
+}
+:root[data-theme="dark"] .usage-browser .usage-day:hover span,
+:root[data-theme="dark"] .usage-browser .usage-day:focus span,
+:root[data-theme="dark"] .usage-browser .usage-day:focus-visible span {
+  color: var(--cp-cyan, #00d0c0);
+}
+:root[data-theme="dark"] .usage-browser .usage-day-track {
+  background-image: repeating-linear-gradient(to top, var(--cp-grid, rgba(0, 208, 192, 0.028)) 0 1px, transparent 1px 25%);
+}
+:root[data-theme="dark"] .usage-browser .usage-trend-chart {
+  border-bottom-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+}
+
+/* --- 4. 表格：等宽读数 + hover 左侧青色刻度线 --- */
+:root[data-theme="dark"] .usage-browser .usage-model-table th {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--cp-cyan, #00d0c0);
+  background: var(--us-surface-raised, #151b26);
+  border-bottom-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  box-shadow: inset 0 1px 0 rgba(0, 208, 192, 0.10);
+}
+:root[data-theme="dark"] .usage-browser .usage-model-table td:not(:first-child) {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+:root[data-theme="dark"] .usage-browser .usage-model-table tbody tr td {
+  border-bottom-color: rgba(0, 208, 192, 0.07);
+}
+:root[data-theme="dark"] .usage-browser .usage-model-table tbody tr:hover td {
+  background-color: var(--us-surface-raised, #151b26);
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--cp-cyan, #00d0c0) 8%, transparent), transparent 46%);
+}
+:root[data-theme="dark"] .usage-browser .usage-model-table tbody tr td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: repeating-linear-gradient(180deg, var(--cp-cyan, #00d0c0) 0 2px, transparent 2px 5px);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 180ms var(--us-ease-out, ease-out);
+  pointer-events: none;
+}
+:root[data-theme="dark"] .usage-browser .usage-model-table tbody tr:hover td:first-child::before,
+:root[data-theme="dark"] .usage-browser .usage-model-table tbody tr:focus-within td:first-child::before {
+  transform: scaleY(1);
+}
+:root[data-theme="dark"] .usage-browser .usage-model-table td:first-child code,
+:root[data-theme="dark"] .usage-browser .usage-model-table td small {
+  color: color-mix(in srgb, var(--cp-cyan, #00d0c0) 28%, #7e8ba1);
+}
+
+/* --- 5. 筛选、分页、空态：终端键与 NO SIGNAL 框 --- */
+:root[data-theme="dark"] .usage-browser .usage-model-search input,
+:root[data-theme="dark"] .usage-browser .usage-model-filters select {
+  border-radius: 2px;
+  border-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  background: var(--us-surface-sunken, #0b1018);
+  color: var(--cp-cyan, #00d0c0);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  caret-color: var(--cp-cyan, #00d0c0);
+}
+:root[data-theme="dark"] .usage-browser .usage-model-search input::placeholder {
+  color: color-mix(in srgb, var(--cp-cyan, #00d0c0) 38%, #7e8ba1);
+  opacity: 1;
+}
+:root[data-theme="dark"] .usage-browser .usage-model-search input:focus,
+:root[data-theme="dark"] .usage-browser .usage-model-filters select:focus {
+  border-color: var(--cp-cyan, #00d0c0);
+  box-shadow: 0 0 0 3px rgba(0, 208, 192, 0.12), inset 0 0 0 1px var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+}
+:root[data-theme="dark"] .usage-browser .usage-trend .channel-filters button {
+  border-radius: 2px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.05em;
+}
+:root[data-theme="dark"] .usage-browser .usage-trend .channel-filters button[aria-pressed="true"] {
+  background: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12));
+  color: var(--cp-cyan, #00d0c0);
+  border-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  box-shadow: inset 0 1px 0 rgba(0, 208, 192, 0.10), 0 0 14px -6px var(--cp-glow, rgba(0, 208, 192, 0.16));
+}
+:root[data-theme="dark"] .usage-browser .usage-empty > svg {
+  border-radius: 0;
+  border-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  background: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12));
+  color: var(--cp-cyan, #00d0c0);
+}
+:root[data-theme="dark"] .usage-browser .usage-window-empty {
+  border-radius: 1px;
+  border-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  background: rgba(0, 208, 192, 0.05);
+}
+:root[data-theme="dark"] .usage-browser .usage-window-empty::before {
+  border-radius: 0;
+  background: var(--cp-cyan, #00d0c0);
+}
+:root[data-theme="dark"] .usage-browser .usage-pagination {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.03em;
+}
+:root[data-theme="dark"] .usage-browser .usage-pagination .ui-button {
+  border-radius: 2px;
+}
+
+/* --- 6. 反馈：对勾盖章 + 青/琥珀色差一闪（cp-glitch-pop） --- */
+:root[data-theme="dark"] .usage-browser .usage-feedback {
+  color: var(--cp-cyan, #00d0c0);
+  background: var(--cp-cyan-soft, rgba(0, 208, 192, 0.12));
+  border-color: var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  border-radius: 1px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  letter-spacing: 0.04em;
+  text-shadow:
+    1px 0 0 color-mix(in srgb, var(--cp-cyan, #00d0c0) 45%, transparent),
+    -1px 0 0 color-mix(in srgb, var(--cp-amber, #e8a33d) 45%, transparent);
+  animation: us-toast-in 240ms var(--us-ease-out, ease-out) both, cp-glitch-pop 320ms steps(2, end) 40ms both;
+}
+:root[data-theme="dark"] .usage-browser .usage-feedback::before {
+  content: "✓";
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 3px;
+  color: var(--cp-cyan, #00d0c0);
+  border: 1px solid var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  font-weight: 700;
+  text-shadow: none;
+  transform-origin: 50% 60%;
+  animation: us-stamp-in 280ms var(--us-ease-out, ease-out) both;
+}
+:root[data-theme="dark"] .ov-copied {
+  animation: cp-glitch-pop 300ms steps(2, end) both;
+  box-shadow: 0 0 16px -5px var(--cp-glow, rgba(0, 208, 192, 0.16));
+}
+:root[data-theme="dark"] .copy-feedback {
+  text-shadow:
+    1px 0 0 color-mix(in srgb, var(--cp-cyan, #00d0c0) 45%, transparent),
+    -1px 0 0 color-mix(in srgb, var(--cp-amber, #e8a33d) 45%, transparent);
+}
+:root[data-theme="dark"] .copy-feedback::after {
+  content: "";
+  position: absolute;
+  inset: -4px -7px;
+  border: 1px solid var(--cp-cyan-line, rgba(0, 208, 192, 0.30));
+  border-radius: 1px;
+  transform-origin: 50% 60%;
+  pointer-events: none;
+  animation: us-stamp-in 280ms var(--us-ease-out, ease-out) both;
+}
+
+/* --- 7. 页面特有容器：selection / caret / 滚动条 --- */
+:root[data-theme="dark"] .usage-browser ::selection {
+  background: color-mix(in srgb, var(--cp-cyan, #00d0c0) 28%, transparent);
+  color: #eafffd;
+}
+:root[data-theme="dark"] .usage-browser .usage-model-search input,
+:root[data-theme="dark"] .usage-browser .usage-model-filters select {
+  caret-color: var(--cp-cyan, #00d0c0);
+}
+:root[data-theme="dark"] .usage-browser .usage-trend-scroll,
+:root[data-theme="dark"] .usage-browser .usage-model-scroll {
+  scrollbar-color: rgba(0, 208, 192, 0.30) transparent;
+}
+:root[data-theme="dark"] .usage-browser .usage-trend-scroll::-webkit-scrollbar-thumb,
+:root[data-theme="dark"] .usage-browser .usage-model-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 208, 192, 0.30);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 0;
+}
+:root[data-theme="dark"] .usage-browser .usage-trend-scroll::-webkit-scrollbar-thumb:hover,
+:root[data-theme="dark"] .usage-browser .usage-model-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 208, 192, 0.48);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* ============================================================
+   昼 · 流光岁月
+   ============================================================ */
+
+/* --- 1. 总量：黄铜刻度质感（刻线尺 + 纸面压印） --- */
+:root:not([data-theme="dark"]) .usage-total,
+:root:not([data-theme="dark"]) .usage-browser .usage-window-total strong {
+  color: var(--amber-ink, #92400e);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.005em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.78), 0 -1px 0 rgba(var(--warm-shadow, 86, 52, 10), 0.16);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-window-total strong {
+  font-size: 32px;
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-window-total strong::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--amber-ink, #92400e) 55%, transparent) 0 1px, transparent 1px 6px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+:root:not([data-theme="dark"]) .usage-total span {
+  text-shadow: none;
+  color: var(--us-ink-muted, #766f63);
+}
+
+/* --- 2. 指标卡：暖棕定向影 + 琥珀暖印章家族 ---- */
+:root:not([data-theme="dark"]) .ov-metric:nth-child(1) { --ov-accent: var(--amber, #b45309); --ov-accent-soft: var(--amber-soft, #fdf6ec); }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(2) { --ov-accent: #8a6215; --ov-accent-soft: #fbf6ea; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(3) { --ov-accent: var(--amber, #b45309); --ov-accent-soft: var(--amber-soft, #fdf6ec); }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(4) { --ov-accent: #9a5b12; --ov-accent-soft: #f9f1e6; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(5) { --ov-accent: #9c3343; --ov-accent-soft: #fdf5f5; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(6) { --ov-accent: #6f6a1e; --ov-accent-soft: #f6f4e5; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(1) .ov-metric-icon { background: var(--amber-soft, #fdf6ec); color: var(--amber, #b45309); }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(2) .ov-metric-icon { background: #fbf6ea; color: #8a6215; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(3) .ov-metric-icon { background: var(--amber-soft, #fdf6ec); color: var(--amber, #b45309); }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(4) .ov-metric-icon { background: #f9f1e6; color: #9a5b12; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(5) .ov-metric-icon { background: #fdf5f5; color: #9c3343; }
+:root:not([data-theme="dark"]) .ov-metric:nth-child(6) .ov-metric-icon { background: #f6f4e5; color: #6f6a1e; }
+:root:not([data-theme="dark"]) .usage-browser .ov-metric strong {
+  color: #3a2a12;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+:root:not([data-theme="dark"]) .usage-browser .ov-metric:hover strong {
+  color: var(--ov-accent, var(--amber, #b45309));
+}
+:root:not([data-theme="dark"]) .usage-browser .ov-metric:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    2px 5px 0 rgba(var(--warm-shadow, 86, 52, 10), 0.07),
+    0 16px 32px -16px rgba(var(--warm-shadow, 86, 52, 10), 0.34),
+    inset 0 0 0 1px rgba(var(--warm-shadow, 86, 52, 10), 0.04);
+}
+
+/* --- 3. 图表柱：顶端最亮的暖渐变；hover 整柱亮起，像光移过来 --- */
+:root:not([data-theme="dark"]) .usage-browser .usage-day-bar,
+:root:not([data-theme="dark"]) .ov-chart .dashboard-chart-bar {
+  background-color: #d98b2b;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.12) 34%, rgba(255, 255, 255, 0) 58%),
+    linear-gradient(180deg, #f0bb63 0%, #d98b2b 48%, #9c5a10 100%);
+  border-radius: 6px 6px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 2px 0 rgba(var(--warm-shadow, 86, 52, 10), 0.08);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-day-bar.zero,
+:root:not([data-theme="dark"]) .ov-chart .dashboard-chart-bar.zero {
+  background-color: #e8e1d4;
+  background-image: linear-gradient(180deg, #efe8db, #e6dccb);
+  border-radius: 6px 6px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.70), inset 0 0 0 1px rgba(var(--warm-shadow, 86, 52, 10), 0.05);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-day:hover .usage-day-bar:not(.zero),
+:root:not([data-theme="dark"]) .usage-browser .usage-day:focus .usage-day-bar:not(.zero),
+:root:not([data-theme="dark"]) .usage-browser .usage-day:focus-visible .usage-day-bar:not(.zero),
+:root:not([data-theme="dark"]) .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) {
+  transform: scaleY(1.013);
+  transform-origin: bottom;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.20) 38%, rgba(255, 255, 255, 0) 62%),
+    linear-gradient(180deg, #ffd89a 0%, #e9a83f 42%, #b45309 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 7px 18px -8px rgba(var(--warm-shadow, 86, 52, 10), 0.40),
+    0 0 0 1px rgba(var(--warm-shadow, 86, 52, 10), 0.05);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-day-track {
+  background-image: repeating-linear-gradient(to top, rgba(86, 52, 10, 0.07) 0 1px, transparent 1px 25%);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-day span {
+  color: #8b8377;
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-day:hover span,
+:root:not([data-theme="dark"]) .usage-browser .usage-day:focus span,
+:root:not([data-theme="dark"]) .usage-browser .usage-day:focus-visible span {
+  color: var(--amber-ink, #92400e);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-trend-chart {
+  border-bottom-color: var(--amber-line, #eedfc6);
+}
+
+/* --- 4. 表格：纸张表头高光 + 琥珀数据刻度 --- */
+:root:not([data-theme="dark"]) .usage-browser .usage-model-table th {
+  color: var(--us-ink-secondary, #4b453d);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+  border-bottom-color: var(--amber-line, #eedfc6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.80);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-model-table td:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-model-table tbody tr:hover td {
+  background-color: var(--amber-soft, #fdf6ec);
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--amber, #b45309) 7%, transparent), transparent 50%);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-model-table tbody tr td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, var(--amber, #b45309) 18%, var(--amber, #b45309) 82%, transparent);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transform-origin: center;
+  transition: opacity 180ms var(--us-ease-out, ease-out), transform 180ms var(--us-ease-out, ease-out);
+  pointer-events: none;
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-model-table tbody tr:hover td:first-child::before,
+:root:not([data-theme="dark"]) .usage-browser .usage-model-table tbody tr:focus-within td:first-child::before {
+  opacity: 0.72;
+  transform: scaleY(1);
+}
+
+/* --- 5. 筛选、搜索、空态：纸标签 + 琥珀柔光 --- */
+:root:not([data-theme="dark"]) .usage-browser .usage-model-search input,
+:root:not([data-theme="dark"]) .usage-browser .usage-model-filters select {
+  border-radius: 8px;
+  border-color: var(--amber-line, #eedfc6);
+  background-color: var(--us-surface, #fffdfa);
+  caret-color: var(--amber-ink, #92400e);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-model-search input:focus,
+:root:not([data-theme="dark"]) .usage-browser .usage-model-filters select:focus {
+  border-color: var(--amber, #b45309);
+  box-shadow: 0 0 0 3px var(--amber-glow, rgba(217, 119, 6, 0.14)), inset 0 0 0 1px var(--amber-line, #eedfc6);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-trend .channel-filters button[aria-pressed="true"] {
+  background: var(--amber-soft, #fdf6ec);
+  color: var(--amber-ink, #92400e);
+  border-color: var(--amber-line, #eedfc6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.70), 1px 2px 0 rgba(var(--warm-shadow, 86, 52, 10), 0.06);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-empty > svg {
+  border-radius: 999px;
+  border-color: var(--amber-line, #eedfc6);
+  background: var(--amber-soft, #fdf6ec);
+  color: var(--amber, #b45309);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-window-empty {
+  border-radius: 8px;
+  border-color: var(--amber-line, #eedfc6);
+  background: var(--amber-soft, #fdf6ec);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-pagination > span[data-testid="usage-model-count"] {
+  color: var(--amber-ink, #92400e);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-pagination .ui-button {
+  border-radius: 6px;
+}
+
+/* --- 6. 反馈：琥珀墨洇开（us-ink-spread） --- */
+:root:not([data-theme="dark"]) .usage-browser .usage-feedback {
+  color: var(--amber-ink, #92400e);
+  background: var(--amber-soft, #fdf6ec);
+  border-color: var(--amber-line, #eedfc6);
+  border-radius: 8px;
+  box-shadow: 1px 3px 0 rgba(var(--warm-shadow, 86, 52, 10), 0.06);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-feedback::after,
+:root:not([data-theme="dark"]) .copy-feedback::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--amber, #b45309) 40%, transparent) 0%, transparent 68%);
+  opacity: 0;
+  transform: scale(0.28);
+  animation: us-ink-spread 520ms var(--us-ease-out, ease-out) both;
+  pointer-events: none;
+}
+:root:not([data-theme="dark"]) .ov-copied {
+  box-shadow: 0 0 0 3px var(--amber-glow, rgba(217, 119, 6, 0.14));
+}
+
+/* --- 7. 页面特有容器：selection / caret / 滚动条 --- */
+:root:not([data-theme="dark"]) .usage-browser ::selection {
+  background: color-mix(in srgb, var(--amber, #b45309) 26%, transparent);
+  color: #3a2a12;
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-model-search input,
+:root:not([data-theme="dark"]) .usage-browser .usage-model-filters select {
+  caret-color: var(--amber-ink, #92400e);
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-trend-scroll,
+:root:not([data-theme="dark"]) .usage-browser .usage-model-scroll {
+  scrollbar-color: var(--us-line-strong, #d8d2c7) transparent;
+}
+:root:not([data-theme="dark"]) .usage-browser .usage-trend-scroll::-webkit-scrollbar-thumb,
+:root:not([data-theme="dark"]) .usage-browser .usage-model-scroll::-webkit-scrollbar-thumb {
+  background: var(--us-line-strong, #d8d2c7);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+/* --- 圆角纪律：夜=0 直角切角 / 昼=8px 纸角 --- */
+:root[data-theme="dark"] .usage-browser .ui-card { border-radius: 0; }
+:root:not([data-theme="dark"]) .usage-browser .ui-card { border-radius: 8px; }
+
+/* ---------- 减少动画：新增动作完整降级 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="dark"] .usage-total,
+  :root[data-theme="dark"] .usage-browser .usage-window-total strong,
+  :root[data-theme="dark"] .usage-browser .usage-window-total strong::after,
+  :root[data-theme="dark"] .usage-browser .usage-feedback,
+  :root[data-theme="dark"] .usage-browser .usage-feedback::before,
+  :root[data-theme="dark"] .ov-copied,
+  :root[data-theme="dark"] .copy-feedback::after,
+  :root:not([data-theme="dark"]) .usage-browser .usage-feedback::after,
+  :root:not([data-theme="dark"]) .copy-feedback::after {
+    animation: none !important;
+  }
+  :root[data-theme="dark"] .usage-browser .usage-day-bar,
+  :root[data-theme="dark"] .ov-chart .dashboard-chart-bar,
+  :root:not([data-theme="dark"]) .usage-browser .usage-day-bar,
+  :root:not([data-theme="dark"]) .ov-chart .dashboard-chart-bar,
+  :root[data-theme="dark"] .usage-browser .usage-model-table tbody tr td:first-child::before,
+  :root:not([data-theme="dark"]) .usage-browser .usage-model-table tbody tr td:first-child::before {
+    transition: none !important;
+  }
+  :root[data-theme="dark"] .usage-browser .usage-day:hover .usage-day-bar:not(.zero),
+  :root[data-theme="dark"] .usage-browser .usage-day:focus .usage-day-bar:not(.zero),
+  :root[data-theme="dark"] .usage-browser .usage-day:focus-visible .usage-day-bar:not(.zero),
+  :root[data-theme="dark"] .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero),
+  :root:not([data-theme="dark"]) .usage-browser .usage-day:hover .usage-day-bar:not(.zero),
+  :root:not([data-theme="dark"]) .usage-browser .usage-day:focus .usage-day-bar:not(.zero),
+  :root:not([data-theme="dark"]) .usage-browser .usage-day:focus-visible .usage-day-bar:not(.zero),
+  :root:not([data-theme="dark"]) .ov-chart .dashboard-chart-column:hover .dashboard-chart-bar:not(.zero) {
+    transform: none !important;
+  }
+}
+
+/* ==== V5 NIGHT · 深度打磨（usage 补丁） ==== */
+
+/* KPI 图标圆角清零（配合 app.css 切角） */
+[data-theme="dark"] .ov-metric-icon {
+  border-radius: 0 !important;
+}
+
+/* 趋势图柱条：圆角清零（五级切角已由 app.css 处理 clip-path） */
+[data-theme="dark"] .usage-day-bar,
+[data-theme="dark"] .ov-chart .dashboard-chart-bar {
+  border-radius: 0 !important;
+}
+
+/* 移动端 KPI 图标也清零 */
+@media (max-width: 700px) {
+  [data-theme="dark"] .ov-metric-icon { border-radius: 0 !important; }
+}
+
+/* ==== V5 NIGHT · usage 补丁 END ==== */

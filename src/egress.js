@@ -52,6 +52,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import tls from 'node:tls'
 import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
@@ -103,14 +104,19 @@ export function egressActive() {
 export async function egressFetch(url, init) {
   const relay = activeRelay
   if (relay === null) return fetch(url, init)
-  const target = new URL(String(url))
+  const request = url instanceof Request ? new Request(url, init) : null
+  const target = new URL(request ? request.url : String(url))
   if (target.protocol !== 'http:' && target.protocol !== 'https:') {
     throw new Error(`the egress relay only carries http(s) targets, got "${target.protocol}"`)
   }
-  const headers = new Headers(init?.headers ?? {})
+  const headers = new Headers(request?.headers ?? init?.headers ?? {})
   headers.set(TARGET_HEADER, target.href)
   headers.set(KEY_HEADER, relay.key)
-  return fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...init, headers })
+  const outgoing = request ? {
+    ...init, method: request.method, body: request.body, signal: request.signal,
+    redirect: request.redirect, ...(request.body ? { duplex: 'half' } : {}),
+  } : init
+  return fetch(`http://${RELAY_HOST}:${relay.port}${target.pathname}${target.search}`, { ...outgoing, headers })
 }
 
 /**
@@ -692,31 +698,79 @@ export function renderMihomoConfig({ subscription, mixedPort, apiPort, secret, a
 export function findMihomoBinary(explicit) {
   const given = String(explicit ?? '').trim()
   if (given !== '') {
-    if (!fs.existsSync(given)) throw new Error(`the mihomo path "${given}" does not exist`)
-    return given
+    const stat = statOrNull(given)
+    if (stat === null) throw new Error(`the mihomo path "${given}" does not exist`)
+    const found = stat.isDirectory()
+      ? scanMihomo([given, path.join(given, 'bin'), path.join(given, 'resources')], mihomoNames())
+      : scanMihomo([path.dirname(given)], [path.basename(given)])
+    if (found === null) throw new Error(`the mihomo path "${given}" holds no mihomo binary`)
+    if (!found.executable) throw notExecutable(found.path)
+    return found.path
   }
-  const windows = process.platform === 'win32'
-  const names = windows
+  const found = scanMihomo(mihomoSearchRoots(), mihomoNames())
+  if (found === null) {
+    throw new Error('no mihomo binary found - set its path in the egress settings (Clash Verge installs one, or get it from MetaCubeX/mihomo)')
+  }
+  if (!found.executable) throw notExecutable(found.path)
+  return found.path
+}
+
+function mihomoNames() {
+  return process.platform === 'win32'
     ? ['mihomo.exe', 'verge-mihomo.exe', 'verge-mihomo-alpha.exe', 'clash-meta.exe', 'clash.exe']
     : ['mihomo', 'clash-meta', 'clash']
-  const dirs = []
+}
+
+function mihomoSearchRoots() {
+  const roots = []
   for (const entry of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (entry.trim() !== '') dirs.push(entry)
+    if (entry.trim() !== '') roots.push(entry)
   }
-  const roots = windows
-    ? [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], path.join(process.env.LOCALAPPDATA ?? '', 'Programs')]
-        .filter(Boolean)
-        .flatMap(root => [path.join(root, 'Clash Verge'), path.join(root, 'clash-verge'), path.join(root, 'mihomo')])
-    : ['/usr/local/bin', '/usr/bin', '/opt/homebrew/bin', path.join(process.env.HOME ?? '', '.local/bin')]
-  for (const dir of [...dirs, ...roots]) {
+  let home = ''
+  try { home = os.homedir() } catch { /* no home in this environment */ }
+  if (typeof home !== 'string' || !path.isAbsolute(home)) home = ''
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA || (home === '' ? '' : path.join(home, 'AppData', 'Local'))
+    const installs = [process.env.ProgramFiles, process.env['ProgramFiles(x86)']]
+    if (local !== '' && path.isAbsolute(local)) installs.push(path.join(local, 'Programs'))
+    for (const root of installs) {
+      if (typeof root !== 'string' || !path.isAbsolute(root)) continue
+      roots.push(path.join(root, 'Clash Verge'), path.join(root, 'clash-verge'), path.join(root, 'mihomo'))
+    }
+    return roots
+  }
+  // Missing home/prefix values must not turn fallback roots into cwd searches.
+  if (home !== '') roots.push(path.join(home, '.local', 'bin'), path.join(home, 'bin'))
+  const prefix = String(process.env.PREFIX ?? '').trim()
+  if (prefix !== '' && path.isAbsolute(prefix)) roots.push(path.join(prefix, 'bin'))
+  roots.push('/usr/local/bin', '/usr/bin', '/opt/homebrew/bin')
+  return roots
+}
+
+/** Keep searching past a non-executable hit, but retain its actionable error. */
+function scanMihomo(dirs, names) {
+  let blocked = null
+  for (const dir of dirs) {
     for (const name of names) {
       const candidate = path.join(dir, name)
+      if (statOrNull(candidate)?.isFile() !== true) continue
       try {
-        if (fs.statSync(candidate).isFile()) return candidate
-      } catch { /* not there; next */ }
+        if (process.platform !== 'win32') fs.accessSync(candidate, fs.constants.X_OK)
+        return { path: candidate, executable: true }
+      } catch {
+        blocked ??= candidate
+      }
     }
   }
-  throw new Error('no mihomo binary found — set its path in the egress settings (Clash Verge installs one, or get it from MetaCubeX/mihomo)')
+  return blocked === null ? null : { path: blocked, executable: false }
+}
+
+function statOrNull(target) {
+  try { return fs.statSync(target) } catch { return null }
+}
+
+function notExecutable(target) {
+  return new Error(`the mihomo at "${target}" is not executable - run: chmod +x "${target}"`)
 }
 
 /** Hostname of a URL, for display: the path of a subscription link is its credential. */

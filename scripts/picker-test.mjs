@@ -1,7 +1,7 @@
 /**
  * What the model picker is allowed to advertise.
  *
- * Issue #3: a model the gateway names in `/zen/v1/models` but refuses to route
+ * Issue #3: a model the gateway names in `/inference/v1/models` but refuses to route
  * at all still appeared in the picker, so picking it spent a turn on a
  * guaranteed failure. The probe already knew — the settings page said 暂不可用 —
  * but `computeMembership` only ever separated the region-gated ones and left
@@ -85,6 +85,13 @@ if (adapter === undefined) {
 const api = () => routes.find(route => route.kind === 'prefix')?.handler
 await until(() => api() !== undefined, { what: 'the settings API route' })
 
+// Automatic probing is disabled by owner policy. This suite is about picker
+// reads, so it waits for the listing, then drives the one probe round it needs
+// through the manual endpoint.
+await callRoute(api(), 'POST', '/api/our-free-model/refresh')
+check('startup and a listing refresh spend no probe requests', stub.requests.length, 0)
+await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+
 const ids = models => models.map(model => model.id)
 const advertised = async route => ids(await adapter.listModels(route))
 
@@ -145,6 +152,8 @@ check('the settings page says it has not been probed', midRoundRow?.availability
 check('rather than a verdict it does not have', midRoundRow?.detail ?? '', '')
 gate.resolve()
 await round
+// Discovery refreshed the listing only; probe the new row explicitly.
+await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
 check('once the round lands it carries a verdict',
   (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json.catalog
     .find(row => row.id === 'union-alpha')?.availability, 'available')
@@ -220,6 +229,24 @@ await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
 check('a lane-wide failure never empties the picker', (await advertised(ROUTE_MAIN)).length > 0, true)
 check('it keeps the refused models rather than dropping them', (await advertised(ROUTE_MAIN)).includes('deepseek-v4-flash-free'), true)
 check('and says so in the log', ctx.__logs.some(line => line.includes('refused all')), true)
+const visibleId = 'space-bunny-free'
+const beforeVisibilityEvents = ctx.__captured.events.filter(event => event === 'emit:llm/adapters-updated').length
+const hiddenSave = await callRoute(api(), 'POST', '/api/our-free-model/settings', { hiddenModelIds: [visibleId, visibleId], hideEacModels: true })
+check('picker visibility settings save successfully', hiddenSave.status, 200)
+check('hidden ids are canonical and persisted', JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'settings.json'), 'utf8')).hiddenModelIds, [visibleId])
+check('refusedAll never restores an explicitly hidden model', (await advertised(ROUTE_MAIN)).includes(visibleId), false)
+check('visibility changes broadcast topology invalidation',
+  ctx.__captured.events.filter(event => event === 'emit:llm/adapters-updated').length > beforeVisibilityEvents, true)
+const hiddenSummary = (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json
+check('management keeps hidden rows with a recovery marker', hiddenSummary.catalog.find(row => row.id === visibleId)?.hiddenByUser, true)
+check('a hidden id still resolves for history', (await adapter.resolveModel(ROUTE_MAIN, visibleId)).id, visibleId)
+for (const patch of [null, [], { hiddenModelIds: [null] }, { hiddenModelIds: [''] }, { hideEacModels: 1 }, { hideFreeModels: 'true' }, { enabled: false, hiddenModelIds: [3] }]) {
+  check('invalid visibility patch is refused atomically', (await callRoute(api(), 'POST', '/api/our-free-model/settings', patch)).status, 400)
+}
+check('invalid patch does not change existing settings', (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json.settings.enabled, true)
+await callRoute(api(), 'POST', '/api/our-free-model/settings', { hideFreeModels: true })
+check('whole free group remains hidden during lane-wide refusal', await advertised(ROUTE_MAIN), [])
+await callRoute(api(), 'POST', '/api/our-free-model/settings', { hiddenModelIds: [], hideFreeModels: false, hideEacModels: false })
 
 stub.api.refuseAll = false
 await callRoute(api(), 'POST', '/api/our-free-model/reprobe')

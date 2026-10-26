@@ -10,6 +10,21 @@
  */
 import http from 'node:http'
 
+// The offline discipline is "no suite reaches the network", and the plugin now
+// mounts two keyless producers: the free lane and the Kilo channel. A suite
+// that boots the whole plugin but pins only one base would silently send the
+// other one live, so an unset variable defaults to a closed loopback port for
+// both. A suite that wants a stand-in sets its own value before importing
+// `../index.js` — the same contract the free lane has always had.
+for (const name of ['OUR_FREE_MODEL_BASE', 'OUR_FREE_MODEL_KILO_BASE']) {
+  if (process.env[name] === undefined) {
+    const dead = http.createServer()
+    await new Promise(resolve => dead.listen(0, '127.0.0.1', resolve))
+    process.env[name] = `http://127.0.0.1:${dead.address().port}`
+    await new Promise(resolve => dead.close(resolve))
+  }
+}
+
 /**
  * One healthy SSE body, in the Chat Completions shape every stub model speaks.
  *
@@ -29,7 +44,7 @@ export function chatFrames(text = 'ok') {
  * Start the stand-in gateway.
  *
  * @param {object} options
- * @param {string[]} options.listing - model ids `GET /zen/v1/models` names
+ * @param {string[]} options.listing - model ids `GET /inference/v1/models` names
  * @param {(id: string, body: object, api: object) => {status?: number, body?: string, socket?: boolean, contentType?: string}} options.answer
  *   what one `POST` to the model's endpoint looks like; `api.refuseAll` etc. are
  *   readable from the returned object so a test can flip verdicts between rounds
@@ -45,7 +60,7 @@ export async function stubUpstream({ listing = [], answer = () => ({ body: chatF
     req.on('data', row => chunks.push(row))
     req.on('end', async () => {
       const url = String(req.url ?? '')
-      if (req.method === 'GET' && url === '/zen/v1/models') {
+      if (req.method === 'GET' && url === '/inference/v1/models') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ data: rows }))
         return

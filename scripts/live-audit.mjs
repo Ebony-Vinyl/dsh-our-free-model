@@ -32,13 +32,13 @@ let verified = 0
 for (const source of only) {
   const host = new URL(source).hostname
   try {
-    const { manifest } = await downloadManifest([source])
+    const { manifest, source: snapshot } = await downloadManifest([source])
     const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-live-audit-'))
     try {
-      const staged = await stageRelease({ manifest, manifestUrl: source, stageDir: stage })
+      const staged = await stageRelease({ manifest, manifestUrl: snapshot, stageDir: stage })
       verifyStaged(stage, manifest)
       verified++
-      console.log(`OK   ${host}: version=${manifest.version}, ${staged.files} files, ${staged.bytes} bytes — 全部 SHA-256 与回读校验通过`)
+      console.log(`OK   ${host}: version=${manifest.version}, ${staged.files} files, ${staged.bytes} bytes — 全部 SHA-256 与回读校验通过 (${snapshot})`)
     } finally {
       fs.rmSync(stage, { recursive: true, force: true })
     }

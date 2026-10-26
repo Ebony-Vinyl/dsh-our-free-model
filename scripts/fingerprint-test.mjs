@@ -1,14 +1,13 @@
 /**
- * The free tier's tool fingerprint: four names must be declared, and every one of
- * them must be something the caller can actually execute.
+ * The free tier's **v2** tool fingerprint.
  *
- * The gateway refuses a request that does not declare `bash`, `glob`, `grep` and
- * `read` in `body.tools` (403 FreeTierError), so the plugin fills any gap. Filling
- * it with a decoy is what issue #9's second half is about: dsh names its shell
- * tool `pwsh` on Windows, so `bash` was declared as a tool whose own description
- * said "must not be used" — and models called it anyway, 24 times in one recorded
- * session, every call returning unknown tool. Promoting the real shell into the
- * slot satisfies the same gate and answers the call with a tool that exists.
+ * Since 2026-10-14 the gateway reads the declared tools themselves: `read` and
+ * `shell` must be present **with OpenCode's own definitions** (description and
+ * parameter schema, verbatim), `tool_choice: 'none'` is refused outright, and a
+ * caller tool that reuses one of those names with a different definition has to
+ * move aside. The v1 contract this file used to encode — four names, each with
+ * any non-empty schema, decoys allowed — is gone; every case below is one of the
+ * refusals the new gate produces.
  *
  * Run: node scripts/fingerprint-test.mjs
  */
@@ -22,87 +21,139 @@ const check = (name, actual, expected) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `\n       got      ${JSON.stringify(actual)}\n       expected ${JSON.stringify(expected)}`}`)
 }
 
-const chatTool = name => ({ type: 'function', function: { name, description: `the ${name} tool`, parameters: { type: 'object', properties: {} } } })
-const flatTool = name => ({ type: 'function', name, description: `the ${name} tool`, parameters: { type: 'object', properties: {} } })
+const chatTool = (name, extra = {}) => ({
+  type: 'function',
+  function: { name, description: `the ${name} tool`, parameters: { type: 'object', properties: { x: { type: 'string' } } }, ...extra },
+})
+const flatTool = (name, extra = {}) => ({ type: 'function', name, description: `the ${name} tool`, parameters: { type: 'object', properties: { x: { type: 'string' } } }, ...extra })
+const claudeTool = name => ({ name, description: `the ${name} tool`, input_schema: { type: 'object', properties: { command: { type: 'string' } } } })
 const declared = body => (body.tools ?? []).map(tool => tool.function?.name ?? tool.name)
-
-console.log('=== 1. the Windows session: pwsh stands in for the bash slot ===')
-{
-  const body = { tools: [chatTool('pwsh'), chatTool('read'), chatTool('glob'), chatTool('grep')] }
-  const map = applyFingerprint(body, false)
-  check('all four quartet names are declared', FINGERPRINT_TOOLS.filter(name => declared(body).includes(name)), ['bash', 'glob', 'grep', 'read'])
-  check('no decoy was needed', body.tools.filter(tool => tool.function?.description?.includes('must not be used')).map(tool => tool.function.name), [])
-  check('the slot carries the real tool description', body.tools.find(tool => tool.function?.name === 'bash')?.function?.description, 'the pwsh tool')
-  check('the rename map sends bash back to pwsh', map.get('bash'), 'pwsh')
-  check('a model call for bash is executable downstream', restoreToolName('bash', map), 'pwsh')
-  check('unrelated names pass through the map untouched', restoreToolName('write', map), 'write')
-}
-
-console.log('\n=== 2. the same holds on the flat Responses shape ===')
-{
-  const body = { tools: [flatTool('pwsh'), flatTool('read'), flatTool('glob'), flatTool('grep')] }
-  const map = applyFingerprint(body, true)
-  check('quartet declared', FINGERPRINT_TOOLS.filter(name => declared(body).includes(name)), ['bash', 'glob', 'grep', 'read'])
-  check('pwsh promoted, not duplicated', declared(body).filter(name => name === 'pwsh' || name === 'bash'), ['bash'])
-  check('map restored', restoreToolName('bash', map), 'pwsh')
-}
-
-console.log('\n=== 3. a real bash wins over the donor, and nothing is duplicated ===')
-{
-  const body = { tools: [chatTool('bash'), chatTool('pwsh')] }
-  const map = applyFingerprint(body, false)
-  check('bash stays bash', declared(body).filter(n => n === 'bash' || n === 'pwsh'), ['bash', 'pwsh'])
-  check('bash is not remapped to pwsh', map.has('bash'), false)
-  const cased = { tools: [chatTool('Bash'), chatTool('Grep'), chatTool('Glob'), chatTool('Read')] }
-  const casedMap = applyFingerprint(cased, false)
-  check('case variants are canonicalised once, not duplicated', declared(cased), ['bash', 'grep', 'glob', 'read'])
-  check('…and each is restored to the caller spelling', ['bash', 'grep', 'glob', 'read'].map(name => restoreToolName(name, casedMap)), ['Bash', 'Grep', 'Glob', 'Read'])
-}
-
-console.log('\n=== 4. with nothing to promote, the decoy still clears the gate ===')
-{
-  const body = { tools: [chatTool('browser_navigate')] }
-  const map = applyFingerprint(body, false)
-  check('every quartet name is still declared', FINGERPRINT_TOOLS.filter(name => declared(body).includes(name)), ['bash', 'glob', 'grep', 'read'])
-  check('the four decoys say what they are', body.tools.filter(tool => tool.function?.description?.includes('must not be used')).map(tool => tool.function.name), ['bash', 'glob', 'grep', 'read'])
-  check('a decoy is not in the rename map, so it is never called a real tool', map.has('bash'), false)
-}
-
-console.log('\n=== 5. a caller with no tools at all ===')
-{
+const schemaOf = tool => tool.function?.parameters ?? tool.parameters ?? tool.input_schema
+const noteOf = body => JSON.stringify(body.messages?.[0]?.content ?? body.system ?? body.instructions ?? '')
+/** An official declaration as the gate itself produces it, for "already correct" cases. */
+const official = (style, name) => {
   const body = {}
-  applyFingerprint(body, false)
-  check('the gate is still satisfied', FINGERPRINT_TOOLS.every(name => declared(body).includes(name)), true)
-  check('and no tool_choice is claimed', body.tool_choice, 'none')
-  const withTools = { tools: [chatTool('write')] }
-  applyFingerprint(withTools, false)
-  check('a caller that brought tools keeps tool_choice unset so the model decides', withTools.tool_choice, undefined)
+  applyFingerprint(body, style)
+  return body.tools.find(tool => (tool.function?.name ?? tool.name) === name)
 }
 
-// Messages 使用自己的工具结构，不能把 Chat 的 function 包装发到上游。
-console.log('\n=== 6. Messages 工具指纹和 Windows Shell 回译 ===')
+console.log('=== 1. the gate names are read + shell, with the official definitions ===')
+{
+  const body = { tools: [chatTool('pwsh'), chatTool('Read'), chatTool('write')] }
+  const map = applyFingerprint(body, false)
+  check('read and shell are declared', FINGERPRINT_TOOLS.filter(name => declared(body).includes(name)), ['read', 'shell'])
+  check('the caller tools are left alone', declared(body), ['pwsh', 'Read', 'write', 'read', 'shell'])
+  check('case variants are not renamed', declared(body).filter(name => name === 'Read' || name === 'read'), ['Read', 'read'])
+  check('nothing was aliased', map.size, 0)
+  const read = body.tools.find(tool => tool.function.name === 'read')
+  check('the read schema is the official one', read.function.parameters.required, ['path'])
+  check('…and is closed to extra properties', read.function.parameters.additionalProperties, false)
+  const shell = body.tools.find(tool => tool.function.name === 'shell')
+  check('the shell schema is the official one', shell.function.parameters.required, ['command'])
+  check('the model is told the injected tools are placeholders', /placeholders that do nothing/.test(noteOf(body)), true)
+  check('…and no tool_choice is claimed', body.tool_choice, undefined)
+}
+
+console.log('\n=== 2. a caller tool that reuses a gate name moves to an alias ===')
+{
+  const body = { tools: [chatTool('read'), chatTool('read_client'), chatTool('Edit')] }
+  const map = applyFingerprint(body, false)
+  check('the caller read is aliased past the taken name', declared(body), ['read_client2', 'read_client', 'Edit', 'read', 'shell'])
+  check('the alias maps back to the caller name', restoreToolName('read_client2', map), 'read')
+  check('the official read is the last declaration of that name', body.tools.filter(tool => tool.function.name === 'read').length, 1)
+}
+
+console.log('\n=== 3. a caller tool that already carries the official definition is kept ===')
+{
+  const body = { tools: [official(false, 'read'), official(false, 'shell')] }
+  const map = applyFingerprint(body, false)
+  check('no duplicate and no alias', declared(body), ['read', 'shell'])
+  check('nothing was aliased', map.size, 0)
+  check('no placeholder note is added', noteOf(body), '""')
+}
+
+console.log('\n=== 4. duplicate declarations of one gate name keep the first ===')
+{
+  const body = { tools: [chatTool('shell'), chatTool('shell')] }
+  applyFingerprint(body, false)
+  check('the duplicate moves aside instead of repeating', declared(body), ['shell_client', 'read', 'shell'])
+}
+
+console.log('\n=== 5. tool_choice: never none, retargeted to an alias, auto on Responses ===')
+{
+  const chat = { tools: [chatTool('write')], tool_choice: 'none' }
+  applyFingerprint(chat, false)
+  check('a caller none is dropped (the gate refuses it)', chat.tool_choice, undefined)
+
+  const claude = { tools: [claudeTool('write')], tool_choice: { type: 'none' } }
+  applyFingerprint(claude, 'claude')
+  check('the Messages shape drops it too', claude.tool_choice, undefined)
+
+  const named = { tools: [chatTool('read')], tool_choice: { type: 'function', function: { name: 'read' } } }
+  applyFingerprint(named, false)
+  check('a choice naming an aliased tool follows the alias', named.tool_choice.function.name, 'read_client')
+
+  const flat = { tools: [flatTool('write')] }
+  applyFingerprint(flat, true)
+  check('Responses defaults to auto', flat.tool_choice, 'auto')
+}
+
+console.log('\n=== 6. history calls to an aliased tool are renamed with it ===')
+{
+  const body = {
+    tools: [chatTool('read')],
+    messages: [
+      { role: 'assistant', tool_calls: [{ id: 'c1', function: { name: 'read', arguments: '{}' } }] },
+      { role: 'tool', content: 'ok' },
+    ],
+  }
+  applyFingerprint(body, false)
+  const assistant = body.messages.find(message => Array.isArray(message.tool_calls))
+  check('the prior call follows the alias', assistant.tool_calls[0].function.name, 'read_client')
+  check('the caller message itself is untouched', body.messages.at(-2) === assistant || body.messages.at(-1) === assistant, true)
+}
+
+console.log('\n=== 7. the Messages (Claude) shape carries input_schema, not parameters ===')
 {
   const body = {}
   applyFingerprint(body, 'claude')
-  check('Messages 无工具时仍声明四个指纹工具', declared(body), ['bash', 'glob', 'grep', 'read'])
-  check('Messages 无工具时禁止工具选择', body.tool_choice, { type: 'none' })
-  check('Messages 补齐工具使用 input_schema', body.tools.every(tool => tool.input_schema?.type === 'object' && tool.function === undefined && tool.parameters === undefined), true)
+  check('both gate names are declared', declared(body), ['read', 'shell'])
+  check('every declaration uses input_schema', body.tools.every(tool => tool.input_schema?.type === 'object' && tool.function === undefined && tool.parameters === undefined), true)
+  check('the read schema is still the official one', body.tools.find(tool => tool.name === 'read').input_schema.required, ['path'])
+  check('the placeholder note lands in system', /placeholders that do nothing/.test(noteOf(body)), true)
 
-  const claudeTool = name => ({ name, description: `the ${name} tool`, input_schema: { type: 'object', properties: { command: { type: 'string' } } } })
-  const partial = { tools: [claudeTool('read')] }
-  applyFingerprint(partial, 'claude')
-  check('Messages 部分工具只补缺项', declared(partial).filter(name => name === 'read').length, 1)
-  check('Messages 部分工具补齐四个指纹工具', FINGERPRINT_TOOLS.every(name => declared(partial).includes(name)), true)
-  check('Messages 调用者携带工具时保留自主工具选择', partial.tool_choice, undefined)
+  const caller = { tools: [claudeTool('read')] }
+  applyFingerprint(caller, 'claude')
+  check('a conflicting caller read is aliased here too', declared(caller), ['read_client', 'read', 'shell'])
+}
 
-  const original = claudeTool('pwsh')
-  const promoted = { tools: [original, claudeTool('read'), claudeTool('glob'), claudeTool('grep')] }
-  const map = applyFingerprint(promoted, 'claude')
-  check('Messages 的 pwsh 推广为 bash', declared(promoted), ['bash', 'read', 'glob', 'grep'])
-  check('Messages 推广保留真实 Shell 的 schema', promoted.tools[0].input_schema, original.input_schema)
-  check('Messages 推广保留真实 Shell 的描述', promoted.tools[0].description, 'the pwsh tool')
-  check('Messages 工具名能回译为 pwsh', restoreToolName('bash', map), 'pwsh')
-  check('Messages 推广不增加假 Shell', promoted.tools.some(tool => tool.description?.includes('must not be used')), false)
+console.log('\n=== 8. the Responses (flat) shape carries a flat declaration ===')
+{
+  const body = {}
+  applyFingerprint(body, true)
+  check('both gate names are declared', declared(body), ['read', 'shell'])
+  check('the declarations are flat', body.tools.every(tool => tool.function === undefined && typeof tool.name === 'string'), true)
+  check('the shell schema is the official one', body.tools.find(tool => tool.name === 'shell').parameters.required, ['command'])
+  check('the placeholder note lands in instructions', /placeholders that do nothing/.test(String(body.instructions)), true)
+
+  const caller = { tools: [flatTool('shell')] }
+  applyFingerprint(caller, true)
+  check('a conflicting caller shell is aliased here too', declared(caller), ['shell_client', 'read', 'shell'])
+}
+
+console.log('\n=== 9. the injected definitions are byte-for-byte the official ones ===')
+{
+  // The gate compares description and parameters, so a reworded copy is a 403
+  // even though the name is right. These are the invariants a careless edit breaks.
+  const body = {}
+  applyFingerprint(body, false)
+  const read = body.tools.find(tool => tool.function.name === 'read').function
+  const shell = body.tools.find(tool => tool.function.name === 'shell').function
+  check('read description opens the official way', read.description.startsWith('Read the contents of a file or directory.'), true)
+  check('read properties are exactly path/offset/limit', Object.keys(read.parameters.properties), ['path', 'offset', 'limit'])
+  check('shell description opens the official way', shell.description.startsWith('Execute a shell command and return its output.'), true)
+  check('shell properties are exactly command/workdir/timeout/background', Object.keys(shell.parameters.properties), ['command', 'workdir', 'timeout', 'background'])
+  check('the two names are the gate set', [...FINGERPRINT_TOOLS], ['read', 'shell'])
 }
 
 console.log(failures === 0 ? '\nall fingerprint checks passed' : `\n${failures} fingerprint check(s) failed`)

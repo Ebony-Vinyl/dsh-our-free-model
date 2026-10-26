@@ -1,0 +1,42 @@
+{
+  "files": [
+    {
+      "name": "index.html",
+      "bytes": 9336,
+      "gzip": 3665
+    },
+    {
+      "name": "_ofm-provider-list-pivkrBvn.js",
+      "bytes": 2510,
+      "gzip": 1197
+    },
+    {
+      "name": "app.css",
+      "bytes": 69210,
+      "gzip": 13742
+    },
+    {
+      "name": "app.js",
+      "bytes": 255872,
+      "gzip": 87658
+    },
+    {
+      "name": "channels-CTU3VLwS.js",
+      "bytes": 236049,
+      "gzip": 92577
+    },
+    {
+      "name": "models-BKANfkjf.js",
+      "bytes": 37388,
+      "gzip": 12266
+    }
+  ],
+  "total": {
+    "bytes": 610365,
+    "gzip": 211105
+  },
+  "initial": {
+    "bytes": 334418,
+    "gzip": 105065
+  }
+}

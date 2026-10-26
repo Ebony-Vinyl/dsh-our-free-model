@@ -76,7 +76,7 @@ export function detectSealedHost({ env = process.env, execPath = process.execPat
     && /resources[\\/]+node[\\/]+node\.exe$/i.test(String(execPath ?? ''))
     && (Array.isArray(argv) ? argv : []).includes('web-desktop')) return FLAVOR_AIO
   if (profileName === 'web' || profileName === 'web-desktop') return FLAVOR_WEB
-  if (profileName === 'desktop') return FLAVOR_HARNESS
+  if (profileName === 'desktop' || profileName === 'tauri') return FLAVOR_HARNESS
   return null
 }
 

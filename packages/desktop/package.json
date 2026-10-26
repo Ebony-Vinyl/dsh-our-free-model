@@ -1,0 +1,19 @@
+{
+  "name": "our-free-model-desktop",
+  "version": "2.7.1",
+  "description": "Our Free Model 独立服务的 Windows 桌面壳",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "prepare": "node ../../scripts/prepare-desktop.mjs",
+    "test": "node ../../scripts/desktop-test.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2"
+  },
+  "private": true
+}

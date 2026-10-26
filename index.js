@@ -26,25 +26,47 @@
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { FreeModelAdapter, ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
-import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, DATA_DIR_NAME, MIN_DECODE_MS, decodeWindow, migrateStats, pruneDays, recordTurn, recordUsage, resolveDshHome } from './src/store.js'
-import { buildCatalog, buildEacCatalog, isEacEntry, parseListing } from './src/catalog.js'
-import { STATE, detectEgress, probeCatalog } from './src/probe.js'
-import { generateKey, startForwardServer, startLanRelay, toOpenAiUsage } from './src/forward.js'
-import { CODE, UpstreamError, getJson } from './src/http.js'
-import { outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
-import { directFetch, fetchSealedListing } from './src/eac.js'
+import { externalUrl, openExternal } from './src/open-external.js'
+import { ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
+import { DATA_DIR_NAME, resolveDshHome, publicModelVisibility, validateModelVisibility, isModelHidden } from './src/store.js'
+import { isEacEntry, isKiloEntry } from './src/catalog.js'
+import { STATE } from './src/probe.js'
+import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
+import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
+import { CODE, UpstreamError } from './src/http.js'
+import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
+import { directFetch } from './src/eac.js'
+import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
+import { createEacLoginPoller } from './src/eac-login.js'
 import { unlockSealedLane } from './src/vault.js'
-import { mintRequestId, sessionForConversation } from './src/upstream.js'
-import { DEFAULT_LEVEL, budgetLadder } from './src/effort.js'
-import { windowTokens } from './src/stream.js'
+import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort.js'
+import { modelAvailability } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
+import { createPickStats } from './src/picks.js'
 import { PluginUpdater } from './src/updater.js'
 import { selfReload, watchPackage, isReloading } from './src/reload.js'
 import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
+import { buildAggregateCatalog, fetchProviderModels, isAggregateEntry, testProvider } from './src/aggregate.js'
+import { buildComboCatalog, COMBO_STRATEGIES, isComboEntry, normalizeCombos, pruneRotation } from './src/combos.js'
+import { getProvider, listProviders } from './src/providers/index.js'
+import { addSavings, describeSavingsTotal, emptySavings, saverConfig, savingsPercent } from './src/token-saver.js'
+import { CAVEMAN_LEVELS, PONYTAIL_LEVELS } from './src/token-saver.js'
+import { OPTIMIZATIONS } from './src/local-optimize.js'
+import { createModelRuntime, createRuntimeStores } from './src/core/runtime.js'
+import { createSubscriptions } from './src/subscriptions.js'
+import { createSubscriptionRuntime } from './src/subscription-completion.js'
+import { isSubscriptionEntry } from './src/subscription-adapter.js'
+import { createMagpieEngine } from './src/magpie-engine.js'
+import { createMagpieModels, combineSubscriptionRuntimes } from './src/magpie-models.js'
+import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from './src/disclaimer.js'
+
+export { fromOpenAiMessages } from './src/core/completion.js'
+import { buildStats } from './src/core/stats.js'
+export { buildStats }
 
 export const name = 'our-free-model'
 
@@ -90,15 +112,8 @@ export const version = readPackageVersion()
  */
 export const inject = ['llm']
 
-/** Static fallback catalog, so a cold start with no network still lists models. */
-const FALLBACK_CATALOG = buildCatalog([
-  'mimo-v2.6-flash-free', 'mimo-v2.5-free', 'ling-3.0-flash-fin-free',
-  'nemotron-3-ultra-free', 'nemotron-3.5-lightning-free', 'space-bunny-free',
-  'muse-spark-1.3-contributor-free', 'muse-spark-1.2-contributor-free',
-])
-
 /** Where the plugin's own announcement copy lives; bump it to re-announce. */
-export const ANNOUNCEMENT_VERSION = '2026-09-25.1'
+export const ANNOUNCEMENT_VERSION = '2026-10-17.3'
 
 /**
  * Who owns the plugin's bytes — the distribution mode:
@@ -126,7 +141,7 @@ function distributionOf(config, settings) {
 export function apply(ctx, config) {
   const logger = ctx.logger ?? console
   const home = resolveDshHome()
-  const dataDir = path.join(home, DATA_DIR_NAME)
+  const dataDir = path.resolve(home, DATA_DIR_NAME)
   fs.mkdirSync(dataDir, { recursive: true })
   const packageVersion = version
 
@@ -137,12 +152,8 @@ export function apply(ctx, config) {
   const generation = (globalThis[Symbol.for('our-free-model.generation')] ?? 0) + 1
   globalThis[Symbol.for('our-free-model.generation')] = generation
 
-  const settings = new JsonStore(path.join(dataDir, 'settings.json'), SETTINGS_INITIAL, { log: message => logger.warn?.(message) })
-  const stats = new JsonStore(path.join(dataDir, 'stats.json'), STATS_INITIAL, { log: message => logger.warn?.(message) })
-  const availability = new JsonStore(path.join(dataDir, 'availability.json'), { version: 1, at: 0, egress: null, results: {} }, { log: message => logger.warn?.(message) })
-  const catalogStore = new JsonStore(path.join(dataDir, 'catalog.json'), { version: 1, at: 0, entries: FALLBACK_CATALOG.map(entry => entry.id) }, { log: message => logger.warn?.(message) })
-
-  if (stats.get().version !== STATS_VERSION) stats.edit(migrateStats)
+  const stores = createRuntimeStores({ dataDir, logger })
+  const { settings, stats, availability } = stores
 
   if (generation > 1) {
     settings.update({ reloadedAt: Date.now(), reloadCount: generation - 1 })
@@ -153,9 +164,6 @@ export function apply(ctx, config) {
   const distribution = distributionOf(config, settings)
   const managed = distribution === 'managed'
 
-  let catalog = materializeCatalog(catalogStore.get().entries ?? [])
-  let attributionUserAgent = 'deepseek-harness'
-  let egress = availability.get().egress ?? null
   let forward = null
   let forwardError = ''
   // Non-fatal: the listener is up, but not where the settings asked for it.
@@ -169,16 +177,14 @@ export function apply(ctx, config) {
   let outletError = ''
   /** Last reading of the outlet's own view of itself, cached for `/summary`. */
   let outletNode = { node: '', delayMs: 0, at: 0 }
-  /** How long the last successful listing round took over the current path. */
-  let gatewayLatency = { ms: 0, at: 0 }
 
   // ── the co-paid lane ────────────────────────────────────────────────────────
   /**
    * The sealed lane is invisible until the host gate passes and the seal opens,
    * both re-checked per use. Its roster persists under `sealIds` in the catalog
    * store so a desktop restart offline still shows what it served last. A host
-   * the gate refuses never reads that list — `sealedCatalog` starts and stays
-   * empty, and no entry, request, or error of the lane is observable — but the
+   * the gate refuses never exposes that list through the runtime, and no
+   * entry or request of the lane is observable — but the
    * persisted list survives the refusal, and the refusal itself is logged, so
    * an empty EAC group has a reason in the log instead of silence.
    */
@@ -187,9 +193,6 @@ export function apply(ctx, config) {
     return typeof context?.name === 'string' ? context.name : undefined
   }
   const sealedCredentialOf = () => unlockSealedLane({ profileName: profileNameOf() })
-  let sealedCatalog = sealedCredentialOf() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
-  const mergeCatalogs = () => { catalog = [...catalog, ...sealedCatalog.filter(row => !catalog.some(entry => entry.id === row.id))] }
-  mergeCatalogs()
 
   // ── the pool snapshot (settings-page gauge) ─────────────────────────────────
   // The co-paid gateway publishes aggregate, non-sensitive numbers (provisioned
@@ -236,6 +239,107 @@ export function apply(ctx, config) {
     }
   }
 
+  // ── the GitHub authorization gate on the co-paid lane ───────────────────────
+  // One per-user token (src/eac-user.js) is what the gateway's GitHub gate
+  // mints after login + star, and these four hops are the settings page's whole
+  // relationship with that gate. The token never reaches the browser: the page
+  // sees a login name and a verdict, the file and the signed wire keep the
+  // credential. `cached` is the sync bit /summary can carry.
+  const eacAuthCache = { at: 0, data: { available: false, authorized: false, login: '' } }
+  const eacAuthRootOf = credential => credential.base.replace(/\/v1\/?$/, '')
+  async function eacAuthStatus() {
+    const credential = sealedCredentialOf()
+    if (credential === null || credential.mode !== 'worker') {
+      return { available: false, authorized: false, login: '', mode: credential?.mode ?? null }
+    }
+    const local = readEacUser()
+    const base = {
+      available: true,
+      mode: 'worker',
+      local: local !== null,
+      login: local?.login ?? '',
+      avatar: local?.avatar ?? '',
+      savedAt: local?.savedAt ?? 0,
+    }
+    try {
+      const response = await directFetch(`${eacAuthRootOf(credential)}/auth/status`, {
+        headers: { accept: 'application/json', ...(local === null ? {} : { 'x-ofm-user': local.token }) },
+        signal: AbortSignal.timeout(15_000),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || data === null) throw new Error('bad answer')
+      const result = {
+        ...base,
+        configured: data.configured === true,
+        required: data.required === true,
+        authorized: data.authorized === true,
+        login: typeof data.login === 'string' && data.login !== '' ? data.login : base.login,
+        avatar: typeof data.avatar === 'string' && data.avatar !== '' ? data.avatar : base.avatar,
+        starred: data.starred === true,
+        lastCheck: Number.isFinite(data.lastCheck) ? data.lastCheck : 0,
+        reason: typeof data.reason === 'string' ? data.reason : null,
+        repo: typeof data.repo === 'string' ? data.repo : '',
+        checkedAt: Date.now(),
+      }
+      eacAuthCache.at = Date.now()
+      eacAuthCache.data = result
+      return result
+    } catch {
+      // The gateway did not answer: report what this machine holds, marked
+      // unverified, rather than claiming an authorization nobody confirmed.
+      const fallback = { ...base, authorized: local !== null, unverified: true, checkedAt: Date.now() }
+      eacAuthCache.at = Date.now()
+      eacAuthCache.data = fallback
+      return fallback
+    }
+  }
+  const eacLoginPoller = createEacLoginPoller({
+    credentialOf: sealedCredentialOf, fetch: directFetch,
+    readUser: readEacUser, writeUser: writeEacUser,
+    onSaved: saved => {
+      eacAuthCache.data = { ...eacAuthCache.data, available: true, local: true, authorized: true, login: saved.login, avatar: saved.avatar, savedAt: saved.savedAt }
+    },
+  })
+  const eacAuth = {
+    /** Fresh read; the settings page calls this on mount and after actions. */
+    status: eacAuthStatus,
+    /** The last verdict, for the sync /summary document. */
+    cached: () => eacAuthCache.data,
+    /** Begin a login: mint the link code, hand the URL to the system browser. */
+    async start() {
+      const credential = sealedCredentialOf()
+      if (credential === null || credential.mode !== 'worker') return { error: 'no-lane' }
+      const link = crypto.randomBytes(24).toString('base64url')
+      const url = `${eacAuthRootOf(credential)}/auth/github/start?link=${link}`
+      const prepared = await eacLoginPoller.prepare(link)
+      if (prepared.error !== undefined) return prepared
+      return { url, link, opened: await openExternal(url) }
+    },
+    /** Collect the token the browser flow just produced. */
+    poll: link => eacLoginPoller.poll(link),
+    cancel: link => eacLoginPoller.cancel(link),
+    /** Revoke server-side, then forget locally. Local removal is the part that
+     * must always happen — a gateway that cannot be reached must not leave the
+     * user logged in on this machine. */
+    async logout() {
+      eacLoginPoller.reset()
+      const credential = sealedCredentialOf()
+      const local = readEacUser()
+      if (local !== null && credential !== null && credential.mode === 'worker') {
+        try {
+          await directFetch(`${eacAuthRootOf(credential)}/auth/logout`, {
+            method: 'POST',
+            headers: { accept: 'application/json', 'x-ofm-user': local.token },
+            signal: AbortSignal.timeout(8000),
+          })
+        } catch { /* local removal below is what the user asked for */ }
+      }
+      const cleared = clearEacUser()
+      eacAuthCache.data = { available: credential !== null && credential.mode === 'worker', authorized: false, login: '', local: false }
+      return { ok: cleared }
+    },
+  }
+
   // ── push channel ────────────────────────────────────────────────────────────
   const push = createPushHub({ logger })
 
@@ -252,6 +356,14 @@ export function apply(ctx, config) {
     log: message => logger.info?.(message),
   })
   feed.load()
+
+  // The recommendation page's star counts. Not part of the feed: the feed is
+  // the owner's channel to the user, this is a read of GitHub's public numbers,
+  // and a failure here only ever costs the page its figures.
+  const picks = createPickStats({
+    cacheFile: path.join(dataDir, 'picks.json'),
+    log: message => logger.info?.(message),
+  })
 
   /**
    * The announcement view the settings page reads. A managed install polls no
@@ -300,45 +412,37 @@ export function apply(ctx, config) {
     }
   }
 
-  /** The immutable snapshot every adapter call binds to. */
-  const state = () => ({
-    catalog,
-    membership: computeMembership(catalog, availability.get(), settings.get()),
-    settings: settings.get(),
-    attributionUserAgent,
+  const magpieEngine = createMagpieEngine({ dataDir, logger })
+  const magpieModels = createMagpieModels({
+    engine: magpieEngine, stats, logger,
+    onChanged: () => modelRuntime.syncAggregateCatalog(),
   })
-
-  /** A turn refused for geography means the egress moved; re-classify promptly. */
-  let reprobeTimer
-  function scheduleReprobe() {
-    if (disposed || reprobeTimer !== undefined) return
-    reprobeTimer = setTimeout(() => {
-      reprobeTimer = undefined
-      // Teardown clears this handle, but the trigger comes from a turn that can
-      // land the instant after `disposed` was set; a forced round against
-      // disposed stores would be swallowed whole and still spend the quota.
-      if (disposed) return
-      void refreshAvailability(true)
-        .catch(error => logger.warn?.(`our-free-model: region reprobe failed (${error?.message ?? error})`))
-    }, 4000)
-    reprobeTimer.unref?.()
+  let subscriptions
+  let subscriptionRuntime
+  try {
+    subscriptions = createSubscriptions({ dataDir })
+    subscriptionRuntime = createSubscriptionRuntime({ subscriptions, stats, logger })
+  } catch {
+    // A broken private sidecar must not disable the anonymous model lane.
+    subscriptions = undefined
+    logger.warn?.('our-free-model: private subscription storage is unavailable')
   }
-
-  const adapter = new FreeModelAdapter({
-    state,
+  subscriptionRuntime = combineSubscriptionRuntimes(magpieModels, subscriptionRuntime)
+  const modelRuntime = createModelRuntime({
+    ...stores,
+    logger,
+    subscriptionRuntime,
+    attributionUserAgent: 'deepseek-harness',
     resolveImage: imageResolver(ctx, logger),
     sealedCredential: sealedCredentialOf,
-    recordUsage: record => {
-      recordUsage(stats, record)
-      stats.edit(state => pruneDays(state, 120))
-    },
-    recordTurn: record => recordTurn(stats, record),
-    warn: message => logger.warn?.(message) ?? logger.log?.(message),
-    onRegionBlocked: () => scheduleReprobe(),
+    onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
+    onTopology: () => emitTopology(),
   })
+  const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
+  const runForwarded = modelRuntime.complete
 
   // ── registration ────────────────────────────────────────────────────────────
-  const routes = () => Object.keys(computeMembership(catalog, availability.get(), settings.get()))
+  const routes = () => Object.keys(state().membership)
   const registration = ctx.llm.registerAdapter([ROUTE_MAIN, ROUTE_REGION], adapter)
   ctx.llm.registerConfigurableProviders?.([
     { provider: ROUTE_MAIN, displayName: ROUTE_LABELS[ROUTE_MAIN], settingsNs: ctx.fiber?.entry?.options?.id ?? name, settingsPath: [] },
@@ -347,11 +451,12 @@ export function apply(ctx, config) {
   // Advertise a probe endpoint for the in-app "detect models" button. It offers
   // what the picker itself advertises — a model the gateway refuses to route at
   // all must not be addable to a profile just because it still appears in the
-  // upstream listing.
+  // upstream listing. Automatic availability probing is disabled by owner
+  // policy, so discovery refreshes the listing only.
   ctx.llm.registerModelDiscovery?.(ctx.fiber?.entry?.options?.id ?? name, async () => {
-    await refreshCatalog({ probe: true, force: true })
+    await refreshCatalog({ probe: false, force: true })
     const advertised = new Set(Object.values(state().membership).flat())
-    return catalog
+    return modelRuntime.catalog
       .filter(entry => advertised.has(entry.id))
       .map(entry => ({
         id: entry.id,
@@ -366,200 +471,10 @@ export function apply(ctx, config) {
     registration.replace(routes())
   })
 
-  // ── catalog + availability ──────────────────────────────────────────────────
-  // One round at a time, coalesced: the boot refresh, a model discovery, and
-  // the refresh button all arrive together at startup, and each used to fetch
-  // the listing and probe the lane on its own. A forced round covers every
-  // waiter; one that still needs forcing (a reprobe inside the 429 backoff,
-  // where an unforced round deliberately skips the probe) runs its own after
-  // the shared round rather than inheriting its softer options.
-  let catalogRefresh = null
-  let catalogRefreshForced = false
-  async function refreshCatalog(opts) {
-    const { probe = true, force = false } = opts ?? {}
-    while (catalogRefresh !== null) {
-      const shared = catalogRefresh
-      const sharedForced = catalogRefreshForced
-      const value = await shared
-      if (!force || sharedForced) return value
-    }
-    const run = refreshCatalogOnce({ probe, force })
-    catalogRefresh = run
-    catalogRefreshForced = force
-    try { return await run } finally {
-      if (catalogRefresh === run) { catalogRefresh = null; catalogRefreshForced = false }
-    }
-  }
-  async function refreshCatalogOnce({ probe, force }) {
-    let ids = []
-    try {
-      ids = parseListing(await fetchListing())
-    } catch (error) {
-      logger.warn?.(`our-free-model: model listing refresh failed (${error?.message ?? error}); keeping the cached catalog`)
-    }
-    if (ids.length > 0) {
-      catalog = buildCatalog(ids)
-      catalogStore.update({ at: Date.now(), entries: catalog.map(entry => entry.id) })
-      catalogStore.flush()
-      settings.update({ catalogSyncedAt: Date.now() })
-    } else {
-      catalog = materializeCatalog(catalogStore.get().entries ?? [])
-    }
-    await refreshSealedRoster()
-    mergeCatalogs()
-    if (probe) await refreshAvailability(force)
-    emitTopology()
-    return catalog
-  }
-
-  /**
-   * One roster round for the sealed lane, after the free lane's.
-   *
-   * A transient listing failure keeps the roster it served last; a credential
-   * refusal means the lane is closed to this install, so the roster and its
-   * persisted ids are dropped — a picker full of models the relay now refuses
-   * is worse than an empty group with the failure in the log. Every log line
-   * carries the failure class only, never the endpoint or the credential.
-   *
-   * A host the gate refuses is different: the lane was never open here, so
-   * nothing this install did was wrong, and the persisted ids belong to a
-   * machine that may be back on the supported host tomorrow. They stay, and
-   * the refusal is logged — this branch used to wipe the cache in silence,
-   * which made every "the EAC models are gone" report undiscoverable.
-   */
-  async function refreshSealedRoster() {
-    const credential = sealedCredentialOf()
-    if (credential === null) {
-      sealedCatalog = []
-      // Web hosts are admitted too (issues #58/#59), so reaching here means the
-      // kernel gave no profile context at all — an embedding this lane is not
-      // published for, not a misconfigured desktop or web install.
-      logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden')
-      return
-    }
-    try {
-      const ids = parseListing(await fetchSealedListing(credential))
-      if (ids.length > 0) {
-        sealedCatalog = buildEacCatalog(ids)
-        catalogStore.update({ sealIds: sealedCatalog.map(entry => entry.id) })
-      }
-    } catch (error) {
-      if (error?.code === CODE.credential) {
-        sealedCatalog = []
-        catalogStore.update({ sealIds: [] })
-        logger.warn?.('our-free-model: the sealed lane refused its credential; its models are hidden until it is accepted again')
-        return
-      }
-      logger.warn?.(`our-free-model: sealed lane listing failed (${error?.code ?? 'unknown'}); keeping its cached roster`)
-    }
-  }
-
-  async function fetchListing() {
-    // Read straight from the listing path rather than the probe helper: a listing
-    // needs no session identity, and a failure should be a plain throw. Through
-    // `getJson` so the base URL stays the one override every other request uses.
-    const started = Date.now()
-    const listing = await getJson('/zen/v1/models', {
-      session: sessionForConversation('catalog:our-free-model'),
-      requestId: mintRequestId(),
-      attributionUserAgent,
-    })
-    // The one number that answers "how far away is opencode right now": the
-    // listing is the cheapest call that proves the whole path, and it goes
-    // through `egressFetch` like every other gateway request.
-    gatewayLatency = { ms: Date.now() - started, at: Date.now() }
-    return listing
-  }
-
-  async function runProbeRound() {
-    // The sealed lane gets no per-model probes: its verdicts would be spent
-    // against a different relay, and a roster the listing named is advertised
-    // as-is (its health is the listing round's, refreshed on the same cadence).
-    const probeable = catalog.filter(entry => !isEacEntry(entry))
-    const results = await probeCatalog(probeable, { attributionUserAgent }, (id, result) => {
-      availability.edit(state => ({ ...state, results: { ...state.results, [id]: { state: result.state, ...result.detail === undefined ? {} : { detail: result.detail }, ...result.ttftMs === undefined ? {} : { ttftMs: result.ttftMs }, latencyMs: result.latencyMs, at: Date.now() } } }))
-    }, 2)
-    availability.update({ at: Date.now(), egress })
-    availability.flush()
-    // Say it out loud when a round refuses everything: `computeMembership` keeps
-    // the roster advertised in that case, and without this line the log would
-    // read as a healthy probe while the gateway was turning every model down.
-    const verdicts = Object.values(results)
-    if (verdicts.length > 0 && verdicts.every(row => row.state === STATE.unavailable)) {
-      logger.warn?.(`our-free-model: the gateway refused all ${verdicts.length} models this round (${verdicts[0].detail ?? 'no detail'}); keeping them advertised`)
-    }
-    // A round the lane answered with nothing but 429s is the lane saying "this
-    // egress is out of quota". The probe draws from the same per-IP pool as the
-    // user's turns, so answering "how full is the pool?" by draining it again
-    // every period makes the shortage permanent. Back the next periodic round
-    // off (doubling, capped) and let real traffic — a manual reprobe, an egress
-    // change, the boot round — through regardless: those are worth their cost.
-    const allThrottled = verdicts.length > 0 && verdicts.every(row => row.state === STATE.throttled)
-    probeThrottleStreak = allThrottled ? probeThrottleStreak + 1 : 0
-    probeBackoffUntil = allThrottled
-      ? Date.now() + Math.min(30 * 2 ** (probeThrottleStreak - 1), 120) * 60_000
-      : 0
-    if (allThrottled) {
-      logger.warn?.(`our-free-model: the probe round hit the lane's quota; availability probes pause for ${Math.round((probeBackoffUntil - Date.now()) / 60_000)} minutes (your own requests are unaffected, and the reprobe button forces a round)`)
-    }
-    emitTopology()
-    return results
-  }
-
-  /**
-   * One catalog round at a time, for every caller.
-   *
-   * Four things start a round: the periodic catalog loop, the 2-minute egress
-   * watch, a mid-turn `RegionError`, and the two settings buttons. Each awaited a
-   * fresh `probeCatalog`, so a slow round and a trigger arriving during it ran
-   * whole catalogs side by side — against a lane whose 429 carries a growing
-   * `retry-after`, that is the user's own quota spent on the same question. A
-   * caller that arrives mid-round joins the round in flight instead of starting
-   * another, which is what the feed poll above already does.
-   *
-   * `force` is for the callers whose round is worth its quota no matter what the
-   * lane just said: a manual reprobe, the boot round, an egress change. The
-   * periodic loop passes nothing and is the one that gets held off while a
-   * quota-backoff window is open (see {@link runProbeRound}).
-   */
-  let probeRound = null
-  let probeThrottleStreak = 0
-  let probeBackoffUntil = 0
-  async function refreshAvailability(force = false) {
-    if (!force && probeBackoffUntil > Date.now()) return {}
-    if (probeRound !== null) return probeRound
-    const round = runProbeRound()
-    probeRound = round
-    try {
-      return await round
-    } finally {
-      if (probeRound === round) probeRound = null
-    }
-  }
-
-
-  /** Returns whether the exit could actually be read, not just whether it moved. */
-  async function watchEgress() {
-    const seen = await detectEgress()
-    if (seen === undefined) return false
-    const previous = availability.get().egress
-    const changed = previous === null || previous === undefined
-      || previous.ip !== seen.ip || (seen.country !== undefined && previous.country !== seen.country)
-    egress = seen
-    if (changed) {
-      availability.update({ egress: seen })
-      availability.flush()
-      logger.info?.(`our-free-model: egress changed to ${seen.ip}${seen.country ? ` (${seen.country})` : ''}; re-probing availability`)
-      await refreshAvailability(true)
-    }
-    return true
-  }
-
   /**
    * A freshly started outlet needs a moment before its nodes carry traffic: the
-   * first read comes back empty, and a re-probe fired on that cold path would
-   * record "unavailable" for models the new exit would have unlocked. Retry a
-   * few times and let the re-probe run only once the exit answers.
+   * first read comes back empty. Retry a few times so the settings page gets a
+   * reading; no availability probe is fired here (automatic probing is off).
    */
   async function settleOutletWatch() {
     let lastError
@@ -611,7 +526,7 @@ export function apply(ctx, config) {
     // resetting whatever request was in flight on the old socket.
     if (forward !== null && wanted
       && forward.host === (desired.host || '127.0.0.1')
-      && forward.port === (Number.isFinite(Number(desired.port)) ? Number(desired.port) : 0)) return
+      && forward.requestedPort === (Number.isFinite(Number(desired.port)) ? Math.trunc(Number(desired.port)) : 0)) return
     if (forward === null && !wanted) return
     if (forward !== null) {
       const closing = forward
@@ -639,25 +554,19 @@ export function apply(ctx, config) {
         },
         complete: (request, onChunk) => runForwarded(request, onChunk),
         modelRows: () => publicModelRows(),
+        // Read per request, not captured: the settings page can flip a switch
+        // while the listener is up, and a captured snapshot would keep answering
+        // a disabled optimization until the next restart.
+        optimize: () => optimizeConfig(settings.get().localOptimize),
         log: message => logger.warn?.(`our-free-model forward: ${message}`),
         onTrace: event => logger.info?.(`our-free-model request: ${JSON.stringify(event)}`),
       })
       forwardError = ''
-      // The requested port is somebody else's for good — a `netsh interface
-      // portproxy` rule outlives this plugin, and on Windows it surfaces as
-      // EACCES on a loopback bind. `startForwardServer` walks to a free port
-      // rather than leaving the feature down; the port it settled on is what
-      // gets persisted below, and this notice is what says so.
+      // Keep the requested configuration; the bound port belongs to runtime state.
       forwardNotice = forward.fellBack === true && forward.bindError !== null
         ? `port ${forward.requestedPort} is not available on this machine (${forward.bindError.code}); the listener is on port ${forward.port} instead`
         : ''
       if (forwardNotice !== '') logger.warn?.(`our-free-model forward: ${forwardNotice}`)
-      // Persist the port that actually answers, but out of the CURRENT
-      // settings - not the desired snapshot from before the await. An
-      // overlapped save would otherwise be rolled back to entry-time values.
-      const settledForward = settings.get().forward ?? {}
-      settings.update({ forward: { ...settledForward, port: forward.port, host: forward.host || desired.host || '127.0.0.1' } })
-      settings.flush()
     } catch (error) {
       forwardError = String(error?.message ?? error)
       logger.warn?.(`our-free-model: forward listener could not start (${forwardError})`)
@@ -687,15 +596,16 @@ export function apply(ctx, config) {
     return minted
   }
 
-  /** IPv4 addresses another machine on this network could dial. */
+  /**
+   * IPv4 addresses another machine on this network could dial, best first.
+   *
+   * Read fresh on every ask — the panel polls it while the relay is on — because
+   * the answer is a property of the machine's interfaces and they change under a
+   * laptop that switched networks. The ordering lives in `rankLanAddresses`
+   * (`src/forward.js`), next to the relay it describes.
+   */
   function lanAddresses() {
-    const out = []
-    for (const entries of Object.values(os.networkInterfaces())) {
-      for (const entry of entries ?? []) {
-        if (entry.family === 'IPv4' && entry.internal !== true) out.push(entry.address)
-      }
-    }
-    return out
+    return rankLanAddresses(os.networkInterfaces())
   }
 
   /**
@@ -772,6 +682,120 @@ export function apply(ctx, config) {
     }
   }
 
+  // ── the channels' gateway relay ─────────────────────────────────────────────
+  /**
+   * The absorbed pack serves every 白嫖 provider through one OpenAI-compatible
+   * gateway on the loopback. The relay is this plugin's own door in front of
+   * it: callers authenticate with `chanGateway.relay.key` and the forwarded
+   * hop is re-stamped with the gateway's own credential, which never leaves
+   * the host. Off until asked for; the settings page owns the switch.
+   */
+  let chanRelay = null
+  let chanRelayError = ''
+  let chanRelaySyncInFlight = null
+
+  function chanRelayKey() {
+    const relay = settings.get().chanGateway?.relay ?? {}
+    if (typeof relay.key === 'string' && relay.key !== '') return relay.key
+    const minted = generateKey()
+    settings.update({ chanGateway: { ...(settings.get().chanGateway ?? {}), relay: { ...(settings.get().chanGateway?.relay ?? {}), key: minted } } })
+    settings.flush()
+    return minted
+  }
+
+  function rotateChanRelayKey() {
+    const minted = generateKey()
+    settings.update({ chanGateway: { ...(settings.get().chanGateway ?? {}), relay: { ...(settings.get().chanGateway?.relay ?? {}), key: minted } } })
+    settings.flush()
+    return minted
+  }
+
+  /** The gateway's address and credential, read fresh: both can move (env). */
+  function chanGatewayTarget() {
+    return {
+      port: chanGatewayPort(process.env),
+      enabledByEnv: chanGatewayEnabled(process.env),
+      credential: chanGatewayCredential({ profileContext: optional('profileContext'), env: process.env }),
+    }
+  }
+
+  async function syncChanRelay() {
+    while (chanRelaySyncInFlight !== null) await chanRelaySyncInFlight.catch(() => {})
+    const run = syncChanRelayOnce()
+    chanRelaySyncInFlight = run
+    try { await run } finally { if (chanRelaySyncInFlight === run) chanRelaySyncInFlight = null }
+  }
+  async function syncChanRelayOnce() {
+    const relay = settings.get().chanGateway?.relay ?? {}
+    const wanted = relay.enabled === true
+    const host = String(relay.host ?? '').trim() || '127.0.0.1'
+    const port = Number.isFinite(Number(relay.port)) && Number(relay.port) > 0 ? Math.trunc(Number(relay.port)) : 0
+    const target = chanGatewayTarget()
+    if (chanRelay !== null && wanted && chanRelay.host === host && chanRelay.port === port) return
+    if (chanRelay === null && !wanted) return
+    if (chanRelay !== null) {
+      const closing = chanRelay
+      chanRelay = null
+      await closing.close().catch(() => {})
+    }
+    if (!wanted) { chanRelayError = ''; return }
+    if (port !== 0 && target.port === port) {
+      chanRelayError = 'the relay needs a port of its own (the gateway listens on ' + target.port + ')'
+      logger.warn?.(`our-free-model: channel gateway relay not started (${chanRelayError})`)
+      return
+    }
+    try {
+      chanRelay = await startChanRelay({
+        config: () => {
+          const current = settings.get().chanGateway?.relay ?? {}
+          const targetNow = chanGatewayTarget()
+          return {
+            enabled: current.enabled === true,
+            host: String(current.host ?? '').trim() || '127.0.0.1',
+            port: current.port ?? 0,
+            lanKey: chanRelayKey(),
+            gatewayHost: '127.0.0.1',
+            gatewayPort: targetNow.port,
+            gatewayKey: targetNow.credential?.key ?? '',
+          }
+        },
+        log: message => logger.warn?.(`our-free-model channel relay: ${message}`),
+      })
+      chanRelayError = ''
+      // The bound port goes back into the settings, so the page shows the
+      // address that actually answers (the OS picks when 0 was asked for).
+      const settled = settings.get().chanGateway ?? {}
+      settings.update({ chanGateway: { ...settled, relay: { ...(settled.relay ?? {}), port: chanRelay.port } } })
+      settings.flush()
+    } catch (error) {
+      chanRelayError = String(error?.message ?? error)
+      logger.warn?.(`our-free-model: channel gateway relay could not start (${chanRelayError})`)
+    }
+  }
+
+  function chanRelayStatus() {
+    const relay = settings.get().chanGateway?.relay ?? {}
+    const target = chanGatewayTarget()
+    return {
+      relay: {
+        enabled: relay.enabled === true,
+        running: chanRelay !== null,
+        host: chanRelay?.host ?? (String(relay.host ?? '').trim() || '127.0.0.1'),
+        port: chanRelay?.port ?? relay.port ?? 0,
+        hasKey: typeof relay.key === 'string' && relay.key !== '',
+        error: chanRelayError,
+      },
+      gateway: {
+        port: target.port,
+        enabledByEnv: target.enabledByEnv,
+        keyFound: target.credential !== null,
+        keyFromEnv: target.credential?.fromEnv === true,
+        keyPath: target.credential?.path ?? '',
+      },
+    }
+  }
+
+
   // ── egress outlet ───────────────────────────────────────────────────────────
   /** One gateway round trip at a time; the panel polls, the throttle decides. */
   let latencyMeasureInFlight = null
@@ -789,7 +813,7 @@ export function apply(ctx, config) {
    * reused here, throttled so a panel left open cannot turn into a loop.
    */
   async function measureGatewayLatency() {
-    if (gatewayLatency.at !== 0 && Date.now() - gatewayLatency.at < 60_000) return
+    if (modelRuntime.gatewayLatency.at !== 0 && Date.now() - modelRuntime.gatewayLatency.at < 60_000) return
     if (latencyMeasureInFlight !== null) return await latencyMeasureInFlight.catch(() => {})
     const run = fetchListing()
       .then(() => {})
@@ -816,8 +840,8 @@ export function apply(ctx, config) {
       node: selection?.node ?? '',
       nodeDelayMs: selection?.delayMs ?? 0,
       nodeAt: Date.now(),
-      latencyMs: gatewayLatency.ms,
-      latencyAt: gatewayLatency.at,
+      latencyMs: modelRuntime.gatewayLatency.ms,
+      latencyAt: modelRuntime.gatewayLatency.at,
     }
   }
   // Same serialisation gate as the two listeners above: the boot chain and every
@@ -910,80 +934,6 @@ export function apply(ctx, config) {
     outletRestartTimer.unref?.()
   }
 
-  /**
-   * Run one forwarded OpenAI request through the adapter.
-   *
-   * The caller's spelling is translated into harness messages, and the resulting
-   * chunk stream is handed straight back to the caller's callback while an
-   * outcome summary accumulates for the non-streaming path.
-   */
-  async function runForwarded(request, onChunk) {
-    const entry = catalog.find(candidate => candidate.id === request.model)
-    // OpenAI semantics: a model the roster does not carry is the caller's
-    // mistake (404 model_not_found), not the gateway's — a 502 here read as
-    // "the plugin is broken" to every client that inspects the status. The same
-    // gate as `/v1/models` below: a model the picker hides for having no route
-    // must not become dialable just by naming it in a request body.
-    if (entry === undefined || !routableModelIds().has(entry.id)) throw httpError(404, `model "${request.model}" not found`)
-    const openAi = request.openAi ?? {}
-    const messages = fromOpenAiMessages(openAi, request.responses === true, entry.id)
-    // The caller's defs reach the adapter in the harness's own flat spelling,
-    // and the adapter re-shapes them for the endpoint it picked. Pre-converting
-    // them here fed `{type,function:{…}}` wrappers back into that same
-    // conversion, which reads `tool.name`: every tool was dropped, the request
-    // went upstream with none, and the model answered "no tool is available"
-    // instead of calling the one the caller offered.
-    const tools = (openAi.tools ?? []).map(normalizeTool).filter(Boolean)
-    const handler = typeof onChunk === 'function' ? onChunk : () => {}
-    const outcome = { text: '', toolCalls: [], usage: undefined, truncated: false, error: undefined }
-
-    const options = {
-      provider: ROUTE_MAIN,
-      model: entry.id,
-      messages,
-      tools: tools.length > 0 ? tools : undefined,
-      ...typeof openAi.temperature === 'number' ? { temperature: openAi.temperature } : {},
-      ...typeof openAi.max_tokens === 'number' ? { maxTokens: openAi.max_tokens } : {},
-      ...typeof openAi.reasoning_effort === 'string' ? { reasoningEffort: openAi.reasoning_effort } : {},
-      sessionId: `forward:${String(openAi.user ?? openAi.conversation ?? 'shared')}`,
-      signal: request.signal,
-    }
-
-    for await (const chunk of adapter.stream(options, entry, state())) {
-      handler(chunk)
-      foldForwardOutcome(outcome, chunk)
-    }
-    // A max-tokens finish means the adapter judged a tool call unexecutable
-    // (arguments cut mid-JSON); keep the OpenAI answer consistent with its
-    // finish_reason by not reporting the broken call alongside `length`.
-    if (outcome.truncated === true) {
-      outcome.toolCalls = outcome.toolCalls.filter(call => {
-        try { JSON.parse(call.arguments === '' ? '{}' : call.arguments); return true } catch { return false }
-      })
-    }
-    return outcome
-  }
-
-  /** What the picker selects and the forward port may dial — one definition, two surfaces. */
-  function routableModelIds() {
-    const membership = new Set(state().membership[ROUTE_MAIN] ?? [])
-    if (settings.get().exposeRegionModels !== false) for (const id of state().membership[ROUTE_REGION] ?? []) membership.add(id)
-    return membership
-  }
-
-  function publicModelRows() {
-    const membership = routableModelIds()
-    return catalog
-      .filter(entry => membership.has(entry.id))
-      .map(entry => ({
-        id: entry.id,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'our-free-model',
-        ...entry.contextWindow === undefined ? {} : { context_window: entry.contextWindow },
-      }))
-  }
-
   // ── hot reload + in-app upgrade ─────────────────────────────────────────────
   /**
    * Swap the running plugin for the code on disk. Called for explicit reloads
@@ -1068,15 +1018,259 @@ export function apply(ctx, config) {
    * its own structural check instead of reading as "admitted".
    */
   const fenceConnection = connectionAdmissionView(() => optional('connection'))
+  // ── the absorbed free-channel pack ──────────────────────────────────────────
+  /**
+   * The 白嫖 channels — LobsterAI
+   * (有道), Qoder / Qoder CN (阿里系), TRAE (字节), Cline, Loomy (讯飞), Raccoon
+   * (商汤), MiniMax Code, ZCode (智谱) and Gemini (Google) — are
+   * carried with local integration adaptations from the plugin that shipped them, vendored under
+   * `vendor/channel-pack` (provenance in `vendor/channel-pack/NOTICE.md`). Mounting the
+   * pack keeps every login flow, account pool, credit claim, model blacklist
+   * and its local OpenAI gateway working as they were validated upstream,
+   * instead of being re-implemented here and drifting.
+   *
+   * The pack runs on a fiber of its own, after `credentials`, `commands` and
+   * `llm` exist. A composition without them — a headless TUI, the offline test
+   * harness — keeps the free lane and loses only the channels, the same trade
+   * this plugin makes for every optional service. `channelPack` is the state
+   * bit `/summary` reports so the page can say *why* the channel list is empty
+   * instead of showing nothing.
+   */
+  let channelPack = { state: 'pending', error: '' }
+  ctx.inject(['credentials', 'commands', 'llm'], scoped => {
+    let stopped = false
+    scoped.effect(() => () => { stopped = true }, 'our-free-model: channel pack')
+    // Dynamic import: the pack's own imports (the kernel's llm and credential
+    // modules) are host-provided, and a composition that lacks them must still
+    // load this plugin's free lane. `pack.js` is the bundled form of the
+    // vendored tree (see scripts/build-channel-pack.mjs) — one file, so the
+    // release manifest stays inside its file cap.
+    void import('./vendor/channel-pack/pack.js').then(pack => {
+      if (stopped) return
+      pack.apply(scoped, {
+        disableOpencode: true,
+        outlet: { active: egressActive, fetch: egressFetch },
+      })
+      channelPack = { state: 'ready', error: '' }
+      logger.info?.('our-free-model: free-channel pack mounted (10 account providers)')
+    }).catch(error => {
+      if (stopped) return
+      channelPack = { state: 'failed', error: String(error?.message ?? error).slice(0, 300) }
+      logger.warn?.(`our-free-model: free-channel pack unavailable (${channelPack.error})`)
+    })
+  })
+
   const logAdmissionRejection = surface => ({ status, source, reason }) => {
     // Fixed fields only: headers, request URLs and admission errors may contain
     // credentials. JSON API and SSE must report the same admission boundary.
     logger.warn?.(`our-free-model: ${surface} admission rejected status=${status} source=${source} reason=${reason}`)
   }
   const api = createApiRoutes({
-    settings, stats, availability, catalog: () => catalog, state,
+    settings, stats, availability, catalog: () => modelRuntime.catalog, state,
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress,
+    onVisibilityChanged: emitTopology,
     pool: fetchPoolSnapshot,
+    eacAuth,
+    picks,
+    magpieEngine,
+    magpieModels,
+    onEngineStarted: () => {
+      settings.update({ magpieEnabled: true })
+      settings.flush()
+    },
+    subscriptions,
+    onSubscriptionsChanged: syncAggregateCatalog,
+    // ── the aggregate lane's settings surface ────────────────────────────────
+    // The registry is static data; the configured half is the settings file with
+    // every key masked. Writing one provider rebuilds the catalog and re-emits
+    // the topology, because a provider the picker cannot see is a provider the
+    // user cannot use, and the picker is driven by `llm/adapters-updated`.
+    providers: {
+      registry: publicProviderRegistry,
+      configured: () => publicAggregate(settings.get().aggregate),
+      save: async patch => {
+        if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
+        const id = String(patch.providerId ?? '').trim()
+        const provider = getProvider(id)
+        if (provider === null) throw httpError(400, `unknown provider "${id}"`)
+        const section = settings.get().aggregate ?? {}
+        const providers = { ...(section.providers ?? {}) }
+        const previous = providers[id] ?? {}
+        const next = { ...previous, addedAt: Number.isFinite(previous.addedAt) && previous.addedAt > 0 ? previous.addedAt : Date.now() }
+        if (patch.enabled !== undefined) next.enabled = patch.enabled === true
+        // An absent field keeps the stored value; an empty string clears it. That
+        // is the difference between "the page did not touch the key" and "the user
+        // emptied the box", and conflating them silently kept a key the user
+        // believed they had removed.
+        if (typeof patch.apiKey === 'string') next.apiKey = patch.apiKey.trim().slice(0, 512)
+        if (typeof patch.baseUrl === 'string') {
+          const url = patch.baseUrl.trim()
+          if (url !== '' && !/^https?:\/\//i.test(url)) throw httpError(400, 'baseUrl must be an http(s) URL')
+          next.baseUrl = url.slice(0, 512)
+        }
+        if (Array.isArray(patch.models)) next.models = patch.models.map(value => String(value ?? '').trim()).filter(value => value !== '').slice(0, 300)
+        providers[id] = next
+        settings.update({ aggregate: { ...section, providers } })
+        settings.flush()
+        syncAggregateCatalog()
+        return publicAggregate(settings.get().aggregate)
+      },
+      remove: async id => {
+        const section = settings.get().aggregate ?? {}
+        const providers = { ...(section.providers ?? {}) }
+        delete providers[String(id ?? '').trim()]
+        settings.update({ aggregate: { ...section, providers } })
+        settings.flush()
+        syncAggregateCatalog()
+        return publicAggregate(settings.get().aggregate)
+      },
+      test: async id => {
+        const providerId = String(id ?? '').trim()
+        if (getProvider(providerId) === null) throw httpError(400, `unknown provider "${providerId}"`)
+        const result = await testProvider(settings.get().aggregate ?? {}, providerId)
+        // The verdict is persisted so the page can show "verified 3 minutes ago"
+        // without spending a probe on every mount. It is a reading, not a
+        // credential, so it rides the public section as-is.
+        const section = settings.get().aggregate ?? {}
+        const providers = { ...(section.providers ?? {}) }
+        if (providers[providerId] !== undefined) {
+          providers[providerId] = { ...providers[providerId], lastTest: { at: Date.now(), ok: result.ok === true, status: result.status ?? 0, message: String(result.message ?? '').slice(0, 300) } }
+          settings.update({ aggregate: { ...section, providers } })
+          settings.flush()
+        }
+        return result
+      },
+      discover: async id => {
+        const providerId = String(id ?? '').trim()
+        if (getProvider(providerId) === null) throw httpError(400, `unknown provider "${providerId}"`)
+        const ids = await fetchProviderModels(settings.get().aggregate ?? {}, providerId)
+        if (ids === null) return { models: null, note: 'this provider declares no model listing' }
+        const section = settings.get().aggregate ?? {}
+        const providers = { ...(section.providers ?? {}) }
+        if (providers[providerId] !== undefined) {
+          providers[providerId] = { ...providers[providerId], discovered: ids.slice(0, 300) }
+          settings.update({ aggregate: { ...section, providers } })
+          settings.flush()
+          syncAggregateCatalog()
+        }
+        return { models: ids }
+      },
+    },
+    // ── fallback chains ─────────────────────────────────────────────────────
+    combos: {
+      list: () => ({
+        combos: normalizeCombos(settings.get().combos),
+        // Every id a chain may reference, with the display name the picker uses —
+        // the editor offers a searchable list instead of a free-text field, so a
+        // typo cannot become a chain link that silently never resolves.
+        models: state().catalog.map(entry => ({
+          id: entry.id, name: entry.name, channel: entry.channel ?? 'free', vision: entry.vision === true,
+          contextWindow: entry.contextWindow, maxOutput: entry.maxOutput,
+        })),
+        usable: state().catalog.filter(isComboEntry).map(publicCombo),
+        strategies: [...COMBO_STRATEGIES],
+      }),
+      preview: patch => {
+        if (patch === null || typeof patch !== 'object' || !Array.isArray(patch.models)
+          || patch.models.length > 1000 || patch.models.some(id => typeof id !== 'string' || id.length > 300)) {
+          throw httpError(400, 'models must be an array of model ids')
+        }
+        const entries = buildComboCatalog(normalizeCombos([{ name: 'preview', models: patch.models }]), state().catalog)
+        return { capacity: entries.length ? publicCombo(entries[0]) : null }
+      },
+      save: async patch => {
+        if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
+        const rows = normalizeCombos(patch.combos)
+        // Stored as entered. Links that name nothing right now are kept on purpose:
+        // a chain that reaches an EAC model is still correct on a day the lane is
+        // closed, and dropping the link would quietly rewrite the user's chain.
+        settings.update({ combos: rows })
+        settings.flush()
+        const catalog = syncAggregateCatalog()
+        return { combos: rows, usable: catalog.filter(isComboEntry).map(publicCombo) }
+      },
+    },
+    // ── token savers ────────────────────────────────────────────────────────
+    tokenSaver: {
+      get: () => ({ ...publicTokenSaver(settings.get().tokenSaver), savings: buildStats(stats.get(), state().catalog).savings }),
+      set: async patch => {
+        if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
+        const current = settings.get().tokenSaver ?? {}
+        const prompts = { ...(current.prompts ?? {}) }
+        if (patch.prompts !== null && typeof patch.prompts === 'object') {
+          if (patch.prompts.caveman !== undefined) {
+            const level = String(patch.prompts.caveman)
+            if (!CAVEMAN_LEVELS.includes(level)) throw httpError(400, `caveman level must be one of ${CAVEMAN_LEVELS.join(', ')}`)
+            prompts.caveman = level
+          }
+          if (patch.prompts.ponytail !== undefined) {
+            const level = String(patch.prompts.ponytail)
+            if (!PONYTAIL_LEVELS.includes(level)) throw httpError(400, `ponytail level must be one of ${PONYTAIL_LEVELS.join(', ')}`)
+            prompts.ponytail = level
+          }
+        }
+        settings.update({ tokenSaver: {
+          ...current,
+          prompts,
+          ...patch.enabled === undefined ? {} : { enabled: patch.enabled === true },
+          ...patch.rtk === undefined ? {} : { rtk: patch.rtk === true },
+        } })
+        settings.flush()
+        return publicTokenSaver(settings.get().tokenSaver)
+      },
+    },
+    // ── the five local answers ──────────────────────────────────────────────
+    localOptimize: {
+      get: () => publicLocalOptimize(settings.get().localOptimize),
+      set: async patch => {
+        if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
+        const current = settings.get().localOptimize ?? {}
+        const next = { ...current }
+        if (patch.enabled !== undefined) next.enabled = patch.enabled === true
+        for (const kind of OPTIMIZATION_KINDS) if (patch[kind] !== undefined) next[kind] = patch[kind] === true
+        settings.update({ localOptimize: next })
+        settings.flush()
+        return publicLocalOptimize(settings.get().localOptimize)
+      },
+    },
+    // Connection recipes for the local gateway, generated from the live port and
+    // key so the page never shows a stale address after a port fallback.
+    clients: () => clientSnippets({
+      forward: { running: forward !== null, port: forward?.port ?? 0, lan: { running: relay !== null, port: relay?.port ?? 0, addresses: lanAddresses() } },
+      key: settings.get().forwardKey ?? '',
+      lanKey: settings.get().forwardLanKey ?? '',
+      models: publicModelRows().map(row => row.id),
+    }),
+    // The absorbed channel pack's liveness, for the 白嫖接入 page: the page
+    // renders its channel grid from this bit plus the pack's own RPC.
+    channels: () => channelPack,
+    chanRelay: {
+      status: chanRelayStatus,
+      apply: async patch => {
+        const current = settings.get().chanGateway ?? {}
+        const relay = { ...(current.relay ?? {}) }
+        if (patch === null || typeof patch !== 'object') throw httpError(400, 'the request body must be a JSON object')
+        if (patch.enabled !== undefined) relay.enabled = patch.enabled === true
+        if (patch.host !== undefined) {
+          const host = String(patch.host ?? '').trim()
+          if (host !== '' && host !== '127.0.0.1' && host !== 'localhost' && host !== '0.0.0.0' && host !== '::') {
+            throw httpError(400, 'host must be one of 127.0.0.1, localhost, 0.0.0.0, ::')
+          }
+          relay.host = host === 'localhost' ? '127.0.0.1' : host
+        }
+        if (patch.port !== undefined) {
+          const port = Number(patch.port)
+          if (!Number.isInteger(port) || port < 0 || port > 65535) throw httpError(400, 'port must be an integer between 0 and 65535')
+          relay.port = port
+        }
+        settings.update({ chanGateway: { ...current, relay } })
+        settings.flush()
+        await syncChanRelay()
+        return chanRelayStatus()
+      },
+      key: () => chanRelayKey(),
+      rotate: rotateChanRelayKey,
+    },
     // Whether the co-paid lane is open on this host at all — the settings page's
     // one-bit answer to "why do I see no EAC group" (issue #60). Reads the gate,
     // not the listing: a closed gate and a dead relay are different sentences.
@@ -1086,7 +1280,7 @@ export function apply(ctx, config) {
       port: forward?.port ?? 0,
       error: forwardError,
       notice: forwardNotice,
-      egress,
+      egress: modelRuntime.egress,
       lan: {
         running: relay !== null,
         port: relay?.port ?? 0,
@@ -1108,8 +1302,8 @@ export function apply(ctx, config) {
       node: outletNode.node,
       nodeDelayMs: outletNode.delayMs,
       nodeAt: outletNode.at,
-      latencyMs: gatewayLatency.ms,
-      latencyAt: gatewayLatency.at,
+      latencyMs: modelRuntime.gatewayLatency.ms,
+      latencyAt: modelRuntime.gatewayLatency.at,
       // `dead` is the managed mihomo dying after startup — surfaced through the
       // same field so the settings page shows why traffic fell back to direct.
       error: outletError !== '' ? outletError : (outletRelay?.dead ?? ''),
@@ -1130,45 +1324,7 @@ export function apply(ctx, config) {
       settings.flush()
       return minted
     },
-    testModel: async (id, effort) => {
-      const entry = catalog.find(candidate => candidate.id === id)
-      if (entry === undefined) throw new UpstreamError(`unknown model "${id}"`, CODE.server)
-      const started = Date.now()
-      let firstFrame
-      let sawReasoning = false
-      let text = ''
-      let usage
-      for await (const chunk of adapter.stream({
-        provider: ROUTE_MAIN,
-        model: entry.id,
-        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-        reasoningEffort: effort === undefined || effort === '' ? DEFAULT_LEVEL : effort,
-        sessionId: `bench:${entry.id}:${effort ?? DEFAULT_LEVEL}`,
-      }, entry, state())) {
-        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-call-delta') {
-          if (firstFrame === undefined) firstFrame = Date.now()
-          if (chunk.type === 'reasoning-delta') sawReasoning = true
-          if (chunk.type === 'text-delta') text += chunk.text
-        }
-        if (chunk.type === 'usage') usage = chunk.usage
-        if (chunk.type === 'finish' && chunk.reason.kind !== 'stop' && chunk.reason.kind !== 'tool-calls') {
-          throw new UpstreamError(chunk.reason.failure?.message ?? chunk.reason.kind, chunk.reason.failure?.code ?? CODE.server)
-        }
-      }
-      const ms = Date.now() - started
-      // Same rule as the recorded calls: the rate divides only by a window that
-      // actually covers the tokens in its numerator.
-      const measured = decodeWindow(firstFrame === undefined ? 0 : ms - firstFrame, windowTokens(usage, sawReasoning), true)
-      return {
-        model: entry.id, effort: effort ?? DEFAULT_LEVEL, ok: true,
-        totalMs: ms,
-        ttftMs: firstFrame === undefined ? ms : firstFrame - started,
-        outputTokens: usage?.outputTokens ?? 0,
-        reasoningTokens: usage?.reasoningTokens ?? 0,
-        tokensPerSecond: measured.tps,
-        sample: text.slice(0, 60),
-      }
-    },
+    testModel: (id, effort, options) => modelRuntime.testModel(id, effort, options),
     meta: () => ({
       version: packageVersion,
       distribution,
@@ -1212,6 +1368,9 @@ export function apply(ctx, config) {
     push,
     connection: fenceConnection,
     onAdmissionRejection: logAdmissionRejection('settings API'),
+    /** Read on every ask, so a machine that changed networks answers with the
+     *  interfaces it has now rather than the ones the relay started on. */
+    lanAddresses,
     logger,
   })
 
@@ -1257,12 +1416,25 @@ export function apply(ctx, config) {
 
   // ── boot + background loop ──────────────────────────────────────────────────
   ctx.effect(() => () => {
-    settings.dispose(); stats.dispose(); availability.dispose(); catalogStore.dispose()
+    magpieModels.close()
+    const closing = magpieEngine.close()
+    modelRuntime.dispose()
+    stores.dispose()
+    return closing
   }, 'our-free-model: stores')
+
+  ctx.effect(() => {
+    if (settings.get().magpieEnabled === true) {
+      void magpieEngine.start().then(() => magpieModels.refresh()).catch(() => {
+        logger.warn?.('our-free-model: model workspace could not resume')
+      })
+    }
+  }, 'our-free-model: model workspace')
 
   ctx.effect(() => () => {
     void forward?.close().catch(() => {})
     void relay?.close().catch(() => {})
+    void chanRelay?.close().catch(() => {})
     void outletRelay?.close().catch(() => {})
   }, 'our-free-model: forward listener')
 
@@ -1270,30 +1442,46 @@ export function apply(ctx, config) {
 
   ctx.effect(() => () => {
     disposed = true
+    eacLoginPoller.reset()
     // The geography-reprobe timer belongs to this generation; without this it
     // outlives teardown and fires a forced probe round after the stores it
     // reads have been disposed (the rejection gets swallowed, quota burned).
-    clearTimeout(reprobeTimer)
+    modelRuntime.dispose()
     push.dispose()
     watcher?.()
   }, 'our-free-model: push + watcher')
 
   ctx.effect(() => {
     void (async () => {
-      attributionUserAgent = await resolveAttributionUserAgent(logger)
+      modelRuntime.setAttributionUserAgent(await resolveAttributionUserAgent(logger))
       if (disposed) return
       // First: the catalog refresh and its probe round below go through
       // egressFetch, so the outlet must be carrying traffic before they run.
       await syncEgress()
       if (disposed) return
-      await refreshCatalog({ probe: true, force: true })
-      // Every await here is a chance for teardown to have run underneath this
-      // boot: a resumed refresh would start listeners the disposer already
-      // closed and force a probe round against stores it disposed.
-      if (disposed) return
+      // The listeners next, ahead of the round that goes out: they answer local
+      // sockets and nothing in them depends on the gateway. Binding them after
+      // the full listing + probe round meant a lane that stalled held the port
+      // down for the whole round — the settings page still said it was on, and
+      // it only started when the user clicked 应用, whose POST calls
+      // `syncForward()` by itself.
       await syncForward()
       if (disposed) return
       await syncRelay()
+      if (disposed) return
+      await syncChanRelay()
+      if (disposed) return
+      // Every await here is a chance for teardown to have run underneath this
+      // boot: a resumed refresh would force a probe round against stores it
+      // disposed. The round is boot's only network step, so it is the one held
+      // to a failure of its own — a throw here used to take the watcher, the
+      // topology event and the upgrade marker below down with it, reported as
+      // a single "startup refresh failed" line.
+      try {
+        await refreshCatalog({ probe: false, force: true })
+      } catch (error) {
+        logger.warn?.(`our-free-model: startup refresh failed (${error?.message ?? error})`)
+      }
       if (disposed) return
       syncWatcher()
       emitTopology()
@@ -1321,9 +1509,9 @@ export function apply(ctx, config) {
    * stopped the whole plugin from activating. `timer` is not worth declaring on a
    * headless composition, and the mixin adds nothing here beyond `setTimeout` plus
    * a disposer: it must not hold the process open, and `disposed` ends it when the
-   * fiber goes away. Without any loop the availability probe would run once at
-   * boot, so a model that throttled, recovered, or moved behind the region gate
-   * would keep the picker position it was first given.
+   * fiber goes away. Without any loop the catalog would be read once at boot,
+   * so a model added, removed or renamed upstream would keep its boot-time
+   * position until a manual refresh.
    */
   // `ms` may be a function: the period is re-read on every re-arm, so an
   // interval changed on the settings page takes effect from the next cycle
@@ -1347,14 +1535,14 @@ export function apply(ctx, config) {
       if (hours > 0) void updater.check().then(() => pushUpdate(false)).catch(() => {})
     }, () => positiveOr(settings.get().feedPollMinutes, 30, 5) * 60_000)
   }
-  // The probe period is in minutes, and one minute is the floor — a value of 0 or
-  // a negative one would otherwise spin. This used to read `Math.max(60, …)`,
-  // which floored every interval below an hour *including the shipped default of
-  // 15*, so the number on the settings page was silently ignored.
+  // Automatic availability probing is disabled by owner policy. This loop only
+  // refreshes the listing and reads the egress; the interval keeps its setting
+  // name for upgrade compatibility. `/reprobe` is the only path that still asks
+  // for a probe, and it is driven by a manual button.
   every(() => {
     void (async () => {
       await watchEgress()
-      await refreshCatalog({ probe: true })
+      await refreshCatalog({ probe: false })
     })().catch(error => logger.warn?.(`our-free-model: periodic refresh failed (${error?.message ?? error})`))
   }, () => positiveOr(settings.get().probeIntervalMinutes, 15, 1) * 60_000)
   // A failing egress watch means the network is down, which is worth one line —
@@ -1452,56 +1640,6 @@ function sanitizeSettings(patch, current) {
 }
 
 /**
- * Which route advertises which model, given the last probe.
- *
- * Region-gated models move to their dedicated route, and only while the user
- * wants them shown. Everything else sits on the main route, including models a
- * probe could not reach this round — a call that never got an answer is not a
- * verdict, and a flaky network must not empty the picker.
- *
- * A model the gateway named in its listing but refused to route at all is the
- * exception: it cannot answer any prompt, so advertising it trades the user's
- * turn for a guaranteed failure. Those come out of both routes until a later
- * probe reverses the verdict, which the periodic re-probe does by itself if the
- * lane brings the id back.
- *
- * A catalog entry with no verdict at all is normal, not an edge case: a fresh
- * install has no probe history until the boot round lands (one ping per model,
- * two at a time, each with a 45 second budget), and a model the listing just
- * added has none until the next one does. Such an entry is advertised — not
- * knowing is not the same as knowing it is refused.
- *
- * The one thing that may never happen is an empty result. Every model failing
- * the same way means the lane or the client fingerprint is broken, not that the
- * whole roster went away, and a picker with no models at all is worse than one
- * with a stale entry — so a round that refused everything is ignored, geography
- * grouping and all.
- */
-function computeMembership(catalog, availabilitySnapshot, settings) {
-  const results = availabilitySnapshot?.results ?? {}
-  const expose = settings?.exposeRegionModels !== false
-  const verdictOf = entry => results[entry.id]?.state
-  let usable = catalog.filter(entry => verdictOf(entry) !== STATE.unavailable)
-  if (catalog.length > 0 && usable.length === 0) usable = catalog
-  const main = []
-  const region = []
-  for (const entry of usable) {
-    const verdict = verdictOf(entry)
-    if (verdict !== STATE.regionBlocked) main.push(entry.id)
-    else if (expose) region.push(entry.id)
-  }
-  const membership = {}
-  if (main.length > 0) membership[ROUTE_MAIN] = main
-  if (region.length > 0) membership[ROUTE_REGION] = region
-  return membership
-}
-
-function materializeCatalog(ids) {
-  const rebuilt = buildCatalog(ids)
-  return rebuilt.length > 0 ? rebuilt : FALLBACK_CATALOG
-}
-
-/**
  * Resolve an image attachment into a data URL the provider can accept.
  *
  * The attachment service exposes a host path, not bytes; reading it here keeps the
@@ -1542,99 +1680,6 @@ function imageResolver(ctx, logger) {
   }
 }
 
-/** OpenAI request messages -> harness messages, for the forward listener.
- *  Exported for the suite, which pins the assistant `source` shape the v4
- *  session format requires (issue #62). */
-export function fromOpenAiMessages(body, isResponses, modelId) {
-  const out = []
-  const rows = isResponses
-    ? normaliseResponsesInput(body.input)
-    : (Array.isArray(body.messages) ? body.messages : [])
-  for (const row of rows) {
-    const role = row.role ?? 'user'
-    const content = []
-    if (typeof row.content === 'string') {
-      if (row.content !== '') content.push({ type: 'text', text: row.content })
-    } else if (Array.isArray(row.content)) {
-      for (const part of row.content) {
-        if (typeof part === 'string') { if (part !== '') content.push({ type: 'text', text: part }); continue }
-        const text = part?.text ?? part?.input_text ?? part?.output_text
-        if (typeof text === 'string' && text !== '') content.push({ type: 'text', text })
-        const image = part?.image_url?.url ?? part?.image_url
-        if (typeof image === 'string' && image !== '') {
-          content.push({ type: 'image', attachment: { attachmentId: `url:${image.slice(0, 64)}`, mediaType: 'image/png', bytes: 0, width: 0, height: 0, url: image } })
-        }
-      }
-    }
-    if (role === 'tool') {
-      out.push({ role: 'tool', content: [{ type: 'text', text: typeof row.content === 'string' ? row.content : JSON.stringify(row.content ?? '') }], toolCallId: row.tool_call_id ?? '', source: { kind: 'tool', callId: row.tool_call_id ?? '' } })
-      continue
-    }
-    if (role === 'assistant' && Array.isArray(row.tool_calls)) {
-      for (const call of row.tool_calls) {
-        content.push({ type: 'tool-call', id: call.id ?? '', name: call.function?.name ?? '', arguments: call.function?.arguments ?? '{}' })
-      }
-    }
-    if (content.length === 0) continue
-    out.push({
-      role: role === 'developer' ? 'developer' : role === 'system' ? 'system' : role === 'assistant' ? 'assistant' : 'user',
-      content,
-      // The v4 session format admits a `model` source only with its provider
-      // and model named (dsh-session refuses a bare one on restore), so the
-      // synthesized assistant rows carry the route they will stream through.
-      ...role === 'assistant' ? { source: { kind: 'model', provider: ROUTE_MAIN, model: String(modelId ?? '') } } : {},
-    })
-  }
-  return out
-}
-
-function normaliseResponsesInput(input) {
-  if (typeof input === 'string') return [{ role: 'user', content: input }]
-  if (!Array.isArray(input)) return []
-  return input.map(row => {
-    if (typeof row === 'string') return { role: 'user', content: row }
-    if (row.type === 'function_call') return { role: 'assistant', content: [], tool_calls: [{ id: row.call_id, function: { name: row.name, arguments: row.arguments } }] }
-    if (row.type === 'function_call_output') return { role: 'tool', content: String(row.output ?? ''), tool_call_id: row.call_id }
-    return row
-  })
-}
-
-function normalizeTool(tool) {
-  const name = tool?.name ?? tool?.function?.name
-  if (typeof name !== 'string' || name.trim() === '') return null
-  const parameters = tool?.parameters ?? tool?.function?.parameters ?? { type: 'object', properties: {} }
-  return { name, description: String(tool?.description ?? tool?.function?.description ?? ''), parameters }
-}
-
-function foldForwardOutcome(outcome, chunk) {
-  switch (chunk.type) {
-    case 'text-delta': outcome.text += chunk.text; break
-    case 'tool-call-delta': {
-      let call = outcome.toolCalls.find(candidate => candidate.slot === chunk.index)
-      if (call === undefined) { call = { slot: chunk.index, id: chunk.id ?? '', name: chunk.name ?? '', arguments: chunk.argumentsDelta ?? '' }; outcome.toolCalls.push(call) }
-      else call.arguments += chunk.argumentsDelta ?? ''
-      if (chunk.name) call.name = chunk.name
-      if (chunk.id) call.id = chunk.id
-      break
-    }
-    case 'block-end':
-      if (chunk.block?.type === 'tool-call') {
-        const existing = outcome.toolCalls.find(candidate => candidate.id === chunk.block.id)
-        if (existing === undefined) outcome.toolCalls.push({ slot: chunk.index, id: chunk.block.id, name: chunk.block.name, arguments: chunk.block.arguments })
-      }
-      break
-    case 'usage': outcome.usage = toOpenAiUsage(chunk.usage); break
-    case 'finish':
-      if (chunk.reason?.kind === 'max-tokens') outcome.truncated = true
-      // An aborted turn carries the same in-body nothing as an errored one; both
-      // are the caller's failure to report, not an empty completion.
-      if (chunk.reason?.kind === 'error' || chunk.reason?.kind === 'aborted') outcome.error = chunk.reason.failure?.message
-      break
-    default: break
-  }
-  return outcome
-}
-
 /**
  * The settings page's HTTP surface.
  *
@@ -1647,10 +1692,13 @@ function foldForwardOutcome(outcome, chunk) {
 /** The fixed failure classes the pool proxy may surface to the client. */
 const POOL_REASONS = new Set(['no-lane', 'gateway-status', 'malformed', 'unreachable'])
 
-function createApiRoutes(deps) {
+export function createApiRoutes(deps) {
   return async function handler(req, res) {
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const routePath = url.pathname.replace(/^\/api\/our-free-model/, '').replace(/\/+$/, '') || '/'
+    const marker = '/api/our-free-model'
+    const markerAt = url.pathname.indexOf(marker)
+    const apiPrefix = markerAt >= 0 ? url.pathname.slice(0, markerAt + marker.length) : marker
+    const routePath = url.pathname.slice(markerAt >= 0 ? apiPrefix.length : 0).replace(/\/+$/, '') || '/'
     const method = String(req.method ?? 'GET').toUpperCase()
     const rejection = rejectionFor(req, deps.connection, deps.onAdmissionRejection)
     const send = (status, payload) => {
@@ -1658,10 +1706,46 @@ function createApiRoutes(deps) {
       res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       res.end(body)
     }
-    if (rejection !== undefined) return send(rejection, {
+    // Sandboxed extension assets carry a per-run HMAC capability in their path.
+    // They have an opaque origin and cannot send the host's authentication.
+    // The engine validates the capability and serves only that plugin's files.
+    const pluginAsset = ['GET', 'HEAD'].includes(method)
+      && /^\/engine\/ui\/_magpie\/plugin\/[a-f0-9]{32}\/[^?]+$/.test(routePath)
+    if (pluginAsset && deps.magpieEngine?.status().state !== 'ready') {
+      return send(503, { error: 'Model workspace is unavailable' })
+    }
+    if (rejection !== undefined && !pluginAsset) return send(rejection, {
       error: rejection === 401 ? 'unauthorized' : rejection === 503 ? 'admission unavailable' : 'forbidden',
     })
     try {
+      if (routePath === '/engine/status' && method === 'GET') {
+        return send(200, deps.magpieEngine?.status() ?? { state: 'unavailable', available: false })
+      }
+      if (routePath === '/engine/start' && method === 'POST') {
+        if (!deps.magpieEngine) return send(503, { error: 'Model workspace is unavailable' })
+        await deps.magpieEngine.start()
+        await deps.magpieModels?.refresh()
+        deps.onEngineStarted?.()
+        return send(200, deps.magpieEngine.status())
+      }
+      if (routePath === '/engine/refresh' && method === 'POST') {
+        if (!deps.magpieEngine) return send(503, { error: 'Model workspace is unavailable' })
+        await deps.magpieModels?.refresh()
+        return send(200, { ok: true })
+      }
+      if (routePath === '/engine/ui' || routePath.startsWith('/engine/ui/')) {
+        if (!deps.magpieEngine) return send(503, { error: 'Model workspace is unavailable' })
+        // Authentication above applies to every asset and engine operation.
+        if (routePath === '/engine/ui' && !url.pathname.endsWith('/')) {
+          res.writeHead(302, { location: `${apiPrefix}/engine/ui/` + url.search })
+          return res.end()
+        }
+        res.once?.('finish', () => {
+          if (method === 'POST') void deps.magpieModels?.refresh().catch(() => {})
+        })
+        const upstreamPath = url.pathname.slice(`${apiPrefix}/engine/ui`.length) || '/'
+        return await deps.magpieEngine.proxy(req, res, upstreamPath + url.search)
+      }
       if (method === 'GET' && routePath === '/summary') {
         return send(200, buildSummary(deps))
       }
@@ -1671,8 +1755,119 @@ function createApiRoutes(deps) {
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())
       }
+      if (routePath === '/subscriptions' || routePath.startsWith('/subscriptions/')) {
+        const action = routePath.slice('/subscriptions'.length)
+        const mutations = { '/import': 'import', '/import-local': 'importLocal', '/quota': 'refreshQuota',
+          '/enabled': 'setEnabled', '/remove': 'remove' }
+        if (!(method === 'GET' && (action === '' || action === '/discover'))
+          && !(method === 'POST' && Object.hasOwn(mutations, action))) {
+          return send(404, { error: 'not found' })
+        }
+        if (!deps.subscriptions) return send(503, { error: 'Subscription support is unavailable' })
+        if (method === 'GET') {
+          return send(200, { accounts: action === '/discover'
+            ? await deps.subscriptions.discover() : deps.subscriptions.list() })
+        }
+        const body = await readJson(req)
+        if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+          throw httpError(400, 'Invalid subscription request')
+        }
+        const controller = new AbortController()
+        const abort = () => controller.abort()
+        res.once?.('close', abort)
+        try {
+          await deps.subscriptions[mutations[action]](action === '/quota'
+            ? { id: body.id, signal: controller.signal } : body)
+          if (action !== '/quota') deps.onSubscriptionsChanged?.()
+          if (!controller.signal.aborted) return send(200, { accounts: deps.subscriptions.list() })
+          return
+        } finally { res.removeListener?.('close', abort) }
+      }
+      // ── the aggregate lane ─────────────────────────────────────────────────
+      if (method === 'GET' && routePath === '/providers') {
+        const id = url.searchParams.get('id')
+        if (id !== null && id !== '') {
+          const provider = getProvider(id)
+          if (provider === null) return send(404, { error: `unknown provider "${id}"` })
+          return send(200, { provider, configured: publicAggregate(deps.settings.get().aggregate).providers[id] ?? null })
+        }
+        return send(200, { registry: deps.providers.registry(), configured: deps.providers.configured() })
+      }
+      if (method === 'POST' && routePath === '/providers') {
+        const body = await readJson(req)
+        return send(200, { ok: true, aggregate: await deps.providers.save(body) })
+      }
+      if (method === 'POST' && routePath === '/providers/remove') {
+        const body = await readJson(req)
+        return send(200, { ok: true, aggregate: await deps.providers.remove(body?.providerId) })
+      }
+      if (method === 'POST' && routePath === '/providers/test') {
+        const body = await readJson(req)
+        return send(200, await deps.providers.test(body?.providerId))
+      }
+      if (method === 'POST' && routePath === '/providers/discover') {
+        const body = await readJson(req)
+        return send(200, await deps.providers.discover(body?.providerId))
+      }
+      // ── fallback chains ────────────────────────────────────────────────────
+      if (method === 'GET' && routePath === '/combos') {
+        return send(200, deps.combos.list())
+      }
+      if (method === 'POST' && routePath === '/combos') {
+        const body = await readJson(req)
+        return send(200, { ok: true, ...await deps.combos.save(body) })
+      }
+      if (method === 'POST' && routePath === '/combos/preview') {
+        return send(200, deps.combos.preview(await readJson(req)))
+      }
+      // ── token savers ───────────────────────────────────────────────────────
+      if (method === 'GET' && routePath === '/token-saver') {
+        return send(200, deps.tokenSaver.get())
+      }
+      if (method === 'POST' && routePath === '/token-saver') {
+        const body = await readJson(req)
+        return send(200, { ok: true, tokenSaver: await deps.tokenSaver.set(body) })
+      }
+      // ── the five local answers ─────────────────────────────────────────────
+      if (method === 'GET' && routePath === '/local-optimize') {
+        return send(200, deps.localOptimize.get())
+      }
+      if (method === 'POST' && routePath === '/local-optimize') {
+        const body = await readJson(req)
+        return send(200, { ok: true, localOptimize: await deps.localOptimize.set(body) })
+      }
+      // ── connection recipes ─────────────────────────────────────────────────
+      if (method === 'GET' && routePath === '/clients') {
+        return send(200, deps.clients())
+      }
       if (method === 'GET' && routePath === '/meta') {
         return send(200, { ...deps.meta(), feed: { fetchedAt: deps.announcements.view().fetchedAt, source: deps.announcements.view().source, error: deps.announcements.view().error }, update: deps.update.status() })
+      }
+      if (method === 'POST' && routePath === '/eac/login/start') {
+        const started = await deps.eacAuth.start()
+        return send(started.error === undefined ? 200 : 404, started.error === undefined ? started : { error: started.error })
+      }
+      if (method === 'GET' && routePath === '/eac/login/poll') {
+        const polled = await deps.eacAuth.poll(url.searchParams.get('link') ?? '')
+        const status = polled.error === undefined ? 200 : polled.error === 'bad-link' ? 400 : polled.error === 'no-lane' ? 404 : 502
+        return send(status, polled)
+      }
+      if (method === 'POST' && routePath === '/eac/login/cancel') {
+        const cancelled = deps.eacAuth.cancel(url.searchParams.get('link') ?? '')
+        return send(cancelled.error === undefined ? 200 : 400, cancelled)
+      }
+      if (method === 'GET' && routePath === '/eac/status') {
+        return send(200, await deps.eacAuth.status())
+      }
+      if (method === 'POST' && routePath === '/eac/logout') {
+        return send(200, await deps.eacAuth.logout())
+      }
+      if (method === 'POST' && routePath === '/open-external') {
+        const target = externalUrl((await readJson(req))?.url)
+        if (target === null) return send(400, { error: 'bad-url' })
+        let opened = false
+        try { opened = await (deps.openExternal ?? openExternal)(target) === true } catch { /* manual link remains available */ }
+        return send(200, { ok: true, opened })
       }
       if (method === 'GET' && routePath === '/pool') {
         try { return send(200, await deps.pool()) } catch (error) {
@@ -1680,6 +1875,14 @@ function createApiRoutes(deps) {
           deps.logger?.warn?.(`our-free-model: pool snapshot unavailable (${reason})`)
           return send(404, { error: `pool unavailable (${reason})` })
         }
+      }
+      if (method === 'GET' && routePath === '/disclaimer') {
+        return send(200, { ...DISCLAIMER, acknowledged: disclaimerAcknowledged(deps.settings.get()) })
+      }
+      if (method === 'POST' && routePath === '/disclaimer/ack') {
+        deps.settings.update({ disclaimerAck: DISCLAIMER_VERSION })
+        deps.settings.flush()
+        return send(200, { ok: true, acknowledged: true })
       }
       if (method === 'GET' && routePath === '/announcement') {
         // A managed install also stands down the owner's onboarding copy: the
@@ -1698,6 +1901,9 @@ function createApiRoutes(deps) {
       if (method === 'GET' && routePath === '/announcements') {
         const view = deps.announcements.view()
         return send(200, { ...view, acked: [...ackedSet(deps)], notifyOs: deps.settings.get().notifyOs === true })
+      }
+      if (method === 'GET' && routePath === '/picks') {
+        return send(200, await deps.picks.view())
       }
       if (method === 'POST' && routePath === '/announcements/ack') {
         const body = await readJson(req)
@@ -1749,8 +1955,9 @@ function createApiRoutes(deps) {
       }
       if (method === 'POST' && routePath === '/settings') {
         const patch = await readJson(req)
+        const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']) }, current)
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
           // The listener spends this machine's lane, and a routable bind address
@@ -1761,7 +1968,7 @@ function createApiRoutes(deps) {
           }
           if (forward.port !== undefined) {
             const port = Number(forward.port)
-            forward.port = Number.isFinite(port) && port >= 1 && port <= 65535 ? Math.trunc(port) : (current.forward?.port ?? 0)
+            forward.port = Number.isFinite(port) && port >= 0 && port <= 65535 ? Math.trunc(port) : (current.forward?.port ?? 0)
           }
           // The LAN relay is a second door on the same feature, so it travels in
           // the same `forward` patch — but it does *not* inherit the loopback
@@ -1799,13 +2006,19 @@ function createApiRoutes(deps) {
         }
         deps.settings.update(next)
         deps.settings.flush()
+        if (deps.settings.writeFailed) {
+          deps.settings.value = current
+          return send(500, { error: 'could not persist settings' })
+        }
+        if (Object.keys(visibility).length > 0) deps.onVisibilityChanged?.()
         await deps.syncForward()
         await deps.syncRelay()
         await deps.syncEgress()
         return send(200, { ok: true, settings: publicSettings(deps.settings.get(), deps.forwardInfo(), deps.egressInfo()) })
       }
       if (method === 'POST' && routePath === '/refresh') {
-        await deps.refreshCatalog({ probe: true, force: true })
+        // A listing refresh must not turn into a probe round; only /reprobe does.
+        await deps.refreshCatalog({ probe: false, force: true })
         return send(200, { ok: true, ...buildSummary(deps) })
       }
       if (method === 'POST' && routePath === '/reprobe') {
@@ -1818,11 +2031,35 @@ function createApiRoutes(deps) {
       if (method === 'POST' && routePath === '/forward/rotate') {
         return send(200, { key: deps.rotateKey() })
       }
+      // The channels' gateway relay (the pack's loopback OpenAI endpoint,
+   // re-exposed under this plugin's own key). Status never carries a secret;
+      // the key routes are read by the same fence as every other route here.
+      if (method === 'GET' && routePath === '/chan-gateway') {
+        return send(200, deps.chanRelay.status())
+      }
+      if (method === 'POST' && routePath === '/chan-gateway/apply') {
+        const body = await readJson(req)
+        return send(200, await deps.chanRelay.apply(body))
+      }
+      if (method === 'GET' && routePath === '/chan-gateway/key') {
+        return send(200, { key: deps.chanRelay.key() })
+      }
+      if (method === 'POST' && routePath === '/chan-gateway/rotate') {
+        return send(200, { key: deps.chanRelay.rotate() })
+      }
       if (method === 'GET' && routePath === '/forward/lan/key') {
         return send(200, { key: deps.settings.get().forwardLanKey ?? '' })
       }
       if (method === 'POST' && routePath === '/forward/lan/rotate') {
         return send(200, { key: deps.rotateLanKey() })
+      }
+      // The relay binds every interface, so which address a peer should dial is a
+      // property of this machine right now — not of the moment the relay started.
+      // The panel polls this while the relay is on: a laptop that switched
+      // networks (or brought a VPN up) holds different addresses, and the one it
+      // was showing is the one the user copies to the other machine.
+      if (method === 'GET' && routePath === '/forward/lan/addresses') {
+        return send(200, { addresses: deps.lanAddresses() })
       }
       // The subscription/proxy URL is a credential, so it lives outside every
       // routine payload and leaves the process only when the settings page asks
@@ -1832,13 +2069,30 @@ function createApiRoutes(deps) {
       }
       if (method === 'POST' && routePath === '/bench') {
         const body = await readJson(req)
-        const result = await deps.testModel(String(body.model ?? ''), body.effort === undefined ? undefined : String(body.effort))
-        return send(200, result)
+        const controller = new AbortController()
+        const abort = () => controller.abort(new UpstreamError('Text test cancelled', CODE.aborted))
+        res.once?.('close', abort)
+        try {
+          const result = await deps.testModel(String(body.model ?? ''), body.effort === undefined ? undefined : String(body.effort), { signal: controller.signal })
+          if (!controller.signal.aborted) return send(200, result)
+          return
+        } catch (error) {
+          if (!controller.signal.aborted) throw httpError(error.status === 404 ? 404 : error.code === CODE.timeout ? 504 : 502, String(error.message ?? error))
+          return
+        } finally { res.removeListener?.('close', abort) }
       }
       return send(404, { error: 'not found' })
     } catch (error) {
       const status = Number(error?.statusCode)
-      return send(Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500, { error: String(error?.message ?? error) })
+      const responseStatus = Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500
+      if (routePath === '/subscriptions' || routePath.startsWith('/subscriptions/')) {
+        // Parse errors can quote an import body; never echo credential input.
+        return send(responseStatus, { error: ({
+          400: 'Invalid subscription request', 404: 'Subscription account not found',
+          413: 'request body too large', 499: 'Subscription request aborted',
+        })[responseStatus] ?? 'Subscription operation failed' })
+      }
+      return send(responseStatus, { error: String(error?.message ?? error) })
     }
   }
 }
@@ -1878,8 +2132,219 @@ async function readJson(req) {
   }
 }
 
+
+/**
+ * The token-saver section as the browser may see it.
+ *
+ * Normalized rather than echoed: a stored level id that is not in the family's
+ * list would otherwise reach a `<select>` with no matching option and render as
+ * "off" while the pipeline was still using something else.
+ */
+function publicTokenSaver(section) {
+  const config = saverConfig({ tokenSaver: section })
+  return {
+    enabled: config.enabled,
+    rtk: config.rtk,
+    prompts: { caveman: config.caveman, ponytail: config.ponytail },
+    cavemanLevels: CAVEMAN_LEVELS,
+    ponytailLevels: PONYTAIL_LEVELS,
+  }
+}
+
+/**
+ * The aggregate section with every key replaced by a fingerprint.
+ *
+ * A provider key is a bearer credential for somebody else's account — the one
+ * thing in this document that must never be echoed. It stays in the 0600
+ * settings file; `hasKey` plus the last four characters are all the panel needs
+ * to tell "configured" from "not configured" and to let a user recognise which
+ * key is stored. The value itself is served only to the page that set it, and
+ * only as a mask.
+ */
+function publicAggregate(section) {
+  const providers = section?.providers ?? {}
+  const out = {}
+  for (const [id, value] of Object.entries(providers)) {
+    if (value === null || typeof value !== 'object') continue
+    const key = typeof value.apiKey === 'string' ? value.apiKey : ''
+    out[id] = {
+      enabled: value.enabled !== false,
+      hasKey: key !== '',
+      keyHint: key === '' ? '' : `…${key.slice(-4)}`,
+      baseUrl: typeof value.baseUrl === 'string' ? value.baseUrl : '',
+      models: Array.isArray(value.models) ? value.models : [],
+      discovered: Array.isArray(value.discovered) ? value.discovered : [],
+      addedAt: Number.isFinite(value.addedAt) ? value.addedAt : 0,
+      lastTest: value.lastTest ?? null,
+    }
+  }
+  return { enabled: section?.enabled !== false, providers: out }
+}
+
+/** The provider registry, compact enough for one settings page to hold. */
+function publicProviderRegistry() {
+  return listProviders().map(provider => ({
+    id: provider.id,
+    name: provider.name,
+    category: provider.category,
+    authKind: provider.auth?.kind ?? 'apiKey',
+    credentialUrl: provider.auth?.url ?? '',
+    baseUrl: provider.baseUrl ?? '',
+    baseUrlOverrideEnv: provider.baseUrlOverrideEnv ?? '',
+    format: provider.format,
+    website: provider.website ?? '',
+    notes: provider.notes ?? '',
+    local: provider.local === true,
+    modelCount: Array.isArray(provider.models) ? provider.models.length : 0,
+    models: (Array.isArray(provider.models) ? provider.models : []).map(model => ({
+      id: model.id,
+      name: model.name ?? model.id,
+      contextWindow: model.contextWindow ?? null,
+      vision: model.vision === true,
+      reasoning: model.reasoning === true,
+    })),
+  }))
+}
+
+/** The five local answers, in evaluation order. */
+const OPTIMIZATION_KINDS = OPTIMIZATIONS
+
+/**
+ * The local-optimization switches as the browser may see them.
+ *
+ * Each kind is reported individually even when the section is off, because the
+ * page shows five separate switches: a master switch that silently blanked them
+ * would look like the per-kind values had been lost.
+ */
+function publicLocalOptimize(section) {
+  const config = section ?? {}
+  const out = { enabled: config.enabled !== false }
+  for (const kind of OPTIMIZATION_KINDS) out[kind] = config[kind] !== false
+  return out
+}
+
+/** The switches in the shape `tryOptimizations` wants. */
+function optimizeConfig(section) {
+  const publicView = publicLocalOptimize(section)
+  return publicView.enabled === true ? publicView : null
+}
+
+/**
+ * Connection recipes for the local gateway.
+ *
+ * Generated rather than stored: the port can move when the requested one is
+ * taken, so a snippet baked into the page at mount time is a snippet that lies
+ * after a restart. Everything here is derived from what the listeners actually
+ * bound and the keys they actually demand.
+ */
+function clientSnippets({ forward, key, lanKey, models }) {
+  const running = forward.running === true
+  const base = running ? `http://127.0.0.1:${forward.port}` : 'http://127.0.0.1:<forward-port>'
+  const lanAddress = forward.lan.running === true && forward.lan.addresses.length > 0
+    ? `http://${forward.lan.addresses[0]}:${forward.lan.port}`
+    : ''
+  const shownKey = key === '' ? '<forward-key>' : key
+  const shownLanKey = lanKey === '' ? '<lan-key>' : lanKey
+  const sample = models[0] ?? 'deepseek-v4-flash-free'
+  const snippets = [
+    {
+      id: 'claude-code',
+      name: 'Claude Code',
+      language: 'bash',
+      body: [
+        `export ANTHROPIC_BASE_URL=${base}`,
+        `export ANTHROPIC_AUTH_TOKEN=${shownKey}`,
+        `export ANTHROPIC_MODEL=${sample}`,
+        '# the gateway speaks /v1/messages natively — no translation shim needed',
+      ].join('\n'),
+    },
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      language: 'toml',
+      body: [
+        '# ~/.codex/config.toml',
+        'model_provider = "ofm"',
+        `model = "${sample}"`,
+        '',
+        '[model_providers.ofm]',
+        'name = "Our Free Model"',
+        `base_url = "${base}/v1"`,
+        'wire_api = "responses"',
+        `env_key = "OFM_API_KEY"`,
+      ].join('\n'),
+    },
+    {
+      id: 'openai-sdk',
+      name: 'OpenAI SDK / any OpenAI-compatible tool',
+      language: 'python',
+      body: [
+        'from openai import OpenAI',
+        `client = OpenAI(base_url="${base}/v1", api_key="${shownKey}")`,
+        `client.chat.completions.create(model="${sample}", messages=[{"role": "user", "content": "hi"}])`,
+      ].join('\n'),
+    },
+    {
+      id: 'anthropic-sdk',
+      name: 'Anthropic SDK',
+      language: 'python',
+      body: [
+        'from anthropic import Anthropic',
+        `client = Anthropic(base_url="${base}", api_key="${shownKey}")`,
+        `client.messages.create(model="${sample}", max_tokens=1024, messages=[{"role": "user", "content": "hi"}])`,
+      ].join('\n'),
+    },
+    {
+      id: 'curl',
+      name: 'curl',
+      language: 'bash',
+      body: [
+        `curl ${base}/v1/chat/completions \\`,
+        `  -H "authorization: Bearer ${shownKey}" \\`,
+        '  -H "content-type: application/json" \\',
+        `  -d '{"model":"${sample}","messages":[{"role":"user","content":"hi"}]}'`,
+        '',
+        '# the Anthropic surface answers on the same port:',
+        `curl ${base}/v1/messages \\`,
+        `  -H "x-api-key: ${shownKey}" \\`,
+        '  -H "anthropic-version: 2023-06-01" \\',
+        '  -H "content-type: application/json" \\',
+        `  -d '{"model":"${sample}","max_tokens":1024,"messages":[{"role":"user","content":"hi"}]}'`,
+      ].join('\n'),
+    },
+  ]
+  if (lanAddress !== '') {
+    snippets.push({
+      id: 'lan',
+      name: 'Another device on your network',
+      language: 'bash',
+      body: [
+        `# the LAN relay is up on this machine; its key is not the local one`,
+        `export OPENAI_BASE_URL=${lanAddress}/v1`,
+        `export OPENAI_API_KEY=${shownLanKey}`,
+      ].join('\n'),
+    })
+  }
+  return {
+    running,
+    baseUrl: base,
+    lanUrl: lanAddress,
+    key: shownKey,
+    models,
+    snippets,
+  }
+}
+
+function publicCombo(entry) {
+  return {
+    id: entry.id, name: entry.name, models: entry.combo,
+    contextWindow: entry.contextWindow, maxOutput: entry.maxOutput, vision: entry.vision === true,
+  }
+}
+
 function publicSettings(settings, forwardInfo, egressInfo) {
   return {
+    ...publicModelVisibility(settings),
     enabled: settings.enabled !== false,
     exposeRegionModels: settings.exposeRegionModels !== false,
     probeIntervalMinutes: settings.probeIntervalMinutes ?? 15,
@@ -1892,6 +2357,16 @@ function publicSettings(settings, forwardInfo, egressInfo) {
     autoReloadWatch: settings.autoReloadWatch === true,
     reloadedAt: settings.reloadedAt ?? 0,
     reloadCount: settings.reloadCount ?? 0,
+    tokenSaver: publicTokenSaver(settings.tokenSaver),
+    aggregate: publicAggregate(settings.aggregate),
+    combos: normalizeCombos(settings.combos).map(combo => ({
+      id: combo.id,
+      name: combo.name,
+      models: combo.models,
+      strategy: combo.strategy,
+      stickyLimit: combo.stickyLimit,
+      enabled: combo.enabled,
+    })),
     forward: {
       ...(settings.forward ?? {}),
       running: forwardInfo.running,
@@ -1938,19 +2413,22 @@ function buildSummary(deps) {
   const update = deps.update.status()
   const feedView = deps.announcements.view()
   const defaultMaxTokens = deps.settings.get().defaultMaxTokens
+  // Lanes that carry no availability verdict of their own. The absorbed channels
+  // and the aggregate lane are named by a listing round that already succeeded,
+  // and a combo is a view over rows that were themselves named — none of them is
+  // pinged. A listing is not an inference verdict; explicit tests add their own samples.
+  const unprobed = entry => isEacEntry(entry) || isKiloEntry(entry) || isAggregateEntry(entry) || isComboEntry(entry) || isSubscriptionEntry(entry)
   return {
     catalog: state.catalog.map(entry => ({
       ...entry,
-      // The sealed lane is not probed: its presence in the roster is the
-      // verdict — the listing round named it after the host gate opened.
-      availability: isEacEntry(entry) ? STATE.available : (snapshot.results?.[entry.id]?.state ?? STATE.unknown),
-      detail: isEacEntry(entry) ? '' : (snapshot.results?.[entry.id]?.detail ?? ''),
-      probedAt: isEacEntry(entry) ? 0 : (snapshot.results?.[entry.id]?.at ?? 0),
-      ttftMs: isEacEntry(entry) ? undefined : snapshot.results?.[entry.id]?.ttftMs,
-      latencyMs: isEacEntry(entry) ? undefined : snapshot.results?.[entry.id]?.latencyMs,
+      hiddenByUser: isModelHidden(entry, state.settings),
+      hiddenByGroup: isModelHidden(entry, { ...state.settings, hiddenModelIds: [] }),
+      ...modelAvailability(entry.id, snapshot, unprobed(entry)),
       // What each rung of the effort menu will really put on the wire for this
       // model, so the page never shows a 32K "output ceiling" beside a call that
-      // was cut off at 8K. A model with no effort menu has no ladder to show.
+      // was cut off at 8K. A model with no effort menu has no ladder to show;
+      // a menu model's rungs are flat (its level, not the ladder, is the wire
+      // control), which is what the card's "default ceiling" tag then reads.
       ...(entry.reasoning === true ? { budgets: budgetLadder(entry, undefined, defaultMaxTokens) } : {}),
       // `null` here is what the picker does not advertise; the roster still lists
       // those models, because "the probe refused it" is the user's only evidence.
@@ -1962,6 +2440,7 @@ function buildSummary(deps) {
     outlet: deps.egressInfo(),
     probedAt: snapshot.at ?? 0,
     announcementVersion: ANNOUNCEMENT_VERSION,
+    disclaimerVersion: DISCLAIMER_VERSION,
     version: deps.meta().version,
     distribution: deps.meta().distribution,
     announcements: { unread: feedView.unread, fetchedAt: feedView.fetchedAt },
@@ -1969,93 +2448,13 @@ function buildSummary(deps) {
     // gate never opened (a host the kernel gave no profile context), which is a
     // different sentence from "the relay is down" (issue #60).
     laneAvailable: deps.laneAvailable?.() === true,
+    // The last GitHub-authorization verdict (the settings page refreshes it via
+    // /eac/status on mount). `authorized: false` with the lane available is the
+    // one state the model cards badge as locked.
+    eacAuth: deps.eacAuth?.cached?.() ?? null,
+    // Whether the absorbed free-channel pack is live on this host, and its
+    // failure reason when it is not (see the mount in `apply`).
+    channels: deps.channels?.() ?? { state: 'unknown', error: '' },
     update: { available: update.available, latest: update.latest, current: update.current, checkedAt: update.checkedAt, applying: update.applying, managed: update.managed === true },
-  }
-}
-
-export function buildStats(stats, catalog) {
-  const days = stats.days ?? {}
-  const series = Object.keys(days).sort().map(day => ({
-    day,
-    total: days[day].total ?? 0,
-    models: Object.entries(days[day].models ?? {}).map(([model, value]) => ({ model, ...value })),
-  }))
-  const totals = {}
-  for (const entry of series) for (const row of entry.models) {
-    const previous = totals[row.model] ?? {
-      model: row.model, input: 0, output: 0, reasoning: 0, calls: 0, failed: 0,
-      ttftMs: 0, ttftSamples: 0, decodeMs: 0, decodeTokens: 0,
-    }
-    totals[row.model] = {
-      ...previous,
-      input: previous.input + row.input,
-      output: previous.output + row.output,
-      reasoning: previous.reasoning + row.reasoning,
-      calls: previous.calls + row.calls,
-      failed: previous.failed + row.failed,
-      ttftMs: previous.ttftMs + (row.ttftMs ?? 0),
-      ttftSamples: previous.ttftSamples + (row.ttftSamples ?? 0),
-      decodeMs: previous.decodeMs + (row.decodeMs ?? 0),
-      decodeTokens: previous.decodeTokens + (row.decodeTokens ?? 0),
-    }
-  }
-  const logical = stats.logical ?? {}
-  const logicalModels = logical.models ?? {}
-  const logicalReady = Number.isSafeInteger(logical.turns)
-  const lifetimeModels = stats.models ?? {}
-  const empty = model => ({
-    model, input: 0, output: 0, reasoning: 0, cacheRead: 0, calls: 0, failed: 0,
-    ttftMs: 0, ttftSamples: 0, decodeMs: 0, decodeTokens: 0,
-  })
-  const modelIds = new Set([...Object.keys(totals), ...Object.keys(lifetimeModels)])
-  const named = [...modelIds].map(model => {
-    const row = totals[model] ?? empty(model)
-    const lifetime = lifetimeModels[model] ?? {}
-    const physical = {
-      ...row,
-      input: Number.isSafeInteger(lifetime.input) ? lifetime.input : row.input,
-      output: Number.isSafeInteger(lifetime.output) ? lifetime.output : row.output,
-      reasoning: Number.isSafeInteger(lifetime.reasoning) ? lifetime.reasoning : row.reasoning,
-      cacheRead: Number.isSafeInteger(lifetime.cacheRead) ? lifetime.cacheRead : row.cacheRead,
-      calls: Number.isSafeInteger(lifetime.calls) ? lifetime.calls : row.calls,
-      failed: Number.isSafeInteger(lifetime.failed) ? lifetime.failed : row.failed,
-    }
-    return {
-      ...physical,
-      turns: logicalModels[model]?.turns ?? (logicalReady ? 0 : row.calls),
-      failedTurns: logicalModels[model]?.failed ?? (logicalReady ? 0 : row.failed),
-      recoveredTurns: logicalModels[model]?.recovered ?? 0,
-      name: catalog.find(entry => entry.id === model)?.name ?? model,
-      // A rate over too few measurable calls is a rounding error with a unit on it.
-      tps: row.decodeMs >= MIN_DECODE_MS ? Math.round(row.decodeTokens / (row.decodeMs / 1000)) : null,
-      avgTtftMs: row.ttftSamples > 0 ? Math.round(row.ttftMs / row.ttftSamples) : null,
-    }
-  })
-  const physicalFailed = named.reduce((sum, row) => sum + row.failed, 0)
-  const turns = logicalReady ? logical.turns : named.reduce((sum, row) => sum + row.turns, 0)
-  const failedTurns = Number.isSafeInteger(logical.failed) ? logical.failed : named.reduce((sum, row) => sum + row.failedTurns, 0)
-  const recoveredTurns = Number.isSafeInteger(logical.recovered) ? logical.recovered : named.reduce((sum, row) => sum + row.recoveredTurns, 0)
-  const hasLifetimeFailures = Number.isSafeInteger(stats.failedRequests)
-  return {
-    requests: stats.requests ?? 0,
-    requestFailures: hasLifetimeFailures ? stats.failedRequests : physicalFailed,
-    requestFailuresEstimated: stats.failedRequestsEstimated === true || !hasLifetimeFailures,
-    logicalEstimated: logical.estimated === true,
-    turns,
-    failedTurns,
-    recoveredTurns,
-    days: series,
-    models: named,
-    samples: (stats.samples ?? []).slice(-200),
-    grand: {
-      input: named.reduce((sum, row) => sum + row.input, 0),
-      output: named.reduce((sum, row) => sum + row.output, 0),
-      reasoning: named.reduce((sum, row) => sum + row.reasoning, 0),
-      calls: named.reduce((sum, row) => sum + row.calls, 0),
-      failed: hasLifetimeFailures ? stats.failedRequests : physicalFailed,
-      turns,
-      failedTurns,
-      recoveredTurns,
-    },
   }
 }

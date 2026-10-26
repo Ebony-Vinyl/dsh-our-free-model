@@ -20,7 +20,7 @@ const TOOLS = [
 
 async function turn(label, body) {
   const t0 = Date.now();
-  const res = await fetch(`${B}/zen/v1/chat/completions`, {
+  const res = await fetch(`${B}/inference/v1/chat/completions`, {
     method: "POST", headers: { ...HEADERS, "x-opencode-request": generateRequestId() }, body: JSON.stringify(body), redirect: "error",
   });
   const txt = await res.text();

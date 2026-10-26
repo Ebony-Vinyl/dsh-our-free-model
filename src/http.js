@@ -30,6 +30,18 @@ export const CODE = {
   region: 'REGION_BLOCKED',
   quota: 'RATE_LIMIT',
   credential: 'INVALID_CREDENTIAL',
+  // The co-paid lane's per-user gate (GitHub login + star): the credential
+  // store is fine and the endpoint is reachable — this install just has not
+  // been authorized yet. Its own code keeps it out of INVALID_CREDENTIAL, so
+  // a refusal neither wipes the cached roster nor sends anyone chasing a
+  // re-install; the settings page answers it with a login prompt instead.
+  authorization: 'AUTHORIZATION_REQUIRED',
+  // The free lane's client gate: the gateway judged *this client* and refused
+  // the whole lane (403 FreeTierError). Not a credential, not a model, not
+  // retryable — a refusal this install cannot retry away.
+  laneLocked: 'LANE_LOCKED',
+  permission: 'PERMISSION_DENIED',
+  exhausted: 'QUOTA_EXHAUSTED',
   transport: 'TRANSPORT',
   timeout: 'TIMEOUT',
   server: 'SERVER',
@@ -45,6 +57,34 @@ export class UpstreamError extends Error {
     this.code = code
     Object.assign(this, details)
   }
+}
+
+/**
+ * The socket-level facts behind a transport failure, walked off the error's
+ * `cause` chain.
+ *
+ * Node's fetch collapses every DNS, TCP and TLS refusal into `TypeError: fetch
+ * failed`; the reason a user could act on — the ENOTFOUND, the ECONNRESET, the
+ * certificate alert — lives one or two `cause` links deeper and used to be
+ * dropped, leaving the settings page's probe reporting an unexplainable "fetch
+ * failed" (issue #79). The chain is walked at most three links deep, the codes
+ * and first lines are deduplicated, and anything found is appended by the
+ * transport wrap sites so "fetch failed" reads "fetch failed — getaddrinfo
+ * ENOTFOUND opencode.ai (ENOTFOUND)" instead.
+ */
+export function transportCause(error) {
+  const parts = []
+  let node = error
+  for (let depth = 0; depth < 3 && node?.cause !== undefined; depth += 1) {
+    node = node.cause
+    if (node === null || typeof node !== 'object') break
+    const code = typeof node.code === 'string' && node.code !== '' ? node.code : ''
+    const line = typeof node.message === 'string' ? node.message.split('\n')[0].trim() : ''
+    if (line === '' && code === '') continue
+    const fact = line === '' || line.includes(code) ? (line === '' ? code : line) : `${line} (${code})`
+    if (!parts.includes(fact)) parts.push(fact)
+  }
+  return parts.length > 0 ? ` — ${parts.join('; ')}` : ''
 }
 
 /** Turn a gateway JSON error envelope into a classified failure. */
@@ -67,7 +107,10 @@ export function classifyFailure(status, payload, retryAfterMs) {
   if (type === 'RegionError' || /not available in your country|region/i.test(flat)) {
     return new UpstreamError(message, CODE.region, { status, type })
   }
-  if (status === 429 || type === 'FreeUsageLimitError' || /usage limit|rate limit/i.test(flat)) {
+  if (type !== 'permission_error' && (type === 'insufficient_quota' || error.code === 'insufficient_quota')) {
+    return new UpstreamError(message, CODE.exhausted, { status, type })
+  }
+  if (type !== 'permission_error' && (status === 429 || type === 'FreeUsageLimitError' || /usage limit|rate limit/i.test(flat))) {
     return new UpstreamError(message, CODE.quota, { status, type, providerRetryAfterMs: retryAfterMs })
   }
   // The gateway rejects a signature only when the bytes it received differ from
@@ -81,6 +124,28 @@ export function classifyFailure(status, payload, retryAfterMs) {
       'the gateway rejected the request signature — the request body was modified in transit; if a local proxy plugin (e.g. billion-context) is installed, disable it for this lane or enable its passthrough for signed requests',
       CODE.transport, { status, type, signatureRejected: true })
   }
+  // The co-paid lane's per-user gate speaks before any credential is judged:
+  // the gateway refuses a turn because this install has not completed GitHub
+  // login + star (or the star is gone), not because the lane's own material
+  // is wrong. Reading it as INVALID_CREDENTIAL would wipe the cached roster
+  // and send users chasing a re-install; it is a user-actionable state, so it
+  // gets its own code and the settings page answers with a login prompt.
+  if (type === 'AuthorizationRequired' || /需要 GitHub 授权|GitHub 授权无效/.test(raw)) {
+    return new UpstreamError(message, CODE.authorization, { status, type, reason: typeof error.reason === 'string' ? error.reason : '' })
+  }
+  // The free lane's client gate (issue #310): 403 FreeTierError — "OpenCode's
+  // free tier can only be used from within OpenCode" — names the client, not
+  // the credential or the model. The stock classifier filed it as
+  // INVALID_CREDENTIAL, which wiped the cached roster and sent users chasing
+  // a re-login that cannot help: the upstream refuses this client's fingerprint
+  // and no credential change alters that. Its own code keeps it out of both
+  // the credential branch and the generic 4xx fallthrough, and the availability
+  // probe reads it as a lane-level lock (src/probe.js) instead of leaving the
+  // model in the picker as "unknown".
+  if (type === 'FreeTierError' || /free tier can only be used from within/i.test(flat)) {
+    return new UpstreamError(message, CODE.laneLocked, { status, type })
+  }
+  if (type === 'permission_error') return new UpstreamError(message, CODE.permission, { status, type })
   // An HTML page at 401/403 is the front proxy speaking, not the credential
   // store: fall through to the 4xx branch so users are not sent re-logging for
   // a WAF refusal.
@@ -195,7 +260,7 @@ export async function readHead(stream, limit, { signal, timeoutMs }) {
 export function classifyStreamFailure(error, signal) {
   if (error instanceof UpstreamError) return error
   if (signal?.aborted === true || error?.name === 'AbortError') return new UpstreamError('request aborted', CODE.aborted)
-  return new UpstreamError(`our-free-model: upstream stream read failed: ${error?.message ?? error}`, CODE.transport)
+  return new UpstreamError(`our-free-model: upstream stream read failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
 }
 
 /** The head is the one read with no line-level deadline behind it, so it needs its own. */
@@ -290,28 +355,29 @@ async function readRemainder(head, signal) {
  * @param {string} options.path - gateway path
  * @param {object} options.body - JSON request body
  * @param {string} options.session - canonical upstream session id
- * @param {string} options.requestId - per-turn request id
- * @param {string} [options.attributionUserAgent] - harness User-Agent merged into the request
+ * @param {string} [options.attributionUserAgent] - kept for the host API; this lane sends the v2 fingerprint UA instead
  * @param {AbortSignal} [options.signal]
  * @param {(payload: string) => void} options.onData - one `data:` payload, in order
  * @returns {Promise<{status:number, headers:Headers}>}
  */
 /**
- * Compose the request User-Agent.
+ * The User-Agent this lane sends.
  *
- * Two independent requirements meet in one header: the harness mandates an
- * attribution User-Agent on every provider request, and the gateway identifies a
- * desktop client by an `opencode/<version>` token (>= 1.17). The gateway tests
- * with a search rather than an anchored match, so one value can satisfy both —
- * verified live against this lane.
+ * ⚠️ v2 指纹（2026-10-14 起）要求这一串**原样单独**出现：形状
+ * `opencode/<channel>/<version>/<client>`、major ≥ 2，且按整串匹配。旧实现
+ * 「归属 UA + `opencode/1.18.x`」的拼接方式现在两处都会踩雷 —— v1 版本号被按名字
+ * 拒掉，任何前后缀又会让整串不再是 v2 客户端形状。
+ *
+ * ⇒ 本车道的 UA 就是官方那一串，归属信息不再随行；归属仍保留在其余车道
+ * （channel pack / EAC / Kilo 各自带自己的 UA）。`attributionUserAgent` 因此在本
+ * 车道上不再影响线上字节，参数保留是为了不动宿主 API 与调用方签名。
  */
-function userAgentWith(attribution) {
-  if (typeof attribution !== 'string' || attribution === '') return CLIENT_UA
-  return attribution.includes('opencode/') ? attribution : `${attribution} ${CLIENT_UA}`
+function userAgentWith(_attribution) {
+  return CLIENT_UA
 }
 
-export async function postStreamed({ path, body, session, requestId, attributionUserAgent, signal, onData, timeoutMs = 300000 }) {
-  const headers = gatewayHeaders({ session: truncateSession(session), requestId, stream: true })
+export async function postStreamed({ path, body, session, attributionUserAgent, signal, onData, timeoutMs = 300000 }) {
+  const headers = gatewayHeaders({ session: truncateSession(session), stream: true })
   headers['user-agent'] = userAgentWith(attributionUserAgent)
   let response
   try {
@@ -321,7 +387,7 @@ export async function postStreamed({ path, body, session, requestId, attribution
     // `TimeoutError`/user Error rather than `AbortError` — testing the name alone
     // reported a cancelled turn as `TRANSPORT`, which is retryable.
     if (signal?.aborted === true || error?.name === 'AbortError') throw new UpstreamError('request aborted', CODE.aborted)
-    throw new UpstreamError(`our-free-model: upstream request failed: ${error?.message ?? error}`, CODE.transport)
+    throw new UpstreamError(`our-free-model: upstream request failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
   }
 
   const setRetry = retryAfter(response.headers.get('retry-after'))
@@ -372,12 +438,13 @@ export async function postStreamed({ path, body, session, requestId, attribution
  */
 export async function readSse(source, onData, signal, timeoutMs = 300000) {
   const reader = typeof source?.getReader === 'function' ? source.getReader() : null
-  const iterator = reader ?? (typeof source?.[Symbol.asyncIterator] === 'function' ? source[Symbol.asyncIterator]() : source)
+  const iterator = reader === null ? (typeof source?.[Symbol.asyncIterator] === 'function' ? source[Symbol.asyncIterator]() : source) : null
   const decoder = new TextDecoder()
   let buffer = ''
+  let data = []
+  let rawJson = ''
   let deadline = Date.now() + timeoutMs
   let stopped = false
-  const hasSignal = signal !== undefined && signal !== null
   const stop = () => {
     if (stopped) return
     stopped = true
@@ -392,23 +459,65 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
   // abort so a held response cannot keep the adapter waiting.
   const next = async () => {
     if (signal?.aborted) throw new UpstreamError('request aborted', CODE.aborted)
-    let onAbort
+    let onAbort, timer
     const halted = new Promise((_, reject) => {
       onAbort = () => {
         stop()
         reject(new UpstreamError('request aborted', CODE.aborted))
       }
       signal?.addEventListener('abort', onAbort, { once: true })
+      timer = setTimeout(() => {
+        stop()
+        reject(new UpstreamError('our-free-model: upstream stream idle past its deadline', CODE.timeout))
+      }, Math.max(0, deadline - Date.now()))
     })
-    const pending = Promise.resolve().then(() => iterator.next())
+    const pending = Promise.resolve().then(() => reader !== null ? reader.read() : iterator.next())
     try {
-      return hasSignal ? await Promise.race([pending, halted]) : await pending
+      return await Promise.race([pending, halted])
     } finally {
       signal?.removeEventListener('abort', onAbort)
+      clearTimeout(timer)
       // The losing read settles after the source is cancelled; do not let its
       // rejection become an unhandled promise after the caller has returned.
       pending.catch(() => {})
     }
+  }
+  const dispatch = () => {
+    const payload = data.join('\n')
+    data = []
+    if (payload.trim() === '[DONE]') return true
+    if (payload !== '') onData(payload)
+    return false
+  }
+  const completeData = () => {
+    if (!data.length) return false
+    if (data.join('\n').trim() === '[DONE]') return true
+    try { JSON.parse(data.join('\n')); return true } catch { return false }
+  }
+  const line = value => {
+    const text = value.replace(/\r$/, '').replace(/^\uFEFF/, '')
+    if (rawJson || text.trimStart().startsWith('{')) {
+      if (!rawJson && dispatch()) return true
+      rawJson += (rawJson ? '\n' : '') + text
+      let payload
+      try { payload = JSON.parse(rawJson) } catch { return false }
+      rawJson = ''
+      if (payload?.error || payload?.type === 'error') throw classifyFailure(undefined, payload)
+      onData(JSON.stringify(payload))
+      return false
+    }
+    if (text === '') return dispatch()
+    if (text.startsWith(':')) return false
+    const colon = text.indexOf(':')
+    const field = colon < 0 ? text : text.slice(0, colon)
+    const valueText = colon < 0 ? '' : text.slice(colon + 1).replace(/^ /, '')
+    if (field === 'data') {
+      // Compatible endpoints may omit blank separators between complete JSON events.
+      if (completeData() && dispatch()) return true
+      if (valueText.trim() === '[DONE]') { dispatch(); return true }
+      data.push(valueText)
+    }
+    return false
   }
   try {
     while (true) {
@@ -418,9 +527,9 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
       if (value !== undefined) buffer += decoder.decode(value, { stream: true })
       let newline = buffer.indexOf('\n')
       while (newline !== -1) {
-        const line = buffer.slice(0, newline)
+        const row = buffer.slice(0, newline)
         buffer = buffer.slice(newline + 1)
-        emit(line, onData)
+        if (line(row)) return
         newline = buffer.indexOf('\n')
       }
       deadline = Date.now() + timeoutMs
@@ -428,7 +537,9 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
     // Flush the decoder so a multi-byte character split over the last two chunks
     // is not silently dropped from the final payload.
     buffer += decoder.decode()
-    emit(buffer, onData)
+    if (buffer && line(buffer)) return
+    if (rawJson) throw new UpstreamError('upstream returned an incomplete JSON document inside its event stream', CODE.transport)
+    dispatch()
   } catch (error) {
     throw classifyStreamFailure(error, signal)
   } finally {
@@ -439,19 +550,9 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
   }
 }
 
-function emit(line, onData) {
-  const text = line.trim()
-  if (text === '' || text.startsWith(':')) return
-  if (text.startsWith('data:')) {
-    const payload = text.slice(5).trim()
-    if (payload === '' || payload === '[DONE]') return
-    onData(payload)
-  }
-}
-
 /** Fetch a small JSON document from the gateway with the fingerprint headers. */
-export async function getJson(path, { session, requestId, attributionUserAgent, signal, timeoutMs = 15000 } = {}) {
-  const headers = gatewayHeaders({ session: truncateSession(session ?? ''), requestId: requestId ?? '', stream: false, accept: 'application/json' })
+export async function getJson(path, { session, attributionUserAgent, signal, timeoutMs = 15000 } = {}) {
+  const headers = gatewayHeaders({ session: truncateSession(session ?? ''), stream: false, accept: 'application/json' })
   headers['user-agent'] = userAgentWith(attributionUserAgent)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -472,7 +573,7 @@ export async function getJson(path, { session, requestId, attributionUserAgent, 
     if (error instanceof UpstreamError) throw error
     if (callerAborted || signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
     if (error?.name === 'AbortError') throw new UpstreamError('our-free-model: upstream GET timed out', CODE.timeout)
-    throw new UpstreamError(`our-free-model: upstream GET failed: ${error?.message ?? error}`, CODE.transport)
+    throw new UpstreamError(`our-free-model: upstream GET failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener?.('abort', onCallerAbort)

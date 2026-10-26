@@ -89,8 +89,10 @@ const dataDir = home => path.join(home, 'our-free-model')
   for (const method of ['providerInfo', 'providerRetryPolicy', 'imageRequestPricing', 'listModels', 'resolveModel', 'prepareCall', 'stream']) {
     check(`the adapter answers the contract method ${method}()`, typeof adapter?.[method], 'function')
   }
-  check('imageRequestPricing declares no per-image price for this free lane',
-    adapter?.imageRequestPricing(ROUTE_MAIN, 'any-model-free'), undefined)
+  const pricing = adapter?.imageRequestPricing(ROUTE_MAIN, 'any-model-free')
+  check('imageRequestPricing synchronously estimates request images for spill-policy',
+    pricing?.priceImages([{ type: 'image', attachment: {} }, { type: 'image', attachment: {}, offloaded: true }]),
+    [{ visualTokens: 1024, text: '[image]' }, { visualTokens: 0, text: '[image omitted]' }])
 
   const models = await adapter.listModels(ROUTE_MAIN)
   check('the fallback roster is advertised with no network and no key', models.length > 0, true)

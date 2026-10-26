@@ -1,0 +1,27 @@
+[
+  {
+    "name": "app.css",
+    "bytes": 16964,
+    "gzip": 4305
+  },
+  {
+    "name": "app.js",
+    "bytes": 18245,
+    "gzip": 6345
+  },
+  {
+    "name": "channels.css",
+    "bytes": 39871,
+    "gzip": 8168
+  },
+  {
+    "name": "channels.js",
+    "bytes": 430216,
+    "gzip": 148285
+  },
+  {
+    "name": "index.html",
+    "bytes": 14704,
+    "gzip": 5158
+  }
+]

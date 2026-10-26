@@ -1,0 +1,10 @@
+{
+  "method": "自动化刷新或点击至目标可见，包含工具往返，非纯浏览器渲染耗时",
+  "reloadMs": [
+    138,
+    137,
+    112
+  ],
+  "firstChannelMs": 306,
+  "warmChannelMs": 274
+}

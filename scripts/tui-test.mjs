@@ -13,7 +13,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { chatFrames, fakeContext, freePort, stubUpstream, until } from './lib/fake-kernel.mjs'
+import { callRoute, chatFrames, fakeContext, freePort, stubUpstream, until } from './lib/fake-kernel.mjs'
 
 let failures = 0
 const check = (name, actual, expected) => {
@@ -84,7 +84,13 @@ check('the probe loop and the egress watch armed on plain timers', armed.sort((a
 check('and every one of them is unref’d, so the plugin cannot hold the app open',
   armed.filter(ms => !unrefed.includes(ms)), [])
 check('the dashboard half is the only thing left waiting', ctx.__captured.serverRoutes.length, 0)
-check('it waits for a service rather than running without one', ctx.__waiting.map(fiber => [...fiber.names]), [['webServer']])
+// Two nested fibers now pend, and both are the same bargain: the channel pack
+// waits for credentials/commands/llm (a composition without them loses the
+// absorbed channels and keeps the free lane), the dashboard half waits for
+// webServer. Neither is in the plugin's own `inject`, which stays `['llm']` —
+// that is the property this check exists to protect.
+check('it waits for services rather than running without them',
+  ctx.__waiting.map(fiber => [...fiber.names]), [['credentials', 'commands', 'llm'], ['webServer']])
 
 // The web composition has the same problem in mirror image: `webServer` is not
 // provided yet while plugins load, so a one-shot read of it at apply time mounted
@@ -95,12 +101,16 @@ await until(() => ctx.__captured.serverRoutes.length >= 2, { what: 'the dashboar
 check('the settings API mounts when the service does', ctx.__captured.serverRoutes.map(route => route.path).sort(),
   ['/api/our-free-model', '/api/our-free-model/events'])
 
-await until(() => fs.existsSync(path.join(scratch, 'our-free-model', 'availability.json')), { what: 'the boot probe to land' })
-
-await until(() => ctx.__logs.some(line => line.includes('the sealed lane is not available in this composition')), { what: 'the sealed-lane gate refusal to be logged' })
+await until(() => ctx.__logs.some(line => line.includes('the sealed lane is not available in this composition')), { what: 'the boot listing and the sealed-lane gate refusal to be logged' })
 check('the host-gate refusal is logged, not silent', ctx.__logs.some(line => line.startsWith('warn our-free-model: the sealed lane is not available')), true)
 const persisted = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'catalog.json'), 'utf8'))
 check('and the refusal keeps the roster a desktop session persisted', persisted.sealIds, ['deepseek-ai/deepseek-v4.1-flash'])
+
+// Probing is manual now, so this headless composition drives the one round the
+// picker assertions below need instead of waiting for an automatic boot probe.
+const apiRoute = ctx.__captured.serverRoutes.find(route => route.kind === 'prefix')
+await callRoute(apiRoute.handler, 'POST', '/api/our-free-model/reprobe')
+await until(async () => (await adapter.listModels(ROUTE_MAIN)).length === 2, { what: 'the manual reprobe verdicts' })
 
 const models = await adapter.listModels(ROUTE_MAIN)
 check('the picker still gets its models', models.map(model => model.id).sort(), ['mimo-v2.6-flash-free', 'space-bunny-free'])
@@ -171,6 +181,15 @@ check('…and sends its result, keyed to the call it answers',
 const written = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'settings.json'), 'utf8'))
 const lanPort = written.forward?.lan?.port ?? 0
 check('the LAN relay came up and wrote back the port it settled on', lanPort > 0, true)
+// The address to hand out is re-read from this machine's interfaces on every
+// ask — the panel polls it while the relay is on — so a machine that moved
+// networks is not told to dial where it used to be.
+const lanApi = ctx.__captured.serverRoutes.find(route => route.path === '/api/our-free-model')?.handler
+const lanRead = await callRoute(lanApi, 'GET', '/api/our-free-model/forward/lan/addresses')
+check('the panel can re-read the LAN addresses while the relay is up',
+  [lanRead.status, Array.isArray(lanRead.json?.addresses)], [200, true])
+check('and the settings snapshot carries the same list',
+  Array.isArray((await callRoute(lanApi, 'GET', '/api/our-free-model/summary')).json?.settings?.forward?.lan?.addresses), true)
 const lanKey = written.forwardLanKey
 check('with a key of its own, minted apart from the local one', typeof lanKey === 'string' && lanKey !== '' && lanKey !== key, true)
 const lanModels = await fetch(`http://127.0.0.1:${lanPort}/v1/models`, { headers: { authorization: `Bearer ${lanKey}` } })
@@ -202,7 +221,9 @@ const refused = await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/completions
   body: JSON.stringify({ model: 'space-bunny-free', messages: [{ role: 'user', content: 'hi' }] }),
 })
 const refusedBody = await refused.json()
-check('a refused forward call is a failure', refused.status, 502)
+check('a refused forward call preserves the upstream request status', refused.status, 400)
+check('and preserves its classified code and response type',
+  [refusedBody.error?.code, refusedBody.error?.type], ['SERVER', 'invalid_request_error'])
 check('and says what the gateway said', /unavailable/i.test(refusedBody.error?.message ?? ''), true)
 stub.api.refuseAll = false
 

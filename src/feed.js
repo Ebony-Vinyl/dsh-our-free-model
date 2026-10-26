@@ -29,8 +29,9 @@ const REPO = 'Ebony-Vinyl/dsh-our-free-model'
  * `raw.githubusercontent.com` is first because it is the repository's own bytes,
  * with no third-party cache in front of it. jsDelivr is the fallback for the
  * networks where raw is TLS-interfered (measured: the connection dies with an
- * unverifiable certificate) and the edge serves the same content there; the last
- * entry is that same file under the other default branch name. A minute-
+ * unverifiable certificate) and the edge serves the same content there. The
+ * repository's default branch is `main`; there is no `master` fallback because
+ * GitHub answers that ref with HTTP 422. A minute-
  * resolution cache-buster is appended to jsDelivr URLs at fetch time so an
  * owner's push is never served stale from the CDN (its default cache holds up
  * to 12 hours).
@@ -38,7 +39,13 @@ const REPO = 'Ebony-Vinyl/dsh-our-free-model'
 export const DEFAULT_FEED_SOURCES = [
   `https://raw.githubusercontent.com/${REPO}/main/feed/announcements.json`,
   `https://cdn.jsdelivr.net/gh/${REPO}@main/feed/announcements.json`,
-  `https://raw.githubusercontent.com/${REPO}/master/feed/announcements.json`,
+  // A raw.githubusercontent.com proxy, for the networks where both origins above
+  // are slow or intermittently unreachable (see the note on the updater's
+  // DEFAULT_MANIFEST_SOURCES). The feed is a plain read with no signature of its
+  // own — the client sanitizes every item it renders — so this leg only has to
+  // return the same bytes; the cache-buster below keeps a proxy's edge from
+  // serving a stale copy.
+  `https://gh-proxy.com/https://raw.githubusercontent.com/${REPO}/main/feed/announcements.json`,
 ]
 
 /** jsDelivr's edge caches per full URL; a minute-stamp keeps every poll fresh. */
@@ -179,14 +186,21 @@ export class AnnouncementFeed {  /**
 
   /** Read the cached copy from disk; fresh installs start empty and stay silent on first poll. */
   load(disk = this.readDisk()) {
+    let rememberedIds = []
     try {
       const parsed = JSON.parse(disk ?? '')
       const feed = parseFeed(parsed)
       this.cache = { at: Number(parsed.fetchedAt) || 0, source: String(parsed.source ?? ''), announcements: feed.announcements }
+      if (Array.isArray(parsed.knownIds)) {
+        rememberedIds = parsed.knownIds.filter(id => typeof id === 'string' && id.length > 0 && id.length <= 160)
+      }
     } catch {
       this.cache = { at: 0, source: '', announcements: [] }
     }
-    this.knownIds = new Set(this.cache.announcements.map(item => item.id))
+    this.knownIds = new Set([
+      ...this.cache.announcements.map(item => item.id),
+      ...rememberedIds,
+    ])
     return this.cache
   }
 
@@ -235,10 +249,11 @@ export class AnnouncementFeed {  /**
     this.polling = (async () => {
       try {
         const { feed, source } = await fetchFeed(this.sources())
-        const hadCache = this.knownIds.size > 0
+        const hadCache = !this.neverFetched
         const previousIds = new Set(this.knownIds)
         this.cache = { at: Date.now(), source, announcements: feed.announcements }
-        this.knownIds = new Set(feed.announcements.map(item => item.id))
+        // Mirrors may serve an older subset; seeing an id again is not arrival.
+        this.knownIds = new Set([...previousIds, ...feed.announcements.map(item => item.id)])
         this.error = ''
         const arrived = hadCache && this.deps.onArrival !== undefined
           ? feed.announcements.filter(item => !previousIds.has(item.id))
@@ -263,7 +278,8 @@ export class AnnouncementFeed {  /**
     try {
       fs.mkdirSync(path.dirname(this.deps.cacheFile), { recursive: true })
       const temp = `${this.deps.cacheFile}.${process.pid}.tmp`
-      fs.writeFileSync(temp, JSON.stringify({ fetchedAt: this.cache.at, source: this.cache.source, announcements: this.cache.announcements }))
+      fs.writeFileSync(temp, JSON.stringify({ fetchedAt: this.cache.at, source: this.cache.source,
+        announcements: this.cache.announcements, knownIds: [...this.knownIds] }))
       fs.renameSync(temp, this.deps.cacheFile)
     } catch (error) {
       this.deps.log?.(`our-free-model: could not persist the feed cache (${error?.message ?? error})`)

@@ -56,6 +56,29 @@
  *   LOG_SALT             optional salt for the IP hash in log lines (default:
  *                        derived from the accepted secrets)
  *
+ * GitHub authorization gate (see auth-github.mjs for the whole flow):
+ *
+ *   GITHUB_CLIENT_ID     OAuth app id. Together with the secret below this
+ *   GITHUB_CLIENT_SECRET enables the gate; either missing = auth routes answer
+ *                        "not configured" and (if enforcement is on) the lane
+ *                        refuses every chat turn.
+ *   REQUIRE_STAR_REPO    repo a user must have starred (default
+ *                        Ebony-Vinyl/dsh-our-free-model)
+ *   REQUIRE_USER_TOKEN   "1" = chat turns require a per-user token issued only
+ *                        after GitHub login + star. Default 0: the compatibility
+ *                        window — tokens are tracked, nothing is refused.
+ *                        Flipping this flag is the entire cutover.
+ *   STAR_RECHECK_HOURS   star re-check window, default 12; a removed star ends
+ *                        access at the next sweep. GitHub being unreachable
+ *                        keeps the last verdict (never takes access away).
+ *   PUBLIC_ORIGIN        public base URL used to build the OAuth callback
+ *                        (default: derived from the request's forwarded headers)
+ *   USER_STORE_KEY       key for users.json encryption; defaults to the first
+ *                        signing secret when unset
+ *   USER_STORE_PATH      users.json path, default ./users.json next to this file
+ *   TOKEN_RATE_LIMIT_PER_MINUTE / TOKEN_RATE_LIMIT_PER_DAY / TOKEN_CONCURRENCY_PER_USER
+ *                        per-account ceilings; each defaults to its per-IP twin
+ *
  * Run: node gateway-node.mjs   (starts listening; Ctrl-C stops)
  */
 
@@ -67,6 +90,7 @@ import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import perfHooks from 'node:perf_hooks'
 import gateway from './worker.js'
+import { createAuthGate } from './auth-github.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -271,9 +295,12 @@ const ENTRY_JS = () => {
  * offline suite can drive the exact process a deployment would run.
  *
  * @param {object} hostEnv - the environment (see the module note)
+ * @param {{authFetch?: Function}} [options] - `authFetch` is the test seam for
+ *   the GitHub calls the authorization gate makes; production leaves it unset
+ *   and the gate uses the global fetch.
  * @returns {http.Server}
  */
-export function createGatewayServer(hostEnv = {}) {
+export function createGatewayServer(hostEnv = {}, options = {}) {
   const env = { ...hostEnv }
   loadDotEnv(env)
 
@@ -292,6 +319,15 @@ export function createGatewayServer(hostEnv = {}) {
     DAILY_LIMITER: buildRateLimiter(perDay, DAY_MS),
   }
   const inflight = new Map()
+
+  // ── GitHub authorization gate + per-account ceilings ────────────────────────
+  // The gate is the lane's real door (see auth-github.mjs); the ceilings below
+  // bound one account however many IPs a shared token travels from.
+  const auth = createAuthGate(env, { storePath: env.USER_STORE_PATH || path.join(here, 'users.json'), fetchImpl: options.authFetch })
+  const tokenMinute = buildRateLimiter(Number.parseInt(env.TOKEN_RATE_LIMIT_PER_MINUTE ?? String(perMinute), 10), 60_000)
+  const tokenDay = buildRateLimiter(Number.parseInt(env.TOKEN_RATE_LIMIT_PER_DAY ?? String(perDay), 10), DAY_MS)
+  const tokenConcLimit = (() => { const n = Number.parseInt(env.TOKEN_CONCURRENCY_PER_USER ?? String(concLimit), 10); return Number.isFinite(n) ? n : concLimit })()
+  const tokenInflight = new Map()
 
   // ── the co-paid pool snapshot ───────────────────────────────────────────────
   // Capacity follows the operator's provisioning rule — one star funds 1.5
@@ -433,7 +469,7 @@ export function createGatewayServer(hostEnv = {}) {
         if (!timingSafeEqual(String(url.searchParams.get('t') ?? req.headers['x-admin-token'] ?? ''), adminToken)) {
           return json(res, 401, { error: 'bad admin token' })
         }
-        return json(res, 200, analytics.snapshot())
+        return json(res, 200, { ...analytics.snapshot(), auth: auth.stats() })
       }
       if (url.pathname === prefix + '/stats') {
         // The page itself is public: it self-gates on the token (prompted once
@@ -441,6 +477,14 @@ export function createGatewayServer(hostEnv = {}) {
         // for data, which is where the real check lives.
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
         return res.end(DASHBOARD_HTML())
+      }
+
+      // ── GitHub authorization surface (start / callback / poll / status) ────
+      // Reached without the lane signature on purpose: a caller who has not
+      // logged in yet has nothing to sign with, and the token itself is the
+      // credential these routes speak.
+      if (url.pathname === prefix + '/auth' || url.pathname.startsWith(prefix + '/auth/')) {
+        return void auth.handle(req, res, url)
       }
 
       // ── public pool snapshot (aggregate numbers only) ─────────────────────
@@ -457,28 +501,81 @@ export function createGatewayServer(hostEnv = {}) {
         return json(res, 413, { error: { message: 'request body too large' } })
       }
 
+      // Concurrency bookkeeping for one request, declared where the catch below
+      // can see it: once a slot is taken, every way this request can leave early
+      // — a refusal, a thrown gateway call, the client walking away — must give
+      // it back, or the IP/account counts ratchet up until a restart.
+      let concReleased = false
+      let releaseConc = () => {}
+
       try {
         const bodyText = req.method === 'POST' || req.method === 'PUT' ? Buffer.concat(chunks).toString('utf8') : ''
         const isChat = req.method === 'POST' && url.pathname.endsWith('/chat/completions')
         let model = null
         if (isChat) { try { model = String(JSON.parse(bodyText).model ?? '') || null } catch { /* malformed body is the caller's fault */ } }
 
-        // ── per-IP concurrency gate on chat turns ─────────────────────────
-        if (isChat && concLimit > 0) {
-          const current = (inflight.get(ipHash) ?? 0) + 1
-          if (current > concLimit) {
-            analytics.record({ hash: ipHash, chat: true, status: 429, tokensIn: 0, tokensOut: 0, model, rejected: true })
-            return json(res, 429, { error: { message: 'concurrency limit reached for this IP (' + concLimit + ' in-flight)' } })
+        // ── GitHub authorization gate on chat turns ───────────────────────
+        // The listing stays open so the plugin can show the lane (locked)
+        // before anyone logs in; the turn is where the per-user token — and
+        // behind it a live star verdict — is required. `check` reads the
+        // stored verdict and never waits on GitHub.
+        let accountKey = null
+        if (isChat) {
+          const verdict = auth.check(String(req.headers['x-ofm-user'] ?? ''))
+          if (verdict.ok !== true) {
+            analytics.record({ hash: ipHash, chat: true, status: 401, tokensIn: 0, tokensOut: 0, model, rejected: true })
+            const message = verdict.reason === 'unstarred'
+              ? `GitHub 授权无效：请先 star ${auth.stats().repo}，再在插件设置页重新登录（${verdict.detail ?? 'star removed'}）`
+              : '需要 GitHub 授权：请在插件设置页用 GitHub 登录，并 star 仓库后使用 EAC 模型'
+            return json(res, 401, { error: { message, type: 'AuthorizationRequired', reason: verdict.reason ?? 'missing' } })
           }
-          inflight.set(ipHash, current)
-          analytics.concurrency(ipHash, current, current)
+          if (typeof verdict.githubId === 'string' && verdict.githubId !== '') {
+            accountKey = analytics.ipHash(`account:${verdict.githubId}`, logSalt)
+            for (const limiter of [tokenMinute, tokenDay]) {
+              if (limiter === undefined) continue
+              const limit = await limiter.limit({ key: accountKey })
+              if (limit.success === false) {
+                analytics.record({ hash: ipHash, chat: true, status: 429, tokensIn: 0, tokensOut: 0, model, rejected: true })
+                return json(res, 429, { error: { message: 'rate limit reached for this account; retry later' } })
+              }
+            }
+          }
         }
-        const releaseConc = () => {
-          if (!isChat || concLimit <= 0 || concReleased) return
+
+        // ── concurrency gates on chat turns: check both, then take both ────
+        // Per-IP first, then the per-account ceiling a shared token cannot
+        // escape by moving IPs. Both verdicts are computed before either slot
+        // is taken (no await in between, so the event loop cannot interleave),
+        // which is what keeps a rejection from consuming a slot the request
+        // never releases.
+        const ipNext = isChat && concLimit > 0 ? (inflight.get(ipHash) ?? 0) + 1 : null
+        const acctNext = isChat && accountKey !== null && tokenConcLimit > 0 ? (tokenInflight.get(accountKey) ?? 0) + 1 : null
+        if (ipNext !== null && ipNext > concLimit) {
+          analytics.record({ hash: ipHash, chat: true, status: 429, tokensIn: 0, tokensOut: 0, model, rejected: true })
+          return json(res, 429, { error: { message: 'concurrency limit reached for this IP (' + concLimit + ' in-flight)' } })
+        }
+        if (acctNext !== null && acctNext > tokenConcLimit) {
+          analytics.record({ hash: ipHash, chat: true, status: 429, tokensIn: 0, tokensOut: 0, model, rejected: true })
+          return json(res, 429, { error: { message: `concurrency limit reached for this account (${tokenConcLimit} in-flight)` } })
+        }
+        if (ipNext !== null) {
+          inflight.set(ipHash, ipNext)
+          analytics.concurrency(ipHash, ipNext, ipNext)
+        }
+        if (acctNext !== null) tokenInflight.set(accountKey, acctNext)
+        releaseConc = () => {
+          if (!isChat || concReleased) return
           concReleased = true
-          const current = (inflight.get(ipHash) ?? 1) - 1
-          if (current <= 0) inflight.delete(ipHash)
-          else { inflight.set(ipHash, current); analytics.concurrency(ipHash, current) }
+          if (concLimit > 0) {
+            const current = (inflight.get(ipHash) ?? 1) - 1
+            if (current <= 0) inflight.delete(ipHash)
+            else { inflight.set(ipHash, current); analytics.concurrency(ipHash, current) }
+          }
+          if (accountKey !== null && tokenConcLimit > 0) {
+            const current = (tokenInflight.get(accountKey) ?? 1) - 1
+            if (current <= 0) tokenInflight.delete(accountKey)
+            else tokenInflight.set(accountKey, current)
+          }
         }
 
         // The gateway counts rate-limit keys off `cf-connecting-ip`; behind the
@@ -518,7 +615,6 @@ export function createGatewayServer(hostEnv = {}) {
         })
 
         const scanner = createUsageScanner()
-        let concReleased = false
         if (!earlySent) {
           res.writeHead(response.status, (() => { const out = {}; response.headers.forEach((v, n) => { out[n] = v }); return out })())
         }
@@ -562,6 +658,9 @@ export function createGatewayServer(hostEnv = {}) {
         })
         res.on('close', () => { stopKeepalive(); if (!res.writableEnded) releaseConc() })
       } catch (error) {
+        // The gates may already be holding this request's slots; a thrown
+        // gateway call is exactly the path that used to leak them.
+        releaseConc()
         analytics.record({ hash: ipHash, chat: req.method === 'POST' && url.pathname.endsWith('/chat/completions'), status: 500, tokensIn: 0, tokensOut: 0, model: null, rejected: true })
         if (earlySent) emitInStreamError({ error: { message: 'gateway request failed' } })
         else {
@@ -574,6 +673,14 @@ export function createGatewayServer(hostEnv = {}) {
     req.on('error', () => res.destroy())
   })
 
+  // The authorization gate owns a recheck timer and a users.json handle; the
+  // server carries it so a test can close both, and so callers can read the
+  // same counts /stats-data reports.
+  server.authGate = auth
+  server.once('close', () => {
+    clearInterval(loopSampler)
+    loopDelay.disable()
+  })
   return server
 }
 

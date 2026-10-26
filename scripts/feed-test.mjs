@@ -76,6 +76,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost')
   if (url.pathname === '/good.json') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(goodFeed); return }
   if (url.pathname === '/newer.json') { res.writeHead(200); res.end(newerFeed); return }
+  if (url.pathname === '/empty.json') { res.writeHead(200); res.end('{"announcements":[]}'); return }
   if (url.pathname === '/bad.json') { res.writeHead(200); res.end(badFeed); return }
   if (url.pathname === '/boom.json') { res.writeHead(500); res.end('no'); return }
   if (url.pathname === '/slow.json') { setTimeout(() => { res.writeHead(200); res.end(goodFeed) }, 3000); return }
@@ -155,6 +156,47 @@ await checkAsync('watcher: cache survives a failed poll', async () => {
   assert.equal(reborn.view({}).source, `${base}/good.json`)
   fs.rmSync(dir, { recursive: true, force: true })
 })
+await checkAsync('mirror shrink and restart never announce previously seen ids again (#406)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-feed-mirror-'))
+  try {
+    let source = `${base}/newer.json`
+    const arrivals = []
+    const deps = { settings: () => ({ feedUrl: source }), cacheFile: path.join(dir, 'feed.json'),
+      onArrival: items => arrivals.push(...items), defaultSources: CONTROLLED_DEFAULTS }
+    const store = new AnnouncementFeed(deps)
+    store.load()
+    await store.poll()
+    source = `${base}/good.json`
+    await store.poll()
+    assert.equal(store.view({}).items.length, 2, 'the visible feed follows the current source')
+    source = `${base}/newer.json`
+    await store.poll()
+    assert.deepEqual(arrivals, [], 'source recovery cannot replay an arrival')
+    source = `${base}/empty.json`
+    await store.poll()
+    const reborn = new AnnouncementFeed(deps)
+    reborn.load()
+    source = `${base}/newer.json`
+    await reborn.poll()
+    assert.deepEqual(arrivals, [], 'seen ids survive a restart while the mirror is empty')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+await checkAsync('an initially empty feed still announces its first subsequent item', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-feed-empty-'))
+  try {
+    let source = `${base}/empty.json`
+    const arrivals = []
+    const store = new AnnouncementFeed({
+      settings: () => ({ feedUrl: source }), cacheFile: path.join(dir, 'feed.json'),
+      onArrival: items => arrivals.push(...items), defaultSources: CONTROLLED_DEFAULTS,
+    })
+    store.load()
+    await store.poll()
+    source = `${base}/good.json`
+    await store.poll()
+    assert.deepEqual(arrivals.map(row => row.id), ['one', 'two'])
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
 await checkAsync('watcher: concurrent polls share one request', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-feed-'))
   const feedStore = new AnnouncementFeed({ settings: () => ({ feedUrl: `${base}/good.json` }), cacheFile: path.join(dir, 'f.json'), onArrival: () => {}, defaultSources: CONTROLLED_DEFAULTS })
@@ -169,6 +211,7 @@ check('owner override is consulted first, {repo} expands', () => {
   const sources = store.sources()
   assert.equal(sources[0], 'https://my.example/Ebony-Vinyl/dsh-our-free-model/feed.json')
   assert.ok(DEFAULT_FEED_SOURCES.every(source => sources.includes(source)), 'defaults stay as fallback')
+  assert.equal(DEFAULT_FEED_SOURCES.some(source => source.includes('/master/')), false, 'defaults do not probe the removed master ref')
   fs.rmSync(dir, { recursive: true, force: true })
 })
 check('a plaintext, non-loopback override is refused (issue #19)', () => {

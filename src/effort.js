@@ -46,6 +46,17 @@ export function supportsEffort(model) {
   return model?.reasoning === true
 }
 
+const LEVEL_ALIASES = new Map(Object.entries({
+  light: 'light', minimal: 'light', low: 'light', none: 'light', off: 'light', disabled: 'light',
+  balanced: 'balanced', medium: 'balanced',
+  deep: 'deep', high: 'deep', xhigh: 'deep', max: 'deep',
+}))
+
+/** Aliases for the legacy budget ladder, never for a model's declared menu. */
+export function normalizeLevel(level) {
+  return typeof level === 'string' ? LEVEL_ALIASES.get(level.trim().toLowerCase()) : undefined
+}
+
 /**
  * The rung in force for one call, resolved the same way for the budget sent
  * upstream and the effort recorded against it.
@@ -63,8 +74,16 @@ export function supportsEffort(model) {
  * @returns {object|undefined} the declared level, or undefined when none applies
  */
 export function resolveLevel(level, model) {
+  // A menu model's recorded effort is the level the wire actually carries —
+  // resolving 'high' onto the free ladder's nearest rung logged 均衡 next to a
+  // generation the model delivered at High.
+  if (hasDeclaredEffortMenu(model)) {
+    const chosen = model.efforts.includes(level) ? level : eacDefaultLevel(model)
+    return { id: chosen }
+  }
   if (!supportsEffort(model)) return undefined
-  return LEVELS.find(candidate => candidate.id === level)
+  const wanted = normalizeLevel(level)
+  return LEVELS.find(candidate => candidate.id === wanted)
     ?? LEVELS.find(candidate => candidate.id === DEFAULT_LEVEL)
 }
 
@@ -97,10 +116,12 @@ export function budgetFor(level, model, requested, fallback) {
     usableTokens(requested),
     usableTokens(fallback),
   )
-  // The co-paid lane's thinking is controlled by its level patch, not by a
-  // token budget, so its ceiling is the model capacity regardless of level —
-  // a ladder here would cut answers for a menu that never promised to.
-  if (model?.channel === 'eac') return Math.max(MIN_BUDGET, Math.trunc(capacity))
+  // A model with a declared thinking menu has its level as the real control on
+  // the wire (an effort field the gateway forwards), so its ceiling is the
+  // model capacity regardless of level — a ladder here would cut answers for a
+  // menu that never promised to. Both absorbed channels declare menus; the
+  // free lane's own ladder is the budget semantics below.
+  if (hasDeclaredEffortMenu(model)) return Math.max(MIN_BUDGET, Math.trunc(capacity))
   const ceiling = ceilingOf(resolveLevel(level, model), model)
   if (ceiling === undefined) return Math.max(MIN_BUDGET, Math.trunc(capacity))
   return Math.max(MIN_BUDGET, Math.trunc(Math.min(ceiling, capacity)))
@@ -155,17 +176,16 @@ function instantiatePatch(patch, effort) {
 }
 
 /**
- * The thinking menu a co-paid-lane model declares, in ZCode's shape.
+ * The thinking menu a model declares in ZCode's shape.
  *
- * These models are not budget-driven: the relay ignores `max_tokens` as a
- * thinking control and takes the level itself as the control (a JSON merge
- * patch on the request body), so the menu is the model's own level list rather
- * than the free lane's token ladder.
+ * These models are not budget-driven: the gateway takes the level itself as
+ * the control (a JSON merge patch on the request body), so the menu is the
+ * model's own level list rather than the free lane's token ladder.
  *
  * @param {object} model - catalog entry carrying `efforts`/`effortDefault`
  * @returns {Array<{id:string, name:string, description:string}>|undefined}
  */
-function eacEffortsFor(model) {
+function declaredEffortsFor(model) {
   const levels = Array.isArray(model?.efforts) ? model.efforts : undefined
   if (levels === undefined || levels.length === 0) return undefined
   const names = { disabled: 'Off', low: 'Low', medium: 'Medium', high: 'High', max: 'Max' }
@@ -174,11 +194,11 @@ function eacEffortsFor(model) {
     name: names[id] ?? id,
     description: id === 'disabled'
       ? 'thinking switched off for this turn; the answer alone'
-      : `thinking level "${id}", sent to the relay as this model's own effort field`,
+      : `thinking level "${id}", sent to the gateway as this model's own effort field`,
   }))
 }
 
-/** The declared default level id for a co-paid-lane model, or its first level. */
+/** The declared default level id for a menu model, or its first level. */
 export function eacDefaultLevel(model) {
   const levels = Array.isArray(model?.efforts) ? model.efforts : []
   if (levels.length === 0) return undefined
@@ -203,18 +223,20 @@ export function effortPatchFor(level, model) {
   return instantiatePatch(model.effortPatch, chosen)
 }
 
-/** Is this a co-paid-lane entry (its menu comes from its own declaration)? */
-function isSealedEntry(model) {
-  return model?.channel === 'eac'
+/** Does this entry carry a declared thinking menu (its own effort field is
+ *  the control on the wire)? Both absorbed channels' entries do; the free
+ *  lane's never do, so its entries keep the token-ladder semantics. */
+export function hasDeclaredEffortMenu(model) {
+  return Array.isArray(model?.efforts) && model.efforts.length > 0
 }
 
 /**
  * The declared effort list for one model, in picker order.
  *
  * Two producers, two shapes: the free lane declares a token ladder (see the
- * module note on why a level there is an enforced generation budget), while the
- * co-paid lane declares the model's own levels, which the relay honours as an
- * effort field (see {@link eacEffortsFor}).
+ * module note on why a level there is an enforced generation budget), while a
+ * model with a declared menu offers its own levels, which the gateway honours
+ * as an effort field (see {@link declaredEffortsFor}).
  *
  * The description is generated from the same `budgetFor`/patch call that will
  * decide the request, not written next to it. A rung that advertises 8K while
@@ -236,12 +258,12 @@ function isSealedEntry(model) {
  * ("adapter returned an unknown default reasoning effort").
  */
 export function defaultEffortFor(model) {
-  if (isSealedEntry(model)) return eacDefaultLevel(model) ?? DEFAULT_LEVEL
+  if (hasDeclaredEffortMenu(model)) return eacDefaultLevel(model) ?? DEFAULT_LEVEL
   return DEFAULT_LEVEL
 }
 
 export function effortsFor(model, requested, fallback) {
-  if (isSealedEntry(model)) return eacEffortsFor(model)
+  if (hasDeclaredEffortMenu(model)) return declaredEffortsFor(model)
   if (!supportsEffort(model)) return undefined
   return budgetLadder(model, requested, fallback).map(row => ({
     id: row.id,

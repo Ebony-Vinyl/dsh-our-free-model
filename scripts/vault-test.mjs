@@ -31,8 +31,8 @@ import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { callRoute, fakeContext, until } from './lib/fake-kernel.mjs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { spawnSync } from 'node:child_process'
 
 let failures = 0
 const check = (name, actual, expected) => {
@@ -42,6 +42,95 @@ const check = (name, actual, expected) => {
 }
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
+
+// PR #279 / issue #278: count received bytes, including non-ASCII boundaries.
+// This focused mode never imports vault.js or opens the shipped seal:
+// node scripts/vault-test.mjs --body-limit-only
+async function checkBodyLimits(temporary) {
+  const gateway = await import(pathToFileURL(path.join(temporary, 'worker.js')).href)
+  const { createGatewayServer, resetAnalytics } = await import(pathToFileURL(path.join(temporary, 'gateway-node.mjs')).href)
+  const cap = 128
+  const env = {
+    MAX_BODY_BYTES: String(cap),
+    SIGNING_SECRETS: 'body-limit-synthetic-secret-0123456789abcdef',
+    RATE_LIMIT_PER_MINUTE: '0', RATE_LIMIT_PER_DAY: '0',
+    REQUIRE_USER_TOKEN: '0', GITHUB_STARS_OVERRIDE: '0',
+    USER_STORE_PATH: path.join(temporary, 'users.json'),
+    STATS_PATH: path.join(temporary, 'stats.json'),
+  }
+  const multibyteBody = JSON.stringify({ model: 'm', messages: [{ role: 'user', content: '中'.repeat(40) }] })
+  check('the Chinese fixture exceeds the byte cap but not the code-unit cap',
+    [multibyteBody.length > cap, Buffer.byteLength(multibyteBody, 'utf8') > cap], [false, true])
+  const cases = [
+    ['ASCII below cap', 'a'.repeat(127), 127, 401],
+    ['ASCII exactly at cap', 'a'.repeat(128), 128, 401],
+    ['ASCII above cap', 'a'.repeat(129), 129, 413],
+    ['Chinese JSON above cap', multibyteBody, 175, 413],
+    ['Chinese exactly at cap', '中'.repeat(42) + 'aa', 128, 401],
+    ['Chinese one byte above cap', '中'.repeat(43), 129, 413],
+    ['emoji exactly at cap', '😀'.repeat(32), 128, 401],
+    ['emoji above cap', '😀'.repeat(40), 160, 413],
+  ]
+  let server
+  try {
+    server = createGatewayServer(env)
+    await new Promise((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const endpoint = 'http://127.0.0.1:' + server.address().port + '/v1/chat/completions'
+    for (const [name, body, bytes, expected] of cases) {
+      check(name + ': fixture bytes', Buffer.byteLength(body, 'utf8'), bytes)
+      // Deliberately invalid signatures: 401 proves an in-limit body reached
+      // authentication; 413 proves rejection before authentication/relay work.
+      const init = {
+        method: 'POST', body,
+        headers: { 'x-ofm-timestamp': String(Date.now()), 'x-ofm-signature': 'x'.repeat(64) },
+      }
+      const workerResponse = await gateway.default.fetch(new Request('https://gateway.test/v1/chat/completions', init), env, {})
+      check(name + ': Worker status', workerResponse.status, expected)
+      await workerResponse.text()
+      const nodeResponse = await fetch(endpoint, { ...init, signal: AbortSignal.timeout(5000) })
+      check(name + ': Node status', nodeResponse.status, expected)
+      await nodeResponse.text()
+    }
+  } finally {
+    if (server !== undefined) {
+      server.authGate.close()
+      await new Promise((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve())
+        server.closeAllConnections()
+      })
+    }
+    resetAnalytics()
+  }
+}
+
+// A separate process also disposes the gateway's private event-loop sampler.
+// Keep local .env files and module state out of both this check and later suites.
+if (process.argv[2] === '--body-limit-child') {
+  await checkBodyLimits(process.argv[3])
+  process.exitCode = failures === 0 ? 0 : 1
+} else {
+const bodyLimitDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-body-limit-'))
+try {
+  for (const name of ['worker.js', 'gateway-node.mjs', 'auth-github.mjs']) {
+    fs.copyFileSync(path.join(repo, 'worker', name), path.join(bodyLimitDirectory, name))
+  }
+  fs.writeFileSync(path.join(bodyLimitDirectory, 'package.json'), JSON.stringify({ type: 'module' }))
+  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--body-limit-child', bodyLimitDirectory], {
+    stdio: 'inherit', timeout: 30_000,
+  })
+  if (child.error) throw child.error
+  check('isolated body-limit process passes', { status: child.status, signal: child.signal }, { status: 0, signal: null })
+} finally {
+  fs.rmSync(bodyLimitDirectory, { recursive: true, force: true })
+}
+if (process.argv.includes('--body-limit-only')) {
+  console.log(failures === 0 ? '\nvault-test (body limits): all checks passed' : '\nvault-test (body limits): ' + failures + ' check(s) FAILED')
+  process.exit(failures === 0 ? 0 : 1)
+}
+const { callRoute, fakeContext, until } = await import('./lib/fake-kernel.mjs')
 
 // The lane's wire module reads UPSTREAM_BASE once for the free lane; the sealed
 // lane has its own base from the seal. Import order matters for the boot blocks.
@@ -76,6 +165,10 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   check('the gate refuses one Tauri signal alone (home path only)', partialAio, null)
   const bareHarness = detectSealedHost({ env: {}, profileName: 'desktop' })
   check('the gate admits the desktop profile name alone (kernel-authoritative, Electron scrubs the env marker)', bareHarness, 'harness')
+  check('the kernel-provided DSH Tauri profile is a desktop host (#267)', detectSealedHost({ env: {}, profileName: 'tauri' }), 'harness')
+  check('a Tauri command line without kernel profile context is still refused', detectSealedHost({
+    env: { DSH_HOME: 'D:/dsh' }, execPath: 'D:/node.exe', argv: ['node.exe', '--profile', 'tauri'],
+  }), null)
   const aio = detectSealedHost({
     env: { DSH_HOME: 'C:/Users/u/AppData/Roaming/com.deepseek.dsh.desktop.aio/releases/6.9.3/dsh-home' },
     execPath: 'D:/DSHEAC AIO/resources/node/node.exe',
@@ -146,6 +239,14 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
     'a bearer prefix with payload': 'Bearer ' + 'sk',
   }
   for (const relative of files) {
+    // The vendored channel pack is third-party code carried byte-for-byte from
+    // its own repository (see vendor/channel-pack/NOTICE.md). Scanning it for *our*
+    // lane's fragments cannot find a leak — it never knew the lane — and does
+    // fire on coincidences: one upstream comment names the public host
+    // chatai.dpdns.org, whose suffix happens to contain the fragment. The rule
+    // that matters (no readable material in the code *we* ship) is unchanged
+    // for every other file.
+    if (relative.replace(/\\/g, '/').startsWith('vendor/')) continue
     const text = fs.readFileSync(path.join(repo, relative), 'utf8')
     for (const [name, needle] of Object.entries(needles)) {
       check(`${relative} carries no ${name}`, text.includes(needle), false)
@@ -298,6 +399,14 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   const workerPacked = Buffer.concat([workerIv, workerCipher.update(Buffer.from(JSON.stringify(sealBody))), workerCipher.final(), workerCipher.getAuthTag()])
   const workerOpened = openSealWith(workerShards, workerPacked)
   check('a worker-mode seal opens to gateway url + signing secret', workerOpened, { mode: 'worker', base: 'https://gateway.test/v1', signingSecret: GATEWAY_SECRET })
+  // Migration keeps the mounted path inside the seal; use synthetic material only.
+  const mountedIv = crypto.randomBytes(IV_BYTES)
+  const mountedCipher = crypto.createCipheriv('aes-256-gcm', deriveSealKey(workerShards), mountedIv, { authTagLength: TAG_BYTES })
+  mountedCipher.setAAD(Buffer.from(SEAL_AAD, 'utf8'))
+  const mountedPacked = Buffer.concat([mountedIv, mountedCipher.update(Buffer.from(JSON.stringify({ ...sealBody, u: 'https://gateway.test/eac/v1' }))), mountedCipher.final(), mountedCipher.getAuthTag()])
+  check('a mounted worker seal preserves the complete gateway base', openSealWith(workerShards, mountedPacked), {
+    mode: 'worker', base: 'https://gateway.test/eac/v1', signingSecret: GATEWAY_SECRET,
+  })
   const shortSecretShards = workerShards
   const shortIv = crypto.randomBytes(IV_BYTES)
   const shortCipher = crypto.createCipheriv('aes-256-gcm', deriveSealKey(shortSecretShards), shortIv, { authTagLength: TAG_BYTES })
@@ -433,6 +542,26 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   check('a mounted prefix serves the lane under an existing site', await callGateway('GET', '/eac/v1/models', {}, mounted), 200)
   check('the mount prefix is part of the signature (root path goes dark)', await callGateway('GET', '/v1/models', {}, mounted), 404)
   check('a foreign prefix is refused', await callGateway('GET', '/other/v1/models', {}, mounted), 404)
+
+  // Exercise the actual client poster too: hand-built signed requests alone
+  // cannot catch a client that drops /eac while constructing URLs or signing.
+  env.MOUNT_PREFIX = '/eac'
+  try {
+    const mountedCredential = { ...workerCredential, base: gatewayBase.replace('/v1', '/eac/v1'), userToken: null }
+    const mountedListing = await fetchSealedListing(mountedCredential)
+    check('the client lists models through the mounted signed gateway', mountedListing?.data?.[0]?.id, 'deepseek-ai/deepseek-v4.1-flash')
+    let mountedText = ''
+    const mountedTurn = await postSealedStreamed({
+      credential: mountedCredential,
+      body: { model: 'deepseek-ai/deepseek-v4.1-flash', messages: [{ role: 'user', content: 'hi' }], stream: true },
+      onData: payload => {
+        try { const frame = JSON.parse(payload); const content = frame.choices?.[0]?.delta?.content; if (typeof content === 'string') mountedText += content } catch { /* scripted frames only */ }
+      },
+    })
+    check('the client streams through the mounted signed gateway', [mountedTurn?.status, mountedText], [200, 'via-gateway'])
+  } finally {
+    delete env.MOUNT_PREFIX
+  }
 
   const tinyEnv = { ...env, MAX_BODY_BYTES: '16' }
   const tinyResponse = await gateway.default.fetch(new Request('https://gateway.test/v1/chat/completions', {
@@ -651,7 +780,7 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
     check('analytics counted every request including the refused one', [feedRow?.req, feedRow?.rej], [3, 1])
     check('usage parsed from relayed SSE frames feeds the token totals', [feedRow?.in, feedRow?.out], [18, 8])
     check('the concurrency peak stuck at the gate ceiling', feedRow?.concMax, 2)
-    check('the hourly curve recorded the burst', ((feedJson.hourly ?? [])[0]?.[1] ?? 0) >= 3, true)
+    check('the hourly curve recorded the burst', (feedJson.hourly ?? []).reduce((sum, row) => sum + (row[1] ?? 0), 0) >= 3, true)
 
     const dashboardPage = await fetch(`http://127.0.0.1:${concServer.address().port}/stats?t=${encodeURIComponent('test-admin-token-0123456789')}`)
     const pageText = await dashboardPage.text()
@@ -675,6 +804,12 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   ])
   check('an unknown id still shows its own name, tagged', roster[3].name, 'EAC Some Model 9')
   check('the ids stay the raw namespaced ids', roster[0].id, 'deepseek-ai/deepseek-v4.1-flash')
+  // The card's small line shows the model's own id: the `org/` prefix is what
+  // keeps this row distinct from the free lane's same-named model during the
+  // merge, but it is routing detail the reader never needs to see.
+  check('the card label drops the org prefix', roster.map(entry => entry.label), [
+    'deepseek-v4.1-flash', 'kimi-k3', 'glm-5.3-flash', 'some-model-9',
+  ])
   check('isEacEntry answers the channel field', [isEacEntry(roster[0]), isEacEntry({ id: 'mimo-v2.6-flash-free' })], [true, false])
   check('display names never leak the org prefix', roster.every(entry => !entry.name.includes('deepseek-ai/') && !entry.name.includes('moonshotai/')), true)
 }
@@ -800,7 +935,7 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
       check('with the model name under the channel tag', sealed?.name, 'EAC DeepSeek V4.1 Flash')
       const summary = await callRoute(api(), 'GET', '/api/our-free-model/summary')
       const summaryRow = (summary.json.catalog ?? []).find(entry => entry.id === 'moonshotai/kimi-k3')
-      check('the settings page row is marked available with the channel field', [summaryRow?.availability, summaryRow?.channel], ['available', 'eac'])
+      check('the settings page identifies an EAC listing without claiming a completed test', [summaryRow?.availabilitySource, summaryRow?.availability, summaryRow?.channel], ['listing', 'unknown', 'eac'])
       check('the settings page row carries the tag prefix in its name', summaryRow?.name, 'EAC Kimi K3')
       check('the settings API exposes no credential material anywhere', JSON.stringify(summary.json).includes('sk-'), false)
       const rosterIdsShown = (summary.json.catalog ?? []).filter(entry => entry.channel === 'eac').map(entry => entry.id)
@@ -832,6 +967,22 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   }
 
   {
+    const { ctx, api, restore } = await bootWith({ profileName: 'tauri' })
+    try {
+      const adapter = ctx.__captured.adapters[0]?.adapter
+      await until(async () => (await adapter.listModels(ROUTE_MAIN)).some(model => model.id === 'deepseek-ai/deepseek-v4.1-flash'), {
+        what: 'the sealed roster on a DSH Tauri host', timeoutMs: 10000,
+      })
+      const summary = await callRoute(api(), 'GET', '/api/our-free-model/summary')
+      check('a DSH Tauri boot lists the sealed models and opens the lane (#267)', [
+        (summary.json.catalog ?? []).some(entry => entry.id === 'moonshotai/kimi-k3'), summary.json.laneAvailable,
+      ], [true, true])
+      const poolRow = await callRoute(api(), 'GET', '/api/our-free-model/pool')
+      check('the pool route answers on a DSH Tauri host', poolRow.json?.ok, true)
+    } finally { restore() }
+  }
+
+  {
     const { ctx, api, restore } = await bootWith({ simulateAio: false })
     try {
       const adapter = ctx.__captured.adapters[0]?.adapter
@@ -850,4 +1001,5 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
 }
 
 console.log(failures === 0 ? '\nvault-test: all checks passed' : `\nvault-test: ${failures} check(s) FAILED`)
-process.exit(failures === 0 ? 0 : 1)
+process.exitCode = failures === 0 ? 0 : 1
+}

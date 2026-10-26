@@ -1,0 +1,101 @@
+name: build-macos
+
+# 在 macOS 上构建 Our Free Model 桌面壳的 .dmg（未签名，本地使用需绕过 Gatekeeper）。
+# 手动触发，或在打 v* 标签时自动构建并上传为构件。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: |
+          npm install
+          npm --prefix packages/standalone ci
+          node scripts/build-standalone-ui.mjs
+          npm --prefix packages/desktop ci --ignore-scripts
+      - name: Build macOS dmg
+        env:
+          CI: true
+        run: npm --prefix packages/desktop run build
+      - name: Upload dmg
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ofm-desktop-macos
+          path: packages/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish dmg as a release asset (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dmg=$(ls packages/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -1)
+          sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
+          version=$(node -p "require('./packages/desktop/package.json').version")
+          arch=$(uname -m)
+          release_tag="${GITHUB_REF_NAME}-macos-unofficial"
+          cat > release-notes.md <<NOTES
+          ## 非官方社区构建 / Unofficial community build
+
+          这不是仓库作者发布的官方安装包。作者自 2.4.0 起将桌面安装包限制为 Windows-only，Mac 用户停留在 2.3.0。本 dmg 由本仓库的 GitHub Actions 从公开源码构建，可审计、可复现。
+
+          This is NOT an official release by the repository author. The author restricted desktop installers to Windows-only since 2.4.0, leaving Mac users on 2.3.0. This dmg is built by GitHub Actions from public, auditable source.
+
+          | 项 / Item | 值 / Value |
+          |---|---|
+          | 版本 / Version | ${version} |
+          | 架构 / Arch | ${arch} |
+
+          ### 可信性 / Trust
+
+          1. 构建来自当前标签对应的公开源码，可逐行审计。
+          2. 本 dmg 正是你正在查看的这次 Actions 运行的产物，由 GitHub macOS runner 构建；任何人 fork 后重跑同一 workflow 即可复现。
+          3. 下载后请核对下方 SHA256。
+
+          ### 「已损坏」/ "damaged" 怎么办？/ How to open
+
+          本包未经 Apple 签名与公证（社区构建没有 Apple Developer 账号），Gatekeeper 会拦截首次启动，并非文件损坏。任选其一：
+
+          The package is unsigned / not notarized (a community build has no Apple Developer account), so Gatekeeper blocks first launch. The file is NOT damaged. Pick any one:
+
+          1. 访达中右键（Control 点按）应用图标 → 「打开」→ 再次确认。In Finder, Control-click the app → Open → confirm again.
+          2. 终端清除隔离属性 / remove the quarantine attribute:
+
+          ```bash
+          xattr -cr /Applications/Our\ Free\ Model.app
+          ```
+
+          3. 仍提示损坏时用 sudo / if it still complains:
+
+          ```bash
+          sudo xattr -rd com.apple.quarantine '/Applications/Our Free Model.app'
+          ```
+
+          4. 系统设置 → 隐私与安全性 → 「仍要打开」。System Settings → Privacy & Security → Open Anyway.
+
+          NOTES
+          {
+            echo ""
+            echo "---"
+            echo "- 构建来源 / Source: ${GITHUB_REF_NAME} @ ${GITHUB_SHA}"
+            echo "- 构建记录 / CI run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "- SHA256: $sha"
+          } >> release-notes.md
+          gh release create "$release_tag" "$dmg" \
+            --title "${version} macOS (${arch}) — 非官方社区构建 / unofficial community build" \
+            --notes-file release-notes.md \
+            --target "$GITHUB_SHA" || gh release upload "$release_tag" "$dmg" --clobber

@@ -1,0 +1,24 @@
+[package]
+name = "ofm-desktop"
+version = "2.7.1"
+description = "Our Free Model Desktop"
+authors = ["Ebony-Vinyl"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "ofm_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dirs = "5.0"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+sha2 = "0.10.9"
+semver = "1.0.28"

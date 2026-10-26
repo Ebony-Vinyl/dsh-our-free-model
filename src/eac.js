@@ -28,7 +28,8 @@ import { Readable } from 'node:stream'
 // Web-stream adapter: http.js's readHead/readSse speak getReader(), so the
 // node:http response is converted into a proper WHATWG ReadableStream.
 import { ReadableStream } from 'node:stream/web'
-import { CODE, UpstreamError, classifyFailure, classifyStreamFailure, readHead, readSse, replayStream, sniffBody } from './http.js'
+import { CODE, UpstreamError, classifyFailure, classifyStreamFailure, readHead, readSse, replayStream, sniffBody, transportCause } from './http.js'
+import { readEacUser } from './eac-user.js'
 
 const LISTING_TIMEOUT_MS = 15000
 const TURN_TIMEOUT_MS = 300000
@@ -41,6 +42,19 @@ const TURN_TIMEOUT_MS = 300000
  * the free lane's upstream override.
  */
 export const lane = { fetch: null }
+
+/**
+ * Test seam for the per-user authorization token (src/eac-user.js), same
+ * convention as `lane`: `undefined` reads the file, any other value —
+ * `null` included — is used as-is, so the offline suite never touches a home.
+ */
+export const laneUser = { token: undefined }
+
+/** The GitHub authorization this install holds, or null. Never logged. */
+function laneUserToken() {
+  if (laneUser.token !== undefined) return laneUser.token
+  try { return readEacUser()?.token ?? null } catch { return null }
+}
 
 /**
  * The lane's module-private transport, shared with the pool proxy: plugin
@@ -68,6 +82,7 @@ export { laneFetch as directFetch }
  * sniff window, so first tokens still flow out unheld.
  */
 function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal } = {}) {
+  if (signal?.aborted === true) return Promise.reject(new UpstreamError('request aborted', CODE.aborted))
   if (typeof lane.fetch === 'function') return lane.fetch(url, { method, headers, body, signal })
   return new Promise((resolve, reject) => {
     const target = new URL(url)
@@ -133,7 +148,14 @@ function headersFor(credential, method, fullUrl, body) {
   }
   if (credential.mode === 'worker') {
     const path = new URL(fullUrl).pathname
-    return { ...headers, ...signSealedRequest(credential.signingSecret, { method, path, body }) }
+    const signed = { ...headers, ...signSealedRequest(credential.signingSecret, { method, path, body }) }
+    // The per-user authorization the gateway's GitHub gate demands on turns.
+    // Absent before login; the gateway then answers 401 AuthorizationRequired,
+    // which the settings page turns into a login prompt. Sent on listings too
+    // so a gated listing needs no second wire shape.
+    // 显式传入 null 也必须隔离：独立应用未登录时不能回退读取 DSH 授权。
+    const userToken = Object.hasOwn(credential, 'userToken') ? credential.userToken : laneUserToken()
+    return userToken === null ? signed : { ...signed, 'x-ofm-user': userToken }
   }
   return { ...headers, 'authorization': `Bearer ${credential.apiKey}` }
 }
@@ -168,7 +190,7 @@ export async function fetchSealedListing(credential, { signal, timeoutMs = LISTI
     if (error instanceof UpstreamError) throw error
     if (callerAborted || signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
     if (error?.name === 'AbortError') throw new UpstreamError('model listing timed out', CODE.timeout)
-    throw new UpstreamError(`model listing failed: ${error?.message ?? error}`, CODE.transport)
+    throw new UpstreamError(`model listing failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener?.('abort', onCallerAbort)
@@ -197,7 +219,7 @@ export async function postSealedStreamed({ credential, body, signal, onData, tim
     })
   } catch (error) {
     if (signal?.aborted === true || error?.name === 'AbortError') throw new UpstreamError('request aborted', CODE.aborted)
-    throw new UpstreamError(`model request failed: ${error?.message ?? error}`, CODE.transport)
+    throw new UpstreamError(`model request failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
   }
 
   // `Retry-After` is seconds on the wire and milliseconds in the classified

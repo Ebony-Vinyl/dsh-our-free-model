@@ -20,6 +20,7 @@
  * Run: node scripts/projection-test.mjs
  */
 
+import { fromOpenAiMessages } from '../src/core/completion.js'
 import { repairToolPairing, toChatMessages, toClaudeMessages, toResponseInput } from '../src/messages.js'
 
 let failures = 0
@@ -245,6 +246,68 @@ console.log('\n=== 7. one answer goes out, not two, on every wire ===')
   check('a result image is base64-encoded once on the Messages wire',
     JSON.stringify(toClaudeMessages(repairToolPairing(turn), resolveImage, [])).split('AAAA').length - 1, 1)
 }
+
+console.log('\n=== 8. parallel image results stay adjacent (#112) ===')
+{
+  const images = ['a', 'b'].map(id => ({ ...IMAGE, attachment: { url: `data:image/png;base64,image-${id}` } }))
+  for (const shape of ['v3', 'v4', 'v3-batched']) {
+    const results = shape === 'v3-batched'
+      ? [{ role: 'user', content: ['a', 'b'].map((id, i) => ({ type: 'tool-result', toolCallId: id, content: [images[i]] })) }]
+      : ['a', 'b'].map((id, i) => shape === 'v4'
+        ? v4Result(id, '', { content: [images[i]] })
+        : { role: 'user', content: [{ type: 'tool-result', toolCallId: id, content: [images[i]] }] })
+    const source = [
+      { role: 'user', content: [{ type: 'text', text: 'read both' }] },
+      { role: 'assistant', content: [callBlock('a', 'read_image'), callBlock('b', 'read_image')] },
+      ...results,
+    ]
+    const original = JSON.stringify(source)
+    for (const tail of [[], [{ role: 'assistant', content: [{ type: 'text', text: 'both images read' }] }, { role: 'user', content: 'continue' }]]) {
+      const history = repairToolPairing([...source, ...tail])
+      const chat = toChatMessages(history)
+      const responses = toResponseInput(history)
+      const tools = chat.map((row, i) => row.role === 'tool' ? i : -1).filter(i => i >= 0)
+      const outputs = responses.map((row, i) => row.type === 'function_call_output' ? i : -1).filter(i => i >= 0)
+      const label = `${shape}/${tail.length === 0 ? 'EOF' : 'next turn'}`
+      check(`${label}: no user message interrupts chat results`, tools.length === 2 && tools[1] === tools[0] + 1, true)
+      check(`${label}: no message interrupts Responses results`, outputs.length === 2 && outputs[1] === outputs[0] + 1, true)
+      const chatImages = chat.flatMap((row, i) => Array.isArray(row.content) ? row.content.filter(b => b.type === 'image_url').map(b => [i, b.image_url.url]) : [])
+      const responseImages = responses.flatMap((row, i) => (row.content ?? []).filter?.(b => b.type === 'input_image').map(b => [i, b.image_url]) ?? [])
+      check(`${label}: chat carries each image once, after both results`, chatImages.map(([i, url]) => [i > tools[1], url]), [[true, images[0].attachment.url], [true, images[1].attachment.url]])
+      check(`${label}: Responses carries each image once, after both results`, responseImages.map(([i, url]) => [i > outputs[1], url]), [[true, images[0].attachment.url], [true, images[1].attachment.url]])
+      check(`${label}: subsequent turns survive`, tail.length === 0 || (chat.at(-1).content === 'continue' && responses.at(-1).content[0].text === 'continue'), true)
+    }
+    check(`${shape}: source history is untouched`, JSON.stringify(source), original)
+  }
+  // Old-format wrappers may also contain user text. It must wait until all
+  // results are emitted, without moving into the tool's result or disappearing.
+  const mixed = [
+    { role: 'assistant', content: [callBlock('a'), callBlock('b')] },
+    { role: 'user', content: [{ type: 'tool-result', toolCallId: 'a', content: [images[0]] }, { type: 'text', text: 'keep this note' }] },
+    v3Result('b', 'second result'),
+  ]
+  check('mixed wrapper text cannot interrupt chat results', toChatMessages(repairToolPairing(mixed)).map(row => row.role), ['assistant', 'tool', 'tool', 'user'])
+  check('mixed wrapper text is preserved once', JSON.stringify(toChatMessages(repairToolPairing(mixed))).split('keep this note').length - 1, 1)
+  check('mixed wrapper text cannot interrupt Responses outputs', toResponseInput(repairToolPairing(mixed)).map(row => row.type), ['function_call', 'function_call', 'function_call_output', 'function_call_output', 'message'])
+}
+
+
+// Chat forwarding must retain the caller's previous reasoning through tool results.
+for (const reasoning of ['previous reasoning', '']) {
+  const messages = [
+    { role: 'user', content: 'read a file' },
+    { role: 'assistant', content: null, reasoning_content: reasoning, tool_calls: [{ id: 'a', type: 'function', function: { name: 'read', arguments: '{"path":"owned.txt"}' } }] },
+    { role: 'tool', tool_call_id: 'a', content: 'file contents' },
+    { role: 'assistant', content: 'done', reasoning_content: reasoning },
+  ]
+  const projected = toChatMessages(repairToolPairing(fromOpenAiMessages({ messages }, false, 'reflection/beam-free')))
+  check('forwarding retains explicit reasoning, including empty strings', projected, messages)
+}
+for (const reasoning of [undefined, null, 4, {}]) {
+  const messages = [{ role: 'user', content: 'hello', reasoning_content: 'user field' }, { role: 'assistant', content: 'reply', reasoning_content: reasoning }]
+  check('forwarding does not invent reasoning or accept other roles/invalid values', toChatMessages(fromOpenAiMessages({ messages }, false, 'model')), [{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'reply' }])
+}
+check('internal reasoning blocks are not exposed as Chat text', toChatMessages([{ role: 'assistant', content: [{ type: 'reasoning', text: 'internal' }, { type: 'text', text: 'visible' }] }]), [{ role: 'assistant', content: 'visible' }])
 
 console.log(failures === 0 ? '\nall projection checks passed' : `\n${failures} projection check(s) failed`)
 process.exitCode = failures === 0 ? 0 : 1

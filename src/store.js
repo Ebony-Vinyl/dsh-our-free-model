@@ -155,7 +155,13 @@ export const SETTINGS_INITIAL = {
   enabled: true,
   /** Show region-limited models in the picker as soon as they answer. */
   exposeRegionModels: true,
-  /** Minutes between background availability re-probes. */
+  /** Advertisement only: retain catalog entries and historical model resolution. */
+  hiddenModelIds: [],
+  hideFreeModels: false,
+  hideEacModels: false,
+  /** Minutes between background catalog refreshes. Automatic availability
+   *  probing is disabled by owner policy; only the manual reprobe button sends
+   *  probe requests. */
   probeIntervalMinutes: 15,
   /** Serve the OpenAI-compatible forward listener for other local harnesses. */
   forward: {
@@ -171,12 +177,56 @@ export const SETTINGS_INITIAL = {
    *  'client'` dials one http/https/socks5/socks5h URL directly. Off by
    *  default — requests go straight out until this is turned on. */
   egress: { enabled: false, mode: 'subscription', url: '', mihomoPath: '' },
+  /** Expose the absorbed channels' OpenAI gateway (the pack's loopback
+   *  listener) to other machines under this plugin's own key. Off by default:
+   *  a LAN listener is a door, and doors stay shut until asked for. */
+  chanGateway: {
+    relay: { enabled: false, host: '127.0.0.1', port: 18326, key: '' },
+  },
   /** Cap a turn's output so a slow lane cannot run away. */
   defaultMaxTokens: 32768,
   /** 所有模型默认允许一次纯推理检查点续写，false 可关闭。 */
   streamRecovery: true,
+  /** Token savers. Tool-output compaction is on by default — it is invisible to
+   *  the model's reasoning (the compacted text is what the model reads) and the
+   *  result is auditable in the transcript. Prompt-level shaping changes the
+   *  assistant's voice, so every level starts `off`. */
+  tokenSaver: {
+    enabled: true,
+    rtk: true,
+    prompts: { caveman: 'off', ponytail: 'off' },
+  },
+  /** The aggregate lane: third-party providers reached with the user's own key.
+   *  Keys live in this 0600 file, never in a shared settings document, and the
+   *  API masks them on the way out. */
+  aggregate: {
+    enabled: true,
+    providers: {},
+  },
+  /** Named fallback chains. A combo is a virtual model whose answer comes from
+   *  the first link that produces output; see src/combos.js.
+   *  Ships one sensible default so a fresh install shows a single "推荐免费组"
+   *  entry instead of a dozen free models; users can edit/disable it in settings. */
+  combos: [
+    {
+      id: 'combo:recommended-free',
+      name: '推荐免费组',
+      models: ['deepseek-v4.1-flash-free', 'glm-5.3-flash-free', 'space-bunny-free'],
+      strategy: 'fallback',
+      stickyLimit: 1,
+      enabled: true,
+    },
+  ],
+  /** The five local answers that avoid a provider call entirely: a quota probe,
+   *  a shell command prefix, a session title, a suggestion, a filepath list.
+   *  They are pure request-shape matches, so a false positive would answer a real
+   *  question with a canned string — each is individually switchable, and the
+   *  detector is conservative enough to be off for anything else. */
+  localOptimize: { enabled: true, quota: true, prefix: true, title: true, suggestion: true, filepath: true },
   /** Acknowledged announcement copy version. */
   announcementAck: '',
+  /** Acknowledged disclaimer copy version (src/disclaimer.js); 0 = not yet read. */
+  disclaimerAck: 0,
   /** Last full catalog refresh timestamp. */
   catalogSyncedAt: 0,
   /** Owner override for the announcement/update feed location. `{repo}` expands
@@ -208,6 +258,44 @@ export const SETTINGS_INITIAL = {
   installedVersion: '',
 }
 
+const validHiddenModelId = value => typeof value === 'string' && value.length > 0
+  && value.length <= 300 && value === value.trim() && !/[\u0000-\u001f\u007f]/.test(value)
+
+export function publicModelVisibility(settings) {
+  return {
+    hiddenModelIds: [...new Set((Array.isArray(settings?.hiddenModelIds) ? settings.hiddenModelIds : [])
+      .filter(validHiddenModelId))].slice(0, 1000),
+    hideFreeModels: settings?.hideFreeModels === true,
+    hideEacModels: settings?.hideEacModels === true,
+  }
+}
+
+/** Reject the entire API patch before any setting is written. */
+export function validateModelVisibility(patch) {
+  if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) {
+    throw Object.assign(new TypeError('settings must be a JSON object'), { statusCode: 400 })
+  }
+  const result = {}
+  for (const key of ['hideFreeModels', 'hideEacModels', 'hiddenModelIds']) {
+    if (!Object.hasOwn(patch, key)) continue
+    const value = patch[key]
+    if (key === 'hiddenModelIds'
+      ? !Array.isArray(value) || value.length > 1000 || value.some(id => !validHiddenModelId(id))
+      : typeof value !== 'boolean') {
+      throw Object.assign(new TypeError(`${key} must be ${key === 'hiddenModelIds' ? 'an array of at most 1000 nonempty model ids (up to 300 characters each)' : 'a boolean'}`), { statusCode: 400 })
+    }
+    result[key] = Array.isArray(value) ? [...new Set(value)] : value
+  }
+  return result
+}
+
+export function isModelHidden(entry, settings) {
+  return (Array.isArray(settings?.hiddenModelIds) && settings.hiddenModelIds.includes(entry.id))
+    || (settings?.hideFreeModels === true && (!entry.channel || entry.channel === 'anonymous' || entry.channel === 'kilo'
+      || (entry.channel === 'combo' && Array.isArray(entry.lanes) && entry.lanes.length > 0 && entry.lanes.every(lane => lane === 'free'))))
+    || (settings?.hideEacModels === true && entry.channel === 'eac')
+}
+
 export const STATS_INITIAL = {
   version: STATS_VERSION,
   days: {},
@@ -216,6 +304,9 @@ export const STATS_INITIAL = {
   failedRequests: 0,
   samples: [],
   logical: { turns: 0, failed: 0, recovered: 0, models: {} },
+  /** Lifetime token-saver totals; `calls` counts every request the pipeline ran
+   *  on, including the ones where nothing was compressible. */
+  savings: { bytesBefore: 0, bytesAfter: 0, saved: 0, blocks: 0, calls: 0, promptCalls: 0 },
 }
 
 /**
@@ -313,6 +404,7 @@ export function recordUsage(stats, record) {
       ...record.recoveryScheduled === true ? { recoveryScheduled: true } : {},
       ...record.recovered === true ? { recovered: true } : {},
       ...record.aborted === true ? { aborted: true } : {},
+      ...savingsSample(record.savings),
     }].slice(-400)
     return {
       ...state,
@@ -321,8 +413,42 @@ export function recordUsage(stats, record) {
       requests: (state.requests ?? 0) + 1,
       failedRequests: (state.failedRequests ?? 0) + (record.ok === true ? 0 : 1),
       samples,
+      savings: accumulateSavings(state.savings, record.savings),
     }
   })
+}
+
+/**
+ * Fold one call's token-saver report into the lifetime accumulator.
+ *
+ * Counted here rather than at the pipeline's exit so the number the panel shows
+ * is derived from the same rows the usage charts are: a saved-byte total that
+ * included requests the store never recorded would drift away from the call
+ * count beside it, and the first question anyone asks of a savings figure is
+ * "out of how many calls".
+ *
+ * The shape is written even when a record carries no savings, so a stats file
+ * from before this feature gains the field on its next call instead of the panel
+ * having to guess between `undefined` and zero.
+ */
+export function accumulateSavings(total, savings) {
+  const base = total ?? { bytesBefore: 0, bytesAfter: 0, saved: 0, blocks: 0, calls: 0, promptCalls: 0 }
+  const saved = Number(savings?.saved) || 0
+  return {
+    bytesBefore: (Number(base.bytesBefore) || 0) + (Number(savings?.bytesBefore) || 0),
+    bytesAfter: (Number(base.bytesAfter) || 0) + (Number(savings?.bytesAfter) || 0),
+    saved: (Number(base.saved) || 0) + saved,
+    blocks: (Number(base.blocks) || 0) + (Number(savings?.blocks) || 0),
+    calls: (Number(base.calls) || 0) + 1,
+    promptCalls: (Number(base.promptCalls) || 0) + (Array.isArray(savings?.prompt) && savings.prompt.length > 0 ? 1 : 0),
+  }
+}
+
+/** The per-sample marker, present only when a call actually saved something. */
+function savingsSample(savings) {
+  const saved = Number(savings?.saved) || 0
+  if (saved <= 0) return {}
+  return { saved, ...Array.isArray(savings?.prompt) && savings.prompt.length > 0 ? { savedPrompt: true } : {} }
 }
 
 /** Record one user-visible turn, separately from its physical upstream attempts. */
@@ -404,6 +530,11 @@ export function migrateStats(value) {
     version: STATS_VERSION,
     days,
     models: lifetimeModels,
+    // A stats file written before the token savers existed carries no savings
+    // history at all. Zeroes are the honest reading: those calls really did ship
+    // uncompressed bodies, so back-filling a number would invent a saving that
+    // never happened.
+    savings: value?.savings ?? { bytesBefore: 0, bytesAfter: 0, saved: 0, blocks: 0, calls: 0, promptCalls: 0 },
     failedRequests: version >= 3 && Number.isSafeInteger(value?.failedRequests) ? value.failedRequests : failedRequests,
     failedRequestsEstimated: version >= 3 && Number.isSafeInteger(value?.failedRequests) ? value.failedRequestsEstimated === true : true,
     logical: version >= 3 && value?.logical !== undefined ? value.logical : {

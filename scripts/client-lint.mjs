@@ -40,6 +40,10 @@ new Function('window', 'document', 'navigator', source)(globalThis.window, globa
 const problems = []
 const record = globalThis.__registered
 
+if (!source.includes("ReactDOM.createPortal") || !source.includes("data-ofm-announcement-root") || !source.includes('document.body.appendChild(host)')) {
+  problems.push('announcement overlay must use a body-level portal host')
+}
+
 if (record === undefined) {
   problems.push('the bundle never registered itself with the module loader')
 } else {
@@ -48,7 +52,8 @@ if (record === undefined) {
   else {
     const exports = record.factory(name => {
       if (name === 'react') return stubReact
-      throw new Error(`the browser half may only require react; it asked for "${name}"`)
+      if (name === 'react-dom') return { createPortal: (children, container) => ({ type: 'portal', children, container }) }
+      throw new Error(`the browser half may only require react or react-dom; it asked for "${name}"`)
     })
     if (typeof exports.apply !== 'function') problems.push('exports.apply is missing')
     if (!Array.isArray(exports.inject)) problems.push('exports.inject is missing')
@@ -109,6 +114,10 @@ for (const language of ['zh', 'en']) {
 const cssStart = source.indexOf('const CSS = `')
 const css = source.slice(cssStart + 'const CSS = `'.length, source.indexOf('\n`', cssStart))
 if (css.length === 0) problems.push('the stylesheet block was not located')
+const switchStyle = css.match(/\.ofm_switch\{([^}]+)\}/)?.[1] ?? ''
+for (const reset of ['appearance:none', 'background:transparent', 'border:0', 'padding:0', 'font:inherit', 'color:inherit']) {
+  if (!switchStyle.includes(reset)) problems.push(`switch button must reset ${reset}`)
+}
 const declared = new Set([...css.matchAll(/\.(ofm_[A-Za-z0-9_]+)/g)].map(match => match[1]))
 
 const referenced = new Set()

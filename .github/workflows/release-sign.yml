@@ -1,0 +1,94 @@
+name: release-sign
+
+# main is the live update source: whatever sits there is what every in-app
+# upgrader downloads and verifies against feed/manifest.json. A merge that
+# changes shipped files without re-signing leaves the digests describing a
+# tree that no longer exists — every user's upgrade then fails verification
+# (fail-closed, nothing corrupt installs) until the manifest is rebuilt.
+# This workflow closes that gap on its own: on every push to main it checks
+# the committed manifest against the tree, and when the two have drifted it
+# rebuilds and re-signs with the release key (an Actions secret, never
+# readable), refreshes the catalog revision, and pushes only after the full
+# release suite passes. Idempotent: on a consistent tree it writes nothing,
+# so the run triggered by its own push is a no-op.
+#
+# PR release-readiness validates the candidate's signed release records.
+# prepare-release can create a candidate-bound signed patch from trusted main
+# without executing candidate code. After a merge this workflow remains the
+# fallback that signs the result and validates it before pushing the records.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: rebuild and re-sign even when --check passes (exercises the full loop)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-sign-main
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: refresh-revision walks git log over the release content,
+      # and fetch-depth: 1 would answer HEAD for any path list.
+      # persist-credentials: false keeps the checkout from planting a
+      # GITHUB_TOKEN http extraheader — that header would override the push
+      # token's credentials and the push would land as an actor the ruleset
+      # rightly refuses.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # No install step and no dependencies: the suites are plain Node scripts.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Rebuild and re-sign the manifest when the tree has drifted
+        env:
+          FORCE: ${{ inputs.force }}
+          # build-manifest.mjs takes a key *path* (OFM_MANIFEST_KEY) while the
+          # secret holds the PEM itself — stage it into the ephemeral runner.
+          RELEASE_KEY_PEM: ${{ secrets.RELEASE_MANIFEST_PRIVATE_KEY }}
+        run: |
+          if [ "$FORCE" = "true" ] || ! node scripts/build-manifest.mjs --check; then
+            if [ -z "$RELEASE_KEY_PEM" ]; then
+              echo '::error::RELEASE_MANIFEST_PRIVATE_KEY is not set — add the release signing PEM as a repository secret'
+              exit 1
+            fi
+            KEY_FILE="$RUNNER_TEMP/release-key.pem"
+            printf '%s' "$RELEASE_KEY_PEM" > "$KEY_FILE"
+            OFM_MANIFEST_KEY="$KEY_FILE" node scripts/build-manifest.mjs
+            node scripts/refresh-revision.mjs
+          fi
+      - name: The release suite gates the push
+        run: node scripts/test-all.mjs --mode release
+      - name: Commit and push the refreshed records
+        env:
+          # GITHUB_TOKEN is a ruleset outsider: main demands PRs and green
+          # checks from it. The push token belongs to a bypass holder, so the
+          # push lands as theirs; a fine-grained PAT scoped to this repo is
+          # the intended long-term value for this secret.
+          PUSH_TOKEN: ${{ secrets.OFM_RELEASE_PUSH_TOKEN }}
+        run: |
+          if git diff --quiet -- feed/manifest.json catalog/integrity.json catalog/dsh-plugin.json catalog/provenance.json; then
+            echo "the committed manifest describes this tree — nothing to push"
+            exit 0
+          fi
+          if [ -z "$PUSH_TOKEN" ]; then
+            echo '::error::OFM_RELEASE_PUSH_TOKEN is not set — the re-signed records cannot reach main'
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add feed/manifest.json catalog/integrity.json catalog/dsh-plugin.json catalog/provenance.json
+          git commit -m "catalog: re-sign the manifest over ${GITHUB_SHA::7}"
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main

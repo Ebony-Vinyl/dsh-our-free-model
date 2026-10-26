@@ -27,9 +27,36 @@
 
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { createRequire } from 'node:module'
+import { createRequire, registerHooks } from 'node:module'
 
 let inFlight = null
+const hooksKey = Symbol.for('our-free-model.reload-hooks')
+const reloadHooks = globalThis[hooksKey] ??= new Map()
+
+/** Carry the entry's generation into its dependencies when the host hides its cache. */
+function enableFreshDependencies(packageUrl) {
+  if (reloadHooks.has(packageUrl)) return
+  const packagePath = fs.realpathSync(fileURLToPath(packageUrl))
+  const hook = registerHooks({
+    resolve(specifier, context, nextResolve) {
+      const resolved = nextResolve(specifier, context)
+      const parentPath = context.parentURL?.startsWith('file:')
+        ? fs.realpathSync(fileURLToPath(new URL(context.parentURL)))
+        : null
+      const resolvedPath = resolved.url.startsWith('file:')
+        ? fs.realpathSync(fileURLToPath(new URL(resolved.url)))
+        : null
+      if (parentPath === null || resolvedPath === null
+        || !parentPath.startsWith(packagePath) || !resolvedPath.startsWith(packagePath)) return resolved
+      const generation = new URL(context.parentURL).searchParams.get('ofm-reload')
+      if (generation === null) return resolved
+      const target = new URL(resolved.url)
+      target.searchParams.set('ofm-reload', generation)
+      return { ...resolved, url: target.href }
+    },
+  })
+  reloadHooks.set(packageUrl, hook)
+}
 
 /** Whether a reload is currently running; guards against overlapping swaps. */
 export function isReloading() {
@@ -141,7 +168,10 @@ export function selfReload(ctx, options = {}) {
     const runtime = registry.get(previous)
     const fibers = [...(runtime?.fibers ?? [])].map(fiber => {
       const entry = fiber.entry?.fiber?.uid === fiber.uid ? fiber.entry : undefined
-      return { fiber, entry, config: entry === undefined ? fiber._config : entry.options.config }
+      const plugin = typeof previous === 'function'
+        ? { apply: previous, inject: { ...fiber.inject }, Config: runtime.Config, name: runtime.name }
+        : previous
+      return { fiber, entry, plugin, config: entry === undefined ? fiber._config : entry.options.config }
     })
     if (fibers.length === 0) {
       return { ok: false, error: 'runtime has no live fibers', restored: false }
@@ -164,14 +194,22 @@ export function selfReload(ctx, options = {}) {
       if (replacement === undefined || typeof replacement.apply !== 'function') {
         throw new Error('reloaded module does not export apply()')
       }
-      if (replacement === previous) {
+      if (backup.esm.size === 0 || replacement === previous || replacement.apply === previous
+        || (typeof previous.apply === 'function' && replacement.apply === previous.apply)) {
         // The cache purge did not take effect on this kernel (the loadCache shape
         // changed across Node versions). Force a fresh evaluation of the entry
-        // with a one-off query; its relative imports resolve to the purged URLs.
-        replacement = await importFresh(`${entryUrl}?ofm=${Date.now()}`)
+        // with a generation query shared by static and lazy dependencies.
+        enableFreshDependencies(packageUrl)
+        const freshUrl = new URL(entryUrl)
+        freshUrl.searchParams.set('ofm-reload', `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        replacement = await importFresh(freshUrl.href)
         busted = true
         if (replacement === undefined || typeof replacement.apply !== 'function') {
           throw new Error('reloaded module does not export apply()')
+        }
+        if (replacement === previous || replacement.apply === previous
+          || (typeof previous.apply === 'function' && replacement.apply === previous.apply)) {
+          throw new Error('replacement is still the previous plugin after cache invalidation')
         }
       }
       if (options.expectedVersion !== undefined && replacement.version !== options.expectedVersion) {
@@ -215,8 +253,8 @@ export function selfReload(ctx, options = {}) {
       } catch { /* may never have started */ }
       try {
         const restored = []
-        for (const { fiber, entry, config } of fibers) {
-          const registered = fiber.parent.registry.plugin(previous, config)
+        for (const { fiber, entry, plugin, config } of fibers) {
+          const registered = fiber.parent.registry.plugin(plugin, config)
           const fresh = registered.ctx.fiber
           if (entry !== undefined) {
             fresh.entry = entry

@@ -25,11 +25,12 @@
 import http from 'node:http'
 import net from 'node:net'
 import assert from 'node:assert/strict'
-import { startForwardServer, startLanRelay, resolveLoopbackBind, bindForwardPort, classifyBindError, startHeartbeat, SSE_HEARTBEAT_MS } from '../src/forward.js'
+import { startForwardServer, startLanRelay, resolveLoopbackBind, bindForwardPort, classifyBindError, startHeartbeat, SSE_HEARTBEAT_MS, rankLanAddresses } from '../src/forward.js'
 import { toToolDefs } from '../src/messages.js'
 import { readStream } from '../src/stream.js'
 import { applyFingerprint } from '../src/upstream.js'
 import { fromOpenAiMessages } from '../index.js'
+import { publicModelRows } from '../src/core/completion.js'
 import { until } from './lib/fake-kernel.mjs'
 
 let failures = 0
@@ -115,6 +116,86 @@ function sseFrames(body) {
 const toolCallDeltas = body => sseFrames(body)
   .flatMap(frame => frame.choices?.[0]?.delta?.tool_calls ?? [])
 
+for (const endpoint of ['/v1/chat/completions', '/v1/responses', '/v1/messages']) {
+  await checkAsync(endpoint + ' preserves composite and virtual model identities (#323, #379)', async () => {
+    const seen = []
+    const base = await serve({
+      complete: async (request, onChunk) => {
+        seen.push(request)
+        onChunk?.({ type: 'text-delta', index: 0, text: 'local answer' })
+        onChunk?.({ type: 'finish', reason: { kind: 'stop' } })
+        return { text: 'local answer', toolCalls: [] }
+      },
+    })
+    for (const model of ['open_router/google/gemma-4-31b-it:free', 'combo:u-0123456789abcdef']) {
+      const response = await authFetch(base, endpoint, {
+        model, max_tokens: 64,
+        messages: [{ role: 'user', content: 'local audit' }],
+        ...(endpoint === '/v1/responses' ? { input: 'local audit' } : {}),
+      })
+      assert.equal(response.status, 200)
+      assert.equal((await response.json()).model, model)
+      assert.equal(seen.at(-1).model, model, 'the dispatcher receives the complete model identity')
+    }
+  })
+}
+
+for (const endpoint of ['/v1/chat/completions', '/v1/responses']) {
+  await checkAsync(endpoint + ' resolves flat, nested and model-suffix thinking effort (#74)', async () => {
+    const lane = makeLane()
+    const base = await serve(lane)
+    lane.script = () => ({ chunks: [], outcome: { text: 'done', toolCalls: [] } })
+    const model = 'mimo-v2.6-flash-free'
+    for (const stream of [false, true]) {
+      for (const [label, fields, expected] of [
+        ['nested', { reasoning: { effort: ' high ' } }, 'high'],
+        ['flat', { reasoning_effort: ' light ' }, 'light'],
+        ['suffix', { model: `${model} ( deep ) ` }, 'deep'],
+        ['flat priority', { model: `${model} (deep)`, reasoning_effort: ' light ', reasoning: { effort: 'high' } }, 'light'],
+        ['nested priority', { model: `${model} (deep)`, reasoning: { effort: ' balanced ' } }, 'balanced'],
+        ['empty flat', { reasoning_effort: ' \t ', reasoning: { effort: ' high ' } }, 'high'],
+        ['invalid flat', { reasoning_effort: 42, reasoning: { effort: ' low ' } }, 'low'],
+        ['empty fields', { model: `${model} ( balanced )`, reasoning_effort: '', reasoning: { effort: ' ' } }, 'balanced'],
+        ['absent', {}, undefined],
+      ]) {
+        const response = await authFetch(base, endpoint, {
+          model, stream, messages: [{ role: 'user', content: 'hi' }], input: 'hi', ...fields,
+        })
+        assert.equal(response.status, 200, `${label}, stream=${stream}`)
+        await response.text()
+        assert.equal(lane.seen.at(-1).model, model, 'the effort suffix is removed from the dispatched model')
+        assert.equal(lane.seen.at(-1).openAi.reasoning_effort, expected, `${label}, stream=${stream}`)
+      }
+    }
+  })
+}
+
+await checkAsync('the shared model roster advertises each supported effort menu and its default (#74)', async () => {
+  const snapshot = {
+    settings: { defaultMaxTokens: 4096, exposeRegionModels: false },
+    membership: { 'our-free-model': ['free-thinking', 'declared-thinking', 'plain'], 'our-free-model-region': ['regional'] },
+    catalog: [
+      { id: 'free-thinking', reasoning: true, maxOutput: 32768, contextWindow: 131072 },
+      { id: 'declared-thinking', channel: 'eac', reasoning: true, efforts: ['low', 'high'], effortDefault: 'high', maxOutput: 8192 },
+      { id: 'plain', reasoning: false, maxOutput: 8192 },
+      { id: 'regional', reasoning: true, maxOutput: 8192 },
+      { id: 'hidden', reasoning: true, maxOutput: 8192 },
+    ],
+  }
+  const base = await serve(makeLane(), { modelRows: () => publicModelRows(snapshot) })
+  const response = await fetch(`${base}/v1/models`, { headers: { authorization: 'Bearer k-test' } })
+  assert.equal(response.status, 200)
+  const { data } = await response.json()
+  assert.deepEqual(data.map(row => row.id), ['free-thinking', 'declared-thinking', 'plain'])
+  assert.deepEqual(data[0].x_ofm_efforts, ['light', 'balanced', 'deep'])
+  assert.equal(data[0].x_ofm_effort_default, 'balanced')
+  assert.equal(data[0].context_window, 131072)
+  assert.deepEqual(data[1].x_ofm_efforts, ['low', 'high'])
+  assert.equal(data[1].x_ofm_effort_default, 'high')
+  assert.equal(Object.hasOwn(data[2], 'x_ofm_efforts'), false)
+  assert.equal(Object.hasOwn(data[2], 'x_ofm_effort_default'), false)
+})
+
 // ── streaming tool-call wiring (#20) ─────────────────────────────────────────
 await checkAsync('streaming tool_calls renumber from 0 after reasoning blocks', async () => {
   const lane = makeLane()
@@ -151,13 +232,13 @@ await checkAsync('a decoy tool call never reaches the streaming client', async (
   lane.script = () => ({
     chunks: [
       { type: 'text-delta', index: 1, text: 'let me check' },
-      // The model dialed the fingerprint decoy: the caller declared no such tool.
-      { type: 'tool-call-delta', index: 2, id: 'call_d', name: 'bash', argumentsDelta: '{"command"' },
+      // The model dialed the fingerprint placeholder: the caller declared no such tool.
+      { type: 'tool-call-delta', index: 2, id: 'call_d', name: 'shell', argumentsDelta: '{"command"' },
       { type: 'tool-call-delta', index: 2, argumentsDelta: ':"ls"}' },
-      { type: 'block-end', index: 2, block: { type: 'tool-call', id: 'call_d', name: 'bash', arguments: '{"command":"ls"}' } },
+      { type: 'block-end', index: 2, block: { type: 'tool-call', id: 'call_d', name: 'shell', arguments: '{"command":"ls"}' } },
       { type: 'finish', reason: { kind: 'tool-calls' } },
     ],
-    outcome: { text: 'let me check', toolCalls: [{ slot: 2, id: 'call_d', name: 'bash', arguments: '{"command":"ls"}' }] },
+    outcome: { text: 'let me check', toolCalls: [{ slot: 2, id: 'call_d', name: 'shell', arguments: '{"command":"ls"}' }] },
   })
   const response = await authFetch(base, '/v1/chat/completions', {
     model: 'mimo-v2.6-flash-free', stream: true,
@@ -167,6 +248,65 @@ await checkAsync('a decoy tool call never reaches the streaming client', async (
   assert.deepEqual(toolCallDeltas(body), [], 'no tool frame may mention the undeclared decoy')
   const finish = sseFrames(body).map(frame => frame.choices?.[0]?.finish_reason).filter(Boolean)
   assert.deepEqual(finish, ['stop'], `a suppressed-only turn must not finish as tool_calls, got ${finish}`)
+})
+
+// Measured live: the token saver compacts a diff, appends the filter's own
+// `[full diff: … --no-compact]` hint, the model obeys it by calling a shell tool,
+// and a caller that declared no such tool has that call suppressed (the v2 gate
+// makes the plugin declare `read`/`shell` placeholders, so a dial at one of those
+// names is the case). Suppressing it is right;
+// reporting the turn as a clean empty success is not — `finish_reason: stop` with
+// `content: null` is indistinguishable from "the model said nothing", and it sent
+// a live verification run hunting for a bug in the model instead of in the
+// transcript. Both surfaces must say what actually happened.
+await checkAsync('a turn whose only output was a suppressed call is reported, not answered empty', async () => {
+  // A guarded lane, not `makeLane`: the non-streaming path calls `complete`
+  // without an `onChunk`, and the shared helper forwards chunks unconditionally.
+  const outcome = { text: '', toolCalls: [{ slot: 0, id: 'call_s', name: 'shell', arguments: '{"command":"git diff --no-compact"}' }] }
+  const lane = {
+    complete: async (request, onChunk) => {
+      if (typeof onChunk === 'function') {
+        for (const chunk of [
+          { type: 'tool-call-delta', index: 0, id: 'call_s', name: 'shell', argumentsDelta: '{"command":"git diff --no-compact"}' },
+          { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_s', name: 'shell', arguments: '{"command":"git diff --no-compact"}' } },
+          { type: 'finish', reason: { kind: 'tool-calls' } },
+        ]) onChunk(chunk)
+      }
+      return outcome
+    },
+  }
+  const base = await serve(lane)
+  const streamed = await authFetch(base, '/v1/chat/completions', { model: 'mimo-v2.6-flash-free', stream: true })
+  const body = await streamed.text()
+  assert.deepEqual(toolCallDeltas(body), [], 'the undeclared call still must not reach the client')
+  const error = sseFrames(body).map(frame => frame.error?.message).find(Boolean)
+  assert.ok(typeof error === 'string' && error.includes('shell'), `the stream must name the call it suppressed, got ${JSON.stringify(error)}`)
+  const finish = sseFrames(body).map(frame => frame.choices?.[0]?.finish_reason).filter(Boolean)
+  assert.deepEqual(finish, [], 'a turn reported as failed carries no clean finish frame')
+
+  const plain = await authFetch(base, '/v1/chat/completions', { model: 'mimo-v2.6-flash-free' })
+  assert.equal(plain.status, 502, 'the non-streaming surface reports it as a failure too')
+  const payload = JSON.parse(await plain.text())
+  assert.ok(String(payload.error?.message ?? '').includes('shell'), `got ${JSON.stringify(payload)}`)
+})
+
+// The counter-case, so the note cannot swallow a legitimate truncation: a cut
+// tool call whose arguments never closed is `length`, not "you did not declare it".
+await checkAsync('a ceiling cut is still reported as length, not as a missing tool', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({
+    chunks: [
+      { type: 'tool-call-delta', index: 0, id: 'call_c', name: 'bash', argumentsDelta: '{"command":"git diff"' },
+      { type: 'finish', reason: { kind: 'max-tokens' } },
+    ],
+    outcome: { text: '', toolCalls: [{ slot: 0, id: 'call_c', name: 'bash', arguments: '{"command":"git diff"' }], truncated: true },
+  })
+  const response = await authFetch(base, '/v1/chat/completions', { model: 'mimo-v2.6-flash-free', stream: true })
+  const frames = sseFrames(await response.text())
+  const finish = frames.map(frame => frame.choices?.[0]?.finish_reason).filter(Boolean)
+  assert.deepEqual(finish, ['length'], `got ${finish}`)
+  assert.deepEqual(frames.map(frame => frame.error?.message).filter(Boolean), [], 'a ceiling cut is not an error frame')
 })
 
 await checkAsync('a ceiling-cut tool call finishes as length on the stream', async () => {
@@ -197,7 +337,7 @@ await checkAsync('non-streaming drops decoys and unexecutable calls after a cut'
     outcome: {
       text: '',
       toolCalls: [
-        { slot: 0, id: 'call_d', name: 'bash', arguments: '{}' },
+        { slot: 0, id: 'call_d', name: 'shell', arguments: '{}' },
         { slot: 1, id: 'call_b', name: 'mytool', arguments: '{"x":' },
         { slot: 2, id: 'call_g', name: 'mytool', arguments: '{"y":1}' },
       ],
@@ -220,6 +360,85 @@ await checkAsync('a non-JSON body answers 400', async () => {
   assert.equal(response.status, 400)
   const payload = await response.json()
   assert.equal(payload.error.type, 'invalid_request_error')
+})
+
+await checkAsync('a JSON null body answers 400 instead of a TypeError 500', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  for (const path of ['/v1/chat/completions', '/v1/responses', '/v1/messages']) {
+    const response = await authFetch(base, path, 'null')
+    assert.equal(response.status, 400, path)
+    const payload = await response.json()
+    assert.equal(payload.error.type, 'invalid_request_error', path)
+    if (path === '/v1/messages') assert.equal(payload.type, 'error')
+    assert.match(payload.error.message, /JSON object/, path)
+  }
+  assert.equal(lane.seen.length, 0, 'a malformed body must not reach the lane')
+})
+
+await checkAsync('a dispatch failure before content preserves its HTTP error for streaming callers', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => { throw Object.assign(new Error('model "m" not found'), { statusCode: 404 }) }
+  for (const [path, body] of [
+    ['/v1/chat/completions', { model: 'm', stream: true, messages: [{ role: 'user', content: 'hi' }] }],
+    ['/v1/responses', { model: 'm', stream: true, input: 'hi' }],
+  ]) {
+    const response = await authFetch(base, path, body)
+    assert.equal(response.status, 404)
+    const payload = await response.json()
+    assert.match(payload.error.message, /not found/)
+  }
+})
+
+await checkAsync('the Anthropic endpoint renders dispatch failures in its own error envelope', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => { throw Object.assign(new Error('model "m" not found'), { statusCode: 404 }) }
+  const response = await authFetch(base, '/v1/messages', { model: 'm', max_tokens: 16, messages: [{ role: 'user', content: 'hi' }] })
+  assert.equal(response.status, 404)
+  const payload = await response.json()
+  assert.equal(payload.type, 'error')
+  assert.equal(typeof payload.error?.type, 'string')
+  assert.match(payload.error.message, /not found/)
+})
+
+// ── the address a peer on this network should dial ───────────────────────────
+// The relay binds every interface, so the address to hand out is a property of
+// the machine right now — and a machine commonly holds two private addresses at
+// once, the router's 192.168.x.y and something on a virtual switch or VPN
+// adapter. The settings page puts the first entry in front of the user as *the*
+// address, so the physical interface has to lead and a re-read has to happen
+// rather than a cached answer from relay start.
+await checkAsync('a virtual adapter does not lead the LAN address list', async () => {
+  assert.deepEqual(rankLanAddresses({
+    'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.1.20' }],
+    'vEthernet (WSL)': [{ family: 'IPv4', internal: false, address: '10.208.90.204' }],
+  }), ['192.168.1.20', '10.208.90.204'])
+})
+
+await checkAsync('the platform order holds inside each group, and IPv6, loopback and APIPA are out', async () => {
+  assert.deepEqual(rankLanAddresses({
+    'Ethernet': [{ family: 'IPv4', internal: false, address: '10.0.0.5' }, { family: 'IPv6', internal: false, address: 'fe80::1' }],
+    'Wi-Fi': [
+      { family: 'IPv4', internal: true, address: '127.0.0.1' },
+      { family: 'IPv4', internal: false, address: '169.254.3.4' },
+      { family: 'IPv4', internal: false, address: '192.168.1.20' },
+    ],
+    'Tailscale': [{ family: 'IPv4', internal: false, address: '100.64.0.9' }],
+  }), ['10.0.0.5', '192.168.1.20', '100.64.0.9'])
+})
+
+await checkAsync('an address two interfaces share is reported once', async () => {
+  assert.deepEqual(rankLanAddresses({
+    'Wi-Fi': [{ family: 'IPv4', internal: false, address: '192.168.1.20' }],
+    'Ethernet': [{ family: 'IPv4', internal: false, address: '192.168.1.20' }],
+  }), ['192.168.1.20'])
+})
+
+await checkAsync('a machine with nothing dialable reports an empty list', async () => {
+  assert.deepEqual(rankLanAddresses({ 'Loopback': [{ family: 'IPv4', internal: true, address: '127.0.0.1' }] }), [])
+  assert.deepEqual(rankLanAddresses(undefined), [])
 })
 
 // ── the responses endpoint (#20 / Codex-shaped clients) ──────────────────────
@@ -259,7 +478,16 @@ await checkAsync('responses endpoint streams events and reports usage', async ()
   assert.equal(response.status, 200)
   const body = await response.text()
   const types = body.split('\n').filter(line => line.startsWith('event: ')).map(line => line.slice('event: '.length))
-  assert.deepEqual(types, ['response.created', 'response.output_item.added', 'response.output_text.delta', 'response.output_text.delta', 'response.completed'])
+  assert.deepEqual(types, ['response.created', 'response.output_item.added', 'response.content_part.added',
+    'response.output_text.delta', 'response.output_text.delta', 'response.output_text.done',
+    'response.content_part.done', 'response.output_item.done', 'response.completed'])
+  const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  const added = frames.find(frame => frame.type === 'response.output_item.added')
+  const done = frames.find(frame => frame.type === 'response.output_item.done')
+  assert.equal(added.item.id, done.item.id, 'native Codex requires a stable output item ID')
+  assert.equal(done.item.status, 'completed')
+  assert.equal(done.item.content[0].text, 'hello world', 'the completed item is what native Codex renders')
+  assert.equal(frames.find(frame => frame.type === 'response.output_text.delta').content_index, 0)
   const completed = JSON.parse(body.split('\n').filter(line => line.startsWith('data: ')).at(-1).slice('data: '.length))
   assert.equal(completed.response.status, 'completed')
   assert.equal(completed.response.output[0].content[0].text, 'hello world')
@@ -299,6 +527,13 @@ await checkAsync('responses streaming gives text and calls distinct output index
   assert.deepEqual(completed.response.output.map(row => row.type), ['message', 'function_call', 'function_call'])
   assert.equal(completed.response.output[1].arguments, '{"a":1}')
   assert.equal(completed.response.output[2].arguments, '{"b":2}')
+  const finished = frames.filter(frame => frame.type === 'response.output_item.done')
+  assert.deepEqual(finished.map(frame => frame.output_index), [0, 1, 2])
+  for (const item of finished) {
+    const start = added.find(frame => frame.output_index === item.output_index)
+    assert.equal(start.item.id, item.item.id)
+    if (item.item.type === 'function_call') assert.equal(start.item.call_id, item.item.call_id)
+  }
 })
 
 await checkAsync('responses endpoint reports an incomplete turn after a cut', async () => {
@@ -315,8 +550,9 @@ await checkAsync('responses endpoint reports an incomplete turn after a cut', as
 // The listener used to pre-convert its caller's `body.tools` into the OpenAI
 // wrapper shape before handing them to the adapter, while the adapter's own
 // conversion reads `tool.name` — so every tool was dropped, the request reached
-// the wire with an empty tool list, and `applyFingerprint` filled the quartet's
-// self-disabling decoys in their place and pinned `tool_choice: 'none'`. The
+// the wire with an empty tool list, and `applyFingerprint` filled the gate's
+// placeholders in their place (v1 also pinned `tool_choice: 'none'`; v2 refuses
+// that value outright). The
 // model then told the client it had no tools, and any decoy it called anyway was
 // dropped downstream as an empty answer.
 const openAiTool = name => ({
@@ -360,26 +596,29 @@ check('the adapter conversion keeps every caller tool', () => {
   assert.equal(declared.length, callerTools.length)
 })
 
-check('a non-empty caller list keeps its real tools and no forced tool_choice', () => {
+check('a non-empty caller list keeps its real tools and gains the gate names', () => {
   const body = { tools: toToolDefs([normalizeTool(openAiTool('pwsh')), normalizeTool(openAiTool('glob'))], 'chat') }
   applyFingerprint(body, false)
-  assert.deepEqual(body.tools.map(tool => tool.function.name), ['bash', 'glob', 'grep', 'read'])
+  // v2 keeps the caller's own names (`pwsh` stays `pwsh`) and appends the two
+  // gate declarations under their official names.
+  assert.deepEqual(body.tools.map(tool => tool.function.name), ['pwsh', 'glob', 'read', 'shell'])
   assert.equal(String(body.tools[0].function.description).includes('unavailable'), false)
   assert.equal(String(body.tools[1].function.description).includes('unavailable'), false)
   assert.equal(body.tool_choice, undefined)
 })
 
-check('an empty caller list is the shape that forces tool_choice none', () => {
+check('an empty caller list still gets the gate names, and no tool_choice', () => {
   const body = { tools: [] }
   applyFingerprint(body, false)
-  assert.deepEqual(body.tools.map(tool => tool.function.name), ['bash', 'glob', 'grep', 'read'])
-  assert.equal(body.tool_choice, 'none')
+  assert.deepEqual(body.tools.map(tool => tool.function.name), ['read', 'shell'])
+  // v1 forced `tool_choice: 'none'` here; v2 answers that value with 403.
+  assert.equal(body.tool_choice, undefined)
 })
 
-await checkAsync('a promoted quartet slot stays mapped back to the caller name', async () => {
-  const body = { tools: toToolDefs([normalizeTool(openAiTool('pwsh'))], 'chat') }
+await checkAsync('a caller tool reusing a gate name is mapped back to the caller name', async () => {
+  const body = { tools: toToolDefs([normalizeTool(openAiTool('read'))], 'chat') }
   const map = applyFingerprint(body, false)
-  assert.equal(map.get('bash'), 'pwsh')
+  assert.equal(map.get('read_client'), 'read')
 })
 
 await checkAsync('the lane receives the caller tools the client sent', async () => {
@@ -632,8 +871,13 @@ await checkAsync('bindForwardPort walks past a port that stays taken', async () 
   assert.notEqual(bound.port, held.port)
   assert.ok(bound.port > 0)
   if (heldNext !== null) assert.notEqual(bound.port, heldNext.port, 'a taken neighbour must be skipped too')
-  assert.equal(bound.bindError?.code, 'EADDRINUSE', `expected the occupant's code, got ${bound.bindError?.code}`)
-  await new Promise(resolve => server.close(() => resolve()))
+  try {
+    const occupiedCodes = process.platform === 'win32' ? ['EADDRINUSE', 'EACCES'] : ['EADDRINUSE']
+    assert.ok(occupiedCodes.includes(bound.bindError?.code), `expected the occupant's code, got ${bound.bindError?.code}`)
+    assert.equal(classifyBindError({ code: bound.bindError.code }).retryable, true)
+  } finally {
+    await new Promise(resolve => server.close(() => resolve()))
+  }
 })
 
 await checkAsync('startForwardServer reports the port it settled on and still serves', async () => {

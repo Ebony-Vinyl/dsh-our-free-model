@@ -1,0 +1,23 @@
+{
+  "method": "浏览器 DOM 实测；工具视口尺寸受宿主缩放影响，记录 innerWidth 与文档 scrollWidth",
+  "layouts": [
+    {
+      "height": 935,
+      "label": "desktop",
+      "overflowingControls": 0,
+      "rows": 11,
+      "scrollWidth": 1642,
+      "width": 1662
+    },
+    {
+      "height": 766,
+      "label": "narrow",
+      "overflowingControls": 0,
+      "rows": 11,
+      "scrollWidth": 312,
+      "width": 332
+    }
+  ],
+  "overviewRows": 0,
+  "firstModelVisitWithToolMs": 284
+}

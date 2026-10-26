@@ -14,7 +14,7 @@
  * @module src/probe.js
  */
 
-import { applyFingerprint, endpointFor, mintRequestId, sessionForConversation, wireFor } from './upstream.js'
+import { applyFingerprint, endpointFor, sessionForConversation, wireFor } from './upstream.js'
 import { CODE, postStreamed } from './http.js'
 import { egressFetch } from './egress.js'
 
@@ -48,10 +48,14 @@ const PING_PROMPT = 'ping'
  */
 export async function probeModel(model, { attributionUserAgent, signal, timeoutMs = 45000 } = {}) {
   const started = Date.now()
-  const session = sessionForConversation('probe:our-free-model')
+  // 每个模型独立的上游 session。配额按 session 计数，整轮共用一个 session
+  // 会让第一个模型吃掉配额、其余模型全部读作 429（issue #561）。
+  const session = sessionForConversation('probe:our-free-model:' + model.id)
   const wire = wireFor(model.id)
   const body = buildPing(model.id, wire)
-  applyFingerprint(body, wire === 'responses')
+  // 三条线各有自己的工具形状：Responses 是扁平项，Messages 是 Claude 的
+  // `input_schema`，Chat 是 `{function:{…}}`。传错形状会让注入的指纹工具不合规。
+  applyFingerprint(body, wire === 'responses' ? true : wire === 'messages' ? 'claude' : false)
 
   let firstDelta
   let streamError
@@ -60,7 +64,6 @@ export async function probeModel(model, { attributionUserAgent, signal, timeoutM
       path: endpointFor(model.id),
       body,
       session,
-      requestId: mintRequestId(),
       attributionUserAgent,
       signal,
       timeoutMs,
@@ -153,6 +156,13 @@ function stateOf(error) {
   switch (error?.code) {
     case CODE.region: return STATE.regionBlocked
     case CODE.quota: return STATE.throttled
+    // The free lane's client gate (issue #310) refuses the lane, not the model
+    // — but unlike a 5xx it does not clear on its own, so a model that can
+    // only fail reads with the same verdict the picker already treats as "the
+    // gateway will not route this". The whole-round guard in `computeMembership`
+    // still keeps every model visible when the lock takes the entire lane, and
+    // the settings page carries the upstream's own words as the reason.
+    case CODE.laneLocked: return STATE.unavailable
     default: break
   }
   const message = String(error?.message ?? '')
@@ -218,7 +228,9 @@ export async function probeCatalog(models, options = {}, onResult = () => {}, co
     while (cursor < models.length) {
       const index = cursor++
       const model = models[index]
-      const result = await probeModel(model, options)
+      // A late reply is still the sample that began before a newer manual test.
+      const startedAt = Date.now()
+      const result = { ...await probeModel(model, options), startedAt }
       results[model.id] = result
       onResult(model.id, result)
     }

@@ -62,9 +62,10 @@ function mintToolCallId() {
 }
 
 class BlockSink {
-  constructor(yieldChunk, startIndex, checkpointLimit) {
+  constructor(yieldChunk, startIndex, checkpointLimit, onProgress) {
     this.emit = yieldChunk
     this.next = startIndex
+    this.onProgress = typeof onProgress === 'function' ? onProgress : () => {}
     /** @type {Map<string, {index:number, kind:string, text:string, id?:string, name?:string, args?:string}>} */
     this.open = new Map()
     this.usage = undefined
@@ -150,8 +151,13 @@ class BlockSink {
 
   toolStart(key, id, name) {
     const block = this.slot(key, 'tool-call')
+    const priorId = block.id
+    const priorName = block.name
     if (id) block.id = id
     if (name) block.name = name
+    // A named call can precede its arguments without emitting a delta.
+    if (typeof block.name === 'string' && block.name.trim() !== ''
+      && (block.name !== priorName || block.id !== priorId)) this.onProgress()
   }
 
   toolArgs(key, delta) {
@@ -231,6 +237,44 @@ export function mapUsage(usage) {
   if (cacheWrite > 0) out.cacheWriteTokens = cacheWrite
   if (reasoning > 0) out.reasoningTokens = reasoning
   out.totalTokens = (prompt ?? 0) + (completion ?? 0)
+  return out
+}
+
+/**
+ * Drop input-side usage that cannot fit inside the advertised context window.
+ *
+ * Multimodal replies on the Kilo `kilo-auto/free` router have stamped
+ * `totalTokens` far above the model's declared window after a short vision
+ * turn — hosts that soft-budget from that sample then fail-closed with
+ * CONTEXT_WINDOW_EXCEEDED even when the local conversation surface is tiny
+ * (see Ebony-Vinyl/dsh-our-free-model#494, #464; related image-spill history
+ * #151 / #195). Output / reasoning counts stay so decode stats remain usable;
+ * omitting `totalTokens` and zeroing prompt pressure lets the host fall back
+ * to its local estimate. The Adapter restricts this heuristic to that exact
+ * channel/model; an advertised fallback window is not proof of bad usage on
+ * other routes. Its accumulator must preserve the absence of exact input/total
+ * counts even when a later continuation reports ordinary usage.
+ *
+ * @param {object|undefined} usage - harness TokenUsage from {@link mapUsage}
+ * @param {number|undefined} contextWindow - advertised window for this model
+ * @returns {object|undefined} trusted usage, or undefined when nothing remains
+ */
+export function sanitizeUsage(usage, contextWindow) {
+  if (!usage || typeof usage !== 'object') return usage
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0) return usage
+  const input = number(usage.inputTokens) ?? 0
+  const cacheRead = number(usage.cacheReadTokens) ?? 0
+  const prompt = input + cacheRead
+  const total = number(usage.totalTokens)
+  const over =
+    prompt > contextWindow
+    || (total !== undefined && total > contextWindow)
+  if (!over) return usage
+  const output = number(usage.outputTokens) ?? 0
+  const reasoning = number(usage.reasoningTokens)
+  if (output <= 0 && (reasoning === undefined || reasoning <= 0)) return undefined
+  const out = { inputTokens: 0, outputTokens: output }
+  if (reasoning !== undefined && reasoning > 0) out.reasoningTokens = reasoning
   return out
 }
 
@@ -428,6 +472,7 @@ export function windowTokens(usage, sawReasoning) {
  * @param {number} [options.startIndex=0] - 新块的起始索引
  * @param {number} [options.checkpointLimit=131072] - 推理检查点的最大字符串长度
  * @param {(snapshot: object) => void} [options.onState] - 发布本次读取的已知状态
+ * @param {() => void} [options.onProgress] - Meaningful tool metadata arrived before arguments.
  * @yields {object} harness StreamChunk
  * @returns {Promise<{ usage: object, finish?: string, sawFinish: boolean, sawUsage: boolean, sawToolCall: boolean, sawReasoning: boolean, firstDeltaAt?: number, nextIndex: number, reasoningText: string, checkpointTruncated: boolean }>}
  */
@@ -435,7 +480,7 @@ export async function * readStream(lines, wire, renameMap, now = () => Date.now(
   const outbox = []
   const startIndex = Number.isSafeInteger(options?.startIndex) && options.startIndex >= 0 ? options.startIndex : 0
   const checkpointLimit = Number.isSafeInteger(options?.checkpointLimit) && options.checkpointLimit >= 0 ? options.checkpointLimit : 131072
-  const sink = new BlockSink(chunk => outbox.push(chunk), startIndex, checkpointLimit)
+  const sink = new BlockSink(chunk => outbox.push(chunk), startIndex, checkpointLimit, options?.onProgress)
   const state = { usage: undefined, finish: undefined, sawFinish: false, sawUsage: false, sawToolCall: false, firstDeltaAt: undefined, sawReasoning: false, sawText: false, brokenToolCall: false }
   const snapshot = () => ({
     ...state,
@@ -478,6 +523,9 @@ export async function * readStream(lines, wire, renameMap, now = () => Date.now(
       if (!text.startsWith('{')) continue
       let payload
       try { payload = JSON.parse(text) } catch { continue }
+      if ((payload.type === 'response.failed' || payload.response?.status === 'failed') && payload.response?.error) {
+        throw classifyFailure(undefined, { error: payload.response.error })
+      }
       if (payload.type === 'error' || payload.error) {
         // Classify an in-stream refusal exactly as an error *envelope* is
         // classified, because everything downstream decides off `code`. This throw

@@ -26,6 +26,135 @@ function check(ok, message) {
   }
 }
 
+/** Virtual files keep both platform branches independent of installed binaries. */
+function checkMihomoLocator() {
+  const savedPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
+  const savedStat = fs.statSync
+  const savedAccess = fs.accessSync
+  const savedHomedir = os.homedir
+  const envKeys = ['PATH', 'HOME', 'PREFIX', 'LOCALAPPDATA', 'ProgramFiles', 'ProgramFiles(x86)']
+  const savedEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]))
+  const root = path.resolve(os.tmpdir(), 'ofm-locator-fixture')
+  try {
+    for (const platform of ['win32', 'linux']) {
+      Object.defineProperty(process, 'platform', { ...savedPlatform, value: platform })
+      for (const key of envKeys) delete process.env[key]
+      process.env.PATH = ''
+      const windows = platform === 'win32'
+      const binary = windows ? 'mihomo.exe' : 'mihomo'
+      const home = path.join(root, 'home')
+      let homeValue = home
+      os.homedir = () => {
+        if (homeValue instanceof Error) throw homeValue
+        return homeValue
+      }
+      const files = new Map()
+      let probed = []
+      let accessCalls = 0
+      fs.statSync = target => {
+        probed.push(target)
+        if (!files.has(target)) throw Object.assign(new Error('missing fixture'), { code: 'ENOENT' })
+        const value = files.get(target)
+        return { isFile: () => value !== 'directory', isDirectory: () => value === 'directory' }
+      }
+      fs.accessSync = (target, mode) => {
+        accessCalls++
+        if (mode !== fs.constants.X_OK || files.get(target) !== true) {
+          throw Object.assign(new Error('not executable'), { code: 'EACCES' })
+        }
+      }
+      const verify = (ok, label) => check(ok, `${platform} locator: ${label}`)
+      const fails = (run, pattern, label) => {
+        let failure
+        try { run() } catch (error) { failure = error }
+        verify(failure instanceof Error && pattern.test(failure.message), label)
+      }
+      const userBin = windows
+        ? path.join(home, 'AppData', 'Local', 'Programs', 'Clash Verge')
+        : path.join(home, '.local', 'bin')
+      const userBinary = path.join(userBin, windows ? 'verge-mihomo.exe' : binary)
+      const pathDir = path.join(root, 'path')
+      const pathBinary = path.join(pathDir, binary)
+      files.set(userBinary, true)
+      files.set(pathBinary, true)
+      process.env.PATH = [pathDir, '', ' '].join(path.delimiter)
+      verify(findMihomoBinary('') === pathBinary, 'PATH takes precedence over home installs')
+      process.env.PATH = ''
+      process.env.HOME = 'untrusted-relative-home'
+      verify(findMihomoBinary('') === userBinary, 'os.homedir supplies the platform-specific home install')
+      files.clear()
+      if (windows) {
+        process.env.LOCALAPPDATA = path.join(root, 'local')
+        const localBinary = path.join(process.env.LOCALAPPDATA, 'Programs', 'Clash Verge', binary)
+        files.set(localBinary, true)
+        verify(findMihomoBinary('') === localBinary, 'LOCALAPPDATA installs are found')
+        files.clear()
+        delete process.env.LOCALAPPDATA
+        process.env.ProgramFiles = path.join(root, 'programs')
+        const programBinary = path.join(process.env.ProgramFiles, 'Clash Verge', 'verge-mihomo.exe')
+        files.set(programBinary, true)
+        verify(findMihomoBinary('') === programBinary, 'ProgramFiles installs are found')
+        delete process.env.ProgramFiles
+      } else {
+        const homeBinary = path.join(home, 'bin', binary)
+        files.set(homeBinary, true)
+        verify(findMihomoBinary('') === homeBinary, '~/bin is found without PATH')
+        files.clear()
+        process.env.PREFIX = path.join(root, 'prefix')
+        const prefixBinary = path.join(process.env.PREFIX, 'bin', binary)
+        files.set(prefixBinary, true)
+        verify(findMihomoBinary('') === prefixBinary, '$PREFIX/bin is found without PATH')
+        delete process.env.PREFIX
+      }
+      files.clear()
+      const install = path.join(root, 'install')
+      files.set(install, 'directory')
+      for (const child of ['', 'bin', 'resources']) {
+        const installed = path.join(install, child, binary)
+        files.set(installed, true)
+        verify(findMihomoBinary(install) === installed, `explicit install directory searches ${child || 'its root'}`)
+        files.delete(installed)
+      }
+      files.set(path.join(install, 'nested', 'deeper', binary), true)
+      fails(() => findMihomoBinary(install), /holds no mihomo/, 'directory search does not recurse')
+      fails(() => findMihomoBinary(path.join(root, 'missing')), /does not exist/, 'explicit missing path is explained')
+      files.set(pathBinary, false)
+      if (windows) {
+        verify(findMihomoBinary(pathBinary) === pathBinary && accessCalls === 0, 'Windows does not require a POSIX execute bit')
+      } else {
+        fails(() => findMihomoBinary(pathBinary), /chmod \+x/, 'an explicit blocked binary explains the execute-bit fix')
+        process.env.PATH = pathDir
+        files.set(userBinary, true)
+        verify(findMihomoBinary('') === userBinary, 'a blocked PATH hit does not shadow an executable home binary')
+        files.delete(userBinary)
+        fails(() => findMihomoBinary(''), /chmod \+x/, 'automatic search reports the blocked binary when no executable exists')
+      }
+      files.clear()
+      process.env.PATH = ['', ' ', ''].join(path.delimiter)
+      process.env.PREFIX = 'relative-prefix'
+      process.env.LOCALAPPDATA = 'relative-local'
+      process.env.ProgramFiles = 'relative-install'
+      files.set(path.join('.local', 'bin', binary), true)
+      files.set(path.join('Programs', 'Clash Verge', binary), true)
+      for (const missingHome of ['', '.', 'relative-home', undefined, new Error('home unavailable')]) {
+        homeValue = missingHome
+        probed = []
+        fails(() => findMihomoBinary(''), /no mihomo binary/, 'missing or relative home never discovers a cwd fallback')
+        verify(probed.every(target => path.isAbsolute(target)), 'fallback candidates remain absolute without a home')
+      }
+    }
+  } finally {
+    Object.defineProperty(process, 'platform', savedPlatform)
+    fs.statSync = savedStat
+    fs.accessSync = savedAccess
+    os.homedir = savedHomedir
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+}
+
 /** Echo target: replies with what it saw; /limited answers 429; /stream trickles. */
 function startTarget() {
   const server = http.createServer((req, res) => {
@@ -231,7 +360,7 @@ async function main() {
     const found = findMihomoBinary('')
     check(found.length > 0, 'mihomo discovery either finds a binary or explains itself')
   } catch (error) {
-    check(String(error.message).includes('no mihomo binary'), 'mihomo discovery either finds a binary or explains itself')
+    check(/no mihomo binary|not executable/.test(String(error.message)), 'mihomo discovery either finds a binary or explains itself')
   }
   try {
     findMihomoBinary('C:/definitely/not/here.exe')
@@ -239,6 +368,8 @@ async function main() {
   } catch (error) {
     check(String(error.message).includes('does not exist'), 'explicit missing binary throws')
   }
+  stage = 'locator fixtures'
+  checkMihomoLocator()
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-egress-'))
   try {
     await startEgressRelay({ config: () => ({ mode: 'client', url: '' }), dataDir })
@@ -279,6 +410,16 @@ async function main() {
   check(echoJson.headers?.['x-ofm-egress-target'] === undefined, 'the target header stops at the relay')
   check(echoJson.headers?.['x-ofm-egress-key'] === undefined, 'the relay key stops at the relay too')
   check(socks5a.server.lastTarget.host === '127.0.0.1' && socks5a.server.lastTarget.port === targetPort, 'socks5 dialed the real target')
+
+  // 原生 Request 与 URL 调用一样保留请求体、路径和认证头。
+  const requestBody = '{ "request": true, "spacing": "preserved" }'
+  const request = new Request(`${base}/request`, {
+    method: 'POST', body: requestBody, headers: { authorization: 'Bearer fixture-request' },
+  })
+  const requestResponse = await egressFetch(request)
+  const requestJson = await requestResponse.json()
+  check(requestJson.body === requestBody && requestJson.url === '/request', 'native Request keeps its body and URL through the relay')
+  check(requestJson.headers.authorization === 'Bearer fixture-request', 'native Request retains its Authorization header')
 
   // 5 — 429 and its retry-after are responses, not errors.
   stage = 'socks5-auth 429'

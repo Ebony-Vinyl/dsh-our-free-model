@@ -21,10 +21,10 @@
  *   `tool_calls` by index (the common OpenAI shape) got a sparse array with
  *   holes and merged or dropped arguments.
  * - Tool calls aimed at the fingerprint decoys are suppressed. The free tier's
- *   gate makes the plugin declare the `bash/glob/grep/read` quartet even when
- *   the caller has no such tools, and a model that dialed one of those decoys
- *   handed the client a tool it never registered — the call came back as an
- *   error the caller could do nothing about.
+ *   gate makes the plugin declare `read` and `shell` (v2) even when the caller
+ *   has no such tools, and a model that dialed one of those placeholders handed
+ *   the client a tool it never registered — the call came back as an error the
+ *   caller could do nothing about.
  *
  * @module src/forward.js
  */
@@ -35,6 +35,11 @@ import dns from 'node:dns'
 import crypto from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { baseModelId, FINGERPRINT_TOOLS } from './upstream.js'
+import { anthropicFrames, anthropicMessage, countTokens, foldAnthropicOutcome, fromAnthropicRequest } from './anthropic.js'
+import { toMessagesResponse, tryOptimizations } from './local-optimize.js'
+import { carryFailure, forwardFailure } from './failure.js'
+import { deferStreamResponse } from './deferred-response.js'
+import { geminiEndpoint, geminiError, geminiRoute } from './gemini.js'
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024
 const REQUEST_ID_HEADER = 'x-ofm-request-id'
@@ -100,9 +105,9 @@ export function generateKey() {
 /** Constant-time comparison of a bearer token against the issued key. */
 export function keyMatches(presented, expected) {
   if (typeof presented !== 'string' || typeof expected !== 'string') return false
-  const a = Buffer.from(presented)
-  const b = Buffer.from(expected)
-  return a.byteLength === b.byteLength && crypto.timingSafeEqual(a, b)
+  const a = crypto.createHash('sha256').update(presented).digest()
+  const b = crypto.createHash('sha256').update(expected).digest()
+  return crypto.timingSafeEqual(a, b)
 }
 
 function bearerOf(req) {
@@ -126,21 +131,39 @@ async function readBody(req) {
     chunks.push(chunk)
   }
   if (size === 0) return {}
+  let value
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    value = JSON.parse(Buffer.concat(chunks).toString('utf8'))
   } catch {
     throw httpError(400, 'request body is not valid JSON')
   }
+  // Every endpoint below reads fields off the body (`model`, `messages`, ...).
+  // A parsed `null`, array or scalar would turn that read into a TypeError and
+  // answer 500 with an internal message; it is caller input, so it is a 400.
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw httpError(400, 'request body must be a JSON object')
+  }
+  return value
 }
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload)
-  res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'cache-control': 'no-store' })
+  res.writeHead(status, { ...corsHeaders(), 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'cache-control': 'no-store' })
   res.end(body)
 }
 
 function openAiError(res, status, type, message, code = null) {
   json(res, status, { error: { message, type, param: null, code } })
+}
+
+/** Send classified early failures before committing an SSE success status. */
+function failureReply(res, outcome, anthropic = false, force = false) {
+  const failure = forwardFailure(outcome, anthropic)
+  if (res.headersSent || (!force && !failure.classified)) return false
+  if (['EAC_UPSTREAM_FAILED', 'NO_PROGRESS'].includes(failure.error.code) || (failure.status >= 400 && failure.status < 500 && failure.error.type !== 'rate_limit_error')) res.setHeader('x-should-retry', 'false')
+  if (failure.retryAfterMs !== undefined) res.setHeader('retry-after', String(Math.ceil(failure.retryAfterMs / 1000)))
+  json(res, failure.status, anthropic ? { type: 'error', error: failure.error } : { error: { ...failure.error, param: null } })
+  return true
 }
 
 /**
@@ -296,9 +319,11 @@ export async function bindForwardPort(server, { address, port, attempts = BIND_A
  * @param {() => Array<{id: string, created: number, owned_by: string}>} options.modelRows
  * @param {(message: string) => void} [options.log]
  * @param {(event: object) => void} [options.onTrace] - bounded request diagnostics, separate from warnings
+ * @param {() => object} [options.health] - 健康应答由各产品入口注入，默认保持插件兼容。
+ * @param {(req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>} [options.handleRequest] - 产品附加路由，返回 true 表示已处理。
  * @returns {Promise<{server: http.Server, port: number, close: () => Promise<void>}>}
  */
-export async function startForwardServer({ config, complete, modelRows, log = () => {}, onTrace = () => {}, heartbeatMs = SSE_HEARTBEAT_MS }) {
+export async function startForwardServer({ config, complete, modelRows, log = () => {}, onTrace = () => {}, heartbeatMs = SSE_HEARTBEAT_MS, optimize = null, health = () => ({ ok: true, service: 'our-free-model' }), handleRequest }) {
   const server = http.createServer((req, res) => {
     const trace = traceRequest(req, res, 'forward', onTrace)
     void handle(req, res, trace).catch(error => {
@@ -315,10 +340,15 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
   })
 
   async function handle(req, res, trace) {
+    if (handleRequest && await handleRequest(req, res)) return
     const url = new URL(req.url ?? '/', 'http://localhost')
     const path = url.pathname.replace(/\/+$/, '') || '/'
+    let gemini
+    try { gemini = geminiRoute(path) }
+    catch { geminiError(res, 400, 'invalid Gemini model path'); return }
     const settings = config()
     if (!settings.enabled) {
+      if (gemini) { geminiError(res, 503, 'the forward listener is switched off'); return }
       openAiError(res, 503, 'service_unavailable', 'the forward listener is switched off in Our Free Model settings')
       return
     }
@@ -332,11 +362,19 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
     // whether the port is up must not need the key to get an answer. It gets a
     // count of nothing — the model roster is what the authenticated routes serve.
     if (path === '/' || path === '/health') {
-      json(res, 200, { ok: true, service: 'our-free-model' })
+      json(res, 200, health())
       return
     }
-    if (!authorized(req, settings.key)) {
+    const googleKey = req.headers['x-goog-api-key'] ?? url.searchParams.get('key')
+    const googleAuthorized = gemini && typeof settings.key === 'string' && settings.key !== ''
+      && keyMatches(googleKey, settings.key)
+    if (!authorized(req, settings.key) && !googleAuthorized) {
+      if (gemini) { geminiError(res, 401, 'missing or invalid API key'); return }
       openAiError(res, 401, 'invalid_request_error', 'missing or invalid API key')
+      return
+    }
+    if (gemini) {
+      await serveCompletion(req, res, complete, geminiEndpoint({ readBody, json, modelRows, route: gemini, url }), heartbeatMs, trace)
       return
     }
     if (req.method === 'GET' && (path === '/v1/models' || path === '/models')) {
@@ -344,11 +382,20 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
       return
     }
     if (req.method === 'POST' && (path === '/v1/chat/completions' || path === '/chat/completions')) {
-      await serveCompletion(req, res, complete, chatCompletions, heartbeatMs, trace)
+      await serveCompletion(req, res, complete, chatCompletions, heartbeatMs, trace, { optimize })
       return
     }
     if (req.method === 'POST' && (path === '/v1/responses' || path === '/responses')) {
-      await serveCompletion(req, res, complete, responsesEndpoint, heartbeatMs, trace)
+      await serveCompletion(req, res, complete, responsesEndpoint, heartbeatMs, trace, { optimize })
+      return
+    }
+    if (req.method === 'POST' && (path === '/v1/messages' || path === '/messages')) {
+      await serveCompletion(req, res, complete, messagesEndpoint, heartbeatMs, trace, { optimize })
+      return
+    }
+    if (req.method === 'POST' && (path === '/v1/messages/count_tokens' || path === '/messages/count_tokens')) {
+      const body = await readBody(req)
+      json(res, 200, countTokens(body))
       return
     }
     openAiError(res, 404, 'not_found_error', `no route for ${req.method} ${path}`)
@@ -384,11 +431,63 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
   }
 }
 
+/**
+ * Address families a machine holds but a peer on *this* network cannot reach
+ * through: Windows' WSL/Hyper-V/Docker switches, virtual-machine host-only nets,
+ * VPN and tunnel adapters, and the Bluetooth/Direct adapters. Their addresses are
+ * real and would answer a connect — which is the whole problem, because the
+ * settings page has one line for this URL and it is the line a user copies to the
+ * other machine.
+ */
+const VIRTUAL_IFACE = /(vethernet|hyper-?v|wsl|virtualbox|vmware|docker|br-|veth|tailscale|zerotier|utun|awdl|llw|anpi|^(?:tun|tap|utun)\d|loopback|bluetooth|wi-?fi direct|local area connection\*|virtual|虚拟|环回|蓝牙|隧道)/i
+
+/**
+ * The IPv4 addresses another machine on this network could dial, best first.
+ *
+ * Two properties matter, because the caller reads this on every ask and puts the
+ * first entry in front of the user as *the* address.
+ *
+ * It is re-derived, never cached: a laptop that changed networks, woke from sleep,
+ * or brought a VPN up holds a different set of addresses than it did a minute ago,
+ * and an address that was true at relay start is the one that goes stale in the
+ * panel. `os.networkInterfaces()` is the caller's input for exactly that reason.
+ *
+ * And the physical interfaces come first. A machine commonly holds two private
+ * addresses at once — the router's `192.168.x.y` and something like
+ * `10.208.90.204` on a virtual switch or VPN adapter — and taking whichever the
+ * OS happened to list first showed the user the one that cannot answer from
+ * outside. Order is otherwise the OS's own, so a machine with several real
+ * interfaces keeps the order the platform reports.
+ *
+ * @param {Record<string, Array<{family?: string, internal?: boolean, address?: string}>|undefined>} interfaces
+ * @returns {string[]} addresses, most likely to answer first; empty when none can
+ */
+export function rankLanAddresses(interfaces) {
+  const rows = []
+  const seen = new Set()
+  for (const [name, entries] of Object.entries(interfaces ?? {})) {
+    for (const entry of entries ?? []) {
+      if (entry?.family !== 'IPv4' || entry.internal === true) continue
+      const address = String(entry.address ?? '')
+      // `169.254.x.y` is APIPA: the DHCP offer never came, and the address means
+      // "this link is broken", not "dial me".
+      if (address === '' || address.startsWith('169.254.') || seen.has(address)) continue
+      seen.add(address)
+      rows.push({ address, virtual: VIRTUAL_IFACE.test(String(name)) })
+    }
+  }
+  // A stable sort keeps the OS's order inside each group.
+  rows.sort((a, b) => Number(a.virtual) - Number(b.virtual))
+  return rows.map(row => row.address)
+}
+
 /** The routes the LAN relay carries — the local listener's surface and nothing else. */
 const RELAY_PATHS = new Set([
   '/v1/models', '/models',
   '/v1/chat/completions', '/chat/completions',
   '/v1/responses', '/responses',
+  '/v1/messages', '/messages',
+  '/v1/messages/count_tokens', '/messages/count_tokens',
 ])
 
 /** Marks a request the relay produced, so a misconfigured loop is refused. */
@@ -540,7 +639,7 @@ export async function startLanRelay({ config, log = () => {}, onTrace = () => {}
 }
 
 /** 转发客户端断开时中止正在生成的段，也阻止后续恢复请求。 */
-async function serveCompletion(req, res, complete, endpoint, heartbeatMs, trace) {
+async function serveCompletion(req, res, complete, endpoint, heartbeatMs, trace, extra = {}) {
   const controller = new AbortController()
   const socket = req.socket
   const abort = () => {
@@ -555,8 +654,9 @@ async function serveCompletion(req, res, complete, endpoint, heartbeatMs, trace)
   socket?.once('close', abort)
   res.once('close', abort)
   if (req.aborted || req.destroyed || socket?.destroyed) abort()
+  const staged = deferStreamResponse(res, heartbeatMs ?? SSE_HEARTBEAT_MS)
   try {
-    await endpoint(req, res, async (request, onChunk) => {
+    await endpoint(req, staged.response, async (request, onChunk) => {
       trace.step('dispatch')
       let sawDelta = false
       const tracedChunk = typeof onChunk !== 'function' ? undefined : chunk => {
@@ -565,17 +665,24 @@ async function serveCompletion(req, res, complete, endpoint, heartbeatMs, trace)
           : chunk.type === 'tool-call-delta' && typeof chunk.argumentsDelta === 'string' && chunk.argumentsDelta.length > 0
         if (!sawDelta && hasContent) {
           sawDelta = true
+          staged.commit()
           trace.step('first_delta')
         }
         onChunk(chunk)
       }
-      const result = await complete({ ...request, signal: controller.signal }, tracedChunk)
+      let result
+      try { result = await complete({ ...request, signal: controller.signal }, tracedChunk) }
+      catch (error) {
+        const failure = carryFailure({ ...error, message: String(error?.message ?? error) }, controller.signal.aborted ? 'aborted' : 'error')
+        result = { text: '', toolCalls: [], error: failure.message, failure }
+      }
       const outcome = result.error !== undefined ? 'failed' : result.truncated === true ? 'truncated' : 'completed'
       trace.setOutcome(outcome)
       trace.step('generation_finished', { outcome })
       return result
-    }, { heartbeatMs, trace })
+    }, { heartbeatMs, trace, ...extra })
   } finally {
+    staged.dispose()
     req.removeListener('aborted', abort)
     socket?.removeListener('close', abort)
     res.removeListener('close', abort)
@@ -590,7 +697,7 @@ function authorized(req, key) {
 function corsHeaders() {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization, content-type, x-api-key',
+    'access-control-allow-headers': 'authorization, content-type, x-api-key, x-goog-api-key, x-goog-api-client',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-max-age': '600',
   }
@@ -649,7 +756,7 @@ function openStreamHeaders(res, heartbeatMs = SSE_HEARTBEAT_MS) {
 /** Per-request tool-wire state: harness block index → OpenAI tool index. */
 function createToolWire(body) {
   // The caller's own tool names, spelled as they declared them. A call whose
-  // restored name is one of the fingerprint quartet but not one of these is a
+  // restored name is one of the fingerprint gate names but not one of these is a
   // call to a decoy the model should never have dialed — it is suppressed on
   // the wire instead of handed over as a tool the caller cannot run.
   const declared = new Set()
@@ -707,11 +814,18 @@ function createToolWire(body) {
   }
 }
 
+/** Explicit effort fields take precedence over the picker's model suffix. */
+function callerEffort(body) {
+  for (const value of [body.reasoning_effort, body.reasoning?.effort]) {
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  }
+  return /\(([^()]+)\)\s*$/.exec(String(body.model ?? ''))?.[1].trim() || undefined
+}
+
 /** Drive one chat-completion through `complete`, in either response style. */
 async function chatCompletions(req, res, complete, options = {}) {
   const body = await readBody(req)
   options.trace?.step('body_received')
-  const effortSuffix = /\(([^()]+)\)\s*$/.exec(String(body.model ?? ''))
   const model = baseModelId(String(body.model ?? ''))
   if (model === '') {
     openAiError(res, 400, 'invalid_request_error', '`model` is required')
@@ -720,10 +834,8 @@ async function chatCompletions(req, res, complete, options = {}) {
   const id = `chatcmpl-${crypto.randomBytes(8).toString('hex')}`
   const created = Math.floor(Date.now() / 1000)
   const wantsStream = body.stream === true
-  // The trailing "(level)" rung is this plugin's own convention for thinking
-  // budgets; honor it for callers that speak the spelling the picker uses,
-  // without overriding an explicit `reasoning_effort`.
-  if (effortSuffix !== null && body.reasoning_effort === undefined) body.reasoning_effort = effortSuffix[1].trim()
+  const effort = callerEffort(body)
+  if (effort !== undefined) body.reasoning_effort = effort
 
   const tools = createToolWire(body)
 
@@ -731,10 +843,15 @@ async function chatCompletions(req, res, complete, options = {}) {
     const outcome = await complete({ model, openAi: body })
     // 截断或恢复失败即使已有部分正文，也不能返回正常完成。
     if (outcome.error !== undefined) {
-      openAiError(res, 502, 'server_error', outcome.error)
+      failureReply(res, outcome, false, true)
       return
     }
     const calls = executableCalls(outcome, tools)
+    const suppressed = suppressedOnlyNote(outcome, calls)
+    if (suppressed !== null) {
+      openAiError(res, 502, 'server_error', suppressed)
+      return
+    }
     json(res, 200, {
       id, object: 'chat.completion', created, model,
       choices: [{
@@ -753,47 +870,62 @@ async function chatCompletions(req, res, complete, options = {}) {
 
   openStreamHeaders(res, options.heartbeatMs)
   sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }] })
-  const outcome = await complete({ model, openAi: body }, (chunk) => {
-    if (res.destroyed) return
-    if (chunk.type === 'text-delta') {
-      sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: chunk.text }, finish_reason: null }] })
-      return
-    }
-    if (chunk.type === 'reasoning-delta') {
-      sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { reasoning: chunk.text }, finish_reason: null }] })
-      return
-    }
-    if (chunk.type === 'tool-call-delta') {
-      const action = tools.admit(chunk)
-      if (action.kind === 'drop') return
-      sendSse(res, {
-        id, object: 'chat.completion.chunk', created, model,
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{
-              index: action.openAiIndex,
-              ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
-            }],
-          },
-          finish_reason: null,
-        }],
-      })
-      if (action.args) {
-        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
+  let outcome
+  try {
+    outcome = await complete({ model, openAi: body }, (chunk) => {
+      if (res.destroyed) return
+      if (chunk.type === 'text-delta') {
+        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: chunk.text }, finish_reason: null }] })
+        return
       }
-      return
+      if (chunk.type === 'reasoning-delta') {
+        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { reasoning: chunk.text }, finish_reason: null }] })
+        return
+      }
+      if (chunk.type === 'tool-call-delta') {
+        const action = tools.admit(chunk)
+        if (action.kind === 'drop') return
+        sendSse(res, {
+          id, object: 'chat.completion.chunk', created, model,
+          choices: [{
+            index: 0,
+            delta: {
+              tool_calls: [{
+                index: action.openAiIndex,
+                ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
+              }],
+            },
+            finish_reason: null,
+          }],
+        })
+        if (action.args) {
+          sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
+        }
+        return
+      }
+      if (chunk.type === 'usage') {
+        sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [], usage: toOpenAiUsage(chunk.usage) })
+      }
+    })
+  } catch (error) {
+    // Headers and the initial role chunk are already on the wire, so the only
+    // honest place for a dispatch failure is the stream itself. Ending silently
+    // here is the empty-200 this endpoint's non-streaming branch already fixed.
+    options.trace?.setOutcome('failed')
+    if (!res.destroyed) {
+      sendSse(res, { error: { message: String(error?.message ?? error), type: 'server_error' } })
+      res.write('data: [DONE]\n\n')
+      res.end()
     }
-    if (chunk.type === 'usage') {
-      sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [], usage: toOpenAiUsage(chunk.usage) })
-    }
-  })
+    return
+  }
   if (outcome.error !== undefined) {
     // The status line went out with the first SSE header, so 200 is already spent
     // — but a turn the lane refused must still say so. Answering a refusal with a
     // clean `finish_reason: stop` and no content is the empty-200 this endpoint's
     // non-streaming branch fixed, arriving by the other door.
-    sendSse(res, { error: { message: String(outcome.error), type: 'server_error' } })
+    if (failureReply(res, outcome)) return
+    sendSse(res, { error: forwardFailure(outcome).error })
     res.write('data: [DONE]\n\n')
     res.end()
     return
@@ -804,6 +936,15 @@ async function chatCompletions(req, res, complete, options = {}) {
   // client cannot run — is how the truncation loop used to come back by the
   // streaming door.
   const calls = executableCalls(outcome, tools)
+  const suppressed = suppressedOnlyNote(outcome, calls)
+  if (suppressed !== null) {
+    // Same reasoning as the `outcome.error` branch above: the status line is
+    // spent, so the only honest place left for the explanation is the stream.
+    sendSse(res, { error: { message: suppressed, type: 'server_error' } })
+    res.write('data: [DONE]\n\n')
+    res.end()
+    return
+  }
   sendSse(res, {
     id, object: 'chat.completion.chunk', created, model,
     choices: [{ index: 0, delta: {}, finish_reason: calls.length ? 'tool_calls' : outcome.truncated ? 'length' : 'stop' }],
@@ -831,11 +972,39 @@ function executableCalls(outcome, tools) {
   return calls.map((call, i) => ({ id: call.id || `call_${i}`, name: call.name, arguments: call.arguments }))
 }
 
+/**
+ * The sentence for a turn whose *only* output was a tool call the caller cannot run.
+ *
+ * This is the decoy filter's blind spot, measured live: the token saver compacts a
+ * diff and appends the filter's own `[full diff: rtk git diff --no-compact]` hint,
+ * the model obeys the hint by calling `bash` — and a caller that declared no tools
+ * has that call suppressed as a fingerprint decoy. The turn then ends with no text
+ * and `finish_reason: stop`, which is indistinguishable from "the model said
+ * nothing" and sends the user looking for a bug in the model rather than at the
+ * transcript. Suppressing the call is still right (the caller could not run it);
+ * reporting the turn as a success is not.
+ *
+ * Returns `null` when there is nothing to say — the caller asked for the tools, or
+ * the model also produced prose, or it produced nothing at all.
+ */
+function suppressedOnlyNote(outcome, calls) {
+  if (calls.length > 0) return null
+  // A ceiling cut is already reported honestly: `finish_reason: length` says the
+  // turn ran out of room, and the call that fell out of the executable set did so
+  // because its arguments never closed. Replacing that with "the model asked for a
+  // tool you did not declare" would blame the wrong thing.
+  if (outcome.truncated === true) return null
+  const attempted = Array.isArray(outcome.toolCalls) ? outcome.toolCalls : []
+  if (attempted.length === 0) return null
+  if (typeof outcome.text === 'string' && outcome.text !== '') return null
+  const names = [...new Set(attempted.map(call => call.name).filter(name => typeof name === 'string' && name !== ''))]
+  return `the model answered by calling ${names.length > 0 ? names.join(', ') : 'a tool'} instead of writing an answer, and this request declared no such tool — re-send it with that tool declared`
+}
+
 /** Responses-API spelling, so Codex-shaped local clients work too. */
 async function responsesEndpoint(req, res, complete, options = {}) {
   const body = await readBody(req)
   options.trace?.step('body_received')
-  const effortSuffix = /\(([^()]+)\)\s*$/.exec(String(body.model ?? ''))
   const model = baseModelId(String(body.model ?? ''))
   if (model === '') {
     openAiError(res, 400, 'invalid_request_error', '`model` is required')
@@ -853,11 +1022,12 @@ async function responsesEndpoint(req, res, complete, options = {}) {
   if (Array.isArray(body.input)) input.push(...body.input)
   else if (body.input !== undefined) input.push(body.input)
   else if (Array.isArray(body.messages)) input.push(...body.messages)
+  const effort = callerEffort(body)
   const openAi = {
     ...body,
     input,
     ...(typeof body.max_output_tokens === 'number' ? { max_tokens: body.max_output_tokens } : {}),
-    ...(body.reasoning_effort === undefined && effortSuffix !== null ? { reasoning_effort: effortSuffix[1].trim() } : {}),
+    ...effort === undefined ? {} : { reasoning_effort: effort },
   }
 
   const tools = createToolWire(openAi)
@@ -891,36 +1061,56 @@ async function responsesEndpoint(req, res, complete, options = {}) {
       if (messageIndex !== undefined) return
       messageIndex = nextOutputIndex++
       order.push('message')
-      say('response.output_item.added', { output_index: messageIndex, item: { type: 'message', role: 'assistant', item_id: `msg_${messageIndex}`, content: [] } })
+      say('response.output_item.added', { output_index: messageIndex, item: { id: `msg_${messageIndex}`, type: 'message', status: 'in_progress', role: 'assistant', content: [] } })
+      say('response.content_part.added', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } })
     }
     const announceCall = (openAiIndex, name) => {
       if (callIndexes.has(openAiIndex)) return
       const index = nextOutputIndex++
       callIndexes.set(openAiIndex, index)
       order.push(openAiIndex)
-      say('response.output_item.added', { output_index: index, item: { type: 'function_call', item_id: `fc_${index}`, call_id: `fc_${index}`, name, arguments: '' } })
+      say('response.output_item.added', { output_index: index, item: { id: `fc_${index}`, type: 'function_call', status: 'in_progress', call_id: `fc_${index}`, name, arguments: '' } })
     }
     let usage
-    const outcome = await complete({ model, openAi, responses: true }, (chunk) => {
-      if (res.destroyed) return
-      if (chunk.type === 'text-delta') {
-        announceMessage()
-        say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, delta: chunk.text })
-        return
+    let outcome
+    try {
+      outcome = await complete({ model, openAi, responses: true, responsesBody: body }, (chunk) => {
+        if (res.destroyed) return
+        if (chunk.type === 'text-delta') {
+          announceMessage()
+          say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, delta: chunk.text })
+          return
+        }
+        if (chunk.type === 'tool-call-delta') {
+          const action = tools.admit(chunk)
+          if (action.kind === 'drop') return
+          announceCall(action.openAiIndex, action.name ?? '')
+          say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(action.openAiIndex)}`, output_index: callIndexes.get(action.openAiIndex), delta: action.args })
+          return
+        }
+        if (chunk.type === 'usage') {
+          usage = toOpenAiUsage(chunk.usage)
+        }
+      })
+    } catch (error) {
+      // `response.created` is already on the wire; report the failure with the
+      // event the protocol defines instead of ending a 200 after one frame.
+      options.trace?.setOutcome('failed')
+      if (!res.destroyed) {
+        say('response.failed', { response: response({ status: 'failed', error: { message: String(error?.message ?? error) } }) })
+        res.end()
       }
-      if (chunk.type === 'tool-call-delta') {
-        const action = tools.admit(chunk)
-        if (action.kind === 'drop') return
-        announceCall(action.openAiIndex, action.name ?? '')
-        say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(action.openAiIndex)}`, output_index: callIndexes.get(action.openAiIndex), delta: action.args })
-        return
-      }
-      if (chunk.type === 'usage') {
-        usage = toOpenAiUsage(chunk.usage)
-      }
-    })
+      return
+    }
     if (outcome.error !== undefined) {
-      say('response.failed', { response: response({ status: 'failed', error: { message: String(outcome.error) } }) })
+      if (failureReply(res, outcome)) return
+      say('response.failed', { response: response({ status: 'failed', error: forwardFailure(outcome).error }) })
+      res.end()
+      return
+    }
+    const suppressedStream = suppressedOnlyNote(outcome, executableCalls(outcome, tools))
+    if (suppressedStream !== null) {
+      say('response.failed', { response: response({ status: 'failed', error: { message: suppressedStream } }) })
       res.end()
       return
     }
@@ -935,13 +1125,38 @@ async function responsesEndpoint(req, res, complete, options = {}) {
     // the lane's fold order, which is the announcement order for every shape
     // the free lane emits; a call the ceiling cut mid-JSON simply drops out).
     const finalCalls = executableCalls(outcome, tools)
-    const messageRow = outcome.text ? { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: outcome.text }] } : undefined
+    if (messageIndex === undefined && outcome.text) {
+      announceMessage()
+      say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, delta: outcome.text })
+    }
+    const announcedCalls = order.filter(entry => entry !== 'message').length
+    for (let position = announcedCalls; position < finalCalls.length; position++) {
+      const row = finalCalls[position]
+      const openAiIndex = `outcome:${position}`
+      announceCall(openAiIndex, row.name)
+      say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(openAiIndex)}`, output_index: callIndexes.get(openAiIndex), delta: row.arguments })
+    }
+    const messageRow = outcome.text ? { id: `msg_${messageIndex}`, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: outcome.text, annotations: [] }] } : undefined
     const output = []
     let callPos = 0
     for (const entry of order) {
-      if (entry === 'message') { if (messageRow !== undefined) output.push(messageRow); continue }
+      if (entry === 'message') {
+        if (messageRow !== undefined) {
+          output.push(messageRow)
+          say('response.output_text.done', { item_id: messageRow.id, output_index: messageIndex, content_index: 0, text: outcome.text })
+          say('response.content_part.done', { item_id: messageRow.id, output_index: messageIndex, content_index: 0, part: messageRow.content[0] })
+          say('response.output_item.done', { output_index: messageIndex, item: messageRow })
+        }
+        continue
+      }
       const row = finalCalls[callPos++]
-      if (row !== undefined) output.push({ type: 'function_call', call_id: row.id, name: row.name, arguments: row.arguments })
+      if (row !== undefined) {
+        const index = callIndexes.get(entry)
+        const item = { id: `fc_${index}`, type: 'function_call', status: 'completed', call_id: `fc_${index}`, name: row.name, arguments: row.arguments }
+        output.push(item)
+        say('response.function_call_arguments.done', { item_id: item.id, output_index: index, name: row.name, arguments: row.arguments })
+        say('response.output_item.done', { output_index: index, item })
+      }
     }
     const final = response({
       status: status(outcome),
@@ -954,9 +1169,14 @@ async function responsesEndpoint(req, res, complete, options = {}) {
     return
   }
 
-  const outcome = await complete({ model, openAi, responses: true })
+  const outcome = await complete({ model, openAi, responses: true, responsesBody: body })
   if (outcome.error !== undefined) {
-    openAiError(res, 502, 'server_error', outcome.error)
+    failureReply(res, outcome, false, true)
+    return
+  }
+  const suppressedRows = suppressedOnlyNote(outcome, executableCalls(outcome, tools))
+  if (suppressedRows !== null) {
+    openAiError(res, 502, 'server_error', suppressedRows)
     return
   }
   const rows = outputRows(outcome)
@@ -970,6 +1190,170 @@ async function responsesEndpoint(req, res, complete, options = {}) {
       total_tokens: outcome.usage?.total_tokens ?? 0,
     },
   })
+}
+
+/**
+ * The Anthropic Messages surface.
+ *
+ * Claude Code and the Anthropic SDKs speak this wire, and until this endpoint
+ * existed the only way to reach these lanes from them was an OpenAI-translation
+ * shim in front. It is a first-class surface rather than a translation bolt-on:
+ * the request is projected into the same harness messages the picker path
+ * builds — so tool pairing repair, image handling and the token savers all apply
+ * unchanged — and the answer is rendered straight from the harness chunk stream,
+ * so an Anthropic caller gets thinking blocks, `tool_use` blocks and a correct
+ * `stop_reason` without a lossy round trip through OpenAI's spelling.
+ *
+ * It is also where the five local answers live. A quota probe, a session title,
+ * a suggestion request or a filepath extraction is answered here, in-process,
+ * without spending a single upstream token (see `src/local-optimize.js`).
+ */
+async function messagesEndpoint(req, res, complete, options = {}) {
+  let body
+  try { body = await readBody(req) }
+  catch (error) {
+    anthropicError(res, error.statusCode ?? 400, 'invalid_request_error', error.message)
+    return
+  }
+  options.trace?.step('body_received')
+  const parsed = fromAnthropicRequest(body)
+  if (parsed.error !== undefined) {
+    anthropicError(res, 400, 'invalid_request_error', parsed.error)
+    return
+  }
+  const model = baseModelId(parsed.model)
+  const wantsStream = parsed.stream === true
+  const id = `msg_${crypto.randomBytes(12).toString('hex')}`
+
+  // The five local answers, before any dispatch. A hit is a complete response:
+  // there is nothing to stream from, and nothing to bill.
+  const optimize = typeof options.optimize === 'function' ? options.optimize() : options.optimize
+  if (optimize !== null && optimize !== undefined && optimize.enabled === true) {
+    const local = tryOptimizations(body, { enabled: optimize, model })
+    if (local !== null) {
+      options.trace?.step('local_optimization', { kind: local.kind })
+      if (!wantsStream) {
+        json(res, 200, toMessagesResponse(local, { model, id }))
+        return
+      }
+      openStreamHeaders(res, options.heartbeatMs)
+      const localState = newMessageState(id, model)
+      const write = frame => { if (!res.destroyed) res.write(frame) }
+      // Rendered through the same frame generator the real stream uses, so a
+      // locally answered turn is byte-shaped exactly like a generated one.
+      for (const chunk of [
+        { type: 'text-delta', text: local.text, index: 0 },
+        { type: 'usage', usage: { inputTokens: local.usage?.input ?? 0, outputTokens: local.usage?.output ?? 0 } },
+        { type: 'finish', reason: { kind: 'stop' } },
+      ]) for (const frame of anthropicFrames(chunk, localState)) write(frame)
+      res.end()
+      return
+    }
+  }
+
+  // The system prompt rides the transcript as a leading system row rather than a
+  // separate `system` field. All three wires this plugin builds hoist a system
+  // row correctly (`toChatMessages` keeps it, `toClaudeMessages` folds it into
+  // `system`, `toResponseInput` emits an input message), while the `chat` wire is
+  // the only one that reads a top-level `system` — passing both would send the
+  // same instruction twice on a chat model.
+  const messages = parsed.system === '' || parsed.system === undefined
+    ? parsed.messages
+    : [{ role: 'system', content: [{ type: 'text', text: parsed.system }] }, ...parsed.messages]
+  const request = {
+    model,
+    messages,
+    tools: parsed.tools,
+    ...parsed.toolChoice === undefined ? {} : { toolChoice: parsed.toolChoice },
+    ...parsed.maxTokens === undefined ? {} : { maxTokens: parsed.maxTokens },
+    ...parsed.temperature === undefined ? {} : { temperature: parsed.temperature },
+    ...parsed.reasoningEffort === undefined ? {} : { reasoningEffort: parsed.reasoningEffort },
+  }
+  const outcome = { text: '', thinking: '', toolCalls: [], usage: undefined, truncated: false, error: undefined }
+
+  if (!wantsStream) {
+    let result
+    try {
+      result = await complete(request, chunk => { foldAnthropicOutcome(outcome, chunk) })
+    } catch (error) {
+      // This wire has its own error envelope; letting a thrown 404/400 fall
+      // through to the OpenAI-shaped top-level handler breaks Anthropic SDKs.
+      options.trace?.setOutcome('failed')
+      const status = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+        ? error.statusCode
+        : 500
+      const type = status === 404 ? 'not_found_error' : status >= 500 ? 'api_error' : 'invalid_request_error'
+      anthropicError(res, status, type, error?.message ?? error)
+      return
+    }
+    if (result.error !== undefined) {
+      failureReply(res, result, true, true)
+      return
+    }
+    const suppressed = suppressedOnlyNote(outcome, executableCalls(outcome, ANTHROPIC_TOOL_WIRE))
+    if (suppressed !== null) {
+      anthropicError(res, 502, 'api_error', suppressed)
+      return
+    }
+    json(res, 200, anthropicMessage(outcome, { model, id }))
+    return
+  }
+
+  openStreamHeaders(res, options.heartbeatMs)
+  const state = newMessageState(id, model)
+  const write = frame => { if (!res.destroyed) res.write(frame) }
+  let result
+  try {
+    result = await complete(request, chunk => {
+      foldAnthropicOutcome(outcome, chunk)
+      if (chunk.type === 'finish' && outcome.error !== undefined && !res.headersSent && forwardFailure(outcome).classified) return
+      for (const frame of anthropicFrames(chunk, state)) write(frame)
+    })
+  } catch (error) {
+    // A dispatch that throws *before* its first chunk — an unroutable model, a
+    // credential the lane refuses — would otherwise leave an empty 200 on the
+    // wire: the headers went out with the first frame's slot, and `handle`'s
+    // catch can only `res.end()` because the status line is spent. An Anthropic
+    // client watching for `message_stop` sees a truncated stream instead of the
+    // reason, so the failure is rendered as the error event the protocol has for
+    // exactly this. (The adapter reports its own failures as a `finish` chunk
+    // rather than a throw, so this path is the pre-chunk one.)
+    const failure = carryFailure({ ...error, message: String(error?.message ?? error) })
+    result = { error: failure.message, failure }
+  }
+  if (result.error === undefined && state.finished !== true) {
+    const suppressed = suppressedOnlyNote(outcome, executableCalls(outcome, ANTHROPIC_TOOL_WIRE))
+    if (suppressed !== null) result = { error: suppressed }
+  }
+  if (result.error !== undefined && failureReply(res, result, true)) return
+  if (result.error !== undefined && state.finished !== true) {
+    // `state.finished` keeps a turn that already closed its own stream from
+    // getting a second `message_stop`, which strict clients reject.
+    for (const frame of anthropicFrames({ type: 'finish', reason: { kind: 'error', failure: result.failure ?? { message: String(result.error) } } }, state)) write(frame)
+  }
+  res.end()
+}
+
+/** `executableCalls`' contract, for a wire that suppresses nothing. */
+const ANTHROPIC_TOOL_WIRE = { executable: () => true }
+
+/** The per-turn renderer state `anthropicFrames` threads through. */
+function newMessageState(messageId, model) {
+  return {
+    messageId, model,
+    started: false, finished: false,
+    blockIndex: 0, openBlock: null,
+    toolSlots: new Map(),
+    inputTokens: 0, outputTokens: 0,
+    stopReason: null,
+  }
+}
+
+/** Anthropic's error envelope, which is `{type:'error', error:{type, message}}`. */
+function anthropicError(res, status, type, message) {
+  const body = JSON.stringify({ type: 'error', error: { type, message: String(message) } })
+  res.writeHead(status, { ...corsHeaders(), 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+  res.end(body)
 }
 
 export function toOpenAiUsage(usage) {

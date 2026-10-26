@@ -29,7 +29,12 @@ const LOOPBACK_NAMES = new Set(['127.0.0.1', '[::1]', '::1', 'localhost'])
  * quota to the whole subnet on the strength of a string in a settings file.
  */
 export function isLoopbackHost(value) {
-  const authority = authorityOf(String(value ?? ''), 'http')
+  const raw = String(value ?? '').trim()
+  // URL's authority parser requires brackets around an IPv6 literal, but the
+  // listener accepts the bare spelling too (`resolveLoopbackBind` strips the
+  // brackets itself, and the standalone URL formatter names `::1` directly).
+  if (raw === '::1') return true
+  const authority = authorityOf(raw, 'http')
   return authority !== null && LOOPBACK_NAMES.has(authority.hostname)
 }
 

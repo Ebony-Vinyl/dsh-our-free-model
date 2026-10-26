@@ -1,0 +1,103 @@
+{
+  "name": "dsh-channel-pack",
+  "version": "0.1.0",
+  "description": "Channel Pack account management and model adapters",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client/channel-pack.js",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale/*.json",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:client": "node plugin-src/client/build.mjs",
+    "build:assets": "node scripts/copy-assets.mjs",
+    "qoder:wasm": "node scripts/extract-qoder-wasm.mjs",
+    "build:all": "pnpm build && pnpm build:assets && pnpm build:client",
+    "prepare": "pnpm build:all",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:e2e:lobsterai": "cross-env DSH_LOBSTERAI_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/lobsterai-probe.e2e.spec.ts",
+    "test:e2e:lobsterai-claim": "cross-env DSH_LOBSTERAI_E2E=1 DSH_LOBSTERAI_CLAIM_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/lobsterai-claim-probe.e2e.spec.ts",
+    "test:e2e:qoder": "cross-env DSH_QODER_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/qoder-probe.e2e.spec.ts",
+    "test:e2e:qoder-credits": "cross-env DSH_QODER_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/qoder-credits-probe.e2e.spec.ts",
+    "test:e2e:qoder-chat": "cross-env DSH_QODER_CHAT_E2E=1 DSH_QODER_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/qoder-chat-probe.e2e.spec.ts",
+    "test:e2e:qodercn": "cross-env DSH_QODERCN_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/qodercn-probe.e2e.spec.ts",
+    "test:e2e:qodercn-credits": "cross-env DSH_QODERCN_E2E=1 DSH_QODERCN_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/qodercn-credits-probe.e2e.spec.ts",
+    "test:e2e:qodercn-chat": "cross-env DSH_QODERCN_CHAT_E2E=1 DSH_QODERCN_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/qodercn-chat-probe.e2e.spec.ts",
+    "test:e2e:trae": "cross-env DSH_TRAE_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/trae-probe.e2e.spec.ts",
+    "test:e2e:trae-claim": "cross-env DSH_TRAE_E2E=1 DSH_TRAE_CLAIM_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/trae-claim-probe.e2e.spec.ts",
+    "test:e2e:trae-channels": "cross-env DSH_TRAE_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/trae-channels-probe.e2e.spec.ts",
+    "test:e2e:trae-reasoning": "cross-env DSH_TRAE_REASONING_E2E=1 DSH_TRAE_REASONING_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/trae-reasoning-probe.e2e.spec.ts",
+    "test:e2e:loomy": "cross-env DSH_LOOMY_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/loomy-probe.e2e.spec.ts",
+    "test:e2e:loomy-chat": "cross-env DSH_LOOMY_CHAT_E2E=1 DSH_LOOMY_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/loomy-chat-probe.e2e.spec.ts",
+    "test:e2e:cline": "cross-env DSH_CLINE_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/cline-probe.e2e.spec.ts",
+    "test:e2e:opencode": "cross-env DSH_OPENCODE_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/opencode-probe.e2e.spec.ts",
+    "test:e2e:opencode-chat": "cross-env DSH_OPENCODE_E2E=1 DSH_OPENCODE_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/opencode-probe.e2e.spec.ts",
+    "test:e2e:opencode-account": "cross-env DSH_OPENCODE_ACCOUNT_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/opencode-account-probe.e2e.spec.ts",
+    "test:e2e:opencode-account-chat": "cross-env DSH_OPENCODE_ACCOUNT_E2E=1 DSH_OPENCODE_ACCOUNT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/opencode-account-probe.e2e.spec.ts",
+    "test:e2e:cline-chat": "cross-env DSH_CLINE_CHAT_E2E=1 DSH_CLINE_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/cline-chat-probe.e2e.spec.ts",
+    "test:e2e:raccoon": "cross-env DSH_RACCOON_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/raccoon-probe.e2e.spec.ts",
+    "test:e2e:raccoon-chat": "cross-env DSH_RACCOON_CHAT_E2E=1 DSH_RACCOON_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/raccoon-chat-probe.e2e.spec.ts",
+    "test:e2e:raccoon-tools": "cross-env DSH_RACCOON_TOOLS_E2E=1 DSH_RACCOON_TOOLS_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/raccoon-tools-probe.e2e.spec.ts",
+    "test:e2e:minimax": "cross-env DSH_MINIMAX_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/minimax-probe.e2e.spec.ts",
+    "test:e2e:minimax-claim": "cross-env DSH_MINIMAX_E2E=1 DSH_MINIMAX_CLAIM_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/minimax-claim-probe.e2e.spec.ts",
+    "test:e2e:minimax-chat": "cross-env DSH_MINIMAX_CHAT_E2E=1 DSH_MINIMAX_CHAT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/minimax-chat-probe.e2e.spec.ts",
+    "test:e2e:minimax-image": "cross-env DSH_MINIMAX_IMAGE_E2E=1 DSH_MINIMAX_IMAGE_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/minimax-image-probe.e2e.spec.ts",
+    "test:e2e:image-burst": "cross-env DSH_IMAGE_BURST_E2E=1 DSH_IMAGE_BURST_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/image-burst-cross-provider.e2e.spec.ts"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-model-selection"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-commands": "^0.1.2-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.1.2-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.1.2-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  },
+  "dependencies": {
+    "@deepseek-ai/cosmokit": "^1.8.5",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "undici": "^8.11.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.1.2-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.1.2-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.1.2-rc.1 || ^0.1.7-rc.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@types/node": "^22.0.0",
+    "cross-env": "^7.0.3",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT"
+}

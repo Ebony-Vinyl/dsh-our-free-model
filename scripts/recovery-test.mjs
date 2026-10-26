@@ -15,7 +15,7 @@ const server = http.createServer((req, res) => {
   const pieces = []
   req.on('data', piece => pieces.push(piece))
   req.on('end', async () => {
-    if (forwardScenario !== undefined && req.method === 'GET' && req.url === '/zen/v1/models') {
+    if (forwardScenario !== undefined && req.method === 'GET' && req.url === '/inference/v1/models') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ data: forwardScenario.models.map(id => ({ id })) }))
       return
@@ -41,8 +41,20 @@ const server = http.createServer((req, res) => {
     res.on('close', release)
     const answer = scenario.answers[ordinal] ?? { status: 500, body: '{"error":{"message":"unexpected extra request"}}' }
     if (answer.socket) { req.destroy(); res.destroy(); return }
+    if (answer.holdHeaders) return
     res.writeHead(answer.status ?? 200, { 'content-type': answer.status ? 'application/json' : 'text/event-stream' })
     const send = () => {
+      if (answer.pieces) {
+        for (const [index, piece] of answer.pieces.entries()) {
+          const timer = setTimeout(() => {
+            if (res.destroyed) return
+            res.write(piece)
+            if (index === answer.pieces.length - 1 && !answer.hold) res.end()
+          }, index * answer.intervalMs)
+          scenario.timers.push(timer)
+        }
+        return
+      }
       if (answer.hold) { res.write(answer.body ?? ': waiting\n\n'); return }
       res.end(answer.body ?? '')
     }
@@ -59,6 +71,7 @@ process.env.OUR_FREE_MODEL_BASE = `http://127.0.0.1:${server.address().port}`
 const { FreeModelAdapter, ROUTE_MAIN } = await import('../src/adapter.js')
 const { buildCatalog } = await import('../src/catalog.js')
 const { wireFor } = await import('../src/upstream.js')
+const { recoveryPolicy } = await import('../src/recovery.js')
 
 const MODELS = [
   'mimo-v2.6-flash-free', 'mimo-v2.5-free', 'muse-spark-1.3-contributor-free',
@@ -124,20 +137,25 @@ function terminal(wire, { reason = 'stop', input = 11, output = 7, usage = true 
   })
 }
 
-function setup(model, answers, { settings = {}, options = {}, entryOverrides = {}, onWarn, hideModel = false } = {}) {
+function setup(model, answers, { settings = {}, options = {}, entryOverrides = {}, onWarn, hideModel = false, combo = false } = {}) {
   assert.ok(CATALOG.some(entry => entry.id === model), `目录缺少 ${model}`)
   const scenario = { answers, requests: [], responses: new Set(), timers: [], closed: 0 }
   activeCase = scenario
   const records = []
   const turns = []
   const controller = new AbortController()
+  const catalog = CATALOG.map(entry => entry.id === model ? { ...entry, ...entryOverrides } : entry)
+  const comboEntry = { id: 'combo:progress-deadline', name: 'Progress deadline', channel: 'combo',
+    combo: [model, 'mimo-v2.6-flash-free'], maxOutput: 32768, contextWindow: 131072 }
+  if (combo) catalog.push(comboEntry)
   const adapter = new FreeModelAdapter({
-    state: () => ({ catalog: hideModel ? [] : CATALOG.map(entry => entry.id === model ? { ...entry, ...entryOverrides } : entry), membership: { [ROUTE_MAIN]: MODELS }, settings: { enabled: true, defaultMaxTokens: 32768, ...settings }, attributionUserAgent: 'offline-recovery-test' }),
+    state: () => ({ catalog: hideModel ? [] : catalog, membership: { [ROUTE_MAIN]: MODELS }, settings: { enabled: true, defaultMaxTokens: 32768, ...settings }, attributionUserAgent: 'offline-recovery-test' }),
     recordUsage: row => records.push(row),
     recordTurn: row => turns.push(row),
+    sealedCredential: () => ({ mode: 'direct', base: process.env.OUR_FREE_MODEL_BASE, apiKey: 'fixture' }),
     warn: message => onWarn?.(message, controller),
   })
-  const stream = adapter.stream({ provider: ROUTE_MAIN, model, reasoningEffort: 'deep', maxTokens: 4096,
+  const stream = adapter.stream({ provider: ROUTE_MAIN, model: combo ? comboEntry.id : model, reasoningEffort: 'deep', maxTokens: 4096,
     sessionId: `recovery:${model}`, messages: [{ role: 'user', content: [{ type: 'text', text: TASK }] }],
     tools: [TOOL], signal: controller.signal, ...options })
   return { scenario, records, turns, controller, adapter, stream }
@@ -243,11 +261,18 @@ try {
       assert.equal(first.body.model, model)
       assert.equal(continuation.body.model, model)
       assert.equal(first.headers['x-opencode-session'], continuation.headers['x-opencode-session'], '续写保留原逻辑会话')
-      assert.notEqual(first.headers['x-opencode-request'], continuation.headers['x-opencode-request'], '每次 HTTP 请求使用独立请求标识')
+      // v2 指纹：v1 的 `x-opencode-request` 头已被上游按名字拒掉（403），四个会话头
+      // 必须同值，且这个头不能再出现。
+      assert.equal('x-opencode-request' in continuation.headers, false, '不得再发 v1 的 x-opencode-request')
+      assert.equal(continuation.headers['x-session-affinity'], continuation.headers['x-opencode-session'], 'v2 会话头同值')
+      assert.equal(continuation.headers['x-session-id'], continuation.headers['x-opencode-session'], 'v2 会话头同值')
       assert.ok(JSON.stringify(continuation.body).includes(TASK), '续写必须携带原任务')
       assert.ok(JSON.stringify(continuation.body).includes(CHECKPOINT), '续写必须携带已完成推理检查点')
       assert.notDeepEqual(continuation.body, first.body, '不能原样重发整轮')
-      assert.equal(continuation.body.tool_choice?.type ?? continuation.body.tool_choice, 'none', '续写禁止工具选择')
+      // 续写压制工具调用改为靠指令正文（v2 见到 tool_choice: 'none' 就 403）。
+      // Responses 线会补官方默认的 `auto`，所以这里只禁止 `none`。
+      assert.notEqual(continuation.body.tool_choice, 'none', '续写不得下发 tool_choice: none')
+      assert.ok(JSON.stringify(continuation.body).includes('Do not call tools'), '续写指令须自带「不要调工具」')
       assert.equal(run.records.length, 2, '每次真实 HTTP 调用独立记账')
       assert.deepEqual(run.turns, [{ at: run.turns[0].at, model, ok: true, recovered: true, attempts: 2, origin: 'harness' }])
       assert.deepEqual(run.records.map(row => row.attempt), [0, 1])
@@ -325,7 +350,8 @@ try {
       assert.equal(run.records[1].recovered, true)
       const continuation = run.scenario.requests[1].body
       assert.ok(JSON.stringify(continuation).includes(CHECKPOINT), '续写必须携带思考检查点')
-      assert.equal(continuation.tool_choice?.type ?? continuation.tool_choice, 'none', '续写禁止工具选择')
+      assert.notEqual(continuation.tool_choice, 'none', '续写不得下发 tool_choice: none（v2 见到即 403）')
+      assert.ok(JSON.stringify(continuation).includes('Do not call tools'), '续写指令须自带「不要调工具」')
       assert.ok(warns.some(message => message.includes('stopped turn held only its reasoning')), '空停续写须上报告警')
     })
     await check(`${wire}: 续写段仍只有思考时按断流失败`, async () => {
@@ -382,6 +408,111 @@ try {
     ])
     checkCut(run)
     assert.ok(run.records.every(row => row.recovered !== true))
+  })
+
+  for (const model of ['mimo-v2.6-flash-free', 'union-alpha', 'muse-spark-1.3-contributor-free']) {
+    const wire = wireFor(model)
+    await check(`${wire}: partial answer followed by an explicit server error cannot replay the turn`, async () => {
+      const error = { type: 'server_error', message: 'provider failed' }
+      const event = wire === 'responses' ? { type: 'response.failed', response: { status: 'failed', error } } : { type: 'error', error }
+      const run = await drive(model, [{ body: deltas(wire, { text: ANSWER }) + sse(event) }])
+      checkCut(run, 1)
+    })
+  }
+
+  await check('EAC no longer has an independent no-progress deadline, including legacy settings', () => {
+    for (const value of [undefined, false, { enabled: false }, { progressTimeoutMs: 200 }]) {
+      assert.equal(Object.hasOwn(recoveryPolicy(value), 'progressTimeoutMs'), false)
+    }
+  })
+
+  for (const [label, answer] of [
+    ['held headers', { delayMs: 400, body: deltas('chat', { text: ANSWER }) + terminal('chat') }],
+    ['heartbeats', { pieces: [...Array(6).fill(': heartbeat\n\n'), deltas('chat', { text: ANSWER }) + terminal('chat')], intervalMs: 80 }],
+    ['empty deltas and usage', { pieces: [...Array(6).fill(sse({ choices: [{ delta: { content: '' } }], usage: { prompt_tokens: 1, completion_tokens: 0 } })), deltas('chat', { text: ANSWER }) + terminal('chat')], intervalMs: 80 }],
+  ]) await check(`EAC ${label} can wait for an answer beyond the former progress deadline`, async () => {
+    const run = await drive('union-alpha', [answer], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { enabled: false, progressTimeoutMs: 200 } } })
+    checkFinal(run, 'stop', 1)
+    assert.ok(run.elapsedMs > 200)
+    assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
+  })
+
+  for (const recovery of [true, false]) await check(`EAC does not schedule the former 60-second cutoff (recovery=${recovery})`, async () => {
+    const originalTimer = globalThis.setTimeout
+    let cutoffTimers = 0
+    globalThis.setTimeout = (callback, delay, ...args) => {
+      if (delay === 60000) {
+        cutoffTimers++
+        return originalTimer(callback, 10, ...args)
+      }
+      return originalTimer(callback, delay, ...args)
+    }
+    try {
+      const run = await drive('union-alpha', [{
+        delayMs: 80, body: deltas('chat', { text: ANSWER }) + terminal('chat'),
+      }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: recovery } })
+      checkFinal(run, 'stop', 1)
+      assert.equal(cutoffTimers, 0)
+    } finally { globalThis.setTimeout = originalTimer }
+  })
+
+  for (const kind of ['text', 'reasoning', 'tool']) await check(`EAC preserves ${kind} across a longer stream`, async () => {
+    const pieces = Array.from({ length: 7 }, (_, index) => kind === 'tool'
+      ? deltas('chat', { ...(index === 0 ? { toolName: 'test_tool' } : {}), toolArgs: index === 0 ? '{"x":"' : index === 6 ? '"}' : 'x' })
+      : deltas('chat', { [kind]: 'progress' }))
+    pieces.push(deltas('chat', { text: ANSWER }) + terminal('chat'))
+    const run = await drive('union-alpha', [{ pieces, intervalMs: 80 }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { progressTimeoutMs: 200 } } })
+    assert.equal(run.scenario.requests.length, 1)
+    assert.notEqual(run.finish.kind, 'error')
+    assert.ok(run.elapsedMs > 200)
+  })
+
+  for (const emptyArguments of [false, true]) await check(`EAC named tool start accepts ${emptyArguments ? 'zero' : 'delayed'} arguments after waiting`, async () => {
+    const pieces = [
+      ': waiting\n\n',
+      deltas('chat', { toolName: TOOL.name }),
+      emptyArguments ? terminal('chat', { reason: 'tool_calls' })
+        : deltas('chat', { toolArgs: '{}' }) + terminal('chat', { reason: 'tool_calls' }),
+    ]
+    const run = await drive('union-alpha', [{ pieces, intervalMs: 250 }], {
+      entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { enabled: false, progressTimeoutMs: 400 } },
+    })
+    assert.equal(run.scenario.requests.length, 1)
+    assert.notEqual(run.finish.kind, 'error')
+    assert.ok(run.chunks.some(chunk => chunk.type === 'block-end' && chunk.block?.type === 'tool-call' && chunk.block.name === TOOL.name))
+  })
+
+  await check('EAC waits through a heartbeat-only gap after partial text', async () => {
+    const run = await drive('union-alpha', [{ pieces: [deltas('chat', { text: ANSWER }), ...Array(6).fill(': heartbeat\n\n'), terminal('chat')], intervalMs: 80 }], { entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { progressTimeoutMs: 200 } } })
+    checkFinal(run, 'stop', 1)
+    assert.ok(run.elapsedMs > 200)
+    assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
+  })
+
+  await check('EAC silent waiting does not advance a combo or duplicate the request', async () => {
+    const run = await drive('union-alpha', [
+      { pieces: [...Array(6).fill(': heartbeat\n\n'), deltas('chat', { text: ANSWER }) + terminal('chat')], intervalMs: 80 },
+    ], { combo: true, entryOverrides: { channel: 'eac' }, settings: { streamRecovery: { enabled: false, progressTimeoutMs: 200 } } })
+    checkFinal(run, 'stop', 1)
+    assert.ok(run.elapsedMs > 200)
+    assert.ok(run.chunks.some(chunk => chunk.type === 'text-delta' && chunk.text === ANSWER))
+  })
+
+  await check('caller cancellation stops a combo before its next candidate', async () => {
+    const run = await drive('union-alpha', [
+      { hold: true },
+      { body: deltas('chat', { text: ANSWER }) + terminal('chat') },
+    ], { combo: true, entryOverrides: { channel: 'eac' }, options: { signal: AbortSignal.timeout(100) },
+      settings: { streamRecovery: { enabled: false, progressTimeoutMs: 500 } } })
+    checkFinal(run, 'aborted', 1)
+    assert.equal(run.finish.failure.code, 'ABORTED')
+  })
+
+  await check('EAC server errors retain failure and do not replay the native turn', async () => {
+    const run = await drive('union-alpha', [{ status: 500, body: JSON.stringify({ error: { type: 'server_error', message: 'fixture failure' } }) }], { entryOverrides: { channel: 'eac' } })
+    checkFinal(run, 'error', 1)
+    assert.equal(run.finish.failure.code, 'EAC_UPSTREAM_FAILED')
+    assert.equal(run.adapter.providerRetryPolicy().retryableCodes.includes(run.finish.failure.code), false)
   })
 
   for (const phase of ['首段', '续写段']) {
@@ -642,8 +773,8 @@ try {
       let summary
       await until(async () => {
         summary = await callRoute(api, 'GET', '/api/our-free-model/summary')
-        return summary.json?.settings?.forward?.running === true && summary.json?.probedAt > 0
-      }, { what: '启动探测完成并开启 Forward', timeoutMs: 3000 })
+        return summary.json?.settings?.forward?.running === true
+      }, { what: 'Forward 开启', timeoutMs: 3000 })
       const port = summary.json.settings.forward.actualPort
       const key = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).forwardKey
       const headers = { authorization: `Bearer ${key}`, 'content-type': 'application/json' }
@@ -702,7 +833,7 @@ try {
         const requests = scenario.requests
         assert.equal(requests.length, 2, 'Forward 实际向上游发送首段和续写两次请求')
         assert.ok(JSON.stringify(requests[1].body).includes(CHECKPOINT))
-        assert.equal(requests[1].body.tool_choice, 'none')
+        assert.equal(requests[1].body.tool_choice, undefined, 'v2 门禁拒绝 tool_choice: none，续写只靠指令正文压制工具调用')
         const saved = await savedStats(2)
         assert.equal(saved.requests, 2)
         assert.deepEqual(saved.samples.map(row => row.attempt), [0, 1])

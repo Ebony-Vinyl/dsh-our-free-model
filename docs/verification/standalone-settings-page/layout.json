@@ -1,0 +1,26 @@
+[
+  {
+    "controlsOutside": 0,
+    "documentWidth": 1035,
+    "label": "desktop",
+    "width": 1054
+  },
+  {
+    "controlsOutside": 0,
+    "documentWidth": 487,
+    "label": "mobile",
+    "width": 506
+  },
+  {
+    "controlsOutside": 0,
+    "documentWidth": 396,
+    "label": "narrow",
+    "width": 415
+  },
+  {
+    "controlsOutside": 0,
+    "documentWidth": 312,
+    "label": "narrow-332",
+    "width": 332
+  }
+]

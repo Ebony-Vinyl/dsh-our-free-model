@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "name": "index.html",
+      "bytes": 10510,
+      "gzip": 4066
+    },
+    {
+      "name": "app.css",
+      "bytes": 64938,
+      "gzip": 12923
+    },
+    {
+      "name": "app.js",
+      "bytes": 259222,
+      "gzip": 89078
+    },
+    {
+      "name": "channels-7dDrVcEH.js",
+      "bytes": 236801,
+      "gzip": 92817
+    }
+  ],
+  "total": {
+    "bytes": 571471,
+    "gzip": 198884
+  },
+  "initial": {
+    "bytes": 334670,
+    "gzip": 106067
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Our Free Model",
+  "version": "2.7.1",
+  "identifier": "com.ourfreemodel.desktop",
+  "build": {
+    "frontendDist": "../splash",
+    "beforeBuildCommand": "node ../../scripts/prepare-desktop.mjs",
+    "beforeDevCommand": "node ../../scripts/prepare-desktop.mjs"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "headerImage": "nsis-header.bmp",
+        "sidebarImage": "nsis-sidebar.bmp",
+        "installerHooks": "install-hooks.nsh",
+        "installMode": "currentUser",
+        "languages": [
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false
+      }
+    },
+    "resources": {
+      "resources/service/": "service/",
+      "resources/runtime/": "runtime/"
+    }
+  }
+}

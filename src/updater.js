@@ -31,17 +31,36 @@ import crypto from 'node:crypto'
 
 const REPO = 'Ebony-Vinyl/dsh-our-free-model'
 
-/** Manifest locations, in preference order — jsDelivr first, for the same
- *  reachability reason as the feed (see src/feed.js): raw.githubusercontent.com
- *  is TLS-interfered on the networks this plugin most serves. jsDelivr is a
- *  third-party trust domain, which used to make it the weakest link of this
- *  channel; the Ed25519 signature on every manifest is now the actual trust
- *  root (see {@link PINNED_MANIFEST_PUBLIC_KEY}), so a mirror that lies fails
- *  verification instead of shipping code. */
+/**
+ * A GitHub raw proxy. On networks where `raw.githubusercontent.com` and
+ * `cdn.jsdelivr.net` are slow or intermittently unreachable (measured
+ * 2026-10-17 from a mainland-CN link: raw took 16.6 s and frequently timed out
+ * against the 15 s budget, jsDelivr answered in ~11 s but also dropped runs),
+ * this proxy answered the same bytes in ~1.3 s. It is a *transport* for the
+ * same `raw.githubusercontent.com` path, so the snapshot resolver can pin it to
+ * a full commit exactly like the direct origin — the proxy never becomes a
+ * mutable-branch install source.
+ *
+ * The proxy is only ever asked for an immutable commit-SHA path (see
+ * {@link snapshotManifestSource}); a mirror that answered a different commit's
+ * bytes would fail the manifest signature and the per-file SHA-256 checks, so
+ * it is untrusted by construction, the same as every other mirror.
+ */
+const RAW_PROXY = 'https://gh-proxy.com'
+
+/** Wrap a raw.githubusercontent.com URL in the proxy, keeping the inner URL intact. */
+function viaRawProxy(inner) {
+  return `${RAW_PROXY}/https://raw.githubusercontent.com/${inner}`
+}
+
+/** Discovery locations, in preference order. Official mutable refs are resolved
+ *  to a full commit before fetching either the manifest or its files. Mirrors
+ *  remain untrusted: only the existing Ed25519 signature authorizes content. */
 export const DEFAULT_MANIFEST_SOURCES = [
   `https://raw.githubusercontent.com/${REPO}/main/feed/manifest.json`,
   `https://cdn.jsdelivr.net/gh/${REPO}@main/feed/manifest.json`,
-  `https://raw.githubusercontent.com/${REPO}/master/feed/manifest.json`,
+  `https://gcore.jsdelivr.net/gh/${REPO}@main/feed/manifest.json`,
+  viaRawProxy(`${REPO}/main/feed/manifest.json`),
 ]
 
 /**
@@ -112,7 +131,7 @@ export function verifyManifestSignature(payload, publicKeyBase64) {
   }
 }
 
-/** Mirror of the feed's cache-buster: a minute-stamp keeps upgrades fresh. */
+/** Cache hint only: query strings cannot refresh jsDelivr's branch resolution. */
 export function bustCdnCache(url, now = Date.now()) {
   try {
     const parsed = new URL(url)
@@ -126,7 +145,9 @@ export function bustCdnCache(url, now = Date.now()) {
 
 const MAX_MANIFEST_BYTES = 256 * 1024
 const MAX_FILE_BYTES = 4 * 1024 * 1024
-const MAX_FILES = 80
+const MAX_ENGINE_BYTES = 128 * 1024 * 1024
+const MAX_FILES = 128
+const ENGINE_BINARY = /^vendor\/magpie\/bin\/magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/
 const SHA_RE = /^[0-9a-f]{64}$/
 // Hot reload evaluates a fresh updater module before the old request finishes.
 // A process-wide lock keeps the successor from starting a second transaction.
@@ -221,7 +242,8 @@ function parseFileEntry(row) {
   const sha256 = typeof row?.sha256 === 'string' ? row.sha256.toLowerCase() : ''
   if (!SHA_RE.test(sha256)) throw new Error(`manifest entry "${normalized}" has no valid sha256`)
   const size = row?.size
-  if (!Number.isInteger(size) || size <= 0 || size > MAX_FILE_BYTES) {
+  const limit = ENGINE_BINARY.test(normalized) ? MAX_ENGINE_BYTES : MAX_FILE_BYTES
+  if (!Number.isInteger(size) || size <= 0 || size > limit) {
     throw new Error(`manifest entry "${normalized}" has an out-of-range size`)
   }
   return { path: normalized, sha256, size }
@@ -236,6 +258,137 @@ function timestampOf(value) {
 /** Resolve one manifest-relative path against the URL the manifest came from. */
 export function fileUrlOf(manifestUrl, manifest, relativePath) {
   return new URL(manifest.base + relativePath.split('/').map(encodeURIComponent).join('/'), manifestUrl).href
+}
+
+/** Git pkt-line lengths count bytes, including UTF-8 ref names. */
+export function parseUploadPackRefs(body) {
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body)
+  const refs = new Map()
+  let offset = 0
+  let ended = false
+  while (offset < bytes.length) {
+    const header = bytes.subarray(offset, offset + 4).toString('latin1')
+    if (!/^[0-9a-fA-F]{4}$/.test(header)) throw new Error('invalid ref advertisement packet')
+    const length = Number.parseInt(header, 16)
+    if (length <= 2) {
+      offset += 4
+      ended = offset === bytes.length && (length === 0 || length === 2)
+      continue
+    }
+    ended = false
+    if (length < 4 || offset + length > bytes.length) throw new Error('truncated ref advertisement packet')
+    const payload = bytes.subarray(offset + 4, offset + length).toString('utf8').split('\0')[0]
+    const match = /^([a-f0-9]{40}) ([^\s]+)\n?$/.exec(payload)
+    if (match !== null) refs.set(match[2], match[1])
+    offset += length
+  }
+  if (!ended) throw new Error('incomplete ref advertisement packet sequence')
+  return refs
+}
+
+async function resolveViaApi(ref, fetchImpl, signal) {
+  const response = await fetchImpl(`https://api.github.com/repos/${REPO}/commits/${encodeURIComponent(ref)}`, {
+    redirect: 'error', signal,
+    headers: { accept: 'application/vnd.github.sha', 'user-agent': 'our-free-model-updater' },
+  })
+  if (!response.ok) {
+    const remaining = response.headers?.get('x-ratelimit-remaining')
+    const limited = response.status === 429 || (response.status === 403 && remaining === '0')
+    const diagnostics = ['x-ratelimit-remaining', 'x-ratelimit-reset', 'retry-after'].flatMap(name => {
+      const value = response.headers?.get(name)
+      return value !== null && /^\d{1,16}$/.test(value) ? [`${name}=${value}`] : []
+    })
+    throw new Error(`HTTP ${response.status}${limited ? '; GitHub API rate limit exceeded' : ''}${diagnostics.length ? '; ' + diagnostics.join('; ') : ''}`)
+  }
+  const text = (await response.text()).trim()
+  if (text.length > MAX_MANIFEST_BYTES) throw new Error('snapshot resolution response too large')
+  const sha = /^[a-f0-9]{40}$/.test(text) ? text : JSON.parse(text)?.sha
+  if (typeof sha !== 'string' || !/^[a-f0-9]{40}$/.test(sha)) throw new Error('snapshot resolution did not return a full commit SHA')
+  return sha
+}
+
+async function resolveViaRefAdvertisement(ref, fetchImpl, signal) {
+  const response = await fetchImpl(`https://github.com/${REPO}/info/refs?service=git-upload-pack`, {
+    redirect: 'error', signal,
+    headers: { accept: 'application/x-git-upload-pack-advertisement', 'user-agent': 'our-free-model-updater' },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const body = Buffer.from(await response.arrayBuffer())
+  if (body.length > MAX_MANIFEST_BYTES * 8) throw new Error('ref advertisement too large')
+  const refs = parseUploadPackRefs(body)
+  for (const name of [`refs/heads/${ref}`, `refs/tags/${ref}^{}`, `refs/tags/${ref}`, ...(ref === 'HEAD' ? ['HEAD'] : [])]) {
+    if (refs.has(name)) return refs.get(name)
+  }
+  throw new Error(`no full commit SHA for ${ref} in ref advertisement`)
+}
+
+async function resolveViaCommitFeed(ref, fetchImpl, signal) {
+  const response = await fetchImpl(`https://github.com/${REPO}/commits/${encodeURIComponent(ref)}.atom`, {
+    redirect: 'error', signal,
+    headers: { accept: 'application/atom+xml', 'user-agent': 'our-free-model-updater' },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const body = await response.text()
+  if (Buffer.byteLength(body) > MAX_MANIFEST_BYTES * 8) throw new Error('commit feed too large')
+  const entry = /<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/.exec(body)
+  const match = entry && /<id>\s*tag:github\.com,2008:Grit::Commit\/([a-f0-9]{40})\s*<\/id>/.exec(entry[1])
+  if (!match) throw new Error('commit feed carried no full commit SHA')
+  return match[1]
+}
+
+/** Pin an official discovery URL without changing the signed manifest format.
+ *  A resolution is reused across mirrors in this check, so a moving branch
+ *  cannot select different snapshots when raw fails and the CDN takes over.
+ *  Custom/local sources and already immutable SHA URLs retain their semantics.
+ *  The resolver supplies a location, never authority to install its contents. */
+async function snapshotManifestSource(source, fetchImpl, signal, revisions, resolverTimeoutMs) {
+  const url = new URL(source)
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return source
+  const rawPrefix = `/${REPO}/`
+  const cdnPrefix = `/gh/${REPO}@`
+  // The raw proxy wraps a raw.githubusercontent.com URL after its own origin, so
+  // its path is `/https://raw.githubusercontent.com/<REPO>/<ref>/feed/…`. It is
+  // recognized as a transport for the raw origin and pinned to the same commit
+  // as the direct source — never left as a mutable branch.
+  const proxiedRawPrefix = `/https://raw.githubusercontent.com/${REPO}/`
+  const prefix = url.hostname === 'raw.githubusercontent.com' ? rawPrefix
+    : ['cdn.jsdelivr.net', 'gcore.jsdelivr.net'].includes(url.hostname) ? cdnPrefix
+      : url.hostname === 'gh-proxy.com' ? proxiedRawPrefix : null
+  if (prefix === null || !url.pathname.startsWith(prefix)) return source
+  const match = /^([^/]+)\/feed\/manifest\.json$/.exec(url.pathname.slice(prefix.length))
+  if (match === null) return source
+  const ref = match[1]
+  if (/^[a-f0-9]{40}$/.test(ref)) return source
+  // Never insert arbitrary URL/path syntax in a resolver request.
+  if (!/^[A-Za-z0-9._-]+$/.test(ref)) throw new Error('unsupported update source ref')
+  let revision = revisions.get(ref)
+  if (revision instanceof Error) throw revision
+  if (revision === undefined) {
+    const failures = []
+    for (const [name, resolve] of [['api', resolveViaApi], ['refs', resolveViaRefAdvertisement], ['feed', resolveViaCommitFeed]]) {
+      try {
+        // Leave time for the remaining resolvers and the signed manifest even
+        // when one official endpoint accepts a connection but never responds.
+        const timeout = AbortSignal.timeout(resolverTimeoutMs)
+        const routeSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+        revision = await resolve(ref, fetchImpl, routeSignal)
+        break
+      } catch (error) {
+        failures.push(`${name}: ${error?.message ?? error}`)
+        if (signal?.aborted) break
+      }
+    }
+    if (revision === undefined) {
+      const error = new Error(`snapshot resolution failed for ${ref} (${failures.join('; ')})`)
+      // An exhausted deadline gets another budget on the next mirror. A
+      // completed failed lookup is shared so mirrors do not repeat API limits.
+      if (!signal?.aborted) revisions.set(ref, error)
+      throw error
+    }
+    revisions.set(ref, revision)
+  }
+  url.pathname = `${prefix}${revision}/feed/manifest.json`
+  return url.href
 }
 
 /**
@@ -253,12 +406,16 @@ export function fileUrlOf(manifestUrl, manifest, relativePath) {
  */
 export async function downloadManifest(sources, { timeoutMs = 15000, fetchImpl = fetch, verifyKey = PINNED_MANIFEST_PUBLIC_KEY } = {}) {
   const failures = []
+  const revisions = new Map()
   for (const source of sources) {
     try {
-      const response = await fetchImpl(bustCdnCache(source), {
+      // One deadline covers resolution, manifest headers and body for this leg.
+      const signal = AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
+      const snapshot = await snapshotManifestSource(source, fetchImpl, signal, revisions, Math.max(1, Math.min(3000, Math.floor(timeoutMs / 4))))
+      const response = await fetchImpl(bustCdnCache(snapshot), {
         redirect: 'error',
         headers: { accept: 'application/json' },
-        signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
+        signal,
       })
       if (!response.ok) { failures.push(`${source} -> HTTP ${response.status}`); continue }
       const text = await response.text()
@@ -268,7 +425,7 @@ export async function downloadManifest(sources, { timeoutMs = 15000, fetchImpl =
         failures.push(`${source} -> manifest signature missing or not made with the release key`)
         continue
       }
-      return { manifest, source, signed: true }
+      return { manifest, source: snapshot, signed: true }
     } catch (error) {
       failures.push(`${source} -> ${error?.message ?? error}`)
     }
@@ -282,7 +439,7 @@ function sha256File(file) {
 
 /**
  * Download and hash-verify the whole release into `stageDir`.
- * @returns {Promise<{bytes: number, files: number}>}
+ * @returns {Promise<{bytes: number, files: number, reused: boolean}>}
  */
 const STAGE_ATTEMPTS = 3
 const STAGE_BACKOFF_MS = 700
@@ -297,7 +454,60 @@ function isTransientDownloadError(error) {
   return /fetch failed|network|ECONN|ETIMEDOUT|EAI_AGAIN|terminated|socket/i.test(String(error?.message ?? error))
 }
 
+/** jsDelivr's primary edge can redirect documentation files to raw, which is
+ *  unavailable on some client networks. Try its gcore edge at the exact same
+ *  SHA/path, never an arbitrary Location or a mutable branch. Size/hash checks
+ *  remain outside the transport fallback and cannot authorize another body.
+ *
+ *  jsDelivr also refuses to serve any file above its own size ceiling (measured
+ *  2026-10-25: a 65 MB vendored engine binary answered `403 Forbidden` while
+ *  every ordinary file on the same commit answered 200). A release file that
+ *  large is therefore unreachable through jsDelivr on every edge, so a pinned
+ *  commit falls back to the same commit on raw and through the raw proxy — the
+ *  same SHA, a different transport. Only pinned commits get that fallback: a
+ *  mutable branch's raw bytes could move between the manifest read and the file
+ *  download, which is exactly what pinning exists to prevent.
+ *
+ *  Both jsDelivr edges are recognized as origins here, because the manifest may
+ *  itself have been discovered on either one: a gcore-sourced manifest composes
+ *  gcore file URLs, and those need the same fallbacks. */
+function stagedFileSources(manifestUrl, manifest, relativePath) {
+  const file = fileUrlOf(manifestUrl, manifest, relativePath)
+  const url = new URL(file)
+  const prefix = `/gh/${REPO}@`
+  const jsdelivr = url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'gcore.jsdelivr.net'
+  if (url.protocol !== 'https:' || !jsdelivr || url.port
+    || url.username || url.password || !url.pathname.startsWith(prefix)
+    || !/^[a-f0-9]{40}\//.test(url.pathname.slice(prefix.length))) return [file]
+  const sha = url.pathname.slice(prefix.length).split('/')[0]
+  const rest = url.pathname.slice(prefix.length + sha.length + 1)
+  const cdn = new URL(url)
+  cdn.hostname = 'cdn.jsdelivr.net'
+  const gcore = new URL(url)
+  gcore.hostname = 'gcore.jsdelivr.net'
+  const raw = `https://raw.githubusercontent.com/${REPO}/${sha}/${rest}`
+  // Keep the origin that was actually asked first, then the other edge, then the
+  // two raw transports at the same pinned commit.
+  const others = [cdn.href, gcore.href].filter(href => href !== file)
+  return [file, ...others, raw, viaRawProxy(`${REPO}/${sha}/${rest}`)]
+}
+
 export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl = fetch, concurrency = 4, onProgress = () => {}, timeoutMs = 30000 }) {
+  // A retry after a failure in a later phase — the backup rename, the swap —
+  // would otherwise wipe a staging copy that already verified and re-download
+  // the whole release. On a slow CN egress that turns one transient refusal into
+  // minutes of spinner, which is what "the update is stuck on loading" looks like
+  // from the settings page. An existing copy is only kept when it hashes clean
+  // against *this* manifest, so a stage left over from another release is wiped.
+  try {
+    verifyStaged(stageDir, manifest)
+    onProgress({ phase: 'download', reused: true, done: manifest.files.length, total: manifest.files.length })
+    return {
+      bytes: manifest.files.reduce((sum, file) => sum + file.size, 0),
+      files: manifest.files.length,
+      reused: true,
+    }
+  } catch { /* nothing to reuse; stage from scratch below */ }
   fs.rmSync(stageDir, { recursive: true, force: true })
   fs.mkdirSync(stageDir, { recursive: true })
   let done = 0
@@ -308,15 +518,32 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
     while (cursor < manifest.files.length) {
       const file = manifest.files[cursor++]
       const target = path.join(stageDir, ...file.path.split('/'))
+      const sources = stagedFileSources(manifestUrl, manifest, file.path)
       let lastError
       for (let attempt = 1; attempt <= STAGE_ATTEMPTS; attempt += 1) {
         try {
-          const response = await fetchImpl(bustCdnCache(fileUrlOf(manifestUrl, manifest, file.path)), {
-            redirect: 'error',
-            signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
-          })
-          if (!response.ok) throw new Error(`HTTP ${response.status}`)
-          const body = Buffer.from(await response.arrayBuffer())
+          const signal = AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
+          let body
+          for (let mirror = 0; mirror < sources.length; mirror++) {
+            try {
+              const response = await fetchImpl(bustCdnCache(sources[mirror]), { redirect: 'error', signal })
+              if (!response.ok) throw new Error(`HTTP ${response.status}`)
+              body = Buffer.from(await response.arrayBuffer())
+              break
+            } catch (error) {
+              const status = /^HTTP (\d{3})$/.exec(String(error?.message ?? ''))?.[1]
+              // A 403 is an authorization refusal, and switching hosts on it
+              // would look like a way around one. The single exception is a file
+              // jsDelivr structurally cannot serve: its size ceiling answers 403
+              // for the vendored engine binary, so the same pinned commit's raw
+              // transport is tried instead. Any other 403 still stops here.
+              const oversized = status === '403' && ENGINE_BINARY.test(file.path)
+              const canFallback = status
+                ? /^(3\d\d|404|429|5\d\d)$/.test(status) || oversized
+                : isTransientDownloadError(error)
+              if (!canFallback || mirror === sources.length - 1 || signal?.aborted) throw error
+            }
+          }
           if (body.length !== file.size) throw new Error(`size ${body.length} != manifest ${file.size}`)
           const digest = crypto.createHash('sha256').update(body).digest('hex')
           if (digest !== file.sha256) throw new Error('sha256 mismatch')
@@ -340,10 +567,12 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
   })
   await Promise.all(workers)
   if (failures.length > 0) {
+    // A half-written stage must never be the one a later retry hashes clean
+    // against, so it is removed here rather than left for reuse.
     fs.rmSync(stageDir, { recursive: true, force: true })
     throw new Error(`staging failed: ${failures.join('; ')}`)
   }
-  return { bytes, files: done }
+  return { bytes, files: done, reused: false }
 }
 
 /** The staged copy is checked against the manifest before install touches anything. */
@@ -364,11 +593,24 @@ export function verifyStaged(stageDir, manifest) {
  * release. An installed copy never has them; a git-clone or linked development
  * copy always does, and it is the same directory the upgrader operates on.
  * `catalog` travels with ecosystem packs rather than with a release, and
- * `worker`/`vendor` ship for self-hosters — a sweep that treats them as "files
+ * `worker` and vendor development sources ship for self-hosters — a sweep that treats them as "files
  * the new release dropped" would delete the pack's readiness records out from
  * under the harness's bundle validation on the first in-app upgrade.
  */
-const REPOSITORY_SCAFFOLDING = ['feed', 'scripts', 'docs', 'promo', 'node_modules', 'catalog', 'worker', 'vendor']
+const REPOSITORY_SCAFFOLDING = ['feed', 'scripts', 'docs', 'promo', 'node_modules', 'catalog', 'worker', 'vendor', 'packages', 'tsconfig.json']
+// Actual published runtime assets must participate in backup and rollback,
+// including when an upgrade crosses the 1.x/2.x boundary. Keep vendor source
+// trees protected; package.json is overwritten during installation, so it
+// cannot be the sole authority for identifying old runtime files to clean up.
+const VENDOR_RUNTIME_FILES = [
+  'vendor/channel-pack/pack.js',
+  'vendor/channel-pack/qoder-auth-wasm.wasm',
+  'vendor/channel-pack/NOTICE.md',
+  'vendor/channel-pack/LICENSE',
+  'vendor/magpie/engine.json',
+  'vendor/magpie/LICENSE',
+  'vendor/magpie/NOTICE.md',
+]
 
 /**
  * Walk a directory into relative file paths, skipping release scratch files and
@@ -391,14 +633,31 @@ export function listPackageFiles(dir) {
     }
   }
   if (fs.existsSync(dir)) visit(dir, '')
+  for (const rel of VENDOR_RUNTIME_FILES) {
+    const target = path.join(dir, ...rel.split('/'))
+    if (fs.existsSync(target) && fs.lstatSync(target).isFile()) out.push(rel)
+  }
+  const engineDir = path.join(dir, 'vendor/magpie/bin')
+  if (fs.existsSync(engineDir) && fs.lstatSync(engineDir).isDirectory()) {
+    for (const entry of fs.readdirSync(engineDir, { withFileTypes: true })) {
+      if (entry.isFile() && /^magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/.test(entry.name)) {
+        out.push(`vendor/magpie/bin/${entry.name}`)
+      }
+    }
+  }
   return out
 }
 
 /**
  * Copy the current package aside so a failed swap can be undone.
- * @returns {number} files backed up
+ *
+ * The two directory renames move a tree that was just written, which is exactly
+ * what a real-time scanner or indexer holds open on Windows: they go through
+ * `renameWithRetry`, the same seam the file swap uses, so one transient EPERM
+ * does not abort a transaction that has not touched the installed package yet.
+ * @returns {Promise<number>} files backed up
  */
-export function backupPackage(pkgDir, backupDir) {
+export async function backupPackage(pkgDir, backupDir) {
   const snapshot = packageSnapshot(pkgDir)
   const pending = `${backupDir}.pending-${crypto.randomUUID()}`
   const previous = `${backupDir}.previous-${crypto.randomUUID()}`
@@ -416,13 +675,13 @@ export function backupPackage(pkgDir, backupDir) {
     verifySnapshot(pkgDir, snapshot)
     fs.writeFileSync(path.join(pending, '.ofm-backup.json'), JSON.stringify(snapshot))
     if (fs.existsSync(backupDir)) {
-      fs.renameSync(backupDir, previous)
+      await renameWithRetry(backupDir, previous)
       movedPrevious = true
     }
     try {
-      fs.renameSync(pending, backupDir)
+      await renameWithRetry(pending, backupDir)
     } catch (error) {
-      if (movedPrevious) fs.renameSync(previous, backupDir)
+      if (movedPrevious) await renameWithRetry(previous, backupDir)
       throw error
     }
     // Failure to clean an older copy does not invalidate the new verified copy.
@@ -477,8 +736,11 @@ function backupSnapshot(backupDir) {
     || new Set(snapshot.files.map(file => file.path)).size !== snapshot.files.length) {
     throw new Error('invalid rollback receipt')
   }
-  verifySnapshot(backupDir, snapshot)
-  return snapshot
+  // Older development-install receipts also covered standalone products and
+  // compiler caches. Keep those bytes retained, but never restore that tree.
+  const runtimeSnapshot = { files: snapshot.files.filter(file => file.path.split('/')[0] !== 'packages') }
+  verifySnapshot(backupDir, runtimeSnapshot)
+  return runtimeSnapshot
 }
 
 /** Put a backed-up copy back in place (used when a swap or reload fails). */
@@ -495,9 +757,7 @@ export function restoreBackup(backupDir, pkgDir) {
     // Copy loop must survive a locked file: attempting every entry keeps the
     // restore as complete as this machine allows instead of crashing halfway.
     try {
-      const target = path.join(pkgDir, ...rel.split('/'))
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.copyFileSync(path.join(backupDir, ...rel.split('/')), target)
+      copyIntoPackage(path.join(backupDir, ...rel.split('/')), path.join(pkgDir, ...rel.split('/')))
     } catch (error) { failures.push(`${rel} (${error?.message ?? error})`) }
   }
   // Restore first. Deleting every installed file before copying made a denied
@@ -511,6 +771,27 @@ export function restoreBackup(backupDir, pkgDir) {
     verifySnapshot(pkgDir, snapshot)
   } catch (error) { failures.push(String(error?.message ?? error)) }
   if (failures.length > 0) throw new Error(`rollback incomplete: ${failures.slice(0, 3).join('; ')}${failures.length > 3 ? ` +${failures.length - 3} more` : ''}`)
+}
+
+function copyIntoPackage(source, target) {
+  fs.mkdirSync(path.dirname(target), { recursive: true })
+  try {
+    fs.copyFileSync(source, target)
+  } catch (error) {
+    if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
+    const stat = fs.statSync(target, { throwIfNoEntry: false })
+    if (!stat?.isFile()) throw error
+    try { fs.chmodSync(target, stat.mode | 0o200) } catch { throw error }
+    try {
+      fs.copyFileSync(source, target)
+    } catch (retryError) {
+      try { fs.chmodSync(target, stat.mode) } catch (modeError) {
+        throw new Error(`${retryError?.message ?? retryError}; restoring file permissions failed (${modeError?.message ?? modeError})`, { cause: retryError })
+      }
+      throw retryError
+    }
+    fs.chmodSync(target, stat.mode)
+  }
 }
 
 /** Windows can transiently refuse a rename while a file is scanned; retry briefly. */
@@ -724,7 +1005,7 @@ export class PluginUpdater {
     this.applying = true
     upgradeLocks.add(this.deps.pkgDir)
     const previous = this.currentVersion()
-    let targetVersion = version ?? ''
+    let targetVersion = version ?? this.latest?.version ?? ''
     let state
     let installed = false
     let activated = false
@@ -753,7 +1034,7 @@ export class PluginUpdater {
       verifyStaged(this.stageDir, manifest)
 
       onProgress({ phase: 'install' })
-      const backedUp = backupPackage(this.deps.pkgDir, this.backupDir)
+      const backedUp = await backupPackage(this.deps.pkgDir, this.backupDir)
       state = { from: previous, to: manifest.version, at: Date.now(), phase: 'installing' }
       // Persist the intent before the first installed byte changes.
       this.saveUpgradeState(state)
@@ -795,7 +1076,7 @@ export class PluginUpdater {
       }
       this.saveUpgradeState({ ...state, phase: 'complete', activated })
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
-      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated }
+      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused }
       this.recordHistory(record)
       this.checkedAt = Date.now()
       this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)

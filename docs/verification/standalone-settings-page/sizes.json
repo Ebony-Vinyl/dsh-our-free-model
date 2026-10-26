@@ -1,0 +1,72 @@
+{
+  "files": [
+    {
+      "name": "index.html",
+      "bytes": 5774,
+      "gzip": 2522
+    },
+    {
+      "name": "_ofm-provider-list-D9WP3xjp.js",
+      "bytes": 2091,
+      "gzip": 1028
+    },
+    {
+      "name": "app.css",
+      "bytes": 74121,
+      "gzip": 14615
+    },
+    {
+      "name": "app.js",
+      "bytes": 255227,
+      "gzip": 87084
+    },
+    {
+      "name": "channels-DJyX4lcx.js",
+      "bytes": 236123,
+      "gzip": 92609
+    },
+    {
+      "name": "circle-alert-_DitfIca.js",
+      "bytes": 293,
+      "gzip": 205
+    },
+    {
+      "name": "models-CZzfJjWx.js",
+      "bytes": 37363,
+      "gzip": 12265
+    },
+    {
+      "name": "rotate-ccw-CNM_Rh68.js",
+      "bytes": 223,
+      "gzip": 193
+    },
+    {
+      "name": "search-RZVy3Eoo.js",
+      "bytes": 192,
+      "gzip": 173
+    },
+    {
+      "name": "settings-DcSQF-QC.js",
+      "bytes": 6564,
+      "gzip": 2976
+    },
+    {
+      "name": "usage-C7L7gUx9.js",
+      "bytes": 10615,
+      "gzip": 4198
+    },
+    {
+      "name": "x-CzfajR1e.js",
+      "bytes": 177,
+      "gzip": 161
+    }
+  ],
+  "total": {
+    "bytes": 628763,
+    "gzip": 218029
+  },
+  "initial": {
+    "bytes": 335122,
+    "gzip": 104221
+  }
+}

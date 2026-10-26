@@ -1,0 +1,139 @@
+/* ===== OFM 桌面版·自定义标题栏 ===== */
+/* 注入到 webview，替换系统标题栏 */
+
+/* 标题栏容器 */
+#ofm-titlebar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 0 16px;
+  z-index: 99999;
+  -webkit-app-region: drag;
+  user-select: none;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+}
+
+/* 给主内容留出标题栏空间 */
+#root {
+  padding-top: 36px !important;
+}
+#root .app-shell {
+  padding-top: 0 !important;
+  min-height: calc(100vh - 36px);
+}
+#root .app-shell > main {
+  min-height: calc(100vh - 36px) !important;
+}
+#root .sidebar {
+  height: calc(100vh - 36px);
+  top: 36px;
+}
+
+/* ===== 夜·赛博终端 ===== */
+[data-theme="dark"] #ofm-titlebar {
+  background: #0a0d13;
+  border-bottom: 1px solid rgba(0,208,192,0.12);
+  color: #c8d0d8;
+}
+
+[data-theme="dark"] .ofm-tb-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(0,208,192,0.7);
+}
+
+[data-theme="dark"] .ofm-tb-title::before {
+  content: '▮ ';
+  color: #00d0c0;
+  animation: tb-blink 1.2s step-end infinite;
+}
+
+[data-theme="dark"] .ofm-tb-btn {
+  color: #5a6a7a;
+}
+[data-theme="dark"] .ofm-tb-btn:hover {
+  background: rgba(0,208,192,0.1);
+  color: #00d0c0;
+}
+[data-theme="dark"] .ofm-tb-btn.close:hover {
+  background: rgba(233,69,66,0.2);
+  color: #e94542;
+}
+
+/* ===== 昼·流光岁月 ===== */
+[data-theme="light"] #ofm-titlebar,
+:root:not([data-theme="dark"]) #ofm-titlebar {
+  background: #f9f7f2;
+  border-bottom: 1px solid rgba(180,83,9,0.08);
+  color: #3a2e1e;
+}
+
+[data-theme="light"] .ofm-tb-title,
+:root:not([data-theme="dark"]) .ofm-tb-title {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 1.5px;
+  color: rgba(180,83,9,0.6);
+  font-family: Georgia, serif;
+}
+
+[data-theme="light"] .ofm-tb-title::before,
+:root:not([data-theme="dark"]) .ofm-tb-title::before {
+  content: '● ';
+  font-size: 6px;
+  color: #b45309;
+  vertical-align: middle;
+}
+
+[data-theme="light"] .ofm-tb-btn,
+:root:not([data-theme="dark"]) .ofm-tb-btn {
+  color: #a89880;
+}
+[data-theme="light"] .ofm-tb-btn:hover,
+:root:not([data-theme="dark"]) .ofm-tb-btn:hover {
+  background: rgba(180,83,9,0.06);
+  color: #b45309;
+}
+[data-theme="light"] .ofm-tb-btn.close:hover,
+:root:not([data-theme="dark"]) .ofm-tb-btn.close:hover {
+  background: rgba(200,60,50,0.1);
+  color: #c8402e;
+}
+
+/* ===== 按钮通用 ===== */
+.ofm-tb-actions {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.ofm-tb-btn {
+  width: 46px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ofm-tb-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+@keyframes tb-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ofm-tb-title::before { animation: none !important; }
+}

@@ -70,6 +70,10 @@ const idRe = new RegExp(schema.$defs.namespacedId.pattern)
 check('id is namespaced per the schema', idRe.test(manifest.id), true)
 check('name is the npm package name', manifest.name, pkg.name)
 check('version tracks package.json', manifest.version, pkg.version)
+for (const file of ['README.md', 'README_EN.md']) {
+  const pins = [...read(file).matchAll(/"dsh-our-free-model": "file:\.\/vendor\/dsh-our-free-model-([^"]+)\.tgz"/g)].map(match => match[1])
+  check(`${file} installs the trusted local tarball at the shipping version`, pins, [pkg.version])
+}
 check('license tracks package.json', manifest.license, pkg.license)
 
 const required = schema.required
@@ -165,8 +169,14 @@ for (const rel of ['package.json', ...(pkg.files ?? [])]) {
     if (/@deepseek-ai\//.test(read(file))) upstreamImports.push(file)
   }
 }
-check('only adapter/ may name an @deepseek-ai module', upstreamImports.filter(f => !f.startsWith('adapter/')), [])
-check('the adapter seam exists and is the one importer', upstreamImports, ['adapter/kernel.js'])
+// `vendor/` is the absorbed free-channel pack: a third-party dsh plugin carried
+// byte-for-byte (provenance in vendor/channel-pack/NOTICE.md). It registers its own
+// provider adapters against the kernel, so it names @deepseek-ai modules
+// itself; the rule this check enforces — one adapter seam for *our* code — is
+// kept for everything else.
+const own = upstreamImports.filter(f => !f.startsWith('vendor/'))
+check('only adapter/ and the vendored pack may name an @deepseek-ai module', own.filter(f => !f.startsWith('adapter/')), [])
+check('the adapter seam exists and is the one importer', own, ['adapter/kernel.js'])
 check('the entry reaches the kernel only through the seam', /from '\.\/adapter\/kernel\.js'/.test(read('index.js')), true)
 check('the seam is shipped', (pkg.files ?? []).includes('adapter'), true)
 

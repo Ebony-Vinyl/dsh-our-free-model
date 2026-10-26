@@ -111,9 +111,13 @@ async function load() {
 function renderCards(d) {
   const t = d.totals
   const today = (d.days ?? []).find(([day]) => day === d.day)
+  const auth = d.auth ?? {}
   document.getElementById('cards').innerHTML = [
     ['活跃 IP 数', t.ips], ['累计请求', fmt(t.req)], ['今日请求', fmt(today?.[1]?.req ?? 0)],
     ['Token 入', fmt(t.in)], ['Token 出', fmt(t.out)],
+    // GitHub 授权闸门（自建形态）：已 star 的账号数 / 已知账号数，以及开关状态。
+    ['已授权账号', fmt(auth.authorized ?? 0)], ['已知账号', fmt(auth.known ?? 0)],
+    ['授权闸门', auth.required === true ? '强制' : auth.configured === true ? '兼容期' : '未配置'],
   ].map(([k, v]) => '<div class="card"><span>' + k + '</span><b>' + fmt(v) + '</b></div>').join('')
 }
 

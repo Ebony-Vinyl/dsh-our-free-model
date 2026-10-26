@@ -1,0 +1,44 @@
+{
+  "method": "浏览器 DOM 实测；横向滚动限制在图表与表格容器，视口工具尺寸受宿主缩放影响",
+  "layouts": [
+    {
+      "controlsOutside": 0,
+      "documentWidth": 1642,
+      "label": "desktop-filtered",
+      "rows": 1,
+      "width": 1662
+    },
+    {
+      "controlsOutside": 0,
+      "documentWidth": 405,
+      "label": "mobile-filtered",
+      "rows": 1,
+      "tableViewport": 333,
+      "tableWidth": 1000,
+      "width": 405
+    },
+    {
+      "controlsOutside": 0,
+      "documentWidth": 332,
+      "label": "narrow-filtered",
+      "rows": 1,
+      "width": 332
+    },
+    {
+      "chartViewport": 333,
+      "chartWidth": 498,
+      "controlsOutside": 0,
+      "documentWidth": 405,
+      "label": "final-mobile-filtered",
+      "tableViewport": 333,
+      "tableWidth": 1000,
+      "width": 405
+    },
+    {
+      "controlsOutside": 0,
+      "documentWidth": 332,
+      "label": "final-narrow-filtered",
+      "width": 332
+    }
+  ]
+}

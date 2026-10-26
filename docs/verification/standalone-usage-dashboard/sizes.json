@@ -1,0 +1,57 @@
+{
+  "files": [
+    {
+      "name": "index.html",
+      "bytes": 7736,
+      "gzip": 3170
+    },
+    {
+      "name": "_ofm-provider-list-D9WP3xjp.js",
+      "bytes": 2091,
+      "gzip": 1028
+    },
+    {
+      "name": "app.css",
+      "bytes": 72367,
+      "gzip": 14305
+    },
+    {
+      "name": "app.js",
+      "bytes": 254982,
+      "gzip": 87190
+    },
+    {
+      "name": "channels-DUPB2TyG.js",
+      "bytes": 236083,
+      "gzip": 92591
+    },
+    {
+      "name": "models-B36NeCYB.js",
+      "bytes": 37323,
+      "gzip": 12251
+    },
+    {
+      "name": "search-BEHQNVe9.js",
+      "bytes": 457,
+      "gzip": 278
+    },
+    {
+      "name": "usage-BN75Z2AX.js",
+      "bytes": 10710,
+      "gzip": 4245
+    },
+    {
+      "name": "x-CzfajR1e.js",
+      "bytes": 177,
+      "gzip": 161
+    }
+  ],
+  "total": {
+    "bytes": 621926,
+    "gzip": 215219
+  },
+  "initial": {
+    "bytes": 335085,
+    "gzip": 104665
+  }
+}
