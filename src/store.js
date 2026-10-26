@@ -225,6 +225,8 @@ export const SETTINGS_INITIAL = {
   localOptimize: { enabled: true, quota: true, prefix: true, title: true, suggestion: true, filepath: true },
   /** Acknowledged announcement copy version. */
   announcementAck: '',
+  /** Acknowledged disclaimer copy version (src/disclaimer.js); 0 = not yet read. */
+  disclaimerAck: 0,
   /** Last full catalog refresh timestamp. */
   catalogSyncedAt: 0,
   /** Owner override for the announcement/update feed location. `{repo}` expands
