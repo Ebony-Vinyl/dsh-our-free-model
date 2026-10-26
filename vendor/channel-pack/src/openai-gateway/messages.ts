@@ -69,10 +69,6 @@ export interface OpenAiChatRequest {
 
 export function normalizeMaxTokens(value: number | undefined, provider: string, model: string): number | undefined {
   if (value === undefined) return undefined
-  // GLM-5.2 与 DeepSeek V4 实测均会拒绝 128000，65536 可正常推理。
-  if (provider === 'codearts' && (/^deepseek-v4-(flash|pro)$/.test(model) || model === 'GLM-5.2')) {
-    return Math.min(value, 65536)
-  }
   return value
 }
 /**
@@ -107,9 +103,6 @@ export function normalizeMaxTokens(value: number | undefined, provider: string, 
  * ⚠️ 但**完全不认识的值仍然 400**（例如拼错的 `banana`）：那不是「名字不通用」，
  * 是调用方写错了。静默翻译会让拼写错误变成「档位悄悄不生效」。
  *
- * ⚠️ **CodeArts 例外**：该 provider 只有开/关两态（适配器把档位阶梯拍平了，
- * 见 `llm-adapter.ts`），任何档位名都等价，故一律二值化、永不报错。
- *
  * ## 返回值是**三态**，不可混用
  *
  * - `string`：归一化后的档位，下发它；
@@ -131,9 +124,6 @@ export function normalizeReasoningEffort(
 ): string | null | undefined {
   if (requested === undefined) return undefined
   const value = String(requested)
-  if (provider === 'codearts' && model !== undefined) {
-    return isThinkingOffEffort(value) ? 'off' : 'on'
-  }
   const record = modelInfo as { reasoning?: { efforts?: readonly { id?: unknown }[] } } | undefined
   const declared = (record?.reasoning?.efforts ?? [])
     .map((effort) => String((effort as { id?: unknown } | undefined)?.id))

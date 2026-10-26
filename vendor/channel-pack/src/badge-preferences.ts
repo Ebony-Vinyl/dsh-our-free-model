@@ -120,7 +120,7 @@ class FilePreferenceStore implements BadgePreferenceStore {
   }
 }
 
-const SCHEMA = 'dsh-codearts-auth/ui-preferences/v1'
+const SCHEMA = 'channel-pack/ui-preferences/v1'
 
 /**
  * 取出文档里的偏好字段，同时兼容**裸字符串**形态。

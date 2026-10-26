@@ -145,7 +145,9 @@ export function bustCdnCache(url, now = Date.now()) {
 
 const MAX_MANIFEST_BYTES = 256 * 1024
 const MAX_FILE_BYTES = 4 * 1024 * 1024
-const MAX_FILES = 80
+const MAX_ENGINE_BYTES = 128 * 1024 * 1024
+const MAX_FILES = 128
+const ENGINE_BINARY = /^vendor\/magpie\/bin\/magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/
 const SHA_RE = /^[0-9a-f]{64}$/
 // Hot reload evaluates a fresh updater module before the old request finishes.
 // A process-wide lock keeps the successor from starting a second transaction.
@@ -240,7 +242,8 @@ function parseFileEntry(row) {
   const sha256 = typeof row?.sha256 === 'string' ? row.sha256.toLowerCase() : ''
   if (!SHA_RE.test(sha256)) throw new Error(`manifest entry "${normalized}" has no valid sha256`)
   const size = row?.size
-  if (!Number.isInteger(size) || size <= 0 || size > MAX_FILE_BYTES) {
+  const limit = ENGINE_BINARY.test(normalized) ? MAX_ENGINE_BYTES : MAX_FILE_BYTES
+  if (!Number.isInteger(size) || size <= 0 || size > limit) {
     throw new Error(`manifest entry "${normalized}" has an out-of-range size`)
   }
   return { path: normalized, sha256, size }
@@ -454,16 +457,39 @@ function isTransientDownloadError(error) {
 /** jsDelivr's primary edge can redirect documentation files to raw, which is
  *  unavailable on some client networks. Try its gcore edge at the exact same
  *  SHA/path, never an arbitrary Location or a mutable branch. Size/hash checks
- *  remain outside the transport fallback and cannot authorize another body. */
+ *  remain outside the transport fallback and cannot authorize another body.
+ *
+ *  jsDelivr also refuses to serve any file above its own size ceiling (measured
+ *  2026-10-25: a 65 MB vendored engine binary answered `403 Forbidden` while
+ *  every ordinary file on the same commit answered 200). A release file that
+ *  large is therefore unreachable through jsDelivr on every edge, so a pinned
+ *  commit falls back to the same commit on raw and through the raw proxy — the
+ *  same SHA, a different transport. Only pinned commits get that fallback: a
+ *  mutable branch's raw bytes could move between the manifest read and the file
+ *  download, which is exactly what pinning exists to prevent.
+ *
+ *  Both jsDelivr edges are recognized as origins here, because the manifest may
+ *  itself have been discovered on either one: a gcore-sourced manifest composes
+ *  gcore file URLs, and those need the same fallbacks. */
 function stagedFileSources(manifestUrl, manifest, relativePath) {
   const file = fileUrlOf(manifestUrl, manifest, relativePath)
   const url = new URL(file)
   const prefix = `/gh/${REPO}@`
-  if (url.protocol !== 'https:' || url.hostname !== 'cdn.jsdelivr.net' || url.port
+  const jsdelivr = url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'gcore.jsdelivr.net'
+  if (url.protocol !== 'https:' || !jsdelivr || url.port
     || url.username || url.password || !url.pathname.startsWith(prefix)
     || !/^[a-f0-9]{40}\//.test(url.pathname.slice(prefix.length))) return [file]
-  url.hostname = 'gcore.jsdelivr.net'
-  return [file, url.href]
+  const sha = url.pathname.slice(prefix.length).split('/')[0]
+  const rest = url.pathname.slice(prefix.length + sha.length + 1)
+  const cdn = new URL(url)
+  cdn.hostname = 'cdn.jsdelivr.net'
+  const gcore = new URL(url)
+  gcore.hostname = 'gcore.jsdelivr.net'
+  const raw = `https://raw.githubusercontent.com/${REPO}/${sha}/${rest}`
+  // Keep the origin that was actually asked first, then the other edge, then the
+  // two raw transports at the same pinned commit.
+  const others = [cdn.href, gcore.href].filter(href => href !== file)
+  return [file, ...others, raw, viaRawProxy(`${REPO}/${sha}/${rest}`)]
 }
 
 export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl = fetch, concurrency = 4, onProgress = () => {}, timeoutMs = 30000 }) {
@@ -506,7 +532,15 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
               break
             } catch (error) {
               const status = /^HTTP (\d{3})$/.exec(String(error?.message ?? ''))?.[1]
-              const canFallback = status ? /^(3\d\d|404|429|5\d\d)$/.test(status) : isTransientDownloadError(error)
+              // A 403 is an authorization refusal, and switching hosts on it
+              // would look like a way around one. The single exception is a file
+              // jsDelivr structurally cannot serve: its size ceiling answers 403
+              // for the vendored engine binary, so the same pinned commit's raw
+              // transport is tried instead. Any other 403 still stops here.
+              const oversized = status === '403' && ENGINE_BINARY.test(file.path)
+              const canFallback = status
+                ? /^(3\d\d|404|429|5\d\d)$/.test(status) || oversized
+                : isTransientDownloadError(error)
               if (!canFallback || mirror === sources.length - 1 || signal?.aborted) throw error
             }
           }
@@ -573,6 +607,9 @@ const VENDOR_RUNTIME_FILES = [
   'vendor/channel-pack/qoder-auth-wasm.wasm',
   'vendor/channel-pack/NOTICE.md',
   'vendor/channel-pack/LICENSE',
+  'vendor/magpie/engine.json',
+  'vendor/magpie/LICENSE',
+  'vendor/magpie/NOTICE.md',
 ]
 
 /**
@@ -599,6 +636,14 @@ export function listPackageFiles(dir) {
   for (const rel of VENDOR_RUNTIME_FILES) {
     const target = path.join(dir, ...rel.split('/'))
     if (fs.existsSync(target) && fs.lstatSync(target).isFile()) out.push(rel)
+  }
+  const engineDir = path.join(dir, 'vendor/magpie/bin')
+  if (fs.existsSync(engineDir) && fs.lstatSync(engineDir).isDirectory()) {
+    for (const entry of fs.readdirSync(engineDir, { withFileTypes: true })) {
+      if (entry.isFile() && /^magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/.test(entry.name)) {
+        out.push(`vendor/magpie/bin/${entry.name}`)
+      }
+    }
   }
   return out
 }

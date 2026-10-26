@@ -235,7 +235,6 @@ function queueInfoOf(error: ModelQueuedError): QoderQueueInfo {
   return error.queueInfo as QoderQueueInfo
 }
 
-
 /**
  * 把 DSH 的工具 schema 映射成加密端点认的 `tools[]`。
  *
@@ -453,14 +452,6 @@ export interface QoderAdapterOptions {
   readImage?: (attachment: unknown) => Promise<{ data: Uint8Array; mediaType: string } | undefined>
   /**
    * 读取图片附件的**请求版本**（按像素预算与字节目标缩放后的字节）。
-   *
-   * ⚠️ 与 {@link readImage} 的错误契约**相反**：不可用时必须返回 `undefined`
-   * 而不是抛错 —— 缩放是优化，不能因为"想缩图"把一次本来能成功的请求打死。
-   * 判据与回退都在共享的 `projectRequestImage` 里（buddy / raccoon 用同一份）。
-   *
-   * 背景（issue !IKITT9）：qoder 撞的是**请求体体积**上限（实测 8 张原图能过、
-   * 15 张 ≈57 MiB 直接 `TRANSPORT: fetch failed`），与腾讯的图片 token 预算
-   * 是两种约束，但同样只能靠缩放解决。
    */
   readImageRequest?: (
     attachment: unknown,
@@ -633,13 +624,6 @@ export class QoderAdapter extends LlmAdapter {
     return resolved
   }
 
-  /**
-   * 兼容 0.1.1-rc.2：新版 `LlmRuntime.prepareCall()` 会调用
-   * `registration.adapter.prepareCall(...)`，而本仓库链接的 dsh-llm 副本
-   * 基类尚未提供该方法，缺少时会在每轮请求开始时抛
-   * `registration.adapter.prepareCall is not a function`。
-   * 与 `BuddyAdapter` / `LobsteraiAdapter` 同款 shim。
-   */
   async prepareCall(
     provider: string,
     model: string,
@@ -942,12 +926,6 @@ export class QoderAdapter extends LlmAdapter {
    *
    * ## 用户要求（2026-09-27）
    *
-   * > qoder 碰到当日额度受限应该像 workbuddy/codebuddy 一样，设置一个模型受限时间
-   * > （他们是返回错误中带时间，qoder 和 qodercn 需要自己设置当日 24:00 受限）
-   * > 然后切换账号池中的下一个可用模型
-   *
-   * ## ⚠️ 与 buddy/CodeArts 的**关键差异**
-   *
    * 它们的错误文案里**带重置时间**（`parseRateLimitError` 从中解析）；
    * Qoder **不带** —— 故这里用 {@link nextUtc8DayStartMs} **自己算**
    * 「UTC+8 当日 24:00」。**不能**复用 `parseRateLimitError`：它会因解析不到
@@ -984,7 +962,7 @@ export class QoderAdapter extends LlmAdapter {
     //
     // ⚠️ 必须传 `tried`：池按「限流重置时间最早到期」排序，**刚失败的账号可能
     // 仍排第一**，不排除就会拿回同一个、命中下面的检查而立即放弃切换。
-    // （与 buddy 的注释同因，见 `buddy-adapter.ts` 的 1200 行附近。）
+
     const next = await pool.getAvailableAccount(this.product.id, options.model, tried)
     if (next === null || tried.has(next.entry.id)) return undefined
     tried.add(next.entry.id)
@@ -1116,8 +1094,6 @@ export function promotionActiveNow(promotion: QoderModelPromotion, now: Date): b
 /**
  * 生成模型选择器里显示的名字。
  *
- * 形态（**与 TRAE / buddy 三 provider 统一**）：
- *
  * ```
  * Qwen3.8-Flash · 免费            ← priceFactor = 0
  * Qwen3.8-Max · x0.5→x0.2        ← 折扣窗口内：原价→折后价
@@ -1128,11 +1104,6 @@ export function promotionActiveNow(promotion: QoderModelPromotion, now: Date): b
  * ⚠️ **倍率必须写进 `name` 而不是 `description`**：composer 的模型切换菜单
  * 只渲染 `name`（见 dsh-client-ui-model-selection 的 ModelSelect：
  * `children: model.name`），`description` 仅用于 `/model` 弹窗。
- *
- * ⚠️ **折扣统一用「原价→折后价」箭头**，不再附中文角标（如「错峰 4 折」）：
- * ① 旧形态只有折后价，看不出原价与折扣幅度；② 角标与数字**冗余**
- * （0.2/0.5 本就是 4 折）。TRAE（`x0.4→x0.2`）与 buddy（`x0.79→x0.50`）
- * 早就是这个形态，本次把 Qoder 对齐过去。
  *
  * ⚠️ 折后价**不直接采信目录的 `priceFactor`**：它是采集时刻的生效价，
  * 窗口切换后即失真。改为按 `beforePromotionPriceFactor × discountFactor`
@@ -1149,7 +1120,7 @@ export function qoderDisplayName(model: QoderFallbackModel, now: Date = new Date
   if (model.priceFactor === 0) return `${model.name} · 免费`
 
   if (hasPromo && active) {
-    // 折扣生效中：`原价→折后价`（与 TRAE / buddy 同形态）
+
     const effective = Number((before * discount).toFixed(4))
     return `${model.name} · x${before}→x${effective}`
   }

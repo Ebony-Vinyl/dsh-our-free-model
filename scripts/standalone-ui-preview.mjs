@@ -100,12 +100,12 @@ fs.mkdirSync(path.join(dataDir, 'channel-pack'), { recursive: true })
 const state = path.join(dataDir, 'channel-pack/state.json')
 if (!fs.existsSync(state)) {
   fs.writeFileSync(state, JSON.stringify({ accounts: [{
-    id: 'buddy-preview', provider: 'lobsterai', nickname: '本机替身账号', enabled: true, refreshable: false,
-    createdAt: Date.now(), expiresAt: Date.now() + 86400000, credentialRef: 'BUDDY_ACCOUNT_PREVIEW',
+    id: 'lobsterai-preview', provider: 'lobsterai', nickname: '本机替身账号', enabled: true, refreshable: false,
+    createdAt: Date.now(), expiresAt: Date.now() + 86400000, credentialRef: 'LOBSTERAI_ACCOUNT_PREVIEW',
   }], disabledModels: {} }))
   const credentials = createCredentials(dataDir)
-  await credentials.set('BUDDY_ACCOUNT_PREVIEW', JSON.stringify({
-    access_token: 'fixture-preview', refresh_token: 'fixture-refresh', domain: 'copilot.tencent.com',
+  await credentials.set('LOBSTERAI_ACCOUNT_PREVIEW', JSON.stringify({
+    access_token: 'fixture-preview', refresh_token: 'fixture-refresh', domain: 'lobsterai.invalid',
     expires_at: String(Date.now() + 86400000), refresh_expires_at: String(Date.now() + 7 * 86400000),
     user_id: 'fixture-user', nickname: '本机替身账号', account_type: 'personal',
   }))
@@ -113,8 +113,8 @@ if (!fs.existsSync(state)) {
 }
 if (creditsFixture) {
   const fixtureAccounts = [
-    { id: 'buddy-preview', provider: 'lobsterai', nickname: '余额正常的替身账号', token: 'fixture-preview' },
-    { id: 'buddy-preview-error', provider: 'lobsterai', nickname: '查询失败的替身账号', token: 'fixture-expired' },
+    { id: 'lobsterai-preview', provider: 'lobsterai', nickname: '余额正常的替身账号', token: 'fixture-preview' },
+    { id: 'lobsterai-preview-error', provider: 'lobsterai', nickname: '查询失败的替身账号', token: 'fixture-expired' },
     { id: 'zcode-preview', provider: 'zcode', nickname: 'ZCode 替身账号', token: 'fixture-zcode' },
     { id: 'gemini-preview', provider: 'gemini', nickname: 'Gemini 替身账号', token: 'fixture-gemini' },
   ]

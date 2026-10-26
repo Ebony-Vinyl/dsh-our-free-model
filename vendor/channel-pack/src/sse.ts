@@ -1,12 +1,5 @@
 /**
  * SSE 流读取与工具参数归一化的共享工具。
- *
- * codearts 与 buddy 两个适配器都消费 OpenAI 风格的 SSE chat 响应，并面临
- * 同一类后端行为：网关在连接空闲一段时间后静默掐断，或模型在生成大工具
- * 参数期间长时间不 flush 任何字节。若不主动检测空闲，`reader.read()` 会
- * 无限期挂起——适配器的 generator 永不返回，harness 当前步骤既不出结果
- * 也不报错"，web 端表现为后续指令无响应。主动超时并把失败归类为可重试的
- * TIMEOUT，harness 才能重试该步骤，把控制权交还给用户。
  */
 
 import { EMPTY_RESPONSE_CODE, LlmError } from '@deepseek-ai/dsh-llm'
@@ -21,9 +14,6 @@ export type SsePhase = 'first-token' | 'chunk'
  * reader 并抛可重试的 `LlmError('TIMEOUT')`——比被动等待网关掐断更早
  * 失败，且归类为可重试 code。尊重用户传入的 {@link signal}：若已 abort
  * 则直接抛 abort 原因，不误报超时。
- *
- * @param label - 提供者标签，仅用于错误消息前缀（如 'codearts' / 'buddy'）。
- * @param phase - 仅用于错误消息区分首 token 超时与 chunk 间超时。
  */
 export async function readWithIdleTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -208,12 +198,6 @@ export function createBlankReasoningSuppressor(): {
  * 400 拒绝整个请求。工具执行失败时（参数非法、超时、工具不存在……）harness
  * 会把 assistant 的 tool_calls 持久化进会话历史，却写不回结果消息。
  *
- * ② **名称为空 / 缺失的 tool_call**（2026-09-23 定位，用户报障）：
- * 会话历史里出现 `{type:'tool-call', id:'call_…', name:'', arguments:'{}'}`
- * 时，workbuddy 以 **HTTP 400 `code 11133 model_param_invalid`** 拒绝整个请求
- * （错误文案只说"请求参数不符合当前模型要求"，**不指出是哪个字段**，极难排查）。
- * 实测最小复现（`scripts/confirm-empty-tool-name.ts`）：
- *
  * | wire 上 `function.name` | 结果 |
  * |---|---|
  * | `"read"` | 200 |
@@ -222,16 +206,6 @@ export function createBlankReasoningSuppressor(): {
  *
  * 与配对缺口的关键差异：**空名字即使配对完整也照样 400**，且报的是
  * 11133（参数非法）而非 11148（配对不匹配），两者成因完全独立。
- *
- * 来源是 qoder 的 SSE：模型偶发吐出一个**完全没有 name 字段**的 tool-call
- * 分片（实测 seq=693 的 `{index:2, id:'call_25e9…', args:[""]}`），
- * `consumeOpenAiSse` 在 block-end 处 `name: block.name ?? ''` 把它落成空串块，
- * harness 执行得到 `unknown tool ""` 并把这条坏块**持久化进会话**。
- * 此后用户一旦切换到 workbuddy（或任何腾讯系端点），该坏块被**每次请求原样重放**
- * → 会话彻底报废（表现为"一发消息就报参数错误，怎么重试都不行"）。
- *
- * 这条坏数据**跨 provider 传染**：qoder 产生、workbuddy 受害。故防线放在
- * 本共享函数（四个适配器都调用它），而不是某个适配器内部。
  *
  * ## 为什么由适配器兜底
  *
@@ -447,10 +421,6 @@ export function resolveSliceChars(raw: number | undefined): number {
  *
  * ## 真实缺陷（用户报障，2026-09-23）
  *
- * `workbuddy/deepseek-v4.1-flash` 报「已达到输出 token 上限，回答被截断」。
- * 排查确认**不是**参数沿用上一个模型（DSH 按当前模型解析 `maxTokens`；
- * 且同一会话 turn 1 未做任何切换就爆额度），而是模型思考陷入病态重复：
- *
  * ```
  * Let me write. / Writing. / Go. / OK. / Producing. / Let me output. / Final.
  * ```
@@ -524,9 +494,6 @@ export function createReasoningLoopDetector(
    * `minLoopChars` 时一次观察即满足阈值、`runStart` 落在该 delta 开头 →
    * `cutAt = 0` → **把回答截成空**；更糟的是会误伤「早期自愈」负样本
    * （它正是「零误报」结论的关键）。实测粒度 3000 时自愈样本被误触发。
-   *
-   * 真实流式帧极小（实测 1379 万帧：p99=10、max=95 字符），故逐帧调用的适配器
-   * 不可达；但 `llm-adapter.ts`（codearts）是累积后一次性调用 → **真实可达**。
    *
    * ⚠️ **`cutAt === 0` 在默认参数下不可达、调参可复现**（等价说法：默认参数下
    * `cutAt > 0` 必然成立）。它依赖 `minLines` 与 `sliceChars` 的大小关系
@@ -686,13 +653,6 @@ export function isReasoningLoopGuardEnabled(): boolean {
  * ⚠️ 2026-09-27 从 `<\/think:([0-9a-f]+)>` **放宽为兼容裸标签**。
  * 放宽的依据是普查（`scripts/probe-think-forms.mjs`，41 会话全量）：
  *
- * | 形态 | 块数 | 含义 |
- * |---|---|---|
- * | `close-only-bare` | **38** | 裸 `</think>`（qoder/qfmodel 主形态）|
- * | `close-only-hex` | 4 | 既有生产路径（workbuddy）|
- * | `mixed-hex-and-bare` | 2 | 两种并存 |
- * | `paired`（开+闭）| 2 | **配对格式** |
- *
  * 旧判据只认 hex → **38 + 2 + 2 = 42 处解析失败**，原文直接落盘泄漏给用户。
  * 这正是用户指出的病根：**应先保证配对/闭标签被正确解析，过滤只是兜底**。
  *
@@ -723,13 +683,6 @@ export interface ThinkTaggedSplit {
  * 按 **think 闭标签**把正文块拆成「思考 + 真正文」。
  *
  * ## 真实缺陷（用户报障，2026-09-25 / 2026-09-27 两次）
- *
- * **第一次**：`workbuddy/hy4-preview-f` 把**思考**写进 `content`（正文）通道，
- * 只在思考段末尾留一个 `</think:6124c78e>` 闭标签。实测该会话 93 步里只有 9 步
- * 的 reasoning 通道非空 —— 思考 9563 字符 vs 正文 64043 字符。后果：
- * ① 思考落在正文块里 → 思考死循环守卫（只喂 reasoning 增量）**完全看不见**
- * → 正文出现真循环（去重率 0.0412，实测 seq 34752/34768/34823，最长 34406 字符）；
- * ② 用户看到「模型把内心独白当正文输出」。
  *
  * **第二次**（用户报障，同一函数）：qoder/qfmodel 吐**裸** `</think>`（无 hex）。
  * 旧判据只认 `</think:hex>` → 解析失败 → 标签原样落盘。

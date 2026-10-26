@@ -20,7 +20,7 @@ export interface CheckinStatus {
   checkinDates: string[]
   /** 活动名（如「开学季」） */
   activityName: string
-  /** 主题名（如「Buddy加油站」） */
+
   themeName: string
   /** 活动结束时间 */
   endTime: string
@@ -111,11 +111,6 @@ export type ClaimOutcome =
  *
  * ## 一个账号为什么有多个包
  *
- * 每个包是**一份独立的积分授予**（套餐 + 若干运营活动赠包），各自有独立的
- * 计量周期与到期时间。实测某 CodeBuddy 账号有 5 个包：1 个体验版套餐 +
- * 4 份「国内运营裂变包」，其中 2 份已过期、1 份本周期已耗尽、2 份可用。
- * 所以界面上「5 个资源包」不等于 5 份额度，需要区分有效与失效。
- *
  * ## 两个 "Remain" 字段的口径差异（关键）
  *
  * 响应里同时有两个剩余值，**含义完全不同**：
@@ -131,7 +126,7 @@ export type ClaimOutcome =
  * 一大截，且用户无从核对。
  */
 export interface CreditPackage {
-  /** 包名（如 'Bonus Pack' / 'CodeBuddy个人体验版'） */
+
   name: string
   /** 额度单位（'credit' / 'credits'） */
   unit: string
@@ -162,13 +157,6 @@ export interface CreditPackage {
    * 实测（2026-09-29，两站各取真实账号）有效包的 `ExpiredTime` **一律为空串**，
    * 它只在包**真正失效之后**由服务端回填（此时 `Status` 已变 3、余额已归零）；
    * 而 `DeductionEndTime` 在包还有效时就有值，且两站的实测分布差距极大：
-   *
-   * | 包 | `DeductionEndTime` 距今 | `CycleEndTime` 距今 |
-   * |---|---|---|
-   * | WorkBuddy「Bonus Pack」 | 9 天 | 9 天 |
-   * | WorkBuddy「Free Plan Subscription」 | **3008 天** | 2 天 |
-   * | CodeBuddy「拉新权益包 / 国内运营裂变包」 | 17～208 天 | 同左或更长 |
-   * | CodeBuddy「个人体验版」 | 3008 天 | 已到期 |
    *
    * ⇒ 判「会不会近期作废」**只能用本字段**：套餐（订阅）包的周期虽短，
    * 扣费截止却在 8 年后，取 `CycleEndTime` 会把每月刷新的套餐误判成快作废。
@@ -219,9 +207,6 @@ export function roundCredits(value: number): number {
  * 把单位串归一到**展示口径**，返回 `'token'` 或 `'credit'`。
  *
  * ## 为什么需要它（真实缺陷，2026-10-03）
- *
- * 用户报障：WorkBuddy 国际版有**两个账号**，用量徽标却显示
- * `WorkBuddy (国际版) • 341.78积分 · 100积分`（两个数并排），账号再多就成一长串。
  *
  * 根因不在「多账号没法合计」，而在**服务端把同一个单位拼成两种写法**（实测逐包
  * 原值）：账号 `…01CC739A` 的包是 `CapacityUnit: 'credit'`（Bonus Pack 241.78）
