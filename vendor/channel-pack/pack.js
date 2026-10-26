@@ -53684,7 +53684,30 @@ function registerChannelPackRpc(ctx, pool, lobsterai, qoder, qoderCn, trae, clin
     );
   });
 }
+function llmEmitAdaptersUpdated(ctx) {
+  const read = (target) => {
+    if (target == null) return void 0;
+    try {
+      const direct = target.llm;
+      if (typeof direct?.emitAdaptersUpdated === "function") return direct;
+    } catch {
+    }
+    try {
+      const looked = target.get?.("llm");
+      if (typeof looked?.emitAdaptersUpdated === "function") return looked;
+    } catch {
+    }
+    return void 0;
+  };
+  const llm = read(ctx) ?? read(ctx.root);
+  llm?.emitAdaptersUpdated?.();
+}
 function broadcastCatalogChanged(ctx) {
+  try {
+    llmEmitAdaptersUpdated(ctx);
+  } catch (error) {
+    ctx.logger.warn(`[channel-pack] \u901A\u77E5\u6A21\u578B\u76EE\u5F55\u5237\u65B0\u5931\u8D25\uFF1A${String(error)}`);
+  }
   try {
     ctx.emit("llm/adapters-updated");
   } catch (error) {

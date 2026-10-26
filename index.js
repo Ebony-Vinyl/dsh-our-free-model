@@ -1581,6 +1581,9 @@ export function apply(ctx, config) {
   refreshUpdatePush = () => pushUpdate(false)
 
   function emitTopology() {
+    // The composer refreshes on the host LLM service's own notification.
+    // `ctx.emit` from this plugin fiber is not that notification.
+    try { ctx.llm?.emitAdaptersUpdated?.() } catch { /* composition has no llm method */ }
     try { ctx.emit?.('llm/adapters-updated') } catch { /* no listener surface */ }
     registration.replace(routes())
   }
