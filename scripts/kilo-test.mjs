@@ -12,8 +12,8 @@
  *    listings retain the last roster, including an already-cleared roster.
  * 2. **Mount** — the channel's entries join the catalog under `channel:
  *    'kilo'`, land on the main route without ever being probed (a probe would
- *    spend itself against the wrong gateway), and the free lane's health gauge
- *    stays free-lane only.
+ *    spend itself against the wrong gateway), and the shared free-pool UI reports
+ *    listed Kilo models as untested candidates, not verified successes.
  * 3. **Turn** — a streamed answer survives this gateway's wire dialect: the
  *    `: KILO PROCESSING` keep-alive comment lines, reasoning under
  *    `delta.reasoning`, indexed tool-call deltas, the usage frame, `[DONE]` —

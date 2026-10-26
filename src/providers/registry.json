@@ -740,6 +740,27 @@
     "modelsUrl": "https://api.fireworks.ai/inference/v1/models"
   },
   {
+    "id": "fleetrelay_t1",
+    "name": "FleetRelay Gateway",
+    "category": "apikey",
+    "auth": {
+      "kind": "apiKey",
+      "env": "FLEETRELAY_API_KEY",
+      "url": "https://vpn2.asigo.top:8443"
+    },
+    "baseUrl": "https://vpn2.asigo.top:8443/v1",
+    "format": "openai-responses",
+    "models": [
+      { "id": "deepseek-v4.1-flash-free", "name": "DeepSeek V4.1 Flash Free", "contextWindow": null, "vision": null, "reasoning": null },
+      { "id": "gpt-6-astra", "name": "GPT-6 Astra", "contextWindow": null, "vision": null, "reasoning": null }
+    ],
+    "notes": "Production fallback gateway for the two models it advertises. Its third-party T1 pool is disabled; traffic currently uses the enabled T2/T3 paths. Requires a FleetRelay client key.",
+    "website": "https://vpn2.asigo.top:8443",
+    "local": false,
+    "source": "custom",
+    "modelsUrl": "https://vpn2.asigo.top:8443/v1/models"
+  },
+  {
     "id": "glm",
     "name": "Z.ai (Anthropic wire)",
     "category": "apikey",

@@ -773,8 +773,8 @@ try {
       let summary
       await until(async () => {
         summary = await callRoute(api, 'GET', '/api/our-free-model/summary')
-        return summary.json?.settings?.forward?.running === true && summary.json?.probedAt > 0
-      }, { what: '启动探测完成并开启 Forward', timeoutMs: 3000 })
+        return summary.json?.settings?.forward?.running === true
+      }, { what: 'Forward 开启', timeoutMs: 3000 })
       const port = summary.json.settings.forward.actualPort
       const key = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).forwardKey
       const headers = { authorization: `Bearer ${key}`, 'content-type': 'application/json' }

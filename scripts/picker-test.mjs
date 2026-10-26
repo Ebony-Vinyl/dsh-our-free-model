@@ -85,6 +85,13 @@ if (adapter === undefined) {
 const api = () => routes.find(route => route.kind === 'prefix')?.handler
 await until(() => api() !== undefined, { what: 'the settings API route' })
 
+// Automatic probing is disabled by owner policy. This suite is about picker
+// reads, so it waits for the listing, then drives the one probe round it needs
+// through the manual endpoint.
+await callRoute(api(), 'POST', '/api/our-free-model/refresh')
+check('startup and a listing refresh spend no probe requests', stub.requests.length, 0)
+await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+
 const ids = models => models.map(model => model.id)
 const advertised = async route => ids(await adapter.listModels(route))
 
@@ -145,6 +152,8 @@ check('the settings page says it has not been probed', midRoundRow?.availability
 check('rather than a verdict it does not have', midRoundRow?.detail ?? '', '')
 gate.resolve()
 await round
+// Discovery refreshed the listing only; probe the new row explicitly.
+await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
 check('once the round lands it carries a verdict',
   (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json.catalog
     .find(row => row.id === 'union-alpha')?.availability, 'available')
