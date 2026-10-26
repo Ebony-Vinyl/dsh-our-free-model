@@ -1040,7 +1040,16 @@ async function responsesEndpoint(req, res, complete, options = {}) {
 
   if (body.stream === true) {
     openStreamHeaders(res, options.heartbeatMs)
-    const say = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`)
+    // `sequence_number` is a required field on every Responses stream event and
+    // has to increase strictly within one response. An accumulator that checks
+    // it (the documented one does: `Number.isInteger(event.sequence_number) &&
+    // event.sequence_number > lastSequence`) throws "Non-increasing event
+    // sequence" on the very first frame when the field is absent, which makes
+    // the whole streaming surface unusable for those clients (#548). Stamping
+    // it in the writer keeps every event covered, including the failure and
+    // suppressed-stream frames that leave by a different branch.
+    let sequence = 0
+    const say = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...payload, sequence_number: sequence++ })}\n\n`)
     const response = (over = {}) => ({
       id, object: 'response', created_at: created, model, status: 'in_progress',
       output: [], usage: undefined, ...over,

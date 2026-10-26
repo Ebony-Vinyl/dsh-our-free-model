@@ -482,6 +482,13 @@ await checkAsync('responses endpoint streams events and reports usage', async ()
     'response.output_text.delta', 'response.output_text.delta', 'response.output_text.done',
     'response.content_part.done', 'response.output_item.done', 'response.completed'])
   const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  // #548: a strict accumulator rejects the stream on the first event when
+  // `sequence_number` is missing, so every frame has to carry one, starting at
+  // 0 and strictly increasing.
+  assert.equal(frames.length, types.length, 'every event must come with a data frame')
+  assert.deepEqual(frames.map(frame => frame.sequence_number), frames.map((_, position) => position),
+    'sequence_number must start at 0 and increase by one per event')
+  assert.equal(frames.every(frame => Number.isInteger(frame.sequence_number)), true)
   const added = frames.find(frame => frame.type === 'response.output_item.added')
   const done = frames.find(frame => frame.type === 'response.output_item.done')
   assert.equal(added.item.id, done.item.id, 'native Codex requires a stable output item ID')
@@ -516,6 +523,8 @@ await checkAsync('responses streaming gives text and calls distinct output index
   assert.equal(response.status, 200)
   const body = await response.text()
   const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  assert.deepEqual(frames.map(frame => frame.sequence_number), frames.map((_, position) => position),
+    'the counter must run across mixed text and tool-call frames too')
   const added = frames.filter(frame => frame.type === 'response.output_item.added')
   assert.deepEqual(added.map(frame => frame.output_index), [0, 1, 2], `indexes must be distinct and sequential, got ${added.map(frame => frame.output_index)}`)
   assert.deepEqual(added.map(frame => frame.item.type), ['message', 'function_call', 'function_call'])
