@@ -5,7 +5,10 @@ import os from 'node:os'
 import crypto from 'node:crypto'
 import { createDesktopUpdater, selectDesktopRelease, newerVersion, installerChecksum } from '../packages/standalone/desktop-update.mjs'
 
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-desktop-update-'))
+// `realpath` because macOS hands out a temp dir under `/var`, which is a symlink
+// to `/private/var` — the managed-storage checks reject any symlinked ancestor,
+// so an unresolved path fails on macOS before a single assertion runs.
+const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-desktop-update-')))
 const bytes = Buffer.from('官方安装包下载夹具，不执行安装')
 const sha = crypto.createHash('sha256').update(bytes).digest('hex')
 const release = version => ({ tag_name: `v${version}`, draft: false, prerelease: false, body: '更新说明', assets: [
@@ -97,7 +100,10 @@ try {
     let service
     try {
       const { startStandalone } = await import('../packages/standalone/service.mjs')
-      service = await startStandalone({ dataDir: path.join(scratch, 'http'), port: 0, refresh: false, logger: { warn() {} } })
+      // The endpoint refuses to check anywhere but Windows x64, and CI is not
+      // that host. Declare the host instead of skipping the flow: the point of
+      // this case is the HTTP wiring, which must be exercised where CI runs.
+      service = await startStandalone({ dataDir: path.join(scratch, 'http'), port: 0, refresh: false, logger: { warn() {} }, desktopPlatform: 'win32', desktopArch: 'x64' })
       const api = '/api/management/desktop-update'
       const request = (route, options = {}) => savedFetch(service.url + route, { ...options, headers: { origin: service.url, 'content-type': 'application/json', ...options.headers } })
       assert.equal((await request(api)).status, 401)
@@ -127,6 +133,6 @@ try {
   })
   console.log(`${checks}/${checks} 桌面更新检查通过；所有下载均为本地替身，未执行安装器`)
 } finally {
-  assert.equal(path.dirname(scratch), path.resolve(os.tmpdir()))
+  assert.equal(path.dirname(scratch), fs.realpathSync(os.tmpdir()))
   fs.rmSync(scratch, { recursive: true, force: true })
 }
