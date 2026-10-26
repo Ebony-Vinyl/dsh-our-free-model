@@ -20,10 +20,6 @@
  *
  * ## 与其余 provider 的契约一致性
  *
- * 对外仍返回 `loginUrl`（指向本地 `/raccoon/login`），前端照常 `window.open`
- * —— 与 codearts / lobsterai / qoder / trae / cline / loomy 的「两步式」
- * 体验完全一致。
- *
  * ## ⚠️ 职责边界（安全约束）
  *
  * - **宿主侧**持有全部敏感状态：`qrcode_code`、手机号、凭据

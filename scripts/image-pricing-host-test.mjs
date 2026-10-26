@@ -86,12 +86,12 @@ try {
   const { apply } = await import('../vendor/channel-pack/pack.js')
   apply(ctx, { disableOpencode: true })
   await new Promise(resolve => setImmediate(resolve))
-  assert.equal(adapters.size, 13)
+  assert.equal(adapters.size, 11)
   const free = new FreeModelAdapter({ state: () => ({ catalog: [], membership: {}, settings: {} }), recordUsage() {} })
   adapters.set(ROUTE_MAIN, free); adapters.set(ROUTE_REGION, free)
-  await verify('buddy', false)
+  await verify('lobsterai', false)
   for (const provider of adapters.keys()) await verify(provider, true)
-  console.log(`ok  宿主 ${version}：15 路由的 512KB 含图结果和纯文本对照均真实落盘，预览有恢复地址，无计价失败警告`)
+  console.log(`ok  宿主 ${version}：13 路由的 512KB 含图结果和纯文本对照均真实落盘，预览有恢复地址，无计价失败警告`)
 } finally {
   for (const cleanup of disposers.reverse()) await cleanup()
   hooks.deregister(); globalThis.fetch = originalFetch

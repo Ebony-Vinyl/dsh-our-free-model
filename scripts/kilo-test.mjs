@@ -12,8 +12,8 @@
  *    listings retain the last roster, including an already-cleared roster.
  * 2. **Mount** — the channel's entries join the catalog under `channel:
  *    'kilo'`, land on the main route without ever being probed (a probe would
- *    spend itself against the wrong gateway), and the free lane's health gauge
- *    stays free-lane only.
+ *    spend itself against the wrong gateway), and the shared free-pool UI reports
+ *    listed Kilo models as untested candidates, not verified successes.
  * 3. **Turn** — a streamed answer survives this gateway's wire dialect: the
  *    `: KILO PROCESSING` keep-alive comment lines, reasoning under
  *    `delta.reasoning`, indexed tool-call deltas, the usage frame, `[DONE]` —
@@ -163,8 +163,8 @@ const kiloRows = (summaryJson.catalog ?? []).filter(entry => entry.channel === '
 check('the Kilo roster joins the catalog from the live listing', kiloRows.map(entry => entry.id),
   ['nvidia/nemotron-3.5-lightning:free', 'kilo-auto/free'])
 check('a paid id is never advertised keyless', kiloRows.some(entry => entry.id === 'anthropic/claude-sonnet-5'), false)
-check('roster presence is the availability verdict for a never-probed lane',
-  kiloRows.every(entry => entry.availability === 'available'), true)
+check('roster presence is listed, not a successful inference verdict',
+  kiloRows.every(entry => entry.availabilitySource === 'listing' && entry.availability === 'unknown'), true)
 check('the entries sit on the main route', kiloRows.every(entry => entry.route === ROUTE_MAIN), true)
 check('a verified-off family declares the full thinking menu, EAC shape',
   kiloRows.find(entry => entry.id === 'nvidia/nemotron-3.5-lightning:free')?.efforts, ['disabled', 'low', 'medium', 'high'])

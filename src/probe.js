@@ -48,7 +48,9 @@ const PING_PROMPT = 'ping'
  */
 export async function probeModel(model, { attributionUserAgent, signal, timeoutMs = 45000 } = {}) {
   const started = Date.now()
-  const session = sessionForConversation('probe:our-free-model')
+  // 每个模型独立的上游 session。配额按 session 计数，整轮共用一个 session
+  // 会让第一个模型吃掉配额、其余模型全部读作 429（issue #561）。
+  const session = sessionForConversation('probe:our-free-model:' + model.id)
   const wire = wireFor(model.id)
   const body = buildPing(model.id, wire)
   // 三条线各有自己的工具形状：Responses 是扁平项，Messages 是 Claude 的
@@ -226,7 +228,9 @@ export async function probeCatalog(models, options = {}, onResult = () => {}, co
     while (cursor < models.length) {
       const index = cursor++
       const model = models[index]
-      const result = await probeModel(model, options)
+      // A late reply is still the sample that began before a newer manual test.
+      const startedAt = Date.now()
+      const result = { ...await probeModel(model, options), startedAt }
       results[model.id] = result
       onResult(model.id, result)
     }

@@ -316,7 +316,7 @@ try {
     await service.runtime.refreshCatalog()
     assert.equal(listingCalls, calls)
   })
-  await check('周期探测遵守 429 退避，到期恢复，手动强制探测仍可执行', async () => {
+  await check('自动探测已禁用：--probe 与周期刷新都不发探测，手动探测仍可用', async () => {
     const nativeTimeout = globalThis.setTimeout
     const nativeNow = Date.now
     const started = nativeNow()
@@ -351,22 +351,19 @@ try {
     try {
       const before = turns.length
       probeService = await startStandalone({
-        dataDir: path.join(scratch, 'probe-backoff'), port: 0, probe: true,
+        dataDir: path.join(scratch, 'probe-disabled'), port: 0, probe: true,
         logger: { warn: message => warnings.push(message) },
       })
       await probeService.ready
-      assert.equal(turns.length, before + 1, '启动应探测匿名模型')
-      assert.ok(warnings.some(message => message.includes('pause for 30 minutes')))
+      assert.equal(turns.length, before, '启动不得探测匿名模型')
       const listingsBefore = listingCalls
       await runPeriod()
-      assert.equal(listingCalls, listingsBefore + 1, '退避期间仍刷新模型清单')
-      assert.equal(turns.length, before + 1, '15 分钟周期不得绕过 30 分钟退避')
-      await runPeriod()
-      assert.equal(turns.length, before + 2, '退避到期后应恢复探测')
+      assert.equal(listingCalls, listingsBefore + 1, '周期刷新仍更新模型清单')
+      assert.equal(turns.length, before, '周期刷新不得探测')
       await probeService.runtime.refreshCatalog({ probe: true, force: true })
-      assert.equal(turns.length, before + 3, '手动强制刷新可以绕过退避')
+      assert.equal(turns.length, before + 1, '显式手动探测仍可用')
       await runPeriod()
-      assert.equal(turns.length, before + 3, '手动强制刷新后周期任务仍遵守新的退避')
+      assert.equal(turns.length, before + 1, '下一轮周期仍不得探测')
     } finally {
       await probeService?.close()
       globalThis.setTimeout = nativeTimeout

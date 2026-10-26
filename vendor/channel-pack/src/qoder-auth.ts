@@ -1,11 +1,6 @@
 /**
  * Qoder 认证服务。
  *
- * 结构与 `src/lobsterai-auth.ts` / `src/buddy-auth.ts` **刻意保持一致**：
- * 同样的 `RefreshScheduler` 续期语义、同样的登出竞态保护、同样的
- * `refreshAll(pool)` 批量续期。这是本插件已被三个产品验证过的模式，
- * 复用它可以减少一类「某个 provider 的续期行为与众不同」的意外。
- *
  * 与 LobsterAI 侧的实质差异只有两处：
  *
  * 1. **没有客户端版本号**。LobsterAI 的 exchange/续期/签到都要带 `version`，
@@ -47,13 +42,6 @@ import {
  *
  * `QoderAuth` 一个类服务两个产品（`qoder` / `qodercn`），故调用处的 tag 取
  * `this.product.id`，日志里能区分是哪个面板。
- *
- * ⚠️ `identityOf` 用 `access_token` 而**不是** `security_oauth_token`：
- * `AccountPool.findAccountIdByCredential` 对非 codearts 的 provider 比对的就是
- * `access_token`（见其 `identifierKey`），选错字段会恒匹配失败且静默。
- * Qoder 凭据里这两个字段是**双写同值**的（见 `QoderCredential` 注释），
- * 故取 `access_token` 与客户端的取用顺序（`security_oauth_token ?? access_token`）
- * 并不冲突。
  */
 const QODER_EXPIRY_ACCESSORS: ExpiryAccessors<QoderCredential> = {
   expiresAtOf: qoderCredentialExpiresAtMs,
@@ -113,18 +101,10 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /**
      * Qoder 的认证服务实例。
-     *
-     * 与 `buddyAuth` / `workbuddyAuth` / `codeartsAuth` / `lobsteraiAuth` 并列：
-     * cordis 的 `Service` 构造时按名称注册，同名第二次注册会抛
-     * `service "..." has been registered`，故每个 provider 各占一个服务名。
      */
     qoderAuth: QoderAuth
     /**
      * Qoder **中国版**的认证服务实例。
-     *
-     * 与 `qoderAuth` 是**两个独立实例**（同一 `QoderAuth` 类，不同 `product`），
-     * 正如 `buddyAuth` 与 `workbuddyAuth`。服务名由 `${product.id}Auth` 派生，
-     * 故不会与国际版撞名 —— 这也是 `id` 必须区分两站的原因。
      */
     qoderCnAuth: QoderAuth
   }
@@ -217,13 +197,6 @@ export class QoderAuth extends Service {
 
   /**
    * **两步式登录**：立即返回登录 URL，由调用方先打开窗口。
-   *
-   * 与 CodeArts 的 `CodeArtsAuth.startLogin` / LobsterAI 的同名方法同因
-   * （真实缺陷）：Channel Pack 的「+ 新建账号」原先调用阻塞式 {@link login}，
-   * 而浏览器只在用户点击后的短暂窗口（transient activation，约 5 秒）内
-   * 允许 `window.open`。等阻塞调用返回时手势早已过期，`window.open` 被
-   * 弹窗拦截器拒绝并返回 `null`，前端兜底逻辑便执行
-   * `window.location.href = loginUrl`，把**整个设置页**跳转到登录页。
    *
    * 调用方拿到 `loginUrl` 后应当**立即** `window.open`，再 await `result`。
    */
@@ -342,11 +315,6 @@ export class QoderAuth extends Service {
   /**
    * 按凭据 ref 续期**指定账号**的凭据。
    *
-   * 与 {@link refresh} 的区别（与 `BuddyAuth.refreshAccountCredential` 同因）：
-   * `refresh()` 读写本实例的默认单凭据 ref（`QODER_ACCESS_TOKEN`），
-   * 而 Channel Pack 账号卡片对应的是 `QODER_ACCOUNT_XXX` ——
-   * 用 `refresh()` 刷账号池里的账号，实际刷的是另一个凭据。
-   *
    * 同样**不触碰** `refreshTokenInvalid` / `lastRefreshError` / 调度器：
    * 那些状态属于单凭据路径，被多账号操作污染会让 UI 显示错误的失效提示。
    *
@@ -439,11 +407,6 @@ export class QoderAuth extends Service {
 
   /**
    * 批量续期本产品的所有账号。
-   *
-   * **包含已停用账号**（只按 `refreshable` 过滤）：停用只应影响账号池的自动
-   * 选号，不该让凭据烂掉 —— 否则用户重新启用时只能重新登录。
-   * 详见 `BuddyAuth.refreshAll` 的注释（同一缺陷）。
-   * 单账号失败不影响其他账号（与 `BuddyAuth.refreshAll` 同语义）。
    *
    * ⚠️ **lead-time 过滤**（issue !IKIRTT）：早先这里是**无条件全量续期** ——
    * 定时器每 30 分钟就把每个账号的 refresh_token 轮换一次，与「凭据还剩多久」

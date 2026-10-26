@@ -1,8 +1,8 @@
 name: test
 
-# main is the live update source. Contributor checks do not need a signing key,
-# but the separate release-readiness check must pass before merging shipped
-# changes into main. Maintainers prepare signatures on the reviewed candidate.
+# The required check contexts in ruleset 24626699 are literal strings, including
+# the workflow and event labels. Explicit job names must match those contexts;
+# GitHub's combined display labels do not change the names reported by each job.
 on:
   push:
     branches: [main]
@@ -14,20 +14,13 @@ permissions:
 
 jobs:
   offline:
+    name: test / offline (pull_request)
     runs-on: ubuntu-latest
     steps:
-      # `catalog-test.mjs` compares the recorded revision against the last commit that
-      # touched the release content, and it can only do that with history to walk.
-      # checkout's default `fetch-depth: 1` leaves a single commit with no parent to
-      # diff against, so that walk answers HEAD for any path list — which made the gate
-      # fail on every commit that only refreshes the catalog records, on `main` and on
-      # pull requests alike (where HEAD is GitHub's throwaway merge ref).
+      # Catalog revision checks need the history of the published files.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      # Source regressions also exercise real Cordis/LLM contracts and the
-      # vendored transport dependencies. Lifecycle scripts stay disabled;
-      # the suites themselves use isolated credentials and local upstreams.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
@@ -37,10 +30,8 @@ jobs:
           TEST_MODE: ${{ github.event_name == 'pull_request' && 'contributor' || 'all' }}
         run: node scripts/test-all.mjs --mode "$TEST_MODE"
 
-  # Keep this check required on main. A red result on a source PR means the
-  # maintainer still has release preparation to do, not that the author needs
-  # access to the publisher's private key.
   release-readiness:
+    name: test / release-readiness (pull_request)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -74,3 +65,4 @@ jobs:
       - run: npm ci --prefix packages/standalone --ignore-scripts
       - run: npm run typecheck:standalone
       - run: node scripts/build-standalone-ui.mjs --check
+      - run: node scripts/build-legacy-payload.mjs --check

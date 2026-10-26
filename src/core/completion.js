@@ -59,6 +59,7 @@ export function createForwardCompletion({ adapter, state, signal }) {
       : Number.isFinite(openAi.temperature) ? openAi.temperature : undefined
     const reasoningEffort = typeof request.reasoningEffort === 'string' ? request.reasoningEffort
       : typeof openAi.reasoning_effort === 'string' ? openAi.reasoning_effort : undefined
+    const toolChoice = request.toolChoice === undefined ? openAi.tool_choice : request.toolChoice
     const options = {
       provider: ROUTE_MAIN, model: entry.id,
       messages,
@@ -66,6 +67,7 @@ export function createForwardCompletion({ adapter, state, signal }) {
       ...temperature === undefined ? {} : { temperature },
       ...maxTokens === undefined ? {} : { maxTokens },
       ...reasoningEffort === undefined ? {} : { reasoningEffort },
+      ...toolChoice === undefined ? {} : { toolChoice },
       sessionId: `forward:${String(openAi.user ?? openAi.conversation ?? request.sessionId ?? 'shared')}`,
       signal: request.signal && signal ? AbortSignal.any([request.signal, signal]) : request.signal ?? signal,
     }
@@ -116,6 +118,9 @@ export function fromOpenAiMessages(body, isResponses, modelId) {
     out.push({
       role: role === 'developer' ? 'developer' : role === 'system' ? 'system' : role === 'assistant' ? 'assistant' : 'user',
       content,
+      ...(role === 'assistant' && typeof row.reasoning_content === 'string'
+        ? { reasoning_content: row.reasoning_content }
+        : {}),
       ...role === 'assistant' ? { source: { kind: 'model', provider: ROUTE_MAIN, model: String(modelId ?? '') } } : {},
     })
   }

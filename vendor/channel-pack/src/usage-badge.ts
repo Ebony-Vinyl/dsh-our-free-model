@@ -10,15 +10,6 @@
  * - 每轮轮询 × 账号数 = 上游请求数（5 个号就是每 5 分钟 5 次，多开几个会话再翻倍）；
  * - 设置页那两个按钮的读数与徽标**各拉各的**，同一时刻可能显示不同的数字。
  *
- * 本模块做的事很少，但每件都是必需的：
- * 1. **复用** `credits.balances` 的实现（由装配层注入，见 `channel-pack-rpc.ts`），
- *    不复制任何 provider 分支 —— 否则两套口径必然漂移；
- * 2. **只保留启用账号**，并给出 `disabledCount`（停用账号不该进合计）；
- * 3. 附加**订阅读数**（窗口 / 套餐，判定在 `badge-subscription.ts`）；
- * 4. 每个渠道一份 **TTL 缓存 + 在飞去重**（`TtlCache`）：
- *    成功缓存久、**全部失败缓存短** —— 后者是为了让用户修好凭据后不必干等，
- *    口径与 `buddy-balance-selector.ts` 的「成功 60s / 失败 5s」同源。
- *
  * ## ⚠️ 失败与「读数为 0」必须分开
  *
  * 本模块**不吞**任何失败：单账号失败照原样留在 `accounts[].error` 里（UI 显示
@@ -73,10 +64,6 @@ export const BADGE_FAILURE_TTL_MS = 15_000
 
 /**
  * 读取缓存时长。
- *
- * ⚠️ **不能写成 `Number(raw) || 默认值`**：`0` 是合法值（表示「不缓存、每次都
- * 重新读」），而 `0` 是 falsy 会被 `||` 静默换成默认值 —— 与本仓库
- * `DSH_BUDDY_EXPIRING_WINDOW_DAYS` / `DSH_QODER_QUEUE_TIMEOUT_MS` 同一个坑。
  */
 export function badgeTtlMs(env: NodeJS.ProcessEnv = process.env): number {
   return nonNegativeMs(env[DSH_CHANNEL_PACK_BADGE_TTL_MS], BADGE_TTL_MS)
