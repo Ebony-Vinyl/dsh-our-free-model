@@ -1,10 +1,11 @@
-import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboard, LogOut, Moon, Network, Settings2, ShieldCheck, Sun, Monitor, PanelsTopLeft, LibraryBig, Route } from 'lucide-react'
+import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboard, LogOut, Moon, Network, Settings2, ShieldCheck, Sun, Monitor, PanelsTopLeft, LibraryBig, Route, RotateCw } from 'lucide-react'
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import brandMark from '../../../../icon.svg?inline'
 import { t, getLocale as locale, switchLocale } from '../i18n.mjs'
 import { Badge, Button } from './ui'
 import type { Host, Page, Summary } from '../types'
+import { hasDesktopBridge } from '../desktop-update'
 
 const navigation = [
   { label: t('nav.workspace'), items: [
@@ -22,7 +23,7 @@ const navigation = [
     { id: 'eac', name: t('nav.eac'), icon: Handshake },
     { id: 'connection', name: t('nav.connection'), icon: Cable },
   ] },
-  { label: t('nav.groupManage'), items: [{ id: 'settings', name: t('nav.settings'), icon: Settings2 }] },
+  { label: t('nav.groupManage'), items: [{ id: 'settings', name: t('nav.settings'), icon: Settings2 }, { id: 'updates', name: t('nav.updates'), icon: RotateCw }] },
   { label: t('nav.groupSponsor'), items: [{ id: 'sponsor', name: t('nav.sponsor'), icon: Coffee }] },
 ] as const
 
@@ -84,7 +85,7 @@ export function LangToggle() {
 export const pageNames: Record<Page, string> = {
   overview: t('nav.overview'), workspace: t('nav.workbench'), models: t('nav.models'), usage: t('nav.usage'), channels: t('nav.channels'),
   agents: t('nav.agents'), providers: t('nav.providers'), library: t('nav.library'), routing: t('nav.routing'),
-  eac: t('nav.eac'), settings: t('nav.settings'), connection: t('nav.connection'), sponsor: t('nav.sponsor'),
+  eac: t('nav.eac'), settings: t('nav.settings'), updates: t('nav.updates'), connection: t('nav.connection'), sponsor: t('nav.sponsor'),
 }
 
 export function Sidebar({ page, summary, host, onDisclaimer }: { page: Page; summary?: Summary; host: Host; onDisclaimer(): void }) {
@@ -98,7 +99,7 @@ export function Sidebar({ page, summary, host, onDisclaimer }: { page: Page; sum
     </div>
     <nav className="console-nav" aria-label={t('nav.management')}>{navigation.map(group => <div className="nav-group" key={group.label}>
       <span className="nav-group-label">{group.label}</span>
-      {group.items.map(item => <button key={item.id} id={item.id === 'sponsor' ? 'ofm-sponsor-menu-desktop' : undefined} className={`console-nav-item ${item.id === 'sponsor' ? 'ofm-sponsor-nav' : ''} ${page === item.id ? 'selected' : ''}`}
+      {group.items.filter(item => item.id !== 'updates' || hasDesktopBridge()).map(item => <button key={item.id} id={item.id === 'sponsor' ? 'ofm-sponsor-menu-desktop' : undefined} className={`console-nav-item ${item.id === 'sponsor' ? 'ofm-sponsor-nav' : ''} ${page === item.id ? 'selected' : ''}`}
         aria-current={page === item.id ? 'page' : undefined} onClick={() => host.navigate(item.id)}>
         <span className="console-nav-indicator" aria-hidden="true" />
         <item.icon size={18} strokeWidth={1.7} /><span>{item.name}</span>

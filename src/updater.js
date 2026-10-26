@@ -607,6 +607,9 @@ const VENDOR_RUNTIME_FILES = [
   'vendor/channel-pack/qoder-auth-wasm.wasm',
   'vendor/channel-pack/NOTICE.md',
   'vendor/channel-pack/LICENSE',
+  'vendor/magpie/engine.json',
+  'vendor/magpie/LICENSE',
+  'vendor/magpie/NOTICE.md',
 ]
 
 /**
@@ -633,6 +636,14 @@ export function listPackageFiles(dir) {
   for (const rel of VENDOR_RUNTIME_FILES) {
     const target = path.join(dir, ...rel.split('/'))
     if (fs.existsSync(target) && fs.lstatSync(target).isFile()) out.push(rel)
+  }
+  const engineDir = path.join(dir, 'vendor/magpie/bin')
+  if (fs.existsSync(engineDir) && fs.lstatSync(engineDir).isDirectory()) {
+    for (const entry of fs.readdirSync(engineDir, { withFileTypes: true })) {
+      if (entry.isFile() && /^magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/.test(entry.name)) {
+        out.push(`vendor/magpie/bin/${entry.name}`)
+      }
+    }
   }
   return out
 }

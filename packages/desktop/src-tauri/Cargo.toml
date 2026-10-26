@@ -20,3 +20,5 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-single-instance = "2"
+sha2 = "0.10.9"
+semver = "1.0.28"

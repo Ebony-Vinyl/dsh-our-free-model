@@ -105,7 +105,7 @@ for (const key of KEYS.en ?? []) {
 }
 for (const language of ['zh', 'en']) {
   for (const key of KEYS[language] ?? []) {
-    if (used.has(key) || INDIRECT.has(key) || key.startsWith('meta.') || key.startsWith('provider.')) continue
+    if (used.has(key) || INDIRECT.has(key) || key.startsWith('meta.')) continue
     problems.push(`${language} key '${key}' is never used`)
   }
 }
