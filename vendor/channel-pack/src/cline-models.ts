@@ -34,9 +34,6 @@
  * `deepseek/deepseek-v4.1-flash`（按量计费）是**两个不同条目**。
  * 绝不可用「名字包含 deepseek」之类的模糊匹配 —— 那会把付费条目误标为免费，
  * 用户按免费预期使用却被计费。
- *
- * 这一「集合动态判定、不硬编码」的做法与 CodeArts 的 benefit 集合同源
- * （见 `src/models.ts` 的 `isCodeArtsBenefitModel` 与 AGENTS.md 的对应章节）。
  */
 
 import type { ClineCredential } from './cline.js'

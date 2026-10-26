@@ -70,10 +70,6 @@ export const RACCOON_QR_STATUS = {
 
 /**
  * raccoon 凭据。
- *
- * ⚠️ `access_token` 字段名**必须**是这个 ——
- * `AccountPool.findAccountIdByCredential` 对非 `codearts` 的 provider
- * 统一取该字段作身份标识。
  */
 export interface RaccoonCredential {
   /** JWT（服务端下发）。 */
@@ -233,12 +229,6 @@ function formatMultiplier(value: number): string {
  * ide 是 1 倍，1 倍也要显示倍率」）。早期按「1 倍是默认，显示属噪声」省略它，
  * 结果该模型在列表里**看起来没有计费信息** —— 用户无法区分
  * 「它就是 1 倍」与「我们没取到它的倍率」。IDE 的模型选择器同样显示「1 倍」，故对齐。
- *
- * 三条展示规则：
- * - 生效价为 **0** → 显示「免费」（**不是** `x0`）；
- * - 生效价 **严格小于**原价 → 显示 `x原价→x折后价`（箭头比「（促销 …）」短，
- *   适合窄菜单；与 TRAE/buddy 的形态统一）；
- * - 其余（**含 1 倍**）→ 显示 `x生效价`。
  */
 export function raccoonDisplayName(model: RaccoonModelMeta): string {
   const name = typeof model.description === 'string' && model.description.length > 0

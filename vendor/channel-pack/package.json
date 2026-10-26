@@ -1,7 +1,7 @@
 {
-  "name": "dsh-codearts-auth",
+  "name": "dsh-channel-pack",
   "version": "0.1.0",
-  "description": "deepseek-harness plugin: CodeArts (Huawei Cloud) browser login, storing the temporary credential via ctx.credentials",
+  "description": "Channel Pack account management and model adapters",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -28,16 +28,6 @@
     "prepare": "pnpm build:all",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e:login": "cross-env DSH_CODEARTS_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/login.e2e.spec.ts",
-    "test:e2e:buddy": "cross-env DSH_BUDDY_E2E=1 DSH_BUDDY_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/buddy-models.e2e.spec.ts",
-    "test:e2e:buddy-cache": "cross-env DSH_BUDDY_E2E=1 DSH_BUDDY_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/buddy-cache-probe.e2e.spec.ts",
-    "test:e2e:buddy-probe": "cross-env DSH_BUDDY_PROBE=1 vitest run --config vitest.e2e.config.ts tests/e2e/buddy-login-probe.e2e.spec.ts",
-    "test:e2e:buddy-pool": "cross-env DSH_BUDDY_POOL_E2E=1 DSH_BUDDY_POOL_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/buddy-pool-probe.e2e.spec.ts",
-    "test:e2e:buddy-ratelimit": "cross-env DSH_BUDDY_RATELIMIT_E2E=1 DSH_BUDDY_RATELIMIT_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/buddy-ratelimit-probe.e2e.spec.ts",
-    "test:e2e:codearts": "cross-env DSH_CODEARTS_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/v4-models.e2e.spec.ts tests/e2e/v4-large-write.e2e.spec.ts",
-    "test:e2e:codearts-credits": "cross-env DSH_CODEARTS_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/codearts-credits-probe.e2e.spec.ts",
-    "test:e2e:codearts-claim": "cross-env DSH_CODEARTS_E2E=1 DSH_CODEARTS_CLAIM_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/codearts-claim-probe.e2e.spec.ts",
-    "test:e2e:workbuddy-claim": "cross-env DSH_WORKBUDDY_CLAIM_E2E=1 DSH_WORKBUDDY_CLAIM_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/workbuddy-claim-probe.e2e.spec.ts",
     "test:e2e:lobsterai": "cross-env DSH_LOBSTERAI_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/lobsterai-probe.e2e.spec.ts",
     "test:e2e:lobsterai-claim": "cross-env DSH_LOBSTERAI_E2E=1 DSH_LOBSTERAI_CLAIM_E2E_CONFIRM=yes vitest run --config vitest.e2e.config.ts tests/e2e/lobsterai-claim-probe.e2e.spec.ts",
     "test:e2e:qoder": "cross-env DSH_QODER_E2E=1 vitest run --config vitest.e2e.config.ts tests/e2e/qoder-probe.e2e.spec.ts",
@@ -90,7 +80,6 @@
   "dependencies": {
     "@deepseek-ai/cosmokit": "^1.8.5",
     "@deepseek-ai/schemastery": "^3.18.4",
-    "jose": "^6.1.3",
     "undici": "^8.11.2"
   },
   "devDependencies": {

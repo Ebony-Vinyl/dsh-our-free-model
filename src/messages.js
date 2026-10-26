@@ -156,8 +156,8 @@ function callIdOf(message) {
 /**
  * Project harness messages onto OpenAI Chat Completions.
  *
- * Assistant reasoning is never replayed upstream; only visible text and tool
- * calls are. Tool results are first-class `role: 'tool'` messages keyed by the
+ * Forwarded Chat reasoning_content is preserved, including explicit empty strings.
+ * Internal reasoning blocks are not projected. Tool results are first-class `role: 'tool'` messages keyed by the
  * provider call id they answer.
  */
 export function toChatMessages(messages, resolveImage, warnings) {
@@ -235,6 +235,7 @@ export function toChatMessages(messages, resolveImage, warnings) {
         }
         if (!text && calls.length === 0) break
         const entry = { role: 'assistant', content: text || null }
+        if (typeof message.reasoning_content === 'string') entry.reasoning_content = message.reasoning_content
         if (calls.length > 0) entry.tool_calls = calls
         out.push(entry)
         break

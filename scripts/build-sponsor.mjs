@@ -11,10 +11,10 @@ const file = new URL('client.js', root)
 const old = readText(file)
 if (!old.includes('    // BEGIN GENERATED SPONSOR')) {
   console.log('插件端已移除赞助组件，跳过广告内联')
-  process.exit(0)
-}
+} else {
 const next = old.replace(/    \/\/ BEGIN GENERATED SPONSOR[\s\S]*?    \/\/ END GENERATED SPONSOR/, block)
 if (next === old && !old.includes(block)) throw new Error('广告内联位置不存在')
 if (process.argv.includes('--check')) { if (next !== old) throw new Error('请运行 node scripts/build-sponsor.mjs 更新插件广告组件') }
 else fs.writeFileSync(file, next)
 console.log('共享赞助广告组件与插件内联内容一致')
+}

@@ -43,7 +43,7 @@ const hooks = registerHooks({
     if (sourceMode && url.startsWith(sourceRoot) && url.endsWith('.ts')) {
       let source = fs.readFileSync(fileURLToPath(url), 'utf8')
       const name = url.slice(sourceRoot.length)
-      if (['buddy-adapter.ts', 'lobsterai-adapter.ts'].includes(name)) source += '\nexport { serializeMessages }\n'
+      if (['lobsterai-adapter.ts'].includes(name)) source += '\nexport { serializeMessages }\n'
       if (name === 'trae-adapter.ts') source += '\nexport { serializeTraeMessages as serializeMessages }\n'
       return { format: 'module', source: ts.transpileModule(source, {
         compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
@@ -96,26 +96,35 @@ const ctx = {
   inject(names, callback) { if (names.every(name => services[name] !== undefined)) callback(this) },
   emit() {},
 }
+const unsupportedAccounts = ['unsupported-alpha', 'unsupported-beta'].map(provider => ({
+  id: `${provider}-existing`, provider, nickname: 'Historical', enabled: true, refreshable: true,
+  credentialRef: `${provider.toUpperCase()}_ACCOUNT_EXISTING`, createdAt: 1, expiresAt: 1,
+}))
+const unsupportedCredentials = unsupportedAccounts.map(entry => [entry.credentialRef, { value: JSON.stringify({
+  access_token: 'fixture-unsupported', refresh_token: 'fixture-refresh', domain: 'unsupported.invalid', expires_at: '1',
+}) }])
+for (const [ref, value] of unsupportedCredentials) creds.set(ref, value)
 const state = {
   accounts: [{
     id: 'opencode-existing', provider: 'opencode', nickname: 'Existing',
     credentialRef: 'OPENCODE_ACCOUNT_EXISTING', enabled: true, refreshable: false, createdAt: 1,
-  }],
+  }, ...unsupportedAccounts],
   disabledModels: {},
 }
 fs.mkdirSync(path.join(scratch, 'channel-pack'))
 fs.writeFileSync(path.join(scratch, 'channel-pack/state.json'), JSON.stringify(state))
 try {
-  const { apply } = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
+  const pack = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
+  const { apply } = pack
   apply(ctx, { disableOpencode: true })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
-  assert.equal(adapters.size, 13, 'all other account providers remain registered')
+  assert.equal(adapters.size, 10, 'all other account providers remain registered')
   verifyChannelImagePricing(adapters)
-  console.log('ok  十三渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
+  console.log('ok  十渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
   assert.equal(writes.length, 0, 'mount neither creates nor deletes credentials')
   assert.equal(fetched.some(url => url.includes('opencode') || url.includes('models.dev')), false, 'no OpenCode capability/catalog warmup')
-  assert.deepEqual(ctx.accountPool.listAccountsByProvider('opencode'), state.accounts, 'historical account data survives')
+  assert.deepEqual(ctx.accountPool.listAccountsByProvider('opencode'), state.accounts.filter(entry => entry.provider === 'opencode'), 'historical account data survives')
 
   const route = routes.find(row => row.path === '/api/channel-pack')
   assert.ok(route, 'real RPC route is registered')
@@ -138,7 +147,48 @@ try {
   }
   assert.equal((await call('account.list', { provider: 'opencode' })).value.accounts.length, 1)
   assert.equal(writes.length, 0, 'rejected RPCs leave credentials untouched')
-  console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 13 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
+  const beforeUnsupportedFetch = fetched.length
+  for (const entry of unsupportedAccounts) {
+    assert.equal(adapters.has(entry.provider), false, 'unsupported provider is never registered')
+    assert.equal(ctx[`${entry.provider}Auth`], undefined, 'unsupported auth service is never mounted')
+    for (const [method, payload] of [
+      ...['account.create', 'account.list', 'credits.status', 'credits.balances', 'credits.claimAll', 'model.list', 'provider.setEnabled', 'credits.permanentLock'].map(method => [method, { provider: entry.provider }]),
+      ...['account.refresh', 'account.test', 'account.retest', 'account.reset', 'account.update', 'account.delete', 'login.poll'].map(method => [method, { accountId: entry.id }]),
+      ['account.refresh', { provider: 'cline', accountId: entry.id }],
+    ]) {
+      const result = await call(method, payload)
+      assert.equal(result.ok, false, `${entry.provider} ${method}: fails closed`)
+      assert.equal(result.error.code, 'provider-unsupported')
+    }
+    assert.deepEqual(ctx.accountPool.findAccount(entry.id), entry, 'unsupported account remains intact')
+    assert.deepEqual(creds.get(entry.credentialRef), unsupportedCredentials.find(([ref]) => ref === entry.credentialRef)[1])
+  }
+  assert.equal(writes.length, 0, 'unsupported requests neither write nor delete credentials')
+  assert.equal(fetched.length, beforeUnsupportedFetch, 'unsupported requests never contact upstream')
+  // A supported channel proves that the automatic run really executed, rather
+  // than asserting an empty state after a skipped/failed run.
+  await ctx.accountPool.addAccount({ id: 'automatic-loomy', provider: 'loomy', nickname: 'Auto fixture', enabled: true, refreshable: false, credentialRef: 'AUTO_LOOMY_FIXTURE', createdAt: 1 })
+  creds.set('AUTO_LOOMY_FIXTURE', { value: '{"token":"fixture"}' })
+  const savedClaim = ctx.loomyAuth.claimDailyQuota
+  let automaticClaims = 0
+  ctx.loomyAuth.claimDailyQuota = async () => { automaticClaims++; return { kind: 'claimed', credit: 1, streakDays: 1, isStreakDay: false } }
+  await call('usage.autoCheckin', { enabled: true })
+  let automatic
+  for (let n = 0; n < 100; n++) {
+    automatic = (await call('usage.autoCheckin', {})).value.autoCheckin
+    if (!automatic.running && automatic.ranToday) break
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.equal(automatic.ranToday, true, 'automatic check-in actually completed')
+  assert.equal(automatic.running, false)
+  assert.equal(automatic.channels.some(entry => ['unsupported-alpha', 'unsupported-beta'].includes(entry.provider)), false, 'unsupported accounts are not automatic check-in candidates')
+  assert.equal(fetched.length, beforeUnsupportedFetch, 'automatic check-in sends no unsupported upstream request')
+  assert.equal(automaticClaims, 1, 'supported channel actually signed in')
+  assert.equal(writes.length, 0, 'startup and automatic check-in preserve all historical credentials')
+  ctx.loomyAuth.claimDailyQuota = savedClaim
+  await ctx.accountPool.removeAccount('automatic-loomy')
+  creds.delete('AUTO_LOOMY_FIXTURE')
+  console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 10 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
   if (sourceMode) await verifySourceRegressions({ ctx, adapters, call, creds })
   await verifyChannelCreditsRpc({ ctx, call, creds })
   console.log('ok  实际渠道 RPC：七渠道仅账号池凭据即可查余额，ZCode 账号池回退及缺凭据反馈')
@@ -218,13 +268,13 @@ try {
     visit(node.children)
   }
   visit(tree)
-  assert.equal(cards.length, 13)
-  assert.equal(cards.includes('opencode'), false)
+  assert.equal(cards.length, 10)
+  for (const provider of ['opencode', 'unsupported-alpha', 'unsupported-beta']) assert.equal(cards.includes(provider), false)
   assert.deepEqual([...cards].sort(), [...adapters.keys()].sort(), 'UI and mounted account providers agree')
-  console.log('ok  actual channel page: 13 account cards, OpenCode removed')
+  console.log('ok  actual channel page: 10 account cards, OpenCode and unsupported providers removed')
   await verifyChannelModelActions()
   await verifyChannelCreditsUi()
-  console.log('ok  共享渠道余额：十三渠道能力、失败原因、重试、签到反馈和请求交错')
+  console.log('ok  共享渠道余额：十渠道能力、失败原因、重试、签到反馈和请求交错')
   console.log('ok  共享渠道卡片：批量开关、单次请求、重复点击保护和失败恢复')
 
   // The retained OFM anonymous lane still enumerates and streams without any
@@ -268,6 +318,14 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const { verifyChannelPrFixes } = await import('./channel-pr-fixes-test.mjs')
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
+  // 目录 `efforts` 的键序不是强度序（`dfmodel` 实测是 high/max/low），
+  // 官方客户端还会按强度稳定排序；这条回归保证下发给 DSH 的档位序也是强度序。
+  {
+    const { verifyQoderEffortOrder } = await import('./qoder-effort-order-test.mjs')
+    const { qoderEffortsFor, sortEffortsByStrength } = await import('../vendor/channel-pack/src/qoder-adapter.ts')
+    verifyQoderEffortOrder(qoderEffortsFor, sortEffortsByStrength)
+    console.log('ok  qoder effort order: 档位按强度序下发（关闭思考在最左、max 在最右），未登记 id 排末尾且保持原序')
+  }
   let hostValidate
   await realLlmInvariant.apply({ invariants: { register(_name, install) {
     install({ on(name, callback) { if (name === 'llm/stream') hostValidate = callback } },
@@ -285,8 +343,8 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const options = { model: 'fixture-model', messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }
   const shared = await import('../vendor/channel-pack/src/openai-compat.ts')
   for (const [file, provider] of [
-    ['openai-compat', 'shared'], ['buddy-adapter', 'buddy'], ['lobsterai-adapter', 'lobsterai'],
-    ['trae-adapter', 'trae'], ['llm-adapter', 'codearts'],
+    ['openai-compat', 'shared'], ['lobsterai-adapter', 'lobsterai'],
+    ['trae-adapter', 'trae'],
   ]) {
     const module = await import(new URL(`../vendor/channel-pack/src/${file}.ts`, import.meta.url))
     const serialize = module.serializeMessages
@@ -313,7 +371,7 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
       history[0],
     ])
     assert.deepEqual(poison.map(row => row.role), ['user'], `${provider}: old unnamed calls are not replayed`)
-    if (provider !== 'codearts') {
+    {
       const image = serialize([{ role: 'user', content: [{ type: 'image', attachment: { attachmentId: 'image-1' } }] }], new Map())
       assert.ok(JSON.stringify(image).includes('[image unavailable]'), provider)
       const images = ['image-1', 'image-2']

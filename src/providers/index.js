@@ -31,6 +31,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeniedChannel } from '../magpie-policy.js'
 
 /** The three wire formats the registry can name. */
 export const FORMAT_VALUES = Object.freeze(['openai-chat', 'openai-responses', 'anthropic-messages'])
@@ -57,16 +58,26 @@ function deepFreeze(value) {
 /** The parsed `registry.json` array, sorted by category then id. */
 export const PROVIDERS = deepFreeze(JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf8')))
 
-/** Every registry id — the set `parseProviderModelId` validates prefixes against. */
-export const PROVIDER_IDS = Object.freeze(new Set(PROVIDERS.map(provider => provider.id)))
+/**
+ * The channels this build actually offers: the registry minus the excluded
+ * account channels (WorkBuddy, Huawei Cloud). Excluding here rather than in
+ * `registry.json` keeps one decision point — `src/magpie-policy.js` — so the
+ * embedded engine and this directory cannot disagree, and a later registry
+ * refresh cannot quietly reintroduce a channel the product does not carry.
+ */
+export const OFFERED_PROVIDERS = Object.freeze(PROVIDERS.filter(provider =>
+  !isDeniedChannel(provider.id, `${provider.name} ${provider.notes ?? ''} ${provider.baseUrl ?? ''}`)))
 
-const BY_ID = new Map(PROVIDERS.map(provider => [provider.id, provider]))
+/** Every offered registry id — the set `parseProviderModelId` validates prefixes against. */
+export const PROVIDER_IDS = Object.freeze(new Set(OFFERED_PROVIDERS.map(provider => provider.id)))
+
+const BY_ID = new Map(OFFERED_PROVIDERS.map(provider => [provider.id, provider]))
 
 /**
  * Per-provider lowercase haystack for `listProviders({ search })`, built once so
  * repeated filtering in a settings page never re-walks the model lists.
  */
-const SEARCH_TEXT = new Map(PROVIDERS.map(provider => [provider.id, [
+const SEARCH_TEXT = new Map(OFFERED_PROVIDERS.map(provider => [provider.id, [
   provider.id,
   provider.name,
   provider.website,
@@ -98,7 +109,7 @@ export function getProvider(id) {
  */
 export function listProviders({ category, format, authKind, search } = {}) {
   const needle = typeof search === 'string' ? search.trim().toLowerCase() : ''
-  return PROVIDERS.filter(provider => {
+  return OFFERED_PROVIDERS.filter(provider => {
     if (category !== undefined && provider.category !== category) return false
     if (format !== undefined && provider.format !== format) return false
     if (authKind !== undefined && provider.auth.kind !== authKind) return false
