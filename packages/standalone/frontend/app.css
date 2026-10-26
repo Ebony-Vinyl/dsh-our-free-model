@@ -117,6 +117,8 @@ main { flex: 1; min-width: 0; }
 .console-sidebar-footer { border-top: 1px solid var(--line); padding: 15px 6px 0; display: flex; align-items: center; justify-content: space-between; }
 .console-sidebar-footer > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; }
 .console-sidebar-footer small { margin-left: 4px; font-size: 11px; }
+.sidebar-disclaimer { display: block; width: 100%; margin: 10px 0 2px; padding: 6px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: 11px; text-align: center; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); cursor: pointer; }
+.sidebar-disclaimer:hover { color: var(--dsw-alias-label-secondary); background: color-mix(in srgb, var(--fg, #1c1c21) 5%, transparent); }
 .status-dot { display: inline-block; flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: status-pulse 2s ease-in-out infinite; }
 @keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .status-dot.paused { background: #c08a1e; }
