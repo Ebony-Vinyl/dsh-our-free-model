@@ -46,7 +46,7 @@ import { modelAvailability } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
 import { PluginUpdater } from './src/updater.js'
-import { selfReload, watchPackage, isReloading } from './src/reload.js'
+import { selfReload, watchPackage, isReloading, staleCacheReload } from './src/reload.js'
 import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
@@ -960,13 +960,23 @@ export function apply(ctx, config) {
         activate: async installed => {
           pending = { version: installed.version }
           globalThis[pendingKey] = pending
-          return selfReload(ctx, { logger, packageUrl: PKG_URL.href, entryUrl: ENTRY_URL, expectedVersion: installed.version })
+          const reload = await selfReload(ctx, { logger, packageUrl: PKG_URL.href, entryUrl: ENTRY_URL, expectedVersion: installed.version })
+          if (!staleCacheReload(reload)) return reload
+          // The desktop host cannot re-import in-process: its loader keys the
+          // module cache by resolved path, so the cache-busting query is
+          // normalized away and `import()` returns the module that is already
+          // running. The files on disk are installed and verified by now, and
+          // the next launch activates them — so report "installed, restart to
+          // finish" instead of letting the failure roll a good upgrade back
+          // (#427, #438).
+          logger.info?.('our-free-model: this host cannot hot-reload; the upgrade needs a restart to activate')
+          return { ok: true, deferred: true, version: installed.version }
         },
       })
       // Notification uses the successor's stores and hub. The predecessor's
       // effects have already been disposed by the swap.
       try { pending?.notify?.() } catch (error) { logger.warn?.(`our-free-model: upgrade notification failed (${error?.message ?? error})`) }
-      return { ...result, reloaded: true }
+      return { ...result, reloaded: result.restartRequired !== true }
     } finally {
       if (globalThis[pendingKey] === pending) globalThis[pendingKey] = undefined
     }

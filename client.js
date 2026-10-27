@@ -332,6 +332,7 @@ window.__ModuleLoader__.load({
         'upgrade.phase.reload': '正在热重载…',
         'upgrade.done': '已升级到 {version}，插件已热重载生效。',
         'upgrade.doneRefresh': '已升级到 {version}。点击刷新页面加载新界面。',
+        'upgrade.doneRestart': '已写入 {version}，但当前宿主无法热重载；请完全退出并重新打开应用生效。',
         'upgrade.failed': '升级失败：{message}',
         'upgrade.history': '最近一次升级',
         'upgrade.from': '由 {from} 升级',
@@ -1107,6 +1108,7 @@ window.__ModuleLoader__.load({
         'upgrade.phase.reload': 'Hot-reloading…',
         'upgrade.done': 'Upgraded to {version}; the plugin hot-reloaded into place.',
         'upgrade.doneRefresh': 'Upgraded to {version}. Reload the page to load the new UI.',
+        'upgrade.doneRestart': '{version} is installed, but this host cannot hot-reload; quit and reopen the app to activate it.',
         'upgrade.failed': 'Upgrade failed: {message}',
         'upgrade.history': 'Last upgrade',
         'upgrade.from': 'from {from}',
@@ -4162,7 +4164,12 @@ window.__ModuleLoader__.load({
           const result = await post('/update/apply', {}, 600_000)
           // The response releases controls even when hot reload closes SSE.
           if (!finish(token)) return
-          setMessage(result?.version === undefined ? t('upgrade.phase.install') : t('upgrade.doneRefresh').replace('{version}', result.version))
+          // A host that cannot hot-reload leaves the upgrade installed but not
+          // running, so the two outcomes need two sentences: "reload the page"
+          // is wrong advice when only a full restart picks the new code up (#427).
+          setMessage(result?.version === undefined
+            ? t('upgrade.phase.install')
+            : (result?.restartRequired === true ? t('upgrade.doneRestart') : t('upgrade.doneRefresh')).replace('{version}', result.version))
           void status.reload()
         } catch (err) {
           if (!finish(token)) return

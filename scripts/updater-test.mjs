@@ -1162,6 +1162,26 @@ function reloadHost(mode) {
   }
 }
 
+await checkAsync('a host that cannot re-import keeps the verified install and asks for a restart (#427)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const updater = fixtureUpdater(pkg, data)
+  try {
+    const result = await updater.apply({ activate: async () => ({ ok: true, deferred: true, version: NEW }) })
+    assert.equal(result.restartRequired, true, 'the caller must learn that a restart is what activates it')
+    assert.equal(updaterVersion(pkg), NEW, 'the verified install must stay on disk — rolling it back is the bug')
+    const status = updater.status()
+    assert.equal(status.lastApplied.ok, true)
+    assert.equal(status.lastApplied.activated, false, 'nothing was activated in this process')
+    assert.equal(status.lastApplied.restartRequired, true)
+    assert.equal(status.recoveryRequired, false, 'a deferred activation is not a recovery state')
+    assert.equal(status.restartRequired, true)
+  } finally {
+    fs.rmSync(pkg, { recursive: true, force: true })
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
 for (const mode of ['import-failure', 'startup-failure', 'restore-failure', 'stale-cache', 'success']) {
   await checkAsync(`upgrade includes real hot reload outcome: ${mode}`, async () => {
     const pkg = makePackage(OLD)

@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { selfReload } from '../src/reload.js'
+import { selfReload, staleCacheReload } from '../src/reload.js'
 import { Context, Service } from '@deepseek-ai/cordis'
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-reload-'))
@@ -88,6 +88,19 @@ export const lazy = () => import('./lazy.js')
     assert.ok(current.llm)
     console.log(`ok ${++checks} real Cordis startup rollback preserves module injection metadata`)
   } finally { await root.fiber.dispose() }
+  // #427: the two failures that mean "this kernel cannot re-import in-process"
+  // are the only ones an upgrade may treat as installed-but-not-activated.
+  assert.equal(staleCacheReload({ ok: false, restored: true,
+    error: 're-import failed, old code still running (activation version mismatch: expected 2.5.1, got 2.5.0)' }), true)
+  assert.equal(staleCacheReload({ ok: false, restored: true,
+    error: 're-import failed, old code still running (replacement is still the previous plugin after cache invalidation)' }), true)
+  assert.equal(staleCacheReload({ ok: false, restored: true,
+    error: 're-import failed, old code still running (reloaded module does not export apply())' }), false,
+    'a broken build must still roll back, not be deferred to a restart')
+  assert.equal(staleCacheReload({ ok: false, restored: false, error: 'runtime has no live fibers' }), false)
+  assert.equal(staleCacheReload({ ok: true, version: '2.0.0' }), false)
+  console.log(`ok ${++checks} only a stale-cache reload is deferred to a restart (#427)`)
+
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true })
 }

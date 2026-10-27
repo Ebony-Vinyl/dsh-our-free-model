@@ -944,6 +944,10 @@ export class PluginUpdater {
       installedVersion,
       versionMismatch: current !== installedVersion,
       recoveryRequired,
+      // The disk holds a newer, verified release that this process is not
+      // running yet: the host could not re-import in-process, so the next
+      // launch is what activates it (#427).
+      restartRequired: state?.phase === 'complete' && state?.restartRequired === true && current !== installedVersion,
       phase: state?.phase ?? 'idle',
       latest: this.latest?.version ?? '',
       available,
@@ -1009,6 +1013,11 @@ export class PluginUpdater {
     let state
     let installed = false
     let activated = false
+    // `deferred` is the third outcome: the files are installed and verified, the
+    // host cannot re-import them in-process, and the next launch activates them.
+    // It is deliberately distinct from both `activated` and a failure — see the
+    // activation block below.
+    let deferred = false
     try {
       // Re-check immediately before installing: the owner may have pushed a new
       // manifest since the last check, and a stale cached manifest would verify
@@ -1051,10 +1060,20 @@ export class PluginUpdater {
           if (activation?.ok !== true) {
             throw Object.assign(new Error(activation?.error ?? 'hot reload did not confirm activation'), { runtimeRestored: activation?.restored === true })
           }
-          if (activation.version !== manifest.version) {
+          if (activation.deferred === true) {
+            // The host says: files in place, cannot re-import here, restart will
+            // finish it. Rolling this back threw away a fully installed and
+            // verified upgrade on every single attempt on the desktop shell,
+            // where the Electron loader normalizes the cache-busting query away
+            // and `import()` hands back the module that is already evaluated
+            // (#427, #438). The install stays; `restartRequired` says why the
+            // new code is not running yet.
+            deferred = true
+          } else if (activation.version !== manifest.version) {
             throw new Error(`activation version mismatch: expected ${manifest.version}, got ${String(activation.version ?? '(missing)')}`)
+          } else {
+            activated = true
           }
-          activated = true
         }
       } catch (error) {
         // The installed copy is now in an unknown state: put the old one back
@@ -1074,13 +1093,13 @@ export class PluginUpdater {
         }
         throw new Error(`upgrade failed, previous files restored (${error?.message ?? error})`)
       }
-      this.saveUpgradeState({ ...state, phase: 'complete', activated })
+      this.saveUpgradeState({ ...state, phase: 'complete', activated, ...(deferred ? { restartRequired: true } : {}) })
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
-      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused }
+      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused, ...(deferred ? { restartRequired: true } : {}) }
       this.recordHistory(record)
       this.checkedAt = Date.now()
-      this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)
-      return result
+      this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)${deferred ? '; restart required to activate' : ''}`)
+      return deferred ? { ...result, restartRequired: true } : result
     } catch (error) {
       this.error = String(error?.message ?? error)
       if (state !== undefined && installed) {

@@ -63,6 +63,27 @@ export function isReloading() {
   return inFlight !== null
 }
 
+/**
+ * The two reload failures that mean "this kernel cannot re-import in-process",
+ * as opposed to "the release on disk is broken".
+ *
+ * Both happen after a cache purge plus a cache-busting query, so the new module
+ * was fetched and evaluated from disk and still came back as the old one: the
+ * desktop Electron loader keys its module cache by resolved path, so the query
+ * is normalized away and `import()` hands back the module that is already
+ * running (#427). The install on disk is verified at this point, so the upgrade
+ * is worth keeping — the next launch activates it.
+ *
+ * Deliberately narrow: `reloaded module does not export apply()` and any import
+ * error are a genuinely broken build and must still roll back.
+ */
+const STALE_CACHE_RELOAD = /activation version mismatch|replacement is still the previous plugin after cache invalidation/
+
+/** Did this reload fail only because the host cannot re-import in-process? */
+export function staleCacheReload(result) {
+  return result?.ok === false && STALE_CACHE_RELOAD.test(String(result?.error ?? ''))
+}
+
 /** Directory of the installed package, as a `file://` URL with a trailing slash. */
 export function packageUrlOf(entryModuleUrl) {
   return new URL('../', entryModuleUrl).href
