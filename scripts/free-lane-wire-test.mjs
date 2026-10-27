@@ -40,7 +40,7 @@ server.unref()
 process.env.OUR_FREE_MODEL_BASE = `http://127.0.0.1:${server.address().port}`
 
 const up = await import('../src/upstream.js')
-const { postStreamed, getJson } = await import('../src/http.js')
+const { postStreamed, getJson, readSse, CODE } = await import('../src/http.js')
 
 let failures = 0
 const check = (name, actual, expected) => {
@@ -173,6 +173,65 @@ console.log('\n=== 6. 目录请求与推理请求使用同一串 v2 UA ===')
   const unrelated = 'other-client/3.0 (+https://example.com/our-free-model-standalone)'
   await getJson('/inference/v1/models', { attributionUserAgent: unrelated })
   check('任何归属串都不再改变线上 UA', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
+}
+
+console.log('\n=== 7. 空闲时钟只由真数据上弦，不被 keepalive 注释帧续命（#460）===')
+{
+  // SSE defines a comment line (`: ping`) as something to ignore. A gateway that
+  // pings every 10–15s to hold the socket open therefore used to keep a wedged,
+  // token-less turn alive forever: every read reset `deadline`, so the request
+  // never reached `CODE.timeout` and simply squatted on the connection.
+  const pinging = (async function* () {
+    const stopAt = Date.now() + 800
+    while (Date.now() < stopAt) {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      yield Buffer.from(': keepalive\n')
+    }
+    await new Promise(() => {}) // wedged: no data, no close
+  })()
+  const startedPing = Date.now()
+  let pingCode = null
+  try {
+    await readSse(pinging, () => {}, undefined, 120)
+  } catch (error) { pingCode = error?.code }
+  const pingElapsed = Date.now() - startedPing
+  check('a keepalive-only stream times out', pingCode, CODE.timeout)
+  check(`…at its own deadline (${pingElapsed}ms), not after the pings stop`, pingElapsed < 500, true)
+
+  // The counterweight: real payloads must still wind the clock, or a slow lane
+  // that trickles tokens would be killed mid-answer.
+  const trickle = (async function* () {
+    for (let i = 0; i < 8; i++) {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      yield Buffer.from(`data: {"n":${i}}\n\n`)
+    }
+    await new Promise(() => {})
+  })()
+  const trickled = []
+  let trickleCode = null
+  try {
+    await readSse(trickle, payload => trickled.push(payload), undefined, 120)
+  } catch (error) { trickleCode = error?.code }
+  check('a stream that keeps sending payloads is not idle', trickled.length, 8)
+  check('…and only ends after the payloads stop', trickleCode, CODE.timeout)
+
+  // A raw-JSON body carries no SSE framing, so nothing is dispatched until the
+  // document is complete — yet every chunk is progress. "Renew only when onData
+  // fired" would kill this one, which is why the witness is wider than that.
+  const document = JSON.stringify({ choices: [{ message: { content: 'raw' } }] })
+  const rawChunks = (async function* () {
+    for (let at = 0; at < document.length; at += 4) {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      yield Buffer.from(document.slice(at, at + 4))
+    }
+  })()
+  const rawSeen = []
+  let rawCode = null
+  try {
+    await readSse(rawChunks, payload => rawSeen.push(payload), undefined, 120)
+  } catch (error) { rawCode = error?.code }
+  check('a raw-JSON body without newlines still counts as progress', rawCode, null)
+  check('…and is dispatched once complete', rawSeen.length, 1)
 }
 
 server.close()

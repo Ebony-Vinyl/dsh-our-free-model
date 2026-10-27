@@ -444,6 +444,16 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
   let data = []
   let rawJson = ''
   let deadline = Date.now() + timeoutMs
+  // Did this read carry anything a caller would call progress? A keepalive is a
+  // comment line (`: ping`), and SSE defines it as something to ignore — so it
+  // must not wind the idle clock. Before this witness existed, every read reset
+  // `deadline` unconditionally, so a gateway that pings every 10–15s kept a
+  // wedged, token-less turn alive indefinitely: the request never timed out, it
+  // just held a connection until the gateway itself gave up (#460). The witness
+  // is deliberately wider than "onData fired" — a large raw-JSON body or a
+  // multi-line event can spend several reads accumulating before anything is
+  // dispatched, and those reads are real progress.
+  let content = false
   let stopped = false
   const stop = () => {
     if (stopped) return
@@ -486,7 +496,10 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
     const payload = data.join('\n')
     data = []
     if (payload.trim() === '[DONE]') return true
-    if (payload !== '') onData(payload)
+    if (payload !== '') {
+      onData(payload)
+      content = true
+    }
     return false
   }
   const completeData = () => {
@@ -504,6 +517,7 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
       rawJson = ''
       if (payload?.error || payload?.type === 'error') throw classifyFailure(undefined, payload)
       onData(JSON.stringify(payload))
+      content = true
       return false
     }
     if (text === '') return dispatch()
@@ -515,6 +529,7 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
       // Compatible endpoints may omit blank separators between complete JSON events.
       if (completeData() && dispatch()) return true
       if (valueText.trim() === '[DONE]') { dispatch(); return true }
+      if (valueText !== '') content = true
       data.push(valueText)
     }
     return false
@@ -532,7 +547,16 @@ export async function readSse(source, onData, signal, timeoutMs = 300000) {
         if (line(row)) return
         newline = buffer.indexOf('\n')
       }
-      deadline = Date.now() + timeoutMs
+      // A row still waiting for its newline counts as progress unless what has
+      // arrived so far is itself a comment: `: ping` split across two reads must
+      // not wind the clock, while a raw-JSON body or a half-arrived `data:` line
+      // must.
+      const pending = buffer.replace(/^\uFEFF/, '').replace(/\r$/, '')
+      if (pending.trim() !== '' && !pending.trimStart().startsWith(':')) content = true
+      if (content) {
+        content = false
+        deadline = Date.now() + timeoutMs
+      }
     }
     // Flush the decoder so a multi-byte character split over the last two chunks
     // is not silently dropped from the final payload.
