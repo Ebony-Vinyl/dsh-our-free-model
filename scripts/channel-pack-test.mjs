@@ -318,6 +318,68 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const { verifyChannelPrFixes } = await import('./channel-pr-fixes-test.mjs')
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
+
+  // ── #681：探测分派表、候选链与耗时回传 ─────────────────────────────────
+  //
+  // 三处缺陷，各自独立：
+  // 1. `probeWithAdapter` 没有 loomy 分支 → 「测试」必然抛
+  //    `Unsupported probe adapter: loomy`；
+  // 2. `account.test` 只测目录第一个模型 → TRAE 的 `doubao-for-auto`（自动路由
+  //    占位模型，回 3003）把好好的账号报成不可用；
+  // 3. 服务端从不返回 `ms`，客户端却一直在读它。
+  {
+    const probe = await import('../vendor/channel-pack/src/account-probe.ts')
+    const sse = (...frames) => new Response(frames.map(row => `data: ${JSON.stringify(row)}\n\n`).join('') + 'data: [DONE]\n\n')
+
+    // 候选链的挑选规则：显式指定只测它；否则「已有标记 → 目录顺序」去重截断。
+    assert.deepEqual(
+      probe.pickTestModels({ provider: 'trae', modelRateLimits: { b: 1, a: 2 } }, ['a', 'c', 'd', 'e', 'f']),
+      ['b', 'a', 'c', 'd'],
+      'marked models come first, then catalog order, deduped and capped',
+    )
+    assert.deepEqual(probe.pickTestModels({ provider: 'trae' }, ['a', 'b'], 'only'), ['only'], 'an explicit model is tested alone')
+    assert.deepEqual(probe.pickTestModels({ provider: 'trae' }, []), [], 'no candidates stays empty rather than guessing')
+
+    // 候选链的执行：第一个成功即停，失败的留在 `tried` 里。
+    const chainEntry = { id: 'chain', provider: 'trae', credentialRef: 'CHAIN', enabled: true, createdAt: 1 }
+    const attempted = []
+    const chained = await probe.testAccountCandidates({ findAccount: () => chainEntry }, 'chain', ['m0', 'm1', 'm2'], {
+      timeoutMs: 1000,
+      probe: async (_entry, modelId) => {
+        attempted.push(modelId)
+        return modelId === 'm0' ? { modelId, ok: false, message: '无法确认：3003 model service is unavailable' } : { modelId, ok: true }
+      },
+    })
+    assert.deepEqual(attempted, ['m0', 'm1'], 'the chain stops at the first model that answers')
+    assert.equal(chained.ok, true)
+    assert.equal(chained.modelId, 'm1')
+    assert.deepEqual(chained.tried.map(row => [row.modelId, row.ok]), [['m0', false], ['m1', true]])
+    assert.equal(typeof chained.ms, 'number', 'the latency the client renders is actually reported')
+
+    // loomy 走真实 RPC：没有分支时这里拿到的是 `ok: false` +
+    // `无法确认：Unsupported probe adapter: loomy`。
+    const loomyId = 'probe-loomy-fixture', loomyRef = 'PROBE_LOOMY_FIXTURE'
+    creds.set(loomyRef, { value: JSON.stringify({ access_token: 'probe-token', userid: '123456789012345678', phone: '13800138000' }) })
+    await ctx.accountPool.addAccount({ id: loomyId, provider: 'loomy', nickname: 'Probe fixture', credentialRef: loomyRef, enabled: true, refreshable: false, createdAt: 1 })
+    const savedAudit = auditFetch
+    try {
+      auditFetch = async input => {
+        const url = String(input)
+        if (url.endsWith('/chat/completions')) return sse({ choices: [{ delta: { content: '收到' }, finish_reason: 'stop' }] })
+        throw new Error(`unexpected offline request: ${url}`)
+      }
+      const result = await call('account.test', { accountId: loomyId, modelId: 'deepseek-v4-flash-0731' })
+      assert.equal(result.ok, true, 'account.test itself succeeds')
+      assert.equal(result.value.ok, true, `loomy probe must reach the adapter: ${result.value.message ?? ''}`)
+      assert.equal(result.value.modelId, 'deepseek-v4-flash-0731')
+      assert.equal(typeof result.value.ms, 'number', 'and reports how long it took')
+    } finally {
+      auditFetch = savedAudit
+      await ctx.accountPool.removeAccount(loomyId)
+      creds.delete(loomyRef)
+    }
+    console.log('ok  #681 probe: loomy has an adapter, the chain skips dead models, latency is reported')
+  }
   // 目录 `efforts` 的键序不是强度序（`dfmodel` 实测是 high/max/low），
   // 官方客户端还会按强度稳定排序；这条回归保证下发给 DSH 的档位序也是强度序。
   {

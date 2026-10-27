@@ -113,11 +113,12 @@ import {
 } from './trae-credits.js'
 import {
   pickTestModel,
+  pickTestModels,
+  testAccountCandidates,
   resetAccount,
   resetAllAccounts,
   retestAccount,
   retestAllAccounts,
-  testAccount,
 } from './account-probe.js'
 import { exportBackup, importBackup } from './backup.js'
 import { handleOpencodeRpc } from './opencode-rpc.js'
@@ -2243,8 +2244,11 @@ if (provider === LOBSTERAI.id) {
         //
         // 目录也读不出来时如实报错，**不**猜一个模型名发出去（猜错会得到与账号
         // 无关的 404，把「账号不可用」和「模型名不对」两件事混成一条报错）。
-        let modelId = pickTestModel(entry, [], req.modelId)
-        if (modelId === '') {
+        // ⚠️ 拿到的是**候选链**而不是单个模型：目录第一个未必可调用
+        //（TRAE 的 `doubao-for-auto` 是自动路由占位模型，回 3003），只测它
+        // 会把好好的账号报成不可用（#681）。显式指定时链长为 1。
+        let candidates = pickTestModels(entry, [], req.modelId)
+        if (candidates.length === 0) {
           const catalog = await fullCatalogIds(ctx, modelAdapters, entry.provider)
           if ('error' in catalog) {
             return {
@@ -2252,16 +2256,16 @@ if (provider === LOBSTERAI.id) {
               error: { code: 'bad-request', message: `无法确定要测试的模型：${catalog.error}` },
             }
           }
-          modelId = pickTestModel(entry, catalog.ids, req.modelId)
+          candidates = pickTestModels(entry, catalog.ids, req.modelId)
         }
-        if (modelId === '') {
+        if (candidates.length === 0) {
           return {
             ok: false,
             error: { code: 'bad-request', message: `${entry.provider} 没有可测试的模型` },
           }
         }
 
-        const value: RpcTestAccountResponse = await testAccount(pool, accountId, modelId)
+        const value: RpcTestAccountResponse = await testAccountCandidates(pool, accountId, candidates)
         return { ok: true, value }
       }
 

@@ -4898,8 +4898,14 @@ window.__ModuleLoader__.load({
                       type: 'button', className: 'ofm_minibtn', disabled: busy !== '' || !rpc,
                       onClick: () => accountAction('test:' + row.id, row.id, async () => {
                         const value = await rpc('account.test', { accountId: row.id }, 90_000)
+                        // The RPC envelope is `ok: true` here even when the probe
+                        // failed — `account.test` reports the outcome *inside*
+                        // `value`, so a failed probe lands on this branch with its
+                        // reason in `value.message`. Reading `value.error` (which
+                        // the server never sets) printed an empty reason: the
+                        // user saw "测试失败：" and nothing else (#681).
                         setNotice(value?.ok === false
-                          ? t('chan.test.failed').replace('{reason}', value?.error ?? '')
+                          ? t('chan.test.failed').replace('{reason}', value?.error ?? value?.message ?? '')
                           : t('chan.test.ok').replace('{ms}', String(value?.ms ?? value?.latencyMs ?? '—')))
                       }),
                     }, t('chan.act.test')),

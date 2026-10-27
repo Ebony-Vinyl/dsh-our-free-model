@@ -52038,6 +52038,9 @@ var TRAE_PROVIDER_ID = "trae";
 var PROBE_PROMPT = "\u53EA\u56DE\u7B54\u4E24\u4E2A\u5B57\uFF1A\u6536\u5230";
 var PROBE_SYSTEM = "You are a helpful assistant.";
 var PROBE_TIMEOUT_MS = 12e4;
+var PROBE_CANDIDATES_MAX = 4;
+var PROBE_ATTEMPT_TIMEOUT_MS = 2e4;
+var PROBE_TOTAL_BUDGET_MS = 8e4;
 function isRateLimitFailure(error) {
   if (error instanceof LlmError14) {
     if (error.code === "RATE_LIMIT" || error.code === "QUOTA_EXCEEDED" || error.code === "QUOTA") return true;
@@ -52047,6 +52050,7 @@ function isRateLimitFailure(error) {
 }
 async function probeWithAdapter(entry, credential, modelId, timeoutMs) {
   if (!isSupportedProvider(entry.provider)) throw new Error("provider-unsupported: \u4E0D\u652F\u6301\u6B64\u6E20\u9053");
+  const startedAt = Date.now();
   const signal = AbortSignal.timeout(timeoutMs);
   const ref = credentialRef8(entry.credentialRef);
   const lobsteraiProduct = lobsteraiProductById(entry.provider);
@@ -52086,6 +52090,14 @@ async function probeWithAdapter(entry, credential, modelId, timeoutMs) {
       },
       product: zcodeProduct
     });
+  } else if (entry.provider === LOOMY.id) {
+    adapter = new LoomyAdapter({
+      credentialRef: ref,
+      resolveCredential: async () => credential,
+      refresh: async () => {
+      },
+      product: LOOMY
+    });
   } else if (entry.provider === TRAE_PROVIDER_ID) {
     adapter = new TraeAdapter({
       credentialRef: ref,
@@ -52120,7 +52132,7 @@ async function probeWithAdapter(entry, credential, modelId, timeoutMs) {
       signal
     })) {
     }
-    return { modelId, ok: true };
+    return { modelId, ok: true, ms: Date.now() - startedAt };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (isRateLimitFailure(error)) {
@@ -52129,10 +52141,11 @@ async function probeWithAdapter(entry, credential, modelId, timeoutMs) {
         modelId,
         ok: false,
         message: `\u4ECD\u53D7\u9650\uFF1A${message}`,
-        ...parsed !== null ? { resetTimeMs: parsed.resetTimeMs } : {}
+        ...parsed !== null ? { resetTimeMs: parsed.resetTimeMs } : {},
+        ms: Date.now() - startedAt
       };
     }
-    return { modelId, ok: false, message: `\u65E0\u6CD5\u786E\u8BA4\uFF1A${message}` };
+    return { modelId, ok: false, message: `\u65E0\u6CD5\u786E\u8BA4\uFF1A${message}`, ms: Date.now() - startedAt };
   }
 }
 function makeDefaultProbe(pool, timeoutMs) {
@@ -52184,11 +52197,39 @@ async function retestAllAccounts(pool, provider, deps = {}) {
     clearedCount: accounts.reduce((sum, a) => sum + a.cleared.length, 0)
   };
 }
-function pickTestModel(entry, catalogIds, requested) {
-  if (typeof requested === "string" && requested !== "") return requested;
-  const marked = Object.keys(entry.modelRateLimits ?? {})[0];
-  if (marked !== void 0) return marked;
-  return catalogIds[0] ?? "";
+function pickTestModels(entry, catalogIds, requested, max = PROBE_CANDIDATES_MAX) {
+  if (typeof requested === "string" && requested !== "") return [requested];
+  const seen = /* @__PURE__ */ new Set();
+  const picked = [];
+  for (const id of [...Object.keys(entry.modelRateLimits ?? {}), ...catalogIds]) {
+    if (id === "" || seen.has(id)) continue;
+    seen.add(id);
+    picked.push(id);
+    if (picked.length >= max) break;
+  }
+  return picked;
+}
+async function testAccountCandidates(pool, accountId, modelIds, deps = {}) {
+  const startedAt = Date.now();
+  const tried = [];
+  let value;
+  for (const [index, modelId] of modelIds.entries()) {
+    const remaining = PROBE_TOTAL_BUDGET_MS - (Date.now() - startedAt);
+    if (remaining <= 0) break;
+    const timeoutMs = index === modelIds.length - 1 ? remaining : Math.min(remaining, PROBE_ATTEMPT_TIMEOUT_MS);
+    const outcome = await testAccount(pool, accountId, modelId, { ...deps, timeoutMs });
+    tried.push({ modelId: outcome.modelId, ok: outcome.ok, ...outcome.message === void 0 ? {} : { message: outcome.message } });
+    value ??= outcome;
+    if (outcome.ok) {
+      value = outcome;
+      break;
+    }
+  }
+  return {
+    ...value ?? { accountId, modelId: modelIds[0] ?? "", ok: false, message: "\u6CA1\u6709\u53EF\u6D4B\u8BD5\u7684\u6A21\u578B" },
+    ms: Date.now() - startedAt,
+    tried
+  };
 }
 async function testAccount(pool, accountId, modelId, deps = {}) {
   const entry = pool.findAccount(accountId);
@@ -54592,8 +54633,8 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (entry === void 0) {
           return { ok: false, error: { code: "bad-request", message: `\u8D26\u53F7 ${accountId} \u4E0D\u5B58\u5728` } };
         }
-        let modelId = pickTestModel(entry, [], req.modelId);
-        if (modelId === "") {
+        let candidates = pickTestModels(entry, [], req.modelId);
+        if (candidates.length === 0) {
           const catalog = await fullCatalogIds(ctx, modelAdapters, entry.provider);
           if ("error" in catalog) {
             return {
@@ -54601,15 +54642,15 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
               error: { code: "bad-request", message: `\u65E0\u6CD5\u786E\u5B9A\u8981\u6D4B\u8BD5\u7684\u6A21\u578B\uFF1A${catalog.error}` }
             };
           }
-          modelId = pickTestModel(entry, catalog.ids, req.modelId);
+          candidates = pickTestModels(entry, catalog.ids, req.modelId);
         }
-        if (modelId === "") {
+        if (candidates.length === 0) {
           return {
             ok: false,
             error: { code: "bad-request", message: `${entry.provider} \u6CA1\u6709\u53EF\u6D4B\u8BD5\u7684\u6A21\u578B` }
           };
         }
-        const value = await testAccount(pool, accountId, modelId);
+        const value = await testAccountCandidates(pool, accountId, candidates);
         return { ok: true, value };
       }
       // ── 限流标记：重置（不发请求，直接清除）──
