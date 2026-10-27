@@ -554,6 +554,27 @@ function isTransportError(error: unknown): boolean {
 }
 
 /**
+ * Trae 用量帧里的缓存命中量（#213）。
+ *
+ * 上游实测（见 issue 的原始报文）发的是 Anthropic 口径的
+ * `cache_read_input_tokens`（写入量在 `cache_creation_input_tokens`），
+ * 不是 openai-compat.ts 读的 OpenAI 口径。三处来源按优先级取首个有值的：
+ * 兼容其它 Trae 端点沿用 OpenAI 拼写的可能。
+ */
+function traeCacheReadTokens(usage: Record<string, unknown>): number {
+  const anthropic = usage.cache_read_input_tokens
+  if (typeof anthropic === 'number' && anthropic > 0) return anthropic
+  const details = usage.prompt_tokens_details
+  if (details != null && typeof details === 'object') {
+    const cached = (details as { cached_tokens?: unknown }).cached_tokens
+    if (typeof cached === 'number' && cached > 0) return cached
+  }
+  const openai = usage.prompt_cache_hit_tokens
+  if (typeof openai === 'number' && openai > 0) return openai
+  return 0
+}
+
+/**
  * 组装模型选择器里展示的名字：`模型名 · 倍率`。
  *
  * ## 为什么倍率必须拼进 `name`
@@ -1486,11 +1507,17 @@ export class TraeAdapter extends LlmAdapter {
                     const promptTokens = typeof ev.usage.prompt_tokens === 'number' ? ev.usage.prompt_tokens : 0
                     const completionTokens = typeof ev.usage.completion_tokens === 'number' ? ev.usage.completion_tokens : 0
                     const reasoningTokens = typeof ev.usage.reasoning_tokens === 'number' ? ev.usage.reasoning_tokens : undefined
+                    // prompt_tokens 是**含缓存**的总量（#213 实测：prompt_tokens 4233
+                    // 里已含 cache_read_input_tokens 4224），所以 inputTokens 只计
+                    // 未命中部分，命中量单列 cacheReadTokens —— 与 openai-compat.ts
+                    // 的 DSH 口径一致，否则缓存命中率恒为 0、账本全按 cacheMiss 计价。
+                    const cachedTokens = traeCacheReadTokens(ev.usage)
                     yield {
                       type: 'usage',
                       usage: {
-                        inputTokens: promptTokens,
+                        inputTokens: cachedTokens > 0 ? promptTokens - cachedTokens : promptTokens,
                         outputTokens: completionTokens,
+                        ...cachedTokens > 0 ? { cacheReadTokens: cachedTokens } : {},
                         ...reasoningTokens !== undefined && reasoningTokens > 0 ? { reasoningTokens } : {},
                       },
                     }
