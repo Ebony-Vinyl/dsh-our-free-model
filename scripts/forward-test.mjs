@@ -226,6 +226,40 @@ await checkAsync('streaming tool_calls renumber from 0 after reasoning blocks', 
   assert.equal(args, '{"file":"x"}')
 })
 
+await checkAsync('every streamed tool-call frame carries a function delta (#452)', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  // Arguments arriving one fragment per frame is the shape that used to leak a
+  // bare `{"index":0}` ahead of every increment: the opening frame was the only
+  // one with a `function`, and the rest carried nothing but the index.
+  lane.script = () => ({
+    chunks: [
+      { type: 'tool-call-delta', index: 0, id: 'call_t', name: 'mytool', argumentsDelta: '{"x":' },
+      { type: 'tool-call-delta', index: 0, argumentsDelta: '1' },
+      { type: 'tool-call-delta', index: 0, argumentsDelta: '}' },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+    outcome: { text: '', toolCalls: [{ slot: 0, id: 'call_t', name: 'mytool', arguments: '{"x":1}' }] },
+  })
+  const response = await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free', stream: true,
+    tools: [{ type: 'function', function: { name: 'mytool', parameters: { type: 'object', properties: {} } } }],
+  })
+  assert.equal(response.status, 200)
+  const frames = toolCallDeltas(await response.text())
+  // A strict client validates `delta.tool_calls[0].function` as an object on
+  // every frame, so one bare index frame aborts the whole stream.
+  assert.deepEqual(frames.filter(frame => frame.function === undefined).map(frame => frame.index), [],
+    `every frame must carry a function delta, got ${JSON.stringify(frames)}`)
+  const opening = frames[0]
+  assert.equal(opening.id, 'call_t')
+  assert.equal(opening.type, 'function', 'the opening frame carries the official chunk type')
+  assert.equal(opening.function.name, 'mytool')
+  assert.equal(opening.function.arguments, '')
+  assert.equal(frames.filter(frame => frame.id !== undefined).length, 1, 'id rides the opening frame only')
+  assert.equal(frames.map(frame => frame.function.arguments).join(''), '{"x":1}')
+})
+
 await checkAsync('a decoy tool call never reaches the streaming client', async () => {
   const lane = makeLane()
   const base = await serve(lane)

@@ -885,19 +885,33 @@ async function chatCompletions(req, res, complete, options = {}) {
       if (chunk.type === 'tool-call-delta') {
         const action = tools.admit(chunk)
         if (action.kind === 'drop') return
-        sendSse(res, {
-          id, object: 'chat.completion.chunk', created, model,
-          choices: [{
-            index: 0,
-            delta: {
-              tool_calls: [{
-                index: action.openAiIndex,
-                ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
-              }],
-            },
-            finish_reason: null,
-          }],
-        })
+        // OpenAI's delta protocol puts `id` and `function.name` on the opening
+        // frame only, and every later frame is still a *function* delta. The
+        // shape this branch used to emit for a non-opening frame was a bare
+        // `{"index":N}` — no `function` at all — which a client that validates
+        // `delta.tool_calls[0].function` as an object rejects on the spot, and
+        // which carries nothing an accumulator could use anyway (#452). A frame
+        // with neither the opening fields nor argument bytes is now simply not
+        // sent. `type: 'function'` goes on the opening frame because the
+        // non-streaming branch already spells it and the official chunk shape
+        // carries it.
+        if (action.first) {
+          sendSse(res, {
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{
+              index: 0,
+              delta: {
+                tool_calls: [{
+                  index: action.openAiIndex,
+                  id: action.id,
+                  type: 'function',
+                  function: { name: action.name ?? '', arguments: '' },
+                }],
+              },
+              finish_reason: null,
+            }],
+          })
+        }
         if (action.args) {
           sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
         }
