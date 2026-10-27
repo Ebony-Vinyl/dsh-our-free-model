@@ -156,20 +156,22 @@ export function createModelRuntime({
     // Automatic probing is disabled by owner policy: `probe` defaults to false
     // and every automatic caller passes false. Only an explicit user action (the
     // reprobe button or an explicit caller) asks for `probe: true`.
-    const { probe = false, force = false } = opts ?? {}
-    if (disposed) return catalog
+    const { probe = false, force = false, report = false } = opts ?? {}
+    // 管理接口按需取本轮结果，其他调用仍返回模型数组。
+    const result = value => report ? value : value.catalog
+    if (disposed) return result({ catalog, sources: {} })
     while (catalogRefresh !== null) {
       const shared = catalogRefresh
       const sharedForced = catalogRefreshForced
       const sharedProbed = catalogRefreshProbed
       const value = await shared
-      if (disposed || ((!force || sharedForced) && (!probe || sharedProbed))) return value
+      if (disposed || ((!force || sharedForced) && (!probe || sharedProbed))) return result(value)
     }
     const run = refreshCatalogOnce({ probe, force })
     catalogRefresh = run
     catalogRefreshForced = force
     catalogRefreshProbed = probe
-    try { return await run } finally {
+    try { return result(await run) } finally {
       if (catalogRefresh === run) {
         catalogRefresh = null; catalogRefreshForced = false; catalogRefreshProbed = false
       }
@@ -177,13 +179,14 @@ export function createModelRuntime({
   }
 
   async function refreshCatalogOnce({ probe, force }) {
+    const sources = {}
     let ids = []
     try {
       ids = parseListing(await fetchListing())
     } catch (error) {
       if (!disposed) logger.warn?.(`our-free-model: model listing refresh failed (${error?.message ?? error}); keeping the cached catalog`)
     }
-    if (disposed) return catalog
+    if (disposed) return { catalog, sources }
     if (ids.length > 0) {
       freeCatalog = buildCatalog(ids)
       catalogStore.update({ at: Date.now(), entries: freeCatalog.map(entry => entry.id) })
@@ -192,14 +195,15 @@ export function createModelRuntime({
     } else {
       freeCatalog = materializeCatalog(catalogStore.get().entries ?? [])
     }
-    await refreshSealedRoster()
-    if (disposed) return catalog
-    await refreshKiloRoster()
-    if (disposed) return catalog
+    sources.free = { ok: ids.length > 0, count: freeCatalog.length }
+    sources.sealed = await refreshSealedRoster()
+    if (disposed) return { catalog, sources }
+    sources.kilo = { ok: await refreshKiloRoster(), count: kiloCatalog.length }
+    if (disposed) return { catalog, sources }
     mergeCatalogs()
     if (probe) await refreshAvailability(force)
     emitTopology()
-    return catalog
+    return { catalog, sources }
   }
 
   async function refreshSealedRoster() {
@@ -207,27 +211,29 @@ export function createModelRuntime({
     if (credential === null) {
       sealedCatalog = []
       onSealedUnavailable()
-      return
+      return { ok: true, count: 0, skipped: true }
     }
     try {
       const ids = parseListing(await fetchSealedListing(credential, { signal: lifetime.signal }))
       if (disposed) return
       // 独立应用授权变更时，旧账号正在返回的清单不得覆盖新状态。
-      if (Object.hasOwn(credential, 'userToken') && sealedCredential()?.userToken !== credential.userToken) return
+      if (Object.hasOwn(credential, 'userToken') && sealedCredential()?.userToken !== credential.userToken) return { ok: false, count: sealedCatalog.length, skipped: true }
       if (ids.length > 0) {
         sealedCatalog = buildEacCatalog(ids)
         catalogStore.update({ sealIds: sealedCatalog.map(entry => entry.id) })
       }
+      return { ok: ids.length > 0, count: sealedCatalog.length }
     } catch (error) {
       if (disposed) return
-      if (Object.hasOwn(credential, 'userToken') && sealedCredential()?.userToken !== credential.userToken) return
+      if (Object.hasOwn(credential, 'userToken') && sealedCredential()?.userToken !== credential.userToken) return { ok: false, count: sealedCatalog.length, skipped: true }
       if (error?.code === CODE.credential) {
         sealedCatalog = []
         catalogStore.update({ sealIds: [] })
         logger.warn?.('our-free-model: the sealed lane refused its credential; its models are hidden until it is accepted again')
-        return
+        return { ok: false, count: 0 }
       }
       logger.warn?.(`our-free-model: sealed lane listing failed (${error?.code ?? 'unknown'}); keeping its cached roster`)
+      return { ok: false, count: sealedCatalog.length }
     }
   }
 
@@ -247,8 +253,10 @@ export function createModelRuntime({
       if (payload?.error || !Array.isArray(payload?.data)) throw new Error('invalid Kilo model listing')
       kiloCatalog = buildKiloCatalog(payload.data)
       catalogStore.update({ kiloRows: kiloCatalog })
+      return true
     } catch (error) {
       if (!disposed) logger.warn?.(`our-free-model: Kilo channel listing failed (${error?.code ?? error?.message ?? 'unknown'}); keeping its cached roster`)
+      return false
     }
   }
 

@@ -68,10 +68,11 @@ export async function createChannelRuntime({ dataDir, logger = console, stats })
       worker.postMessage({ type, id, ...payload })
     })
   }
-  function refresh() {
-    if (refreshing) return refreshing
-    refreshing = call('models').then(value => { rows = value; return rows }).finally(() => { refreshing = undefined })
-    return refreshing
+  function refresh({ report = false } = {}) {
+    if (!refreshing) {
+      refreshing = call('models').then(value => { rows = value.rows; return value }).finally(() => { refreshing = undefined })
+    }
+    return report ? refreshing : refreshing.then(value => value.rows)
   }
   const runtime = {
     get providers() { return providers },
