@@ -670,7 +670,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       const referer = req.headers.referer
       const origin = req.headers.origin
       const malformedSource = [referer, origin].some(value => value !== undefined && (
-        typeof value !== 'string' || !value.startsWith('http://')
+        typeof value !== 'string' || !/^https?:\/\//.test(value)
       ))
       if (closed || !cookieName) json(res, 503, { error: '服务正在停止或启动' })
       // A page asset is a capability URL: the sandboxed iframe has an opaque

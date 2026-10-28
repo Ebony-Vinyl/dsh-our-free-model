@@ -5,6 +5,7 @@ import { startStandalone } from './service.mjs'
 const usage = `Our Free Model 独立本地服务
 用法：node packages/standalone/cli.mjs [选项]
 
+  --host <地址>       监听地址，默认 127.0.0.1；容器可使用 0.0.0.0
   --port <端口>       监听端口，默认 18900（冲突时自动选择可用端口）
   --data-dir <目录>   数据目录，默认 OFM_HOME 或 ~/.our-free-model
   --no-refresh        跳过启动与周期刷新；仍可手动刷新和推理
@@ -23,14 +24,15 @@ async function main() {
     if (flag === '--no-refresh') { options.refresh = false; continue }
     if (flag === '--probe') { options.probe = true; continue }
     if (flag === '--lan' || flag === '--no-lan') { options.lanEnabled = flag === '--lan'; continue }
-    if (!['--port', '--data-dir', '--lan-port'].includes(flag) || !process.argv[index + 1] || process.argv[index + 1].startsWith('--')) {
+    if (!['--host', '--port', '--data-dir', '--lan-port'].includes(flag) || !process.argv[index + 1] || process.argv[index + 1].startsWith('--')) {
       throw new Error(`未知选项或缺少参数：${flag}`)
     }
     const value = process.argv[++index]
     if (flag === '--port' || flag === '--lan-port') {
       if (!/^\d+$/.test(value) || Number(value) > 65535) throw new Error('端口必须为 0 到 65535 的整数')
       options[flag === '--port' ? 'port' : 'lanPort'] = Number(value)
-    } else options.dataDir = path.resolve(value)
+    } else if (flag === '--host') options.host = value
+    else options.dataDir = path.resolve(value)
   }
   const service = await startStandalone(options)
   let stopping = false

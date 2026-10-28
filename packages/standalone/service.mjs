@@ -121,7 +121,7 @@ export async function startStandalone({
   // host, and the update flow has to be exercisable where CI actually runs.
   desktopPlatform = process.platform, desktopArch = process.arch,
 } = {}) {
-  if (!isLoopbackHost(host)) throw new TypeError('the standalone service binds a loopback address only')
+  if (host !== '0.0.0.0' && !isLoopbackHost(host)) throw new TypeError('only loopback addresses and 0.0.0.0 are supported')
   if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) throw new TypeError('dataDir must be an absolute path')
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) {
     throw new TypeError('port must be an integer between 0 and 65535')

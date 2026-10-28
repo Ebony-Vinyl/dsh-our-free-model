@@ -135,6 +135,8 @@ export function structuralRejection(req) {
 
 /** Return a fixed reason without exposing caller-supplied strings. */
 function structuralReason(req) {
+  const allowNonLoopback = process.env.OFM_ALLOW_NON_LOOPBACK === '1'
+  if (allowNonLoopback) return undefined
   const host = authorityOf(req.headers.host, 'http')
   if (host === null || !LOOPBACK_NAMES.has(host.hostname)) return 'host-not-loopback'
   const site = String(req.headers['sec-fetch-site'] ?? '').toLowerCase()
