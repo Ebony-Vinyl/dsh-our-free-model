@@ -80,11 +80,50 @@ LAN Key 保存在当前独立目录的 `settings.json` 的 `standaloneLanKey` �
 `baseUrls` 为检测到的本机网卡 IPv4 地址及实际端口，切换网络后重新读取摘要即可更新。
 未知字段、自定义监听 host、目标地址和客户端提交的密钥均不接受。
 
-这只解决 issue #351 的 LAN 推理接入。issue #216 的 Docker / FPK / NAS
-远程管理部署仍未实现：管理监听器和 Host 信任围栏仍限 loopback，
-不支持 `--host`、`OFM_ALLOW_NON_LOOPBACK` 或 `OFM_TRUSTED_HOSTS` 放宽管理访问。
-容器映射中继端口可供已配置的推理客户端连接，但不能据此从 LAN 打开管理页，
-也没有提供容器镜像、FPK 包或容器内账号 OAuth 登录适配。
+这只解决 issue #351 的 LAN 推理接入。Docker 支持容器内管理和推理监听，
+配置方式见下方「Docker」。issue #216 的远程管理部署、FPK / NAS 制品仍未实现；
+容器内 OAuth 登录适配也未提供。
+
+## Docker
+
+仓库根目录提供 Dockerfile。镜像使用 Node.js 22，容器默认监听 `0.0.0.0:18900`，
+管理页面、推理 API 和 `/health` 均通过映射端口访问：
+
+```bash
+docker build -t ofm:latest .
+docker run --name ofm -d --restart unless-stopped \
+  -p 18900:18900 \
+  -v ofm-data:/ofm-data \
+  ofm:latest
+```
+
+容器启动参数固定为：
+
+```text
+npm run start:standalone -- --host 0.0.0.0 --port 18900 --data-dir /ofm-data
+```
+
+- `/ofm-data` 保存账号凭据、密钥、EAC 授权、设置、账本和账号缓存；删除具名卷会删除全部独立数据。
+- 宿主机访问 `http://127.0.0.1:18900/health`；局域网或 Codespaces 使用宿主机地址访问管理页。
+- Dockerfile 内置健康检查，可用 `docker logs -f ofm` 查看一次性管理登录链接和启动状态。
+- Dockerfile 设置 `OFM_ALLOW_NON_LOOPBACK=1`，允许管理页面经端口转发或反向代理访问。
+- 仅在可信网络暴露端口；公网部署应在 Docker 容器前增加防火墙、反向代理和访问控制。
+- 镜像不包含宿主机 DSH 凭据或插件配置。首次启动会生成独立 API Key 和管理会话。
+
+查看和清理容器：
+
+```bash
+docker ps
+docker inspect --format '{{json .State.Health.Status}}' ofm
+docker rm -f ofm
+```
+
+具名卷独立于容器；删除容器不会删除数据，确认清除数据后再删除卷：
+
+```bash
+docker volume ls
+docker volume rm ofm-data
+```
 
 ## 当前接口与渠道
 
