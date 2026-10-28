@@ -1,3 +1,5 @@
+import { withQueueAccountRotation, reportQueueSlot } from './queue-rotation.js'
+import { checkQueuedResponse, ModelQueuedError } from './model-queue.js'
 /**
  * 某模型的输入模态（`LlmModelInfo` / `LlmResolvedModelInfo` 共用）。
  *
@@ -42,7 +44,7 @@ import {
   isReachableOpencodeModel,
   type OpencodeErrorInfo, type OpencodeErrorKind, type OpencodeFallbackModel,
 } from './opencode-product.js'
-import { listIdentitySlots, type IdentitySlot } from './opencode-auth.js'
+import { listIdentitySlots, pickSlot, type IdentitySlot } from './opencode-auth.js'
 import { deriveSessionId, opencodeHeaders, opencodeUserAgent } from './opencode.js'
 import { buildOpencodePayloadWithToolMap } from './opencode-messages.js'
 import {
@@ -137,7 +139,7 @@ export async function loadOpencodeCatalog(
 
 export interface OpencodeAdapterOptions {
   /** 取当前槽序列（账号池顺序 + 匿名槽末位）。 */
-  identitySlots: () => Promise<readonly IdentitySlot[]>
+  identitySlots: (model?: string) => Promise<readonly IdentitySlot[]>
   /** 拉远端目录；缺省时直接用兜底表。 */
   fetchRemoteCatalog?: OpencodeCatalogFetcher
   /** 用户模型黑名单。 */
@@ -153,27 +155,6 @@ export interface OpencodeAdapterOptions {
    * 而不是把图片静默丢掉（Qoder 图片丢失事故的教训）。
    */
   readImage?: (ref: unknown) => Promise<{ data: Uint8Array; mediaType: string } | undefined>
-}
-
-/**
- * 按「平权」规则选一个可用槽。
- *
- * ⚠️ **收费模型跳过匿名槽**：匿名凭证（字面量 `public`）只被服务端认作
- * 免费通道，送付费模型必然 401/403。
- *
- * @param excluded 已试过的槽 id（`tried` 集合）——保证每个槽最多试一次。
- */
-export function pickSlot(
-  slots: readonly IdentitySlot[],
-  modelId: string,
-  excluded: ReadonlySet<string>,
-): IdentitySlot | undefined {
-  for (const slot of slots) {
-    if (excluded.has(slot.id)) continue
-    if (slot.kind === 'anonymous' && !isFreeOpencodeModel(modelId)) continue
-    return slot
-  }
-  return undefined
 }
 
 /** 限流退避上限：服务端再狠也不让它单次阻塞超过 30 分钟。 */
@@ -440,6 +421,7 @@ export class OpencodeAdapter extends LlmAdapter {
       tried.add(slot.id)
       // Token 账本（第 2 期）：回报「本笔请求实际使用的槽」（匿名槽 = 'anonymous'）。
       reportLedgerAccount(OPENCODE.id, slot.id)
+      reportQueueSlot(slot)
 
       let delivered = false
       try {
@@ -455,7 +437,7 @@ export class OpencodeAdapter extends LlmAdapter {
         }
         return
       } catch (error) {
-        if (delivered) throw error
+        if (delivered || error instanceof ModelQueuedError) throw error
         if (error instanceof LlmError && error.code === 'QUOTA_EXCEEDED') throw error
 
         const info = classifyOpencodeFailure(error)
@@ -592,7 +574,7 @@ export class OpencodeAdapter extends LlmAdapter {
       // **不动全局**（两个插件抢全局槽位会互相短路整个路由层）。
       ...slot.proxy === undefined ? {} : { dispatcher: buildProxyDispatcher(slot.proxy) as never },
     }
-    const response = await fetch(`${OPENCODE.baseUrl}${OPENCODE.chatPath}`, init)
+    const response = await fetch(`${OPENCODE.baseUrl}${OPENCODE.chatPath}`, init).then(checkQueuedResponse)
     if (!response.ok) {
       // ⚠️ **必须先读体**：Zen 的限流语义（`GoUsageLimitError`）在响应体里，
       // 而 body 只能读一次 —— 读了不传下去，轮换层就只能按状态码猜，
@@ -668,9 +650,9 @@ function sessionIdOf(options: GenerateOptions): string {
 
 /** 在 `ctx.llm` 上注册 opencode 路由。 */
 export function registerOpencodeLlm(ctx: Context, options: OpencodeAdapterOptions): OpencodeAdapter {
-  const adapter = new OpencodeAdapter(options)
+  const adapter = withQueueAccountRotation(OPENCODE.id, options, scoped => new OpencodeAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [OPENCODE.id], adapter)
   return adapter
 }
 
-export { listIdentitySlots }
+export { listIdentitySlots, pickSlot }

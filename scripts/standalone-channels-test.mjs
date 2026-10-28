@@ -166,6 +166,27 @@ const rpc = async (method, payload = {}) => {
   return value.value
 }
 try {
+  await check('独立业务产物的 Chat / Responses 保留工具调用关联与结果', async () => {
+    const { toGenerateOptions, toResponsesGenerateOptions } = await import('../packages/standalone/channels/business.mjs')
+    const signal = new AbortController().signal
+    const chat = await toGenerateOptions({ model: 'fixture/model', messages: [
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call-result', type: 'function', function: { name: 'lookup', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'call-result', content: 'fixture-tool-output' },
+    ] }, signal)
+    const responses = await toResponsesGenerateOptions({ model: 'fixture/model', input: [
+      { type: 'function_call', call_id: 'call-result', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call-result', output: 'fixture-tool-output' },
+    ] }, signal)
+    for (const result of [chat, responses]) {
+      assert.equal(result.messages[0].content[0].id, 'call-result')
+      const answer = result.messages[1]
+      assert.equal(answer.role, 'tool')
+      assert.equal(answer.toolCallId, 'call-result')
+      assert.deepEqual(answer.source, { kind: 'tool', callId: 'call-result' })
+      assert.deepEqual(answer.content, [{ type: 'text', text: 'fixture-tool-output' }])
+      assert.notEqual(answer.id, result.messages[0].id)
+    }
+  })
   service = await startStandalone({ dataDir, port: 0, refresh: false, logger: { warn: message => warnings.push(message), info() {} } })
   await service.ready
   key = JSON.parse(fs.readFileSync(service.keyFile)).forwardKey

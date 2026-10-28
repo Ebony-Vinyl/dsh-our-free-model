@@ -13,6 +13,7 @@ import { fetchSealedListing } from '../eac.js'
 import { fetchKiloListing } from '../kilo.js'
 import { sessionForConversation } from '../upstream.js'
 import { createForwardCompletion, publicModelRows } from './completion.js'
+import { isSubscriptionEntry, subscriptionCatalog } from '../subscription-adapter.js'
 
 const FALLBACK_CATALOG = buildCatalog([
   'mimo-v2.6-flash-free', 'mimo-v2.5-free', 'ling-3.0-flash-fin-free',
@@ -54,6 +55,8 @@ export function createRuntimeStores({ dataDir, logger = console }) {
 /**
  * 两个产品共同使用的模型运行时。宿主仅注入能力，不传入 Cordis ctx。
  * 创建不启动网络任务；入口先绑定本地监听器，再决定何时刷新和探测。
+ * Optional subscriptionRuntime supplies catalog() and complete(request, onChunk);
+ * its helper owns accounting. Call syncAggregateCatalog() after account mutations.
  */
 export function createModelRuntime({
   settings, stats, availability, catalogStore,
@@ -63,6 +66,7 @@ export function createModelRuntime({
   sealedCredential = () => null,
   onSealedUnavailable = () => {},
   onTopology = () => {},
+  subscriptionRuntime,
 }) {
   let catalog = materializeCatalog(catalogStore.get().entries ?? [])
   let sealedCatalog = sealedCredential() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
@@ -70,6 +74,7 @@ export function createModelRuntime({
   /** The aggregate lane: one row per enabled provider/model the user configured.
    *  Derived from settings, not from a listing, so it is rebuilt on every merge. */
   let aggregateCatalog = []
+  let subscriptionEntries = []
   /** The virtual rows a combo contributes; rebuilt last, after every real lane. */
   let comboCatalog = []
   /** The free lane's own roster: the base every other lane is merged onto. */
@@ -78,7 +83,7 @@ export function createModelRuntime({
   let gatewayLatency = { ms: 0, at: 0 }
   let disposed = false
   const lifetime = new AbortController()
-  let reprobeTimer
+  let egressGeneration = 0
 
   /**
    * Rebuild the merged catalog from its parts, in precedence order.
@@ -95,7 +100,7 @@ export function createModelRuntime({
   const rebuildCatalog = () => {
     const seen = new Set()
     const merged = []
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...subscriptionEntries]) {
       if (entry === null || entry === undefined || seen.has(entry.id)) continue
       seen.add(entry.id)
       merged.push(entry)
@@ -112,6 +117,7 @@ export function createModelRuntime({
   }
   const mergeCatalogs = () => {
     aggregateCatalog = buildAggregateCatalog(settings.get().aggregate ?? {})
+    subscriptionEntries = subscriptionCatalog(subscriptionRuntime)
     rebuildCatalog()
   }
   mergeCatalogs()
@@ -120,11 +126,16 @@ export function createModelRuntime({
     membership: computeMembership(catalog, availability.get(), settings.get()),
     settings: settings.get(),
     attributionUserAgent,
+    routing: {
+      quota: subscriptionRuntime?.routingQuota?.() ?? {},
+      usage: Object.fromEntries(catalog.map(row => [row.id, stats.get().models?.[row.id]?.calls ?? 0])),
+    },
   })
   const emitTopology = () => { if (!disposed) onTopology() }
   const adapter = new FreeModelAdapter({
     state,
     resolveImage,
+    subscriptionRuntime,
     sealedCredential,
     recordUsage: record => {
       if (disposed) return
@@ -133,16 +144,8 @@ export function createModelRuntime({
     },
     recordTurn: record => { if (!disposed) recordTurn(stats, record) },
     warn: message => logger.warn?.(message) ?? logger.log?.(message),
-    onRegionBlocked: () => {
-      if (disposed || reprobeTimer !== undefined) return
-      reprobeTimer = setTimeout(() => {
-        reprobeTimer = undefined
-        if (!disposed) void refreshAvailability(true).catch(error => {
-          logger.warn?.(`our-free-model: region reprobe failed (${error?.message ?? error})`)
-        })
-      }, 4000)
-      reprobeTimer.unref?.()
-    },
+    // Automatic probing is disabled by owner policy: a region refusal from a
+    // real turn stays a turn failure and never fires a background probe.
   })
 
   // 手动强制刷新不能借用一个因限流而跳过探测的普通刷新。
@@ -150,7 +153,10 @@ export function createModelRuntime({
   let catalogRefreshForced = false
   let catalogRefreshProbed = false
   async function refreshCatalog(opts) {
-    const { probe = true, force = false } = opts ?? {}
+    // Automatic probing is disabled by owner policy: `probe` defaults to false
+    // and every automatic caller passes false. Only an explicit user action (the
+    // reprobe button or an explicit caller) asks for `probe: true`.
+    const { probe = false, force = false } = opts ?? {}
     if (disposed) return catalog
     while (catalogRefresh !== null) {
       const shared = catalogRefresh
@@ -259,9 +265,11 @@ export function createModelRuntime({
   }
 
   let probeRound = null
+  let probeRoundGeneration = 0
   let probeThrottleStreak = 0
   let probeBackoffUntil = 0
   async function runProbeRound() {
+    const generation = egressGeneration
     // The absorbed channels get no per-model probes: their verdicts would be
     // spent against a different gateway than the one that serves them, and a
     // roster the listing named is advertised as-is (its health is the listing
@@ -271,9 +279,9 @@ export function createModelRuntime({
     // (whether a key is configured). A combo is excluded because it has no
     // endpoint of its own: probing one would send the chain's own id to the free
     // lane as a model name, spending quota to collect a verdict about nothing.
-    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry))
+    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry) && !isSubscriptionEntry(entry))
     const results = await probeCatalog(probeable, { attributionUserAgent, signal: lifetime.signal }, (id, result) => {
-      if (disposed) return
+      if (disposed || generation !== egressGeneration) return
       availability.edit(value => ({
         ...value,
         results: {
@@ -287,7 +295,7 @@ export function createModelRuntime({
         },
       }))
     }, 2)
-    if (disposed) return {}
+    if (disposed || generation !== egressGeneration) return {}
     availability.update({ at: Date.now(), egress })
     availability.flush()
     const verdicts = Object.values(results)
@@ -307,7 +315,8 @@ export function createModelRuntime({
   }
   async function refreshAvailability(force = false) {
     if (disposed || (!force && probeBackoffUntil > Date.now())) return {}
-    if (probeRound !== null) return probeRound
+    if (probeRound !== null && probeRoundGeneration === egressGeneration) return probeRound
+    probeRoundGeneration = egressGeneration
     const round = runProbeRound()
     probeRound = round
     try { return await round } finally { if (probeRound === round) probeRound = null }
@@ -322,10 +331,19 @@ export function createModelRuntime({
       || previous.ip !== seen.ip || (seen.country !== undefined && previous.country !== seen.country)
     egress = seen
     if (changed) {
-      availability.update({ egress: seen })
+      egressGeneration++
+      // 保留历史记录，但旧出口的成功、拒绝和手动测量均不能代表新出口。
+      const expire = rows => Object.fromEntries(Object.entries(rows ?? {}).map(([id, row]) => [id, { ...row, stale: true }]))
+      availability.edit(value => ({
+        ...value, egress: seen, at: 0,
+        results: expire(value.results), manualResults: expire(value.manualResults),
+      }))
       availability.flush()
-      logger.info?.(`our-free-model: egress changed to ${seen.ip}${seen.country ? ` (${seen.country})` : ''}; re-probing availability`)
-      await refreshAvailability(true)
+      probeThrottleStreak = 0
+      probeBackoffUntil = 0
+      emitTopology()
+      // 只使旧判定失效并通知选择器，不发送任何自动探测请求。
+      logger.info?.(`our-free-model: egress changed to ${seen.ip}${seen.country ? ` (${seen.country})` : ''}; previous availability marked stale`)
     }
     return true
   }
@@ -338,10 +356,11 @@ export function createModelRuntime({
     if (!entry) throw new UpstreamError('Unknown model "' + id + '"', CODE.client, { status: 404 })
     const token = {}
     latestTests.set(id, token)
+    const generation = egressGeneration
     const selectedEffort = effort === undefined || effort === '' ? DEFAULT_LEVEL : effort
     const linkedSignal = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal
     const persist = row => {
-      if (disposed || linkedSignal.aborted || latestTests.get(id) !== token) return false
+      if (disposed || linkedSignal.aborted || latestTests.get(id) !== token || generation !== egressGeneration) return false
       availability.edit(value => ({ ...value, manualResults: { ...value.manualResults, [id]: row } }))
       availability.flush()
       emitTopology()
@@ -355,6 +374,7 @@ export function createModelRuntime({
         signal: testSignal,
       }, entry, state()), { signal: linkedSignal })
       if (linkedSignal.aborted || disposed) throw new UpstreamError('Text test cancelled', CODE.aborted)
+      if (generation !== egressGeneration) throw new UpstreamError('Network egress changed during the text test; please test again', CODE.aborted)
       const persisted = persist({ state: STATE.available, source: 'manual', at: Date.now(), ttftMs: measured.ttftMs, latencyMs: measured.totalMs })
       return { model: entry.id, effort: selectedEffort, ok: true, ...measured, persisted }
     } catch (error) {
@@ -381,8 +401,8 @@ export function createModelRuntime({
     }),
     publicModelRows: () => publicModelRows(state()),
     // A settings write that changes the aggregate lane or the chains (a key
-    // saved, a provider switched off, a combo edited) rebuilds the merged view
-    // without a listing round: the aggregate rows come from settings alone.
+    // saved, a subscription imported/toggled/removed, a combo edited) rebuilds
+    // the merged view without an upstream listing round.
     syncAggregateCatalog() {
       if (disposed) return catalog
       mergeCatalogs()
@@ -397,7 +417,6 @@ export function createModelRuntime({
       if (disposed) return
       disposed = true
       lifetime.abort()
-      clearTimeout(reprobeTimer)
     },
   }
 }

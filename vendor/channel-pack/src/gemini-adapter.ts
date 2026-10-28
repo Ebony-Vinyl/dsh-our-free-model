@@ -1,3 +1,5 @@
+import { withQueueAccountRotation } from './queue-rotation.js'
+import { checkQueuedResponse } from './model-queue.js'
 /**
  * Gemini（Cloud Code Assist）模型适配器。
  *
@@ -186,7 +188,7 @@ export interface GeminiAdapterOptions {
   /** 解析当前可用凭据。 */
   resolveCredential: (modelId?: string) => Promise<GeminiCredential | undefined>
   /** 凭据失效时的处理（续期或换号，由接线侧决定）。 */
-  refresh: () => Promise<void>
+  refresh: (accountId?: string, reason?: 'auth') => Promise<void>
   /** 账号池（目录门控、黑名单、限流切号）。 */
   accountPool?: AccountPool
   /**
@@ -626,6 +628,7 @@ export class GeminiAdapter extends LlmAdapter {
           )
         }
 
+        response = await checkQueuedResponse(response)
         if (response.ok) {
           if (response.body === null) {
             throw new LlmError('gemini: 响应缺少 body', 'EMPTY_RESPONSE')
@@ -698,7 +701,7 @@ export class GeminiAdapter extends LlmAdapter {
         // 3. 401 → 先续期一次，再考虑换账号。
         if (status === 401 && !refreshedOnce) {
           refreshedOnce = true
-          await this.options.refresh().catch(() => {})
+          await this.options.refresh(undefined, 'auth').catch(() => {})
           const refreshed = await this.options.resolveCredential(options.model).catch(() => undefined)
           if (refreshed !== undefined && refreshed.access_token !== '') {
             credential = refreshed
@@ -785,7 +788,7 @@ export function registerGeminiLlm(
   options: GeminiAdapterOptions,
 ): GeminiAdapter {
   const product = options.product ?? GEMINI
-  const adapter = new GeminiAdapter(options)
+  const adapter = withQueueAccountRotation(product.id, options, scoped => new GeminiAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   return adapter
 }

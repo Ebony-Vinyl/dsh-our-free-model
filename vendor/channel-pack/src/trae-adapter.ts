@@ -1,3 +1,5 @@
+import { withQueueAccountRotation } from './queue-rotation.js'
+import { checkQueuedResponse } from './model-queue.js'
 /**
  * TRAE（字节跳动 TRAE IDE）LLM 适配器。
  *
@@ -220,7 +222,7 @@ export interface TraeAdapterOptions {
    */
   resolveCredential: (modelId?: string) => Promise<TraeCredential | undefined>
   /** 静默续期凭据。 */
-  refresh: () => Promise<void>
+  refresh: (accountId?: string, reason?: 'auth') => Promise<void>
   /** 动态拉取远端模型列表；失败时回退到 `product.fallbackModels`。 */
   fetchRemoteModels?: () => Promise<TraeRemoteModel[]>
   fetchImpl?: typeof fetch
@@ -1048,7 +1050,7 @@ export class TraeAdapter extends LlmAdapter {
     // 4. 发送请求（401/403 时刷新一次凭据后重试）
     let response = await this.send(credential, body, options)
     if (!response.ok && (response.status === 401 || response.status === 403)) {
-      await this.options.refresh()
+      await this.options.refresh(undefined, 'auth')
       // 与主路径一致：按本模型选号（跳过正在限流的账号）。
       const refreshed = await this.options.resolveCredential(options.model)
       if (refreshed === undefined || refreshed.access_token.length === 0) {
@@ -1204,7 +1206,7 @@ export class TraeAdapter extends LlmAdapter {
         headers,
         body,
         signal: options.signal,
-      })
+      }).then(checkQueuedResponse)
     } catch (error) {
       if (options.signal?.aborted) throw error
       if (isTransportError(error)) {
@@ -1565,6 +1567,7 @@ export class TraeAdapter extends LlmAdapter {
         }
       }
     } finally {
+      await reader.cancel().catch(() => {})
       reader.releaseLock()
     }
 
@@ -1823,7 +1826,7 @@ export class TraeAdapter extends LlmAdapter {
  */
 export function registerTraeLlm(ctx: Context, options: TraeAdapterOptions): TraeAdapter {
   const product = options.product ?? TRAE
-  const adapter = new TraeAdapter(options)
+  const adapter = withQueueAccountRotation(product.id, options, scoped => new TraeAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   // 返回实例：Channel Pack 的「显示列表」需要它的 `listAllModels()`（不受用户黑名单
   // 影响的全量目录，带最终展示名/倍率）。DSH 的 `ctx.llm` 不透传自定义方法，

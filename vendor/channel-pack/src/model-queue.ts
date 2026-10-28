@@ -32,8 +32,23 @@
  * 取证脚本：`scripts/probe-qoder-queue-error.mjs`。
  */
 
+import { LlmError } from '@deepseek-ai/dsh-llm'
+import { retryAfterMsFromResponse } from './retry-after.js'
+
 /** Qoder 的排队业务码（客户端 obf 产物里的 `mRA`）。 */
 export const QUEUE_BUSINESS_CODE = '10605'
+
+export class ModelQueuedError extends LlmError {
+  readonly queueInfo: Readonly<Record<string, unknown>>
+  readonly retryAfterMs: number | undefined
+
+  constructor(message: string, options: { queueInfo: Readonly<Record<string, unknown>>; retryAfterMs?: number }) {
+    super(message, 'QUEUE')
+    this.name = 'ModelQueuedError'
+    this.queueInfo = options.queueInfo
+    this.retryAfterMs = options.retryAfterMs
+  }
+}
 
 /**
  * Qoder 的**额度用尽**业务码（`Billing daily count exceeded`）。
@@ -184,12 +199,12 @@ export function isQueueBusinessCode(code: unknown): boolean {
  * @param body - 响应体原文、已解析对象，或错误帧的 `message` 字符串。
  * @returns 排队信息；既没命中 `10605` 也没有排队字段时 undefined。
  */
-export function parseQueueError(body: unknown): QueueInfo | undefined {
+function queueNodes(body: unknown): Array<Record<string, unknown>> {
   let root: unknown = body
   if (typeof body === 'string') {
-    try { root = JSON.parse(body) } catch { return undefined }
+    try { root = JSON.parse(body) } catch { return [] }
   }
-  if (root === null || typeof root !== 'object') return undefined
+  if (root === null || typeof root !== 'object') return []
 
   // 广度优先展开 data / result / message / body（客户端 lFc() 的键集）。
   const seen = new Set<unknown>()
@@ -201,14 +216,19 @@ export function parseQueueError(body: unknown): QueueInfo | undefined {
     seen.add(node)
     const record = node as Record<string, unknown>
     nodes.push(record)
-    for (const key of ['data', 'result', 'message', 'body']) {
+    for (const key of ['data', 'result', 'message', 'body', 'error', 'response']) {
       const value = record[key]
       if (value !== null && typeof value === 'object') queue.push(value)
-      else if (typeof value === 'string' && value.length > 0) {
+      else if (key !== 'response' && typeof value === 'string' && value.length > 0) {
         try { queue.push(JSON.parse(value)) } catch { /* 非 JSON，忽略 */ }
       }
     }
   }
+  return nodes
+}
+
+export function parseQueueError(body: unknown): QueueInfo | undefined {
+  const nodes = queueNodes(body)
 
   // 取第一个含排队标志的节点（客户端 dFc()/PJa() 同口径）。
   const info = nodes.find((node) => node.isQueued !== undefined || node.serviceAvailable !== undefined)
@@ -233,6 +253,72 @@ export function parseQueueError(body: unknown): QueueInfo | undefined {
     if (value !== undefined) out[key] = Math.trunc(value)
   }
   return out
+}
+
+/** 跨渠道只认明确排队字段或错误类型，状态码和繁忙文案仍由渠道自己处理。 */
+export function throwIfModelQueued(body: unknown, headers?: { get(name: string): string | null }): void {
+  const declared = queueNodes(body).find(node => node.isQueued === true
+    || [node.code, node.type].some(value => typeof value === 'string'
+      && ['queued', 'model_queued'].includes(value.toLowerCase())))
+  if (declared === undefined) return
+  const info = parseQueueError(body) ?? parseQueueError({ ...declared, isQueued: true }) ?? { isQueued: true }
+  const delay = queueDelayMs(info) ?? retryAfterMsFromResponse(headers)
+  throw new ModelQueuedError('模型排队中', {
+    queueInfo: { ...info },
+    ...(delay === undefined ? {} : { retryAfterMs: Math.min(delay, QUEUE_MAX_DELAY_MS) }),
+  })
+}
+
+/** 保留原响应体供渠道原有鉴权、额度错误处理消费。 */
+export async function checkQueuedResponse(response: Response): Promise<Response> {
+  if (!response.ok) {
+    const body = await response.clone().text().catch(() => undefined)
+    if (body !== undefined) throwIfModelQueued(body, response.headers)
+  } else if (response.body !== null && response.headers.get('content-type')?.includes('application/json')) {
+    const decoder = new TextDecoder()
+    let prefix: string | undefined = ''
+    const reader = response.body.getReader()
+    let cancelling: Promise<void> | undefined
+    // 保留源 reader 的取消完成状态，不能依赖已进入错误状态的下游流。
+    const cancel = (reason?: unknown): Promise<void> => {
+      cancelling ??= reader.cancel(reason).finally(() => reader.releaseLock())
+      return cancelling
+    }
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { done, value: chunk } = await reader.read()
+          if (cancelling !== undefined) return
+          if (done) {
+            reader.releaseLock()
+            controller.close()
+            return
+          }
+          if (prefix !== undefined) {
+            prefix += decoder.decode(chunk, { stream: true })
+            // shortcut: 只检查开头 64 KiB；上游出现更大的排队错误 JSON 时扩展识别。
+            if (prefix.length > 65_536 || (prefix.trimStart().length > 0 && !prefix.trimStart().startsWith('{'))) {
+              prefix = undefined
+            } else {
+              let parsed: unknown
+              try { parsed = JSON.parse(prefix) } catch { /* JSON 可能跨块，继续读取。 */ }
+              if (parsed !== undefined) {
+                prefix = undefined
+                throwIfModelQueued(parsed, response.headers)
+              }
+            }
+          }
+          controller.enqueue(chunk)
+        } catch (error) {
+          await cancel(error).catch(() => {})
+          controller.error(error)
+        }
+      },
+      cancel,
+    })
+    return new Response(body, response)
+  }
+  return response
 }
 
 /**

@@ -39,6 +39,7 @@ import { anthropicFrames, anthropicMessage, countTokens, foldAnthropicOutcome, f
 import { toMessagesResponse, tryOptimizations } from './local-optimize.js'
 import { carryFailure, forwardFailure } from './failure.js'
 import { deferStreamResponse } from './deferred-response.js'
+import { geminiEndpoint, geminiError, geminiRoute } from './gemini.js'
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024
 const REQUEST_ID_HEADER = 'x-ofm-request-id'
@@ -104,9 +105,9 @@ export function generateKey() {
 /** Constant-time comparison of a bearer token against the issued key. */
 export function keyMatches(presented, expected) {
   if (typeof presented !== 'string' || typeof expected !== 'string') return false
-  const a = Buffer.from(presented)
-  const b = Buffer.from(expected)
-  return a.byteLength === b.byteLength && crypto.timingSafeEqual(a, b)
+  const a = crypto.createHash('sha256').update(presented).digest()
+  const b = crypto.createHash('sha256').update(expected).digest()
+  return crypto.timingSafeEqual(a, b)
 }
 
 function bearerOf(req) {
@@ -342,8 +343,12 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
     if (handleRequest && await handleRequest(req, res)) return
     const url = new URL(req.url ?? '/', 'http://localhost')
     const path = url.pathname.replace(/\/+$/, '') || '/'
+    let gemini
+    try { gemini = geminiRoute(path) }
+    catch { geminiError(res, 400, 'invalid Gemini model path'); return }
     const settings = config()
     if (!settings.enabled) {
+      if (gemini) { geminiError(res, 503, 'the forward listener is switched off'); return }
       openAiError(res, 503, 'service_unavailable', 'the forward listener is switched off in Our Free Model settings')
       return
     }
@@ -360,8 +365,16 @@ export async function startForwardServer({ config, complete, modelRows, log = ()
       json(res, 200, health())
       return
     }
-    if (!authorized(req, settings.key)) {
+    const googleKey = req.headers['x-goog-api-key'] ?? url.searchParams.get('key')
+    const googleAuthorized = gemini && typeof settings.key === 'string' && settings.key !== ''
+      && keyMatches(googleKey, settings.key)
+    if (!authorized(req, settings.key) && !googleAuthorized) {
+      if (gemini) { geminiError(res, 401, 'missing or invalid API key'); return }
       openAiError(res, 401, 'invalid_request_error', 'missing or invalid API key')
+      return
+    }
+    if (gemini) {
+      await serveCompletion(req, res, complete, geminiEndpoint({ readBody, json, modelRows, route: gemini, url }), heartbeatMs, trace)
       return
     }
     if (req.method === 'GET' && (path === '/v1/models' || path === '/models')) {
@@ -684,7 +697,7 @@ function authorized(req, key) {
 function corsHeaders() {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'authorization, content-type, x-api-key',
+    'access-control-allow-headers': 'authorization, content-type, x-api-key, x-goog-api-key, x-goog-api-client',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-max-age': '600',
   }
@@ -1048,14 +1061,15 @@ async function responsesEndpoint(req, res, complete, options = {}) {
       if (messageIndex !== undefined) return
       messageIndex = nextOutputIndex++
       order.push('message')
-      say('response.output_item.added', { output_index: messageIndex, item: { type: 'message', role: 'assistant', item_id: `msg_${messageIndex}`, content: [] } })
+      say('response.output_item.added', { output_index: messageIndex, item: { id: `msg_${messageIndex}`, type: 'message', status: 'in_progress', role: 'assistant', content: [] } })
+      say('response.content_part.added', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } })
     }
     const announceCall = (openAiIndex, name) => {
       if (callIndexes.has(openAiIndex)) return
       const index = nextOutputIndex++
       callIndexes.set(openAiIndex, index)
       order.push(openAiIndex)
-      say('response.output_item.added', { output_index: index, item: { type: 'function_call', item_id: `fc_${index}`, call_id: `fc_${index}`, name, arguments: '' } })
+      say('response.output_item.added', { output_index: index, item: { id: `fc_${index}`, type: 'function_call', status: 'in_progress', call_id: `fc_${index}`, name, arguments: '' } })
     }
     let usage
     let outcome
@@ -1064,7 +1078,7 @@ async function responsesEndpoint(req, res, complete, options = {}) {
         if (res.destroyed) return
         if (chunk.type === 'text-delta') {
           announceMessage()
-          say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, delta: chunk.text })
+          say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, delta: chunk.text })
           return
         }
         if (chunk.type === 'tool-call-delta') {
@@ -1111,13 +1125,38 @@ async function responsesEndpoint(req, res, complete, options = {}) {
     // the lane's fold order, which is the announcement order for every shape
     // the free lane emits; a call the ceiling cut mid-JSON simply drops out).
     const finalCalls = executableCalls(outcome, tools)
-    const messageRow = outcome.text ? { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: outcome.text }] } : undefined
+    if (messageIndex === undefined && outcome.text) {
+      announceMessage()
+      say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, delta: outcome.text })
+    }
+    const announcedCalls = order.filter(entry => entry !== 'message').length
+    for (let position = announcedCalls; position < finalCalls.length; position++) {
+      const row = finalCalls[position]
+      const openAiIndex = `outcome:${position}`
+      announceCall(openAiIndex, row.name)
+      say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(openAiIndex)}`, output_index: callIndexes.get(openAiIndex), delta: row.arguments })
+    }
+    const messageRow = outcome.text ? { id: `msg_${messageIndex}`, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: outcome.text, annotations: [] }] } : undefined
     const output = []
     let callPos = 0
     for (const entry of order) {
-      if (entry === 'message') { if (messageRow !== undefined) output.push(messageRow); continue }
+      if (entry === 'message') {
+        if (messageRow !== undefined) {
+          output.push(messageRow)
+          say('response.output_text.done', { item_id: messageRow.id, output_index: messageIndex, content_index: 0, text: outcome.text })
+          say('response.content_part.done', { item_id: messageRow.id, output_index: messageIndex, content_index: 0, part: messageRow.content[0] })
+          say('response.output_item.done', { output_index: messageIndex, item: messageRow })
+        }
+        continue
+      }
       const row = finalCalls[callPos++]
-      if (row !== undefined) output.push({ type: 'function_call', call_id: row.id, name: row.name, arguments: row.arguments })
+      if (row !== undefined) {
+        const index = callIndexes.get(entry)
+        const item = { id: `fc_${index}`, type: 'function_call', status: 'completed', call_id: `fc_${index}`, name: row.name, arguments: row.arguments }
+        output.push(item)
+        say('response.function_call_arguments.done', { item_id: item.id, output_index: index, name: row.name, arguments: row.arguments })
+        say('response.output_item.done', { output_index: index, item })
+      }
     }
     const final = response({
       status: status(outcome),
@@ -1225,6 +1264,7 @@ async function messagesEndpoint(req, res, complete, options = {}) {
     model,
     messages,
     tools: parsed.tools,
+    ...parsed.toolChoice === undefined ? {} : { toolChoice: parsed.toolChoice },
     ...parsed.maxTokens === undefined ? {} : { maxTokens: parsed.maxTokens },
     ...parsed.temperature === undefined ? {} : { temperature: parsed.temperature },
     ...parsed.reasoningEffort === undefined ? {} : { reasoningEffort: parsed.reasoningEffort },

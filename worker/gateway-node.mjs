@@ -508,6 +508,27 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
       let concReleased = false
       let releaseConc = () => {}
 
+      // A client can walk away at any point, and two of those windows are long:
+      // the rate-limiter awaits during admission, and the `await gateway.fetch`
+      // that lasts until the relay sends its headers. Registering the cleanup
+      // only after the fetch resolves means neither window releases the slot,
+      // so the per-IP and per-account counters ratchet up until a restart and
+      // every later turn is refused with 429 (#680). The listener therefore
+      // goes on before anything can await, and it drives the AbortController
+      // that the upstream fetch actually receives.
+      let clientGone = false
+      let upstreamStream = null
+      const clientAbort = new AbortController()
+      const onClientGone = () => {
+        if (clientGone) return
+        clientGone = true
+        stopKeepalive()
+        releaseConc()
+        try { clientAbort.abort() } catch { /* already aborted */ }
+        try { upstreamStream?.destroy() } catch { /* the client is gone either way */ }
+      }
+      res.on('close', onClientGone)
+
       try {
         const bodyText = req.method === 'POST' || req.method === 'PUT' ? Buffer.concat(chunks).toString('utf8') : ''
         const isChat = req.method === 'POST' && url.pathname.endsWith('/chat/completions')
@@ -541,6 +562,10 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
             }
           }
         }
+
+        // A caller that left while the limiters were still answering must not
+        // take a slot it will never hand back.
+        if (clientGone) return
 
         // ── concurrency gates on chat turns: check both, then take both ────
         // Per-IP first, then the per-account ceiling a shared token cannot
@@ -589,6 +614,10 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
           method: req.method,
           headers,
           body: req.method === 'POST' || req.method === 'PUT' ? bodyText : undefined,
+          // Ties the core's upstream call to the client connection: when the
+          // caller disappears the relay connection is torn down too, instead of
+          // staying open and billing capacity for an answer nobody will read.
+          signal: clientAbort.signal,
         })
         const response = await gateway.fetch(request, { ...env, RATE_LIMITER: env.RATE_LIMITER ?? limiters.RATE_LIMITER, DAILY_LIMITER: env.DAILY_LIMITER ?? limiters.DAILY_LIMITER }, {
           waitUntil() {},
@@ -615,6 +644,9 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
         })
 
         const scanner = createUsageScanner()
+        // The caller left while the relay was still thinking: nothing to write
+        // to, and the slot has already been given back by `onClientGone`.
+        if (clientGone) { releaseConc(); return }
         if (!earlySent) {
           res.writeHead(response.status, (() => { const out = {}; response.headers.forEach((v, n) => { out[n] = v }); return out })())
         }
@@ -638,6 +670,7 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
           return
         }
         const upstream = Readable.fromWeb(response.body)
+        upstreamStream = upstream
         upstream.on('data', chunk => {
           const text = chunk.toString('utf8')
           res.write(text)
@@ -656,11 +689,14 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
           releaseConc()
           try { res.destroy() } catch { /* client already gone */ }
         })
-        res.on('close', () => { stopKeepalive(); if (!res.writableEnded) releaseConc() })
       } catch (error) {
         // The gates may already be holding this request's slots; a thrown
         // gateway call is exactly the path that used to leak them.
         releaseConc()
+        // A cancellation is not a server fault: the abort this gateway itself
+        // raised is the expected way out, so it must not be logged as one or
+        // counted as a 500 the caller asked for.
+        if (clientGone) return
         analytics.record({ hash: ipHash, chat: req.method === 'POST' && url.pathname.endsWith('/chat/completions'), status: 500, tokensIn: 0, tokensOut: 0, model: null, rejected: true })
         if (earlySent) emitInStreamError({ error: { message: 'gateway request failed' } })
         else {

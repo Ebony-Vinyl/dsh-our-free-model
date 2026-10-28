@@ -23,4 +23,6 @@ npm run typecheck
 
 修改 vendored 源码后需要运行 `node scripts/build-channel-pack.mjs` 同步生成包；网关回归也会捕获源码已修而生成包未更新的情况。
 
+独立端通过 `channels/contracts.mjs` 提供同名消息工厂，并用 `node scripts/build-standalone-channels.mjs` 同步业务产物。`node scripts/standalone-channels-test.mjs` 检查该产物的两个端点仍保留工具 ID 与结果；`node scripts/build-standalone-channels.mjs --check` 检查它与渠道包一致，避免重建后缺少工厂导出或继续运行旧转换代码。
+
 这些检查证明消息转换和本地序列化行为，不替代真实远端模型或完整桌面宿主验收。签名发布清单与 `release-readiness` 仍按 [贡献者和发布签名流程](contributor-ci-signing.md) 由持钥维护者准备。

@@ -32,8 +32,12 @@ const settings = { enabled: true }
 const summary = { settings, catalog: [], networkMode: 'fixture' }
 const context = {
   ...react, h: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }), Fragment: 'fragment',
-  Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle',
-  pageNames: ['overview', 'models', 'usage', 'channels', 'eac', 'settings', 'connection'], API: '/api/management',
+  Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Workspace: 'Workspace', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle', DisclaimerDialog: 'DisclaimerDialog',
+  // `App` navigates against the sidebar-derived list (`navigationPages`), so that
+  // is the name this sandbox has to supply. The value only needs to cover the
+  // pages this suite walks through — the sidebar/type agreement itself is
+  // pinned by `standalone-nav-test.mjs`.
+  navigationPages: ['overview', 'workspace', 'models', 'usage', 'channels', 'eac', 'settings', 'connection'], API: '/api/management',
   messageOf: error => error.message, AbortSignal, URLSearchParams, location: { hash: '' }, history: {},
   window: { scrollTo() {}, addEventListener() {}, removeEventListener() {}, setInterval() { return 1 }, clearInterval() {} },
   document: { hidden: false }, navigator: { clipboard: { writeText: async () => {} } },
@@ -47,6 +51,11 @@ const flush = async () => { for (const effect of effects.splice(0)) effect(); aw
 render(); await flush()
 let tree = render()
 const host = () => all(tree).find(node => node.type === 'Sidebar').props.host
+// #678：侧边栏列了「模型工作台」，但白名单里没有它，`navigate('workspace')` 被
+// `includes` 静默丢弃 —— 点击无反应、无报错、无 loading。白名单现在从侧边栏
+// 推导，这一条钉住「侧边栏有的页面，点了真的会切过去」。
+host().navigate('workspace'); tree = render()
+assert.ok(all(tree).some(node => node.type === 'Workspace'), '「模型工作台」必须可达，点击后真的切页（#678）')
 host().navigate('settings'); tree = render()
 assert.ok(all(tree).some(node => node.type === 'LazyPage' && node.props.name === 'settings'))
 host().navigate('models'); tree = render()

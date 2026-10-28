@@ -20,12 +20,26 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+      # The desktop build stages the model workspace's engine binary, and
+      # `scripts/prepare-desktop.mjs` refuses to package an installer without one
+      # for the host platform. The repository only records `win32-x64` in
+      # `vendor/magpie/engine.json`, so a macOS runner has to build its own —
+      # without this step the bundle fails at `beforeBuildCommand` with
+      # "模型工作台需要 darwin-arm64 的引擎二进制". magpie's own go.mod pins
+      # `go 1.26.8`, hence the floor here; `cache: false` because this repository
+      # has no go.sum for setup-go to key a cache on.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+          cache: false
       - name: Install dependencies
         run: |
           npm install
           npm --prefix packages/standalone ci
           node scripts/build-standalone-ui.mjs
           npm --prefix packages/desktop ci --ignore-scripts
+      - name: Build the model-workspace engine
+        run: node scripts/build-magpie-engine.mjs
       - name: Build macOS dmg
         env:
           CI: true

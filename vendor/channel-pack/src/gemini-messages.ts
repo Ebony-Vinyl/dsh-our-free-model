@@ -1,3 +1,4 @@
+import { throwIfModelQueued } from './model-queue.js'
 /**
  * Gemini 协议层：DSH 消息 → 上游 `contents`，以及上游 SSE/响应 → DSH `StreamChunk`。
  *
@@ -631,6 +632,7 @@ export async function* consumeGeminiSse(
       return
     }
     if (typeof parsed !== 'object' || parsed === null) return
+    throwIfModelQueued(parsed)
     const frame = parsed as Record<string, unknown>
     // ⚠️ 先试信封形态 `{"response":{…}}`，再试裸 `Response`（原版同序）。
     const inner = typeof frame.response === 'object' && frame.response !== null
@@ -748,6 +750,7 @@ export async function* consumeGeminiSse(
       }
     }
   } finally {
+    await reader.cancel().catch(() => {})
     reader.releaseLock?.()
   }
 

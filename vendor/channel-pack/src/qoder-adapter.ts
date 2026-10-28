@@ -110,6 +110,18 @@ function isQuotaExceededError(error: unknown): boolean {
   return false
 }
 
+/** 丢弃结构损坏或缺关键设备信息的账号，避免坏号阻塞后续健康账号。 */
+function isUsableQoderCredential(value: unknown): value is QoderCredential {
+  if (value === null || typeof value !== 'object') return false
+  const credential = value as Partial<QoderCredential>
+  return typeof credential.access_token === 'string'
+    && credential.access_token.length > 0
+    && (credential.security_oauth_token === undefined
+      || typeof credential.security_oauth_token === 'string')
+    && typeof credential.machine_id === 'string'
+    && credential.machine_id.length > 0
+}
+
 /** 本适配器注册的 provider 路由名（历史常量，等价于 `QODER.id`）。 */
 export const PROVIDER = 'qoder'
 
@@ -198,7 +210,7 @@ export function qoderEffortsFor(model: QoderFallbackModel): string[] {
 }
 
 /**
- * 排队总时长上限（毫秒），可用 `DSH_QODER_QUEUE_TIMEOUT_MS` 覆盖。
+ * 排队等待预算（毫秒），可用 `DSH_QODER_QUEUE_TIMEOUT_MS` 覆盖。
  *
  * ⚠️ **不能用 `parseInt(…) || 默认值`**：`0` 是**合法**配置（表示「不等，立即
  * 判超时」，单测就靠它验证该开关），而 `0` 是 falsy，会被 `||` 静默换成 30 分钟
@@ -210,6 +222,11 @@ function resolveQueueTimeoutMs(): number {
   const parsed = Number.parseInt(raw, 10)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 30 * 60_000
 }
+
+/** 同一账号连续排队到此次数后，优先试下一个可用账号。 */
+const QUEUE_ACCOUNT_MAX_ATTEMPTS = 3
+/** 长时间卡在同一账号时提前换号，避免等完服务端长延迟才发现队列没有进展。 */
+const QUEUE_ACCOUNT_MAX_WAIT_MS = 20_000
 
 /**
  * 读 `AbortSignal.aborted`（**刻意做成函数**）。
@@ -426,7 +443,7 @@ export interface QoderAdapterOptions {
   /** 从凭据存储解析凭据。 */
   resolveCredential: (modelId?: string) => Promise<QoderCredential | undefined>
   /** 静默续期凭据。 */
-  refresh: () => Promise<void>
+  refresh: (accountId?: string) => Promise<void>
   /** 多账号池（用于限流时切换账号与模型黑名单）。 */
   accountPool?: AccountPool
   /**
@@ -469,6 +486,16 @@ export interface QoderAdapterOptions {
    * 未提供时跳过标记（仍会尝试切号），不会因此崩。
    */
   currentAccountId?: () => string | undefined
+  /**
+   * 根据本次凭据绑定请求账号及排队换号；初始化反查失败时不能回退共享默认账号。
+   */
+  queueAccountIdForCredential?: (credential: QoderCredential) => string | undefined | Promise<string | undefined>
+  /** 排队期间成功切换账号时通知宿主。 */
+  onQueueAccountSwitch?: () => void
+  /** 排队换号失败时供宿主记录诊断日志。 */
+  onQueueRotationFailure?: (reason: unknown) => void
+  /** 注入时钟，仅用于让超时/排队边界测试不必真实等待。 */
+  now?: () => number
   /**
    * 注入的休眠实现（**测试用**）。
    *
@@ -514,6 +541,10 @@ export class QoderAdapter extends LlmAdapter {
       }, ms)
       signal?.addEventListener('abort', onAbort, { once: true })
     })
+  }
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now()
   }
 
   /**
@@ -673,12 +704,13 @@ export class QoderAdapter extends LlmAdapter {
     }
 
     // 1. 获取凭据（过期则先静默续期）
-    let credential = await this.options.resolveCredential(options.model)
-    if (credential === undefined || isQoderExpired(credential)) {
-      await this.options.refresh()
-      credential = await this.options.resolveCredential(options.model)
+    let initialCredential = await this.options.resolveCredential(options.model)
+    let activeAccountId = initialCredential === undefined ? undefined : await this.accountIdForCredential(initialCredential)
+    if (initialCredential === undefined || isQoderExpired(initialCredential)) {
+      initialCredential = await this.refreshCredential(options.model, activeAccountId)
+      if (activeAccountId === undefined && initialCredential !== undefined) activeAccountId = await this.accountIdForCredential(initialCredential)
     }
-    if (credential === undefined || credential.access_token.length === 0) {
+    if (initialCredential === undefined || initialCredential.access_token.length === 0) {
       throw new LlmError('qoder: no usable credential; log in first', 'MISSING_CREDENTIAL')
     }
 
@@ -687,7 +719,7 @@ export class QoderAdapter extends LlmAdapter {
     // ⚠️ `uid` 是后加字段，旧凭据里没有；缺它时 WASM 会产出**签名无效**的
     // 请求，服务端回 `Signature invalid (101)`（真实缺陷，用户报障）。
     // 这里调用注入的钩子补一次（实现会调 userinfo 并回写凭据）。
-    credential = await this.ensureUid(credential)
+    let credential = await this.ensureUid(initialCredential)
 
     // 3. 走**加密推理**路径（客户端真实链路，认模型目录 key）。
     //
@@ -778,13 +810,15 @@ export class QoderAdapter extends LlmAdapter {
     // 失败 → 排队时白白续期一次，再落到 harness 的 5 次通用退避（500/1000/2000/
     // 4000/8000 ≈ 共 15.5 秒）—— 而服务端明确要求等 30 秒，于是**永远等不到**；
     // 中国版那条「等 2 秒就能成功」的瞬时排队也因走错路径而反复失败。
-    const queueDeadline = Date.now() + resolveQueueTimeoutMs()
+    const queueStartedAt = this.now()
+    const queueTimeoutMs = resolveQueueTimeoutMs()
+    const queueDeadline = queueStartedAt + queueTimeoutMs
     let queueAttempts = 0
     let authRefreshed = false
     let duplicateRetried = false
     let response: Response
     /**
-     * 已尝试过的账号 id（额度受限切号用）。
+     * 已尝试过的账号 id（本次请求换号用）。
      *
      * ⚠️ 必须跨重试保留（不能在每次迭代里新建）：它是「**已试过哪些账号**」的
      * 记录，用来保证每个账号最多试一次、试完才判定「全部受限」。每次迭代重置
@@ -792,7 +826,7 @@ export class QoderAdapter extends LlmAdapter {
      */
     const triedAccounts = new Set<string>()
     /**
-     * **当前生效账号的 id**（会随额度受限切号而更新）。
+     * **当前生效账号的 id**（会随额度或排队切号而更新）。
      *
      * ⚠️ 是**局部可变**状态、而不是每次都问 `this.options.currentAccountId()`：
      * 那个回调返回的是「池当前的默认账号」，一旦我们切到下一个账号它**不会跟着变**
@@ -800,9 +834,75 @@ export class QoderAdapter extends LlmAdapter {
      * 下次取号又把 B 选中，于是在 A/B 之间**反复空转**
      *（写单测时实测到了：标记记录是 `['acct-A','acct-A']` 而非 `['acct-A','acct-B']`）。
      */
-    let activeAccountId = this.options.currentAccountId?.()
     if (activeAccountId !== undefined && activeAccountId.length > 0) {
       triedAccounts.add(activeAccountId)
+    }
+    const queueTriedAccounts = new Set<string>()
+    let queueActiveAccountId: string | undefined
+    let accountQueueAttempts = 0
+    let accountQueueStartedAt: number | undefined
+    let accountQueueLastCheckAt: number | undefined
+    let queueRotationNoticeEmitted = false
+    let emittedAnyChunk = false
+
+    /** HTTP 与 SSE 排队共用：宽限后只在本次请求里切换，不写额度限制。 */
+    const retryQueuedRequest = async (queueInfo: QoderQueueInfo | undefined): Promise<void> => {
+      const attempts = ++queueAttempts
+      this.assertQueueCanContinue(attempts, queueDeadline, options)
+      accountQueueAttempts += 1
+
+      const now = this.now()
+      accountQueueStartedAt ??= now
+      const queueWaitMs = now - accountQueueStartedAt
+      const queueElapsedMs = Math.max(0, now - queueStartedAt)
+      const rotationDue = accountQueueAttempts >= QUEUE_ACCOUNT_MAX_ATTEMPTS
+        || (queueElapsedMs >= QUEUE_ACCOUNT_MAX_WAIT_MS && accountQueueLastCheckAt === undefined)
+        || (accountQueueLastCheckAt !== undefined
+          && now - accountQueueLastCheckAt >= QUEUE_ACCOUNT_MAX_WAIT_MS)
+      if (rotationDue) {
+        // 首次检查在三次排队后触发；没有备用号时每 20 秒再检查一次，避免高频读账号存储。
+        accountQueueAttempts = 0
+        accountQueueLastCheckAt = now
+        let switched: { credential: QoderCredential; accountId: string } | undefined
+        try {
+          const resolvedQueueId = await this.queueAccountIdForCredential(credential)
+          if (resolvedQueueId !== undefined && resolvedQueueId.length > 0) {
+            queueActiveAccountId = resolvedQueueId
+            queueTriedAccounts.add(resolvedQueueId)
+          }
+          switched = await this.switchAccountOnQueue(
+            options, queueTriedAccounts, queueActiveAccountId, credential,
+          )
+        } catch (error) {
+          // 账号池偶发读盘/凭据服务错误时仍可排队重试原账号；不吞掉取消信号。
+          if (isAborted(options.signal)) throw new LlmError('qoder: 排队等待期间请求已取消', 'QUEUE')
+          if (error instanceof LlmError && error.code === 'QUEUE') throw error
+          if (!queueRotationNoticeEmitted) {
+            queueRotationNoticeEmitted = true
+            try { this.options.onQueueRotationFailure?.(error) } catch { /* 诊断回调不影响请求 */ }
+          }
+        }
+        this.assertQueueCanContinue(attempts, queueDeadline, options)
+        if (switched !== undefined) {
+          credential = switched.credential
+          queueActiveAccountId = switched.accountId
+          activeAccountId = switched.accountId
+          triedAccounts.add(switched.accountId)
+          authRefreshed = false
+          accountQueueAttempts = 0
+          accountQueueStartedAt = undefined
+          accountQueueLastCheckAt = undefined
+          queueRotationNoticeEmitted = false
+          try { this.options.onQueueAccountSwitch?.() } catch { /* 状态通知不影响请求 */ }
+          return
+        }
+        if (!queueRotationNoticeEmitted) {
+          queueRotationNoticeEmitted = true
+          try { this.options.onQueueRotationFailure?.(undefined) } catch { /* 诊断回调不影响请求 */ }
+        }
+      }
+
+      await this.waitForQueue(queueInfo, attempts, queueDeadline, options)
     }
     // 4. 剥掉加密端点的响应信封，交给统一的 OpenAI SSE 消费器。
     //
@@ -821,7 +921,7 @@ export class QoderAdapter extends LlmAdapter {
         const queueInfo = parseQoderQueueError(errorText)
 
         if (queueInfo !== undefined) {
-          await this.waitForQueue(queueInfo, ++queueAttempts, queueDeadline, options)
+          await retryQueuedRequest(queueInfo)
           continue
         }
 
@@ -836,16 +936,18 @@ export class QoderAdapter extends LlmAdapter {
             credential = switched.credential
             activeAccountId = switched.accountId
             authRefreshed = false // 新账号可再续期一次
+            accountQueueAttempts = 0
+            accountQueueStartedAt = undefined
+            accountQueueLastCheckAt = undefined
             continue
           }
           throw new LlmError(`qoder: ${errorDetail(errorText)}`, 'QUOTA_EXCEEDED', { status: response.status })
         }
 
-        // 非排队：认证失败才续期（且每次请求最多一次，避免刷爆 userinfo）。
+        // 非排队：认证失败才续期（每个账号最多一次，避免刷爆 userinfo）。
         if (!authRefreshed) {
           authRefreshed = true
-          await this.options.refresh()
-          const refreshed = await this.options.resolveCredential(options.model)
+          const refreshed = await this.refreshCredential(options.model, activeAccountId)
           if (refreshed === undefined || refreshed.access_token.length === 0) {
             throw new LlmError('qoder: credential expired and refresh failed', 'AUTH', { status: response.status })
           }
@@ -866,9 +968,8 @@ export class QoderAdapter extends LlmAdapter {
         throw new LlmError(`qoder: ${errorDetail(errorText)}`, httpErrorCode(response.status), { status: response.status })
       }
 
-      // ⚠️ 消费 SSE 时**捕获流内排队错误**，走与 HTTP 层**完全相同**的等待逻辑。
-      // `consumeOpenAiSse` 是生成器：无法「try 一次再重试」，故这里手动迭代，
-      // 捕获到排队就等待后重发整条请求（排队期间未产出任何 chunk，可安全重放）。
+      // ⚠️ 消费 SSE 时捕获流内排队错误，走与 HTTP 层完全相同的有限重试策略。
+      // `consumeOpenAiSse` 是生成器，所以这里手动迭代其结果并捕获流内业务错误。
       const inner = consumeOpenAiSse(
         unwrapQoderEnvelopeStream(response, 'qoder'),
         { signal: options.signal },
@@ -887,12 +988,9 @@ export class QoderAdapter extends LlmAdapter {
           step = await iterator.next()
         } catch (error) {
           if (error instanceof ModelQueuedError) {
-            await this.waitForQueue(
-              queueInfoOf(error),
-              ++queueAttempts,
-              queueDeadline,
-              options,
-            )
+            // 已向下游发出片段后不能重放排队请求，避免重复正文或工具调用。
+            if (emittedAnyChunk) throw error
+            await retryQueuedRequest(queueInfoOf(error))
             queued = true
             break
           }
@@ -906,6 +1004,10 @@ export class QoderAdapter extends LlmAdapter {
             if (switched !== undefined) {
               credential = switched.credential
               activeAccountId = switched.accountId
+              authRefreshed = false
+              accountQueueAttempts = 0
+              accountQueueStartedAt = undefined
+              accountQueueLastCheckAt = undefined
               queued = true // 复用「回到循环顶部重发」的语义
               break
             }
@@ -914,6 +1016,7 @@ export class QoderAdapter extends LlmAdapter {
           throw error
         }
         if (step.done === true) break
+        emittedAnyChunk = true
         yield step.value
       }
       if (queued) continue
@@ -968,8 +1071,66 @@ export class QoderAdapter extends LlmAdapter {
     tried.add(next.entry.id)
 
     const credential = next.credential as QoderCredential
-    // 切号后必须重新过一遍 uid 补齐（每个账号的 uid 不同，缺了会签名无效）。
+    // 切号后必须重新过一遍 uid 补齐（每个账号的 uid 不同）。
     return { credential: await this.ensureUid(credential), accountId: next.entry.id }
+  }
+
+  private async accountIdForCredential(credential: QoderCredential): Promise<string | undefined> {
+    return this.options.queueAccountIdForCredential !== undefined
+      ? await this.options.queueAccountIdForCredential(credential)
+      : this.options.currentAccountId?.()
+  }
+
+  private async refreshCredential(model: string, accountId?: string): Promise<QoderCredential | undefined> {
+    await this.options.refresh(accountId)
+    return accountId !== undefined && this.options.accountPool !== undefined
+      ? await this.options.accountPool.resolveCredentialForAccount(accountId) as QoderCredential | undefined
+      : await this.options.resolveCredential(model)
+  }
+
+  /** 排队时反查本次凭据所属账号；本地存储短暂失败不能中断请求。 */
+  private async queueAccountIdForCredential(credential: QoderCredential): Promise<string | undefined> {
+    try {
+      return await this.options.queueAccountIdForCredential?.(credential)
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * 排队持续没有进展时换到另一个账号。
+   *
+   * 只跳过当前请求已试过的账号，不写 `modelRateLimits`：排队是临时服务状态，
+   * 不代表账号额度耗尽。无法补齐候选账号凭据时跳过该账号，继续找下一个。
+   */
+  private async switchAccountOnQueue(
+    options: GenerateOptions,
+    tried: Set<string>,
+    activeAccountId: string | undefined,
+    activeCredential: QoderCredential,
+  ): Promise<{ credential: QoderCredential; accountId: string } | undefined> {
+    const pool = this.options.accountPool
+    if (pool === undefined) return undefined
+    if (activeAccountId !== undefined && activeAccountId.length > 0) tried.add(activeAccountId)
+
+    for (;;) {
+      const next = await pool.getAvailableAccount(this.product.id, options.model, tried)
+      if (next === null || tried.has(next.entry.id)) return undefined
+      tried.add(next.entry.id)
+      try {
+        const candidate: unknown = next.credential
+        if (!isUsableQoderCredential(candidate)) continue
+        // 初始凭据可能来自单账号兼容入口，或账号反查暂时不可用；若池返回同一
+        // 份凭据，跳过它继续找下一个，避免“看似换号、实际仍发给原账号”。
+        if (candidate.access_token === activeCredential.access_token) continue
+        const credential = await this.ensureUid(candidate)
+        return { credential, accountId: next.entry.id }
+      } catch (error) {
+        // 老账号可能缺 uid 且无法补齐；它不应阻挡后续健康账号。
+        if (error instanceof LlmError && error.code === 'MISSING_CREDENTIAL') continue
+        throw error
+      }
+    }
   }
 
   /**
@@ -990,21 +1151,15 @@ export class QoderAdapter extends LlmAdapter {
     // ⚠️ 用 `>=` 而不是 `>`：上限为 **0** 是合法配置（「不等，立即判超时」），
     // 而同一毫秒内 `Date.now() > now + 0` 为 **false**，会让它**先等一次**才
     // 超时 —— 那与「0 = 不等待」的语义不符（单测专门守这一点）。
-    if (Date.now() >= deadline) {
-      throw new LlmError('qoder: 排队等待超时', 'QUEUE')
-    }
-    if (attempts > QUEUE_MAX_ATTEMPTS) {
-      throw new LlmError(
-        `qoder: 排队重试超过上限（${QUEUE_MAX_ATTEMPTS} 次）`,
-        'QUEUE',
-      )
-    }    if (options.signal?.aborted === true) {
-      throw new LlmError('qoder: 排队等待期间请求已取消', 'QUEUE')
-    }
+    this.assertQueueCanContinue(attempts, deadline, options)
     const waitMs = qoderQueueDelayMs(queueInfo)
     // ⚠️ 拿不到服务端延迟时**不忙等**：用保守的短退避，避免瞬间烧掉机会
     // （客户端 W7c() 此时会退回 ltA() 指数退避）。
-    await this.sleep(waitMs ?? 1_000, options.signal)
+    // 预留剩余总预算，不能因为一次较长的 Retry-After 越过用户设定的总超时。
+    // 服务端给出 0 时保留极短间隔，避免不同机器上出现无间隔的忙循环。
+    const requestedWaitMs = Math.max(100, waitMs ?? 1_000)
+    const remainingMs = Math.max(0, deadline - this.now())
+    await this.sleep(Math.min(requestedWaitMs, remainingMs), options.signal)
     // ⚠️ 这次检查**不是**上一次的重复：它检测的是「**等待期间**被中止」。
     // `AbortSignal.aborted` 是随时间的可变状态，但 TS 会静态窄化成字面量
     // `false` 而报「无重叠」—— 故经**不透明函数**读取，避免静态收窄掩盖
@@ -1012,7 +1167,29 @@ export class QoderAdapter extends LlmAdapter {
     if (isAborted(options.signal)) {
       throw new LlmError('qoder: 排队等待期间请求已取消', 'QUEUE')
     }
-    // ⚠️ 排队**不刷新凭据**、不换账号：它与认证和额度都无关。
+    if (this.now() >= deadline) {
+      throw new LlmError('qoder: 排队等待超时', 'QUEUE')
+    }
+  }
+
+  /** 对总等待时长、总尝试次数和用户取消做统一检查。 */
+  private assertQueueCanContinue(
+    attempts: number,
+    deadline: number,
+    options: GenerateOptions,
+  ): void {
+    if (this.now() >= deadline) {
+      throw new LlmError('qoder: 排队等待超时', 'QUEUE')
+    }
+    if (attempts > QUEUE_MAX_ATTEMPTS) {
+      throw new LlmError(
+        `qoder: 排队重试超过上限（${QUEUE_MAX_ATTEMPTS} 次）`,
+        'QUEUE',
+      )
+    }
+    if (isAborted(options.signal)) {
+      throw new LlmError('qoder: 排队等待期间请求已取消', 'QUEUE')
+    }
   }
 
   /**

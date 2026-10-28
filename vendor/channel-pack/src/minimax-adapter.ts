@@ -1,3 +1,5 @@
+import { withQueueAccountRotation } from './queue-rotation.js'
+import { checkQueuedResponse } from './model-queue.js'
 /**
  * MiniMax Code 模型适配器。
  *
@@ -413,8 +415,7 @@ export class MinimaxAdapter extends LlmAdapter {
       headers: minimaxInferHeaders(credential),
       body: JSON.stringify(payload),
       signal: options.signal,
-    })
-
+    }).then(checkQueuedResponse)
     if (!response.ok) {
       const text = await response.text().catch(() => '')
       // ⚠️ 402 是**余额不足**，必须原样透出 —— 它是最常见的真实失败，
@@ -440,7 +441,7 @@ export function registerMinimaxLlm(
   options: MinimaxAdapterOptions,
 ): MinimaxAdapter {
   const product = options.product ?? MINIMAX
-  const adapter = new MinimaxAdapter(options)
+  const adapter = withQueueAccountRotation(product.id, options, scoped => new MinimaxAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   return adapter
 }

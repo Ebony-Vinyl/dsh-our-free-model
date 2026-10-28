@@ -1,3 +1,5 @@
+import { withQueueAccountRotation } from './queue-rotation.js'
+import { checkQueuedResponse } from './model-queue.js'
 /**
  * Cline LLM 适配器。
  *
@@ -158,7 +160,7 @@ export interface ClineAdapterOptions {
   /** 从凭据存储解析凭据。 */
   resolveCredential: (modelId?: string) => Promise<ClineCredential | undefined>
   /** 静默续期凭据。 */
-  refresh: () => Promise<void>
+  refresh: (accountId?: string, reason?: 'auth') => Promise<void>
   /** 多账号池（用于限流时切换账号与模型黑名单）。 */
   accountPool?: AccountPool
   /**
@@ -611,7 +613,7 @@ export class ClineAdapter extends LlmAdapter {
           { status: response.status },
         )
       }
-      await this.options.refresh()
+      await this.options.refresh(undefined, 'auth')
       const refreshed = await this.options.resolveCredential(options.model)
       if (refreshed === undefined || refreshed.access_token.length === 0) {
         throw new LlmError('cline: credential expired and refresh failed', 'AUTH', { status: response.status })
@@ -877,7 +879,7 @@ export class ClineAdapter extends LlmAdapter {
         },
         body,
         signal: options.signal,
-      })
+      }).then(checkQueuedResponse)
     } catch (error) {
       if (options.signal?.aborted === true) throw error
       if (isTransportError(error)) {
@@ -967,7 +969,7 @@ const CLINE_REGION_FORBIDDEN_MARKERS: readonly string[] = [
  */
 export function registerClineLlm(ctx: Context, options: ClineAdapterOptions): ClineAdapter {
   const product = options.product ?? CLINE
-  const adapter = new ClineAdapter(options)
+  const adapter = withQueueAccountRotation(product.id, options, scoped => new ClineAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   // 返回实例：Channel Pack「显示列表」需要 `listAllModels()`（不受黑名单影响、
   // 带最终展示名）。`ctx.llm` 不透传自定义方法，须由调用方持有引用。
