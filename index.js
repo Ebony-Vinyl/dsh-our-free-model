@@ -46,6 +46,7 @@ import { modelAvailability } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
 import { PluginUpdater, installationIsManaged } from './src/updater.js'
+import { clientHealth, writeRepairScript, repairHint } from './src/client-health.js'
 import { selfReload, watchPackage, isReloading, canSafelyHotReload } from './src/reload.js'
 import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
@@ -2094,6 +2095,20 @@ export function createApiRoutes(deps) {
       // for it — the same shape as the forward keys above.
       if (method === 'GET' && routePath === '/egress/url') {
         return send(200, { url: deps.settings.get().egress?.url ?? '' })
+      }
+
+      // ── desktop client health ───────────────────────────────────────────────
+      // The read side is a stat() over the shell's cookie database — a size and
+      // a timestamp, never a cookie value — plus whether the repair script is
+      // on disk. The write side only generates the script: the database itself
+      // is Chromium-held while the shell runs, so the plugin hands the user a
+      // verified self-heal script instead of pretending it deleted anything.
+      if (method === 'GET' && routePath === '/client-health') {
+        return send(200, { ...clientHealth(), hint: repairHint() })
+      }
+      if (method === 'POST' && routePath === '/client-health/cookie-fix') {
+        const result = writeRepairScript()
+        return send(200, { ok: true, ...result, hint: repairHint() })
       }
       if (method === 'POST' && routePath === '/bench') {
         const body = await readJson(req)
