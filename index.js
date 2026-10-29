@@ -1233,7 +1233,7 @@ export function apply(ctx, config) {
           ...current,
           prompts,
           ...patch.enabled === undefined ? {} : { enabled: patch.enabled === true },
-          ...patch.rtk === undefined ? {} : { rtk: patch.rtk === true },
+          ...patch.rtk === undefined ? {} : { rtk: patch.rtk === true },          ...patch.stripHistoryReasoning === undefined ? {} : { stripHistoryReasoning: patch.stripHistoryReasoning === true },
         } })
         settings.flush()
         return publicTokenSaver(settings.get().tokenSaver)
@@ -2188,6 +2188,7 @@ function publicTokenSaver(section) {
   return {
     enabled: config.enabled,
     rtk: config.rtk,
+    stripHistoryReasoning: config.stripHistoryReasoning,
     prompts: { caveman: config.caveman, ponytail: config.ponytail },
     cavemanLevels: CAVEMAN_LEVELS,
     ponytailLevels: PONYTAIL_LEVELS,
