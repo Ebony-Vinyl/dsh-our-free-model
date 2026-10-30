@@ -600,6 +600,52 @@
     "modelsUrl": "https://api.deepseek.com/models"
   },
   {
+    "id": "deepseek_bridge",
+    "name": "DeepSeek Bridge (local)",
+    "category": "apikey",
+    "auth": {
+      "kind": "apiKey",
+      "env": "DSF_BRIDGE_API_KEY",
+      "url": "http://127.0.0.1:8000/"
+    },
+    "baseUrl": "http://127.0.0.1:8000/v1",
+    "format": "openai-chat",
+    "models": [
+      {
+        "id": "deepseek-chat",
+        "name": "DeepSeek Chat",
+        "contextWindow": null,
+        "vision": null,
+        "reasoning": null
+      },
+      {
+        "id": "deepseek-think",
+        "name": "DeepSeek Think",
+        "contextWindow": null,
+        "vision": null,
+        "reasoning": true
+      },
+      {
+        "id": "deepseek-search",
+        "name": "DeepSeek Search",
+        "contextWindow": null,
+        "vision": null,
+        "reasoning": null
+      },
+      {
+        "id": "deepseek-think-search",
+        "name": "DeepSeek Think + Search",
+        "contextWindow": null,
+        "vision": null,
+        "reasoning": true
+      }
+    ],
+    "notes": "Web bridge over the logged-in DeepSeek session (headless CloakBrowser, CDP :9224). Needs dsf-bridge.service running.",
+    "website": "https://github.com/zDEBRYrp/DeepSeek-Api-Free",
+    "local": true,
+    "source": "local"
+  },
+  {
     "id": "experiential",
     "name": "Experiential Labs",
     "category": "apikey",
