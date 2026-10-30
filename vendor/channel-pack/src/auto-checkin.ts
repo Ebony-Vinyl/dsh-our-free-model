@@ -1,10 +1,11 @@
 /**
- * 「每日首次启动自动签到」—— 开关、当日记录与执行体。
+ * 「每日自动签到」—— 开关、当日记录与执行体。
  *
  * ## 它做什么
  *
- * DSH 启动后延迟一小段（默认 30 秒，见下），若这个开关开着、且**今天（UTC+8）
- * 还没跑过**，就串行遍历「账号池里真的有账号的渠道」，逐个调内部
+ * 启动后延迟一小段（默认 30 秒，见下）跑一次；进程常驻时另有 2.5 小时的跨天
+ * 巡检，进入新的一天（UTC+8）后自动补一轮（见 `start()`）。若这个开关开着、
+ * 且**今天还没跑过**，就串行遍历「账号池里真的有账号的渠道」，逐个调内部
  * `credits.claimAll`；跑完把日期与**逐渠道结果**写进文档 ⇒ **当天不再触发**。
  * 用户手动点「全部渠道签到」不受此限（那是显式操作，永远放行）。
  *
@@ -23,7 +24,7 @@
  *    若抢在续期之前签到，过期凭据会让整轮变成失败。
  * 即便如此仍可能抢在续期完成前（多账号时续期本身就要几秒到几十秒），故**再加
  * 一道保险**：整轮跑完**没有任何一条能证明「今天已被处理」**时**不记日期**，
- * 下次启动会重试（见 `shouldMarkToday`）。延迟可用
+ * 下次巡检（或下次启动）会重试（见 `shouldMarkToday`）。延迟可用
  * `DSH_CHANNEL_PACK_AUTO_CHECKIN_DELAY_MS` 覆盖，`0` 合法（表示立刻跑，单测用它）。
  *
  * ## 什么算「今天已被处理」
@@ -59,7 +60,7 @@ import { resolveChannelPackHome } from './channel-pack-store.js'
 import { formatClaimGains } from './credits.js'
 import { ZCODE } from './zcode-product.js'
 import type { BadgeRpcResult } from './usage-badge.js'
-import type { RpcCreditsClaimAllResponse, RpcUsageAutoCheckinState } from './types.js'
+import type { AutoCheckinChannelState, RpcCreditsClaimAccountResult, RpcCreditsClaimAllResponse, RpcUsageAutoCheckinState } from './types.js'
 
 /** 独立文档的文件名（与 state.json / ui-preferences.json 同目录）。 */
 export const AUTO_CHECKIN_FILE = 'auto-checkin.json'
@@ -88,7 +89,7 @@ export interface AutoCheckinDoc {
   /** 上次跑完的时刻（毫秒）；0 = 从未跑过。 */
   lastAt: number
   /** 逐渠道结果（顺序即遍历顺序）；空数组 = 没有可展示的逐渠道信息。 */
-  channels: Array<{ provider: string; text: string }>
+  channels: AutoCheckinChannelRow[]
   /**
    * 用户点过「关闭」的那一轮（存的是那一刻的 `lastAt`）。
    *
@@ -113,16 +114,63 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 /** 逐渠道条目的上限：渠道总数就 12 个，留一点余量即可（脏数据不该撑大文档）。 */
 const MAX_CHANNEL_ENTRIES = 24
 
+/**
+ * 逐渠道结果的一行。
+ *
+ * `state` 是**结构化**状态（面板据此上色、分组），由执行体在产出这一行时当场
+ * 判定 —— 不从 `text` 正则抠字（文案改一个字，颜色就全错）。
+ * 缺省 = 旧文档写下的行，展示层按 `unknown` 处理（不给颜色、不排序）。
+ */
+export interface AutoCheckinChannelRow {
+  provider: string
+  text: string
+  state?: AutoCheckinChannelState
+}
+
+const CHANNEL_STATES: readonly AutoCheckinChannelState[] = [
+  'claimed', 'already', 'failed', 'error', 'inactive', 'skipped', 'nothing', 'unknown',
+] as const
+
+/**
+ * 从**旧文档的文案**反推状态（一次性迁移，仅用于没有 `state` 字段的历史记录）。
+ *
+ * ⚠️ 这是**兜底**，不是常规判据：新记录一律由 `describeChannelState` 当场判定。
+ * 之所以还留它：`state` 是 2026-10-23 才加的字段，升级后第一次打开面板时，磁盘
+ * 里躺着的是旧版本写下的行 —— 全显示「未知」会让「哪个渠道没成功」这个核心用途
+ * 当场失效，而用户并没有做错什么。
+ *
+ * 判据保守：只认 `describeChannel` 自己产出的那几句固定文案，认不出就返回
+ * `undefined`（展示层按未知处理），**不猜**。文案将来若改，这里会自然退化成
+ * 未知而不会给出**错的**状态 —— 宁可不说，也不说错。
+ */
+function inferLegacyState(text: string): AutoCheckinChannelState | undefined {
+  // 顺序与 `describeChannelState` 一致：失败优先，避免失败被同行的成功掩盖。
+  if (text.includes('失败')) return 'failed'
+  if (text === '出错') return 'error'
+  if (text.includes('领取成功') || /个\s+\+/.test(text)) return 'claimed'
+  if (text.includes('今天已领')) return 'already'
+  if (text.includes('未开启')) return 'inactive'
+  if (text.includes('需手动签到') || text.includes('无签到接口')) return 'skipped'
+  if (text === '无可领') return 'nothing'
+  return undefined
+}
+
 /** 归一化逐渠道结果（丢非法项、截断超长文本、限制条数）。 */
-function sanitizeChannels(raw: unknown): Array<{ provider: string; text: string }> {
+function sanitizeChannels(raw: unknown): AutoCheckinChannelRow[] {
   if (!Array.isArray(raw)) return []
-  const out: Array<{ provider: string; text: string }> = []
+  const out: AutoCheckinChannelRow[] = []
   for (const item of raw) {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) continue
     const record = item as Record<string, unknown>
     if (typeof record.provider !== 'string' || record.provider.length === 0) continue
     if (typeof record.text !== 'string') continue
-    out.push({ provider: record.provider, text: record.text.slice(0, 120) })
+    const text = record.text.slice(0, 120)
+    const state = CHANNEL_STATES.includes(record.state as AutoCheckinChannelState)
+      ? (record.state as AutoCheckinChannelState)
+      : inferLegacyState(text)
+    // ⚠️ 只写有值的字段：`state: undefined` 会让 JSON.stringify 丢掉这一项没错，
+    // 但会让 `toEqual({...})` 类断言在别的场景意外失败，索性按对象形状分开构造。
+    out.push(state === undefined ? { provider: record.provider, text } : { provider: record.provider, text, state })
     if (out.length >= MAX_CHANNEL_ENTRIES) break
   }
   return out
@@ -172,6 +220,24 @@ export const DSH_CHANNEL_PACK_AUTO_CHECKIN_DELAY_MS = 'DSH_CHANNEL_PACK_AUTO_CHE
 
 /** 默认延迟（毫秒）。理由见文件头「为什么延迟 30 秒」。 */
 export const AUTO_CHECKIN_DELAY_MS = 30_000
+
+/**
+ * 常驻进程的跨天巡检间隔（毫秒，默认 2.5 小时）。
+ *
+ * 启动补跑只覆盖「当天第一次启动」；独立服务会连续运行多天，必须有跨天触发点。
+ * 巡检只做日期比较，真正的判断与在飞去重都在 `runIfDue()` 里，成本可以忽略；
+ * 过零点后最多晚 2.5 小时签到。
+ */
+export const AUTO_CHECKIN_TICK_MS = 150 * 60 * 1000
+
+/**
+ * 今天尝试过、但没有任何渠道能证明「今天已被处理」时的重试间隔下限（毫秒）。
+ *
+ * 失败（凭据过期 / 网络）时 `runIfDue()` 不记 `lastDate`，会随巡检自然重试。
+ * 该值是**下限保护**：巡检间隔（默认 2.5 小时）不小于它时不生效；只有巡检被
+ * 自定义调小到 1 小时以内时，才用它拦住「每 15 分钟打一轮上游」的高频重试。
+ */
+export const AUTO_CHECKIN_RETRY_MS = 60 * 60 * 1000
 
 /**
  * 读延迟配置。
@@ -363,7 +429,7 @@ export function describeRun(totals: RunTotals): string {
  * 而且界面还显示「1 个今天已领」，用户毫无提示。渠道自己用
  * `ClaimOutcome.coversToday` 标出「这条不算今天」，本函数只负责数。
  *
- * 反例（不记、下次启动重试）：
+ * 反例（不记日期、下次启动重试）：
  * - 整轮零成功零已领（凭据全过期 / 网络不通 / 启动太早抢在续期之前）——
  *   若记了，用户当天就再也不会自动签到，且界面只说「上次：N 个失败」；
  * - 跑完但**没有一条能证明今天**（例如只有 Qoder 且赶在 10:00 之前）——
@@ -371,6 +437,10 @@ export function describeRun(totals: RunTotals): string {
  * - 一个渠道都没跑（全被跳过）：没有意义，不记。
  * 反之「有成功也有失败」要记：否则一个坏账号会让插件每次启动都把好账号再领一遍
  * （虽然幂等，但白白多发请求）。
+ *
+ * ⚠️ 本函数只管**日期**。这些反例的逐渠道结果仍照常落盘（见 `performRun` 里
+ * 「不记日期也要写 channels」那段）—— 不记日期是「今天还要重试」，不是「这轮
+ * 结果不值得留」。
  */
 export function shouldMarkToday(totals: RunTotals): boolean {
   return totals.coversToday > 0
@@ -422,8 +492,51 @@ export function describeChannel(summary: {
   return parts.join('，')
 }
 
-/** 装配层注入的依赖（全部可替换 ⇒ 单测零网络、零文件系统、零等待）。 */
-export interface AutoCheckinDeps {
+/**
+ * 从渠道返回值判定**结构化状态**（面板据此上色、排序）。
+ *
+ * 口径：
+ * - 有失败 ⇒ `failed`（即便同时有成功：那一行同时存在，展示层按 text 展示细节，
+ *   但状态取「需要用户处理」的那一档，避免失败被成功掩盖 —— 这是用户要的点：
+ *   「直接看到哪个渠道没执行成功」）；
+ * - 否则有领取 ⇒ `claimed`；否则有「今天已领」⇒ `already`；
+ * - 否则有停用账号 ⇒ `inactive`；否则 ⇒ `nothing`。
+ *
+ * ⚠️ 与 `describeChannel` 分开：文案是给人看的，状态是给展示层判断的。文案改字
+ * 不该影响颜色，反之亦然。
+ */
+export function describeChannelState(summary: {
+  claimed: number
+  alreadyClaimed: number
+  inactive: number
+  failed: number
+}): AutoCheckinChannelState {
+  if (summary.failed > 0) return 'failed'
+  if (summary.claimed > 0) return 'claimed'
+  if (summary.alreadyClaimed > 0) return 'already'
+  if (summary.inactive > 0) return 'inactive'
+  return 'nothing'
+}
+
+/**
+ * 取本轮**第一条**失败账号的原始原因（渠道自己的 message，不做改写）。
+ *
+ * 只取一条：面板那一行要短，而一排同样的「凭据过期」堆在一起是噪音。没有失败
+ * 或没有 message 时返回空串，调用方据此保持原文案不变。
+ */
+export function firstFailureReason(
+  results: RpcCreditsClaimAccountResult[] | undefined,
+): string {
+  for (const row of results ?? []) {
+    const outcome = row.outcome
+    if (outcome?.kind === 'failed' && typeof outcome.message === 'string' && outcome.message.trim() !== '') {
+      return outcome.message.trim().slice(0, 80)
+    }
+  }
+  return ''
+}
+
+/** 装配层注入的依赖（全部可替换 ⇒ 单测零网络、零文件系统、零等待）。 */export interface AutoCheckinDeps {
   store: AutoCheckinStore
   /**
    * 列出**账号池里有账号**的渠道 id。
@@ -441,6 +554,10 @@ export interface AutoCheckinDeps {
   delayMs?: number
   /** 排定延迟执行（注入以便单测零等待）。返回值交给 `stop()` 取消。 */
   schedule?(fn: () => void, ms: number): { cancel(): void }
+  /** 跨天巡检间隔；默认 `AUTO_CHECKIN_TICK_MS`，设 `0` 关闭巡检（单测/宿主不需要常驻）。 */
+  tickMs?: number
+  /** 排定周期性巡检（注入以便单测零等待）。返回值交给 `stop()` 取消。 */
+  scheduleTick?(fn: () => void, ms: number): { cancel(): void }
   warn?(message: string): void
 }
 
@@ -458,10 +575,18 @@ export interface AutoCheckin {
    * 故下一轮跑出新结果时它会重新出现。
    */
   dismiss(): Promise<RpcUsageAutoCheckinState>
-  /** 启动时调用一次：延迟后排定一轮（内部自己判开关与当天是否已跑）。 */
+  /** 启动时调用一次：延迟后排定一轮，并挂上跨天巡检（内部自己判开关与当天是否已跑）。 */
   start(): void
   /** 立刻按判据跑一轮（供「刚打开开关」与单测用）。 */
   runIfDue(): Promise<void>
+  /**
+   * **手动**跑一轮：用户显式点了按钮，故**不看**开关状态、也**不看**今天是否
+   * 已跑过 —— 两条判据都是给「无人值守自动跑」用的，拿来拦手动操作只会让按钮
+   * 看起来没生效。仍走同一份 `performRun`（同一份记账与逐渠道结果）。
+   *
+   * 已在跑时直接复用那一轮（不排第二轮：领一次和领两次对上游没区别，但会白耗配额）。
+   */
+  runNow(): Promise<RpcUsageAutoCheckinState>
   /** 取消尚未执行的延迟任务（不打断已开始的一轮）。 */
   stop(): void
 }
@@ -474,6 +599,8 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
   /** 在飞去重：`setEnabled(true)` 与启动排定可能同时想跑。 */
   let inflight: Promise<void> | null = null
   let pending: { cancel(): void } | null = null
+  /** 跨天巡检定时器（独立服务常驻时每天自动触发）。 */
+  let tick: { cancel(): void } | null = null
 
   const today = (): string => utc8DateString(now())
 
@@ -501,14 +628,14 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
       deps.warn?.(`[channel-pack] 自动签到：读取账号池失败，本次跳过: ${String(error)}`)
       return
     }
-    const channels: Array<{ provider: string; text: string }> = []
+    const channels: AutoCheckinChannelRow[] = []
     for (const provider of providers) {
       // ⚠️ 排除表先于**任何**上游请求生效（见 isAutoCheckinExcluded 的说明）：
       // zcode 的代价发生在**调用期间**（拉起浏览器产 captcha），事后再判断已经
       // 太晚 —— 必须在调 `claim` 之前就把它摘掉。
       if (isAutoCheckinExcluded(provider)) {
         totals.skipped += 1
-        channels.push({ provider, text: '需手动签到' })
+        channels.push({ provider, text: '需手动签到', state: 'skipped' })
         continue
       }
       let result: BadgeRpcResult<RpcCreditsClaimAllResponse>
@@ -516,7 +643,7 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
         result = await deps.claim(provider)
       } catch (error) {
         totals.errors += 1
-        channels.push({ provider, text: '出错' })
+        channels.push({ provider, text: '出错', state: 'error' })
         deps.warn?.(`[channel-pack] 自动签到：${provider} 调用异常: ${String(error)}`)
         continue
       }
@@ -524,18 +651,18 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
         const message = typeof result.error?.message === 'string' ? result.error.message : ''
         if (isUnsupportedCheckin(message)) {
           totals.skipped += 1
-          channels.push({ provider, text: '无签到接口' })
+          channels.push({ provider, text: '无签到接口', state: 'skipped' })
           continue
         }
         totals.errors += 1
-        channels.push({ provider, text: '出错' })
+        channels.push({ provider, text: '出错', state: 'error' })
         deps.warn?.(`[channel-pack] 自动签到：${provider} 失败: ${message || '未知错误'}`)
         continue
       }
       totals.providers += 1
       const summary = result.value?.summary
       if (summary === undefined) {
-        channels.push({ provider, text: '无可领' })
+        channels.push({ provider, text: '无可领', state: 'nothing' })
         continue
       }
       totals.claimed += summary.claimed
@@ -552,15 +679,43 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
       // 今天这一轮的」。缺省回落到 `claimed + alreadyClaimed`，是为了兼容尚未
       // 上报该字段的旧响应（缺字段 ≠ 0，否则整轮会被判成「什么都没证明」）。
       totals.coversToday += summary.coversToday ?? (summary.claimed + summary.alreadyClaimed)
-      channels.push({ provider, text: describeChannel(summary) })
+      const state = describeChannelState(summary)
+      // ⚠️ 失败时把**第一条失败原因**附在文案后面：只写「1 个失败」的话，用户
+      // 只知道「这个渠道没成」，仍要再点进渠道详情才能看到为什么 —— 而用户要的
+      // 正是「直接看到哪个渠道没执行成功」（2026-10-23 需求）。原因取自
+      // `outcome.message`，是渠道自己给的原文，不加解释。
+      const reason = state === 'failed' ? firstFailureReason(result.value?.results) : ''
+      channels.push({
+        provider,
+        text: reason === '' ? describeChannel(summary) : `${describeChannel(summary)}（${reason}）`,
+        state,
+      })
     }
 
     if (!shouldMarkToday(totals)) {
       // ⚠️ 刻意**不写** lastDate：让「凭据还没续上 / 网络不通 / 赶在渠道刷新前
       // 跑的那一轮」能在下次启动重试，而不是当天就此放弃（判据见 shouldMarkToday）。
       deps.warn?.(
-        `[channel-pack] 自动签到未记入今日（下次启动会重试）：${describeRun(totals)}`,
+        `[channel-pack] 自动签到未记入今日（下次巡检会重试）：${describeRun(totals)}`,
       )
+      // ⚠️⚠️ 但**逐渠道结果仍要落盘**（真实缺陷，2026-10-23 定位）：原先这里直接
+      // return，`channels` 整轮被丢掉，于是「所有渠道都失败」时面板上仍是上一轮
+      // 的记录，或者干脆空白 —— 用户点「立即签到」看到按钮转完、结果一个字没变，
+      // 会以为按钮没生效。不记日期是「今天还要重试」，不是「这轮结果不值得留」。
+      // ⚠️ 只写 `channels` / `lastResult` / `lastAt`，**不动 `lastDate`**：
+      // 正是那个字段决定「当天是否已跑过」，动了就等于放弃重试（本函数上半段的全部理由）。
+      doc = {
+        ...doc,
+        lastResult: describeRun(totals),
+        lastAt: now(),
+        channels,
+        dismissedRunAt: 0,
+      }
+      try {
+        await deps.store.save(doc)
+      } catch (error) {
+        deps.warn?.(`[channel-pack] 自动签到结果写入失败: ${String(error)}`)
+      }
       return
     }
 
@@ -598,6 +753,29 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
     return task
   }
 
+  /**
+   * 手动一轮：与 `runIfDue` 共用执行体，但**跳过**开关与「今天已跑过」两道判据。
+   *
+   * ⚠️ 直接复用 `inflight` 而不是另起一份状态：自动签到可能正在跑，此时用户点
+   * 手动按钮应当等那一轮的结果，而不是并发打两倍上游请求。
+   * ⚠️ `performRun` 内部仍按 `shouldMarkToday` 决定记不记日期 —— 手动跑失败的那轮
+   * 同样不该把今天标成「已跑」，否则自动签到当天就再也不重试了。
+   */
+  async function runNow(): Promise<RpcUsageAutoCheckinState> {
+    if (inflight === null) {
+      running = true
+      const task = performRun().catch((error: unknown) => {
+        deps.warn?.(`[channel-pack] 手动签到异常: ${String(error)}`)
+      }).finally(() => {
+        running = false
+        inflight = null
+      })
+      inflight = task
+    }
+    await inflight
+    return state()
+  }
+
   return {
     state,
     async setEnabled(enabled) {
@@ -610,7 +788,7 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
       return state()
     },
     start() {
-      if (pending !== null) return
+      if (pending !== null || tick !== null) return
       const ms = deps.delayMs ?? autoCheckinDelayMs()
       const fire = (): void => {
         pending = null
@@ -619,11 +797,26 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
       // 延迟为 0 = 立刻跑（单测的默认形态，也是用户把环境变量设成 0 时的语义）。
       if (ms <= 0) {
         fire()
-        return
+      } else {
+        pending = (deps.schedule ?? defaultSchedule)(fire, ms)
       }
-      pending = (deps.schedule ?? defaultSchedule)(fire, ms)
+      // 独立服务会常驻多天：启动补跑只覆盖「当天第一次启动」，跨天必须有巡检，
+      // 否则过了零点就再没有触发点（2026-10-27 实测：进程从 10-25 起未重启，
+      // 10-26 的记录是手动点的，10-27 一整天没有自动签到）。
+      // 开关 / 今天是否已跑 / 在飞去重都收敛在 `runIfDue()`；这里只多做一层
+      // 失败退避下限，拦住「巡检被调小后高频打上游」的情况。
+      const tickMs = deps.tickMs ?? AUTO_CHECKIN_TICK_MS
+      if (tickMs > 0) {
+        tick = (deps.scheduleTick ?? defaultScheduleTick)(() => {
+          if (doc.lastDate !== '' && doc.lastDate === today()) return
+          const attemptedToday = doc.lastAt > 0 && utc8DateString(doc.lastAt) === today()
+          if (attemptedToday && now() - doc.lastAt < AUTO_CHECKIN_RETRY_MS) return
+          void runIfDue()
+        }, tickMs)
+      }
     },
     runIfDue,
+    runNow,
     async dismiss() {
       // 记「关闭的是哪一轮」（当前的 lastAt）：下一轮跑完 lastAt 会变，文字自动回来。
       doc = { ...doc, dismissedRunAt: doc.lastAt }
@@ -638,6 +831,8 @@ export function createAutoCheckin(deps: AutoCheckinDeps): AutoCheckin {
     stop() {
       pending?.cancel()
       pending = null
+      tick?.cancel()
+      tick = null
     },
   }
 }
@@ -652,4 +847,15 @@ function defaultSchedule(fn: () => void, ms: number): { cancel(): void } {
   const timer = setTimeout(fn, ms)
   timer.unref?.()
   return { cancel: () => clearTimeout(timer) }
+}
+
+/**
+ * 默认跨天巡检排定：`setInterval` + `unref()`。
+ *
+ * `unref()` 的理由同 `defaultSchedule`：巡检定时器不能拖住宿主进程退出。
+ */
+function defaultScheduleTick(fn: () => void, ms: number): { cancel(): void } {
+  const timer = setInterval(fn, ms)
+  timer.unref?.()
+  return { cancel: () => clearInterval(timer) }
 }
