@@ -45,8 +45,8 @@ import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort
 import { modelAvailability } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
-import { PluginUpdater } from './src/updater.js'
-import { selfReload, watchPackage, isReloading } from './src/reload.js'
+import { PluginUpdater, installationIsManaged } from './src/updater.js'
+import { selfReload, watchPackage, isReloading, canSafelyHotReload } from './src/reload.js'
 import { createPushHub } from './src/push.js'
 import { rejectionFor, isLoopbackHost, connectionAdmissionView } from './src/trust.js'
 import { resolveAttributionUserAgent } from './adapter/kernel.js'
@@ -163,6 +163,7 @@ export function apply(ctx, config) {
   /** `managed` stands down everything that would rewrite the installed bytes. */
   const distribution = distributionOf(config, settings)
   const managed = distribution === 'managed'
+    || installationIsManaged(PKG_DIR)
 
   let forward = null
   let forwardError = ''
@@ -944,6 +945,9 @@ export function apply(ctx, config) {
     const status = updater.status()
     if (status.applying) throw new Error('an upgrade is already running')
     if (status.recoveryRequired) throw new Error('restore the retained upgrade backup before reloading')
+    if (status.restartRequired || !canSafelyHotReload(ctx.loader, PKG_URL.href)) {
+      return { ok: false, error: 'safe hot reload is unavailable in this host; restart the host to load installed files', restored: true, restartRequired: true }
+    }
     const result = await selfReload(ctx, { logger, packageUrl: PKG_URL.href, entryUrl: ENTRY_URL })
     if (result.ok) return result
     throw new Error(result.error)
@@ -952,12 +956,16 @@ export function apply(ctx, config) {
   async function applyUpgrade(version) {
     if (managed) throw httpError(409, MANAGED_MESSAGE)
     if (isReloading()) throw new Error('a reload is already in progress')
+    if (updater.status().restartRequired) throw new Error('the installed version is ready; restart the host before applying another update')
     const pendingKey = Symbol.for('our-free-model.pending-upgrade')
     let pending
     try {
       const result = await updater.apply({
         version,
         activate: async installed => {
+          if (!canSafelyHotReload(ctx.loader, PKG_URL.href)) {
+            return { ok: false, error: 'safe hot reload is unavailable in this host; restart the host to load installed files', restored: true, restartRequired: true }
+          }
           pending = { version: installed.version }
           globalThis[pendingKey] = pending
           return selfReload(ctx, { logger, packageUrl: PKG_URL.href, entryUrl: ENTRY_URL, expectedVersion: installed.version })
@@ -966,7 +974,12 @@ export function apply(ctx, config) {
       // Notification uses the successor's stores and hub. The predecessor's
       // effects have already been disposed by the swap.
       try { pending?.notify?.() } catch (error) { logger.warn?.(`our-free-model: upgrade notification failed (${error?.message ?? error})`) }
-      return { ...result, reloaded: true }
+      if (result.restartRequired === true) {
+        settings.update({ installedVersion: result.version })
+        settings.flush()
+        push.emit('upgraded', { version: result.version, restartRequired: true })
+      }
+      return { ...result, reloaded: result.restartRequired !== true }
     } finally {
       if (globalThis[pendingKey] === pending) globalThis[pendingKey] = undefined
     }
@@ -978,7 +991,13 @@ export function apply(ctx, config) {
    */
   let watcher = undefined
   function syncWatcher() {
-    const wanted = settings.get().autoReloadWatch === true
+    const safeReload = canSafelyHotReload(ctx.loader, PKG_URL.href)
+    if (!managed && settings.get().autoReloadWatch === true && !safeReload) {
+      settings.update({ autoReloadWatch: false })
+      settings.flush()
+      logger.warn?.('our-free-model: disabled automatic hot reload because this host does not expose a safe package-module cache')
+    }
+    const wanted = !managed && settings.get().autoReloadWatch === true && safeReload
     if (wanted && watcher === undefined) {
       watcher = watchPackage(PKG_DIR, {
         logger,
@@ -1328,6 +1347,7 @@ export function apply(ctx, config) {
     meta: () => ({
       version: packageVersion,
       distribution,
+      restartRequired: updater.status().restartRequired === true,
       generation,
       reloadedAt: settings.get().reloadedAt ?? 0,
       reloadCount: settings.get().reloadCount ?? 0,
@@ -1348,9 +1368,13 @@ export function apply(ctx, config) {
       refresh: () => feed.poll(),
     },
     update: {
-      status: () => managed
-        ? { ...updater.status(), managed: true, available: false, latest: '' }
-        : { ...updater.status(), notifiedFor: updateNotifiedFor },
+      status: () => {
+        const hotReloadAvailable = canSafelyHotReload(ctx.loader, PKG_URL.href)
+        const status = { ...updater.status(), hotReloadAvailable,
+          autoReloadWatch: !managed && hotReloadAvailable && settings.get().autoReloadWatch === true }
+        return managed ? { ...status, managed: true, available: false, latest: '' }
+          : { ...status, notifiedFor: updateNotifiedFor }
+      },
       check: async () => {
         if (managed) throw httpError(409, MANAGED_MESSAGE)
         const result = await updater.check()
@@ -1941,6 +1965,9 @@ export function createApiRoutes(deps) {
         if (status.applying || status.recoveryRequired) return send(409, {
           error: status.applying ? 'an upgrade is already running' : 'restore the retained upgrade backup before reloading',
         })
+        if (status.restartRequired === true || status.hotReloadAvailable === false) return send(409, {
+          error: 'safe hot reload is unavailable in this host; restart the host to reload plugin files', restartRequired: true,
+        })
         // Answer first, then swap: the response rides an already-accepted
         // socket, but the client should not wait on the reload finishing. The
         // swap closure is `deps.hotReload`, applied inside `apply` — this
@@ -1958,6 +1985,7 @@ export function createApiRoutes(deps) {
         const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
         const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
+        if (next.autoReloadWatch === true && deps.update.status().hotReloadAvailable === false) next.autoReloadWatch = false
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
           // The listener spends this machine's lane, and a routable bind address

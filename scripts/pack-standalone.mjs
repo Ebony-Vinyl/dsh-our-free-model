@@ -41,6 +41,7 @@ const sourceFiles = [
     'store', 'stream', 'subscriptions', 'subscription-completion', 'subscription-adapter', 'token-saver', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
     .map(name => `src/${name}.js`),
   ...['completion', 'runtime', 'stats'].map(name => `src/core/${name}.js`),
+  'src/bun-fetch.js',
   'src/providers/index.js',
   'src/providers/registry.json',
   'src/route/classify.js',

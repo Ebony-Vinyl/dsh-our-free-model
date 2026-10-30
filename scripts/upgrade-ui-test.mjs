@@ -12,7 +12,7 @@ import { callRoute, fakeContext, until } from './lib/fake-kernel.mjs'
 const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 const baseline = {
   current: '1.4.5', installedVersion: '1.4.5', latest: '1.4.6', managed: false,
-  available: true, applying: false, recoveryRequired: false, versionMismatch: false,
+  available: true, applying: false, recoveryRequired: false, versionMismatch: false, hotReloadAvailable: true, autoReloadWatch: true,
 }
 let checks = 0
 async function check(name, run) {
@@ -118,6 +118,15 @@ await check('an unfinished upgrade cannot render an up-to-date indicator', async
   assert.ok(!app.draw().includes('upgrade.upToDate'))
   app.setStatus({ ...baseline, available: false }); await app.flush()
   assert.ok(app.draw().includes('upgrade.upToDate')); app.dispose()
+})
+await check('restart-required install explains why reload is disabled and reports restart activation', async () => {
+  const app = await mount({ ...baseline, hotReloadAvailable: false, autoReloadWatch: false })
+  assert.ok(app.draw().includes('upgrade.restartHint'))
+  assert.equal(app.button('reload.now').props.disabled, true)
+  app.setAction(() => response({ version: '1.4.6', restartRequired: true }))
+  await app.button('upgrade.apply').props.onClick(); await app.flush()
+  assert.ok(app.draw().includes('upgrade.restart'))
+  assert.ok(app.draw().includes('upgrade.restartHint')); app.dispose()
 })
 for (const succeeds of [true, false]) {
   await check('upgrade response releases controls without SSE (success=' + succeeds + ')', async () => {
@@ -247,6 +256,7 @@ try {
   const module = await import(pathToFileURL(path.join(pkgDir, 'index.js')))
   const boot = async () => {
     const ctx = fakeContext({ inject: module.inject, mounted: ['llm', 'webServer'] })
+    ctx.loader = { internal: { loadCache: new Map([[pathToFileURL(path.join(pkgDir, 'index.js')).href, { source: 'host fixture cache' }]]) } }
     contexts.push(ctx)
     module.apply(ctx, {})
     await until(() => ctx.__captured.serverRoutes.some(route => route.kind === 'prefix'), { timeoutMs: 5000 })
@@ -273,7 +283,7 @@ try {
     ctx.fiber.runtime = { callback: module }
     ctx.registry = { get: () => ({ fibers: [ctx.fiber] }) }
     ctx.loader = {
-      internal: { loadCache: new Map() },
+      internal: { loadCache: new Map([[pathToFileURL(path.join(pkgDir, 'index.js')).href, { source: 'host fixture cache' }]]) },
       unwrapExports: value => value,
       import: async () => { throw new Error('controlled ordinary import failure') },
     }

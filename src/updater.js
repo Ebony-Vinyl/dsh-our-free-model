@@ -149,6 +149,10 @@ const MAX_ENGINE_BYTES = 128 * 1024 * 1024
 const MAX_FILES = 128
 const ENGINE_BINARY = /^vendor\/magpie\/bin\/magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/
 const SHA_RE = /^[0-9a-f]{64}$/
+const RESTART_MARKER = Symbol.for('our-free-model.restart-required-versions')
+const PROCESS_EPOCH = Symbol.for('our-free-model.process-epoch')
+const processEpoch = globalThis[PROCESS_EPOCH] ??= crypto.randomUUID()
+const restartRequiredVersions = globalThis[RESTART_MARKER] ??= new Map()
 // Hot reload evaluates a fresh updater module before the old request finishes.
 // A process-wide lock keeps the successor from starting a second transaction.
 const UPGRADE_LOCKS = Symbol.for('our-free-model.upgrade-locks')
@@ -186,6 +190,19 @@ export function compareVersions(a, b) {
     if (x !== y) return x < y ? -1 : 1
   }
   return 0
+}
+
+/** Detect a plugin install whose package files still belong to a package-manager store. */
+export function packageUsesHardLinks(pkgDir) {
+  for (const rel of ['package.json', 'index.js', 'client.js']) {
+    try { if (fs.statSync(path.join(pkgDir, rel)).nlink > 1) return true } catch { /* incomplete package: normal startup diagnostics handle it */ }
+  }
+  return false
+}
+
+/** Detect host rollback to a package version older than the code in memory. */
+export function installationIsManaged(pkgDir) {
+  return packageUsesHardLinks(pkgDir)
 }
 
 /**
@@ -856,9 +873,10 @@ export class PluginUpdater {
    *   throwaway keypair here, installs pin the release key
    * @param {string} [deps.runningVersion] - version captured by the running module
    */
-  constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEY, runningVersion }) {
-    this.deps = { pkgDir, dataDir, settings, log, fetchImpl, defaultSources, manifestPublicKey, runningVersion }
+  constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEY, runningVersion, processEpoch: epoch = processEpoch }) {
+    this.deps = { pkgDir, dataDir, settings, log, fetchImpl, defaultSources, manifestPublicKey, runningVersion, processEpoch: epoch }
     this.latest = undefined
+    this.latestContentDrift = false
     this.checkedAt = 0
     this.error = ''
     this.applying = false
@@ -892,6 +910,14 @@ export class PluginUpdater {
 
   reconcileRecovery() {
     const state = this.loadUpgradeState()
+    const restartMarker = restartRequiredVersions.get(this.deps.pkgDir)
+    if (!upgradeLocks.has(this.deps.pkgDir) && state?.phase === 'complete' && state.restartRequired === true
+      && restartMarker?.version === state.to && restartMarker.epoch === this.deps.processEpoch
+      && (this.deps.runningVersion ?? this.currentVersion()) === state.from && this.currentVersion() === state.from) {
+      restartRequiredVersions.delete(this.deps.pkgDir)
+      this.saveUpgradeState({ ...state, phase: 'rolled-back', restartRequired: false, diskRestored: true, runtimeRestored: true })
+      return
+    }
     if (upgradeLocks.has(this.deps.pkgDir) || !['installing', 'activating', 'recovery-required'].includes(state?.phase)) return
     try {
       verifySnapshot(this.deps.pkgDir, backupSnapshot(this.backupDir))
@@ -936,7 +962,11 @@ export class PluginUpdater {
     const active = upgradeLocks.has(this.deps.pkgDir)
     const unfinished = ['installing', 'activating'].includes(state?.phase)
     const recoveryRequired = state?.phase === 'recovery-required' || (unfinished && !active)
-    const available = this.latest !== undefined && compareVersions(this.latest.version, current) > 0
+    const restartMarker = restartRequiredVersions.get(this.deps.pkgDir)
+    const restartRequired = restartMarker?.epoch === this.deps.processEpoch && restartMarker.version === installedVersion
+    const versionOrder = this.latest === undefined ? -1 : compareVersions(this.latest.version, current)
+    const available = !restartRequired && this.latest !== undefined
+      && (versionOrder > 0 || (versionOrder === 0 && this.latestContentDrift))
     this.history = this.loadHistory()
     return {
       current,
@@ -944,6 +974,7 @@ export class PluginUpdater {
       installedVersion,
       versionMismatch: current !== installedVersion,
       recoveryRequired,
+      restartRequired,
       phase: state?.phase ?? 'idle',
       latest: this.latest?.version ?? '',
       available,
@@ -979,14 +1010,24 @@ export class PluginUpdater {
         throw new Error(`update path requires at least ${manifest.minSupported}; ${current} is installed`)
       }
       this.latest = manifest
+      this.latestContentDrift = compareVersions(manifest.version, current) === 0 && !this.installedMatches(manifest)
       this.manifestUrl = source
       this.checkedAt = Date.now()
       this.error = ''
       this.deps.log?.(`our-free-model: update check via ${source} -> ${manifest.version} (installed ${current})`)
-      return { available: compareVersions(manifest.version, current) > 0, current, latest: manifest.version }
+      return { available: compareVersions(manifest.version, current) > 0 || this.latestContentDrift, current, latest: manifest.version }
     } catch (error) {
       this.error = String(error?.message ?? error)
       throw error
+    }
+  }
+
+  installedMatches(manifest) {
+    try {
+      verifyInstalled(this.deps.pkgDir, manifest)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -996,6 +1037,7 @@ export class PluginUpdater {
    * @returns {Promise<{version: string, files: number, bytes: number, previous: string}>}
    */
   async apply({ version, onProgress = () => {}, activate } = {}) {
+    if (this.status().restartRequired) throw new Error('the installed version is ready; restart the host before applying another update')
     if (upgradeLocks.has(this.deps.pkgDir)) throw new Error('an upgrade is already running')
     this.reconcileRecovery()
     const priorState = this.loadUpgradeState()
@@ -1009,6 +1051,7 @@ export class PluginUpdater {
     let state
     let installed = false
     let activated = false
+    let restartRequired = false
     try {
       // Re-check immediately before installing: the owner may have pushed a new
       // manifest since the last check, and a stale cached manifest would verify
@@ -1048,39 +1091,62 @@ export class PluginUpdater {
           this.saveUpgradeState(state)
           onProgress({ phase: 'reload' })
           const activation = await activate(result)
-          if (activation?.ok !== true) {
-            throw Object.assign(new Error(activation?.error ?? 'hot reload did not confirm activation'), { runtimeRestored: activation?.restored === true })
-          }
-          if (activation.version !== manifest.version) {
+          if (activation?.restartRequired === true) {
+            // The installed files are fully verified, but this host cannot safely
+            // replace its live module graph. Keep the good disk install and ask
+            // for a host restart instead of rolling the package back.
+            restartRequired = true
+          } else if (activation?.ok !== true) {
+            if (activation?.restored === true) {
+              // The previous module graph is intact, while the new files are
+              // already hash-verified on disk. Keep them and activate after
+              // restart instead of silently restoring the old package bytes.
+              restartRequired = true
+            } else {
+              throw Object.assign(new Error(activation?.error ?? 'hot reload did not confirm activation'), { runtimeRestored: false })
+            }
+          } else if (activation.version !== manifest.version) {
             throw new Error(`activation version mismatch: expected ${manifest.version}, got ${String(activation.version ?? '(missing)')}`)
+          } else {
+            activated = true
           }
-          activated = true
         }
       } catch (error) {
         // The installed copy is now in an unknown state: put the old one back
         // before surfacing the failure, so the next boot still works. A failed
         // restore must not mask the install failure that caused it, and the
         // "previous version restored" claim is only true when it succeeded.
+        const safeToKeepInstalled = state.phase === 'activating' && error.runtimeRestored === true
         let restoreError = null
-        try { restoreBackup(this.backupDir, this.deps.pkgDir) } catch (rollbackError) { restoreError = rollbackError }
+        if (!safeToKeepInstalled) {
+          try { restoreBackup(this.backupDir, this.deps.pkgDir) } catch (rollbackError) { restoreError = rollbackError }
+        } else {
+          restartRequired = true
+        }
         state = {
           ...state,
-          phase: restoreError !== null || (state.phase === 'activating' && error.runtimeRestored !== true) ? 'recovery-required' : 'rolled-back',
-          diskRestored: restoreError === null,
+          phase: safeToKeepInstalled ? 'complete' : restoreError !== null || (state.phase === 'activating' && error.runtimeRestored !== true) ? 'recovery-required' : 'rolled-back',
+          diskRestored: safeToKeepInstalled || restoreError === null,
           runtimeRestored: state.phase !== 'activating' || error.runtimeRestored === true,
         }
-        if (restoreError !== null) {
+        if (safeToKeepInstalled) {
+          // Activation failed, but selfReload restored the old in-memory
+          // generation. The new signed files are verified on disk; require a
+          // process restart rather than rolling them back invisibly.
+        } else if (restoreError !== null) {
           throw new Error(`upgrade failed (${error?.message ?? error}); rollback also failed (${restoreError?.message ?? restoreError})`)
         }
-        throw new Error(`upgrade failed, previous files restored (${error?.message ?? error})`)
+        if (!safeToKeepInstalled) throw new Error(`upgrade failed, previous files restored (${error?.message ?? error})`)
       }
-      this.saveUpgradeState({ ...state, phase: 'complete', activated })
+      this.saveUpgradeState({ ...state, phase: 'complete', activated, restartRequired })
+      if (restartRequired) restartRequiredVersions.set(this.deps.pkgDir, { version: manifest.version, epoch: this.deps.processEpoch })
+      this.latestContentDrift = false
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
-      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused }
+      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, restartRequired, reused: staged.reused }
       this.recordHistory(record)
       this.checkedAt = Date.now()
       this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)
-      return result
+      return activate === undefined ? result : { ...result, activated, restartRequired }
     } catch (error) {
       this.error = String(error?.message ?? error)
       if (state !== undefined && installed) {

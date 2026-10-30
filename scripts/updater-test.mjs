@@ -13,10 +13,11 @@ import http from 'node:http'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
-import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, parseUploadPackRefs, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, signManifest, verifyManifestSignature, stableStringify, DEFAULT_MANIFEST_SOURCES, PINNED_MANIFEST_PUBLIC_KEY } from '../src/updater.js'
-import { selfReload } from '../src/reload.js'
+import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, parseUploadPackRefs, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, signManifest, verifyManifestSignature, stableStringify, DEFAULT_MANIFEST_SOURCES, PINNED_MANIFEST_PUBLIC_KEY, packageUsesHardLinks, installationIsManaged } from '../src/updater.js'
+import { entryUrlOf, packageUrlOf, selfReload } from '../src/reload.js'
 const CONTROLLED_DEFAULTS = ['http://127.0.0.1:1/never.json']
 
 let failures = 0
@@ -44,6 +45,23 @@ check('compareVersions ordering', () => {
   assert.equal(compareVersions('1.0.0-rc.2', '1.0.0-rc.1'), 1)
   assert.equal(compareVersions('1.0.0-rc.2', '1.0.0-rc.10'), -1, 'numeric pre parts compare numerically')
   assert.equal(compareVersions('2.0.0', '1.9.9'), 1)
+})
+await checkAsync('package-manager hard links are treated as managed installations', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-hardlink-'))
+  try {
+    const store = path.join(directory, 'store.js')
+    const packageDir = path.join(directory, 'node_modules', 'dsh-our-free-model')
+    fs.mkdirSync(packageDir, { recursive: true })
+    fs.writeFileSync(store, 'shared package bytes')
+    for (const rel of ['package.json', 'index.js', 'client.js']) fs.linkSync(store, path.join(packageDir, rel))
+    assert.equal(packageUsesHardLinks(packageDir), true)
+    assert.equal(installationIsManaged(packageDir), true)
+    const copied = path.join(directory, 'copied')
+    fs.mkdirSync(copied)
+    for (const rel of ['package.json', 'index.js', 'client.js']) fs.copyFileSync(store, path.join(copied, rel))
+    assert.equal(packageUsesHardLinks(copied), false)
+    assert.equal(installationIsManaged(copied), false)
+  } finally { fs.rmSync(directory, { recursive: true, force: true }) }
 })
 check('default update sources do not probe the removed master ref', () => {
   assert.equal(DEFAULT_MANIFEST_SOURCES.some(source => source.includes('/master/')), false)
@@ -148,7 +166,7 @@ const cdnSnapshot = cdnSource.replace('@main/', `@${SNAPSHOT}/`)
 const gcoreSnapshot = gcoreSource.replace('@main/', `@${SNAPSHOT}/`)
 const proxySnapshot = proxySource.replace('/main/', `/${SNAPSHOT}/`)
 
-function snapshotFetch({ source = rawSnapshot, resolver = { sha: SNAPSHOT }, resolverStatus = 200, manifest = newManifest } = {}) {
+function snapshotFetch({ source = rawSnapshot, resolver = { sha: SNAPSHOT }, resolverStatus = 200, manifest = newManifest, files = newFiles } = {}) {
   const calls = []
   const fetchImpl = async (url, options) => {
     const parsed = new URL(url)
@@ -159,7 +177,7 @@ function snapshotFetch({ source = rawSnapshot, resolver = { sha: SNAPSHOT }, res
     if (clean === source) return new Response(JSON.stringify(manifest))
     const prefix = new URL('../', source).href
     if (clean.startsWith(prefix)) {
-      const body = newFiles[decodeURIComponent(clean.slice(prefix.length))]
+      const body = files[decodeURIComponent(clean.slice(prefix.length))]
       if (body !== undefined) return new Response(body)
     }
     return new Response('not found', { status: 404 })
@@ -694,7 +712,9 @@ await checkAsync('PluginUpdater.check detects the newer version', async () => {
   const data = makeDataDir()
   const updater = new PluginUpdater({ pkgDir: pkg, dataDir: data, settings: () => ({ feedUrl: `${base}/repo/feed/announcements.json` }), fetchImpl: fetch, defaultSources: [`${base}/repo/feed/manifest.json`], manifestPublicKey: TEST_PUBLIC_KEY })
   const status = await updater.check()
-  assert.deepEqual(status, { available: true, current: OLD, latest: NEW })
+  assert.equal(status.available, true)
+  assert.equal(status.current, OLD)
+  assert.equal(status.latest, NEW)
   fs.rmSync(pkg, { recursive: true, force: true })
   fs.rmSync(data, { recursive: true, force: true })
 })
@@ -861,10 +881,12 @@ for (const rollback of [false, true]) {
       }
       const updater = fixtureUpdater(pkg, data)
       if (rollback) {
-        await assert.rejects(() => updater.apply({ activate: async () => ({
-          ok: false, restored: true, error: 'controlled activation refusal',
-        }) }), /controlled activation refusal/)
-        assert.equal(updater.currentVersion(), OLD)
+        const result = await updater.apply({ activate: async () => ({
+          ok: false, restored: true, restartRequired: true, error: 'controlled activation refusal',
+        }) })
+        assert.equal(result.restartRequired, true)
+        assert.equal(updater.currentVersion(), NEW)
+        assert.equal(updater.status().restartRequired, true)
       } else {
         await updater.apply({})
         assert.equal(updater.currentVersion(), NEW)
@@ -1095,12 +1117,36 @@ await checkAsync('installStaged + verifyInstalled accept a good stage', async ()
   fs.rmSync(stage, { recursive: true, force: true })
 })
 
-function fixtureUpdater(pkg, data, runningVersion = OLD) {
+function fixtureUpdater(pkg, data, runningVersion = OLD, processEpoch) {
   return new PluginUpdater({
-    pkgDir: pkg, dataDir: data, runningVersion, settings: () => ({}),
+    pkgDir: pkg, dataDir: data, runningVersion, processEpoch, settings: () => ({}),
     defaultSources: [`${base}/repo/feed/manifest.json`], manifestPublicKey: TEST_PUBLIC_KEY,
   })
 }
+
+await checkAsync('a verified same-version content update is available and installs after safe restart-required activation (issue #602)', async () => {
+  const pkg = makePackage(OLD)
+  const data = makeDataDir()
+  const files = { ...newFiles, 'package.json': JSON.stringify({ name: 'fake', version: OLD }), 'index.js': "export const v = 'same-version content update'\n" }
+  const unsigned = { ...manifestFor(files), version: OLD }
+  const manifest = { ...unsigned, signature: signManifest(parseManifest(unsigned), testPrivateKey) }
+  const fixture = snapshotFetch({ manifest, files })
+  const updater = new PluginUpdater({ pkgDir: pkg, dataDir: data, runningVersion: OLD, settings: () => ({}), fetchImpl: fixture.fetchImpl, defaultSources: [rawSnapshot], manifestPublicKey: TEST_PUBLIC_KEY })
+  try {
+    assert.equal((await updater.check()).available, true)
+    assert.equal(updater.status().available, true)
+    const result = await updater.apply({ activate: async () => ({ ok: false, restored: true, restartRequired: true, error: 'safe restart' }) })
+    assert.equal(result.restartRequired, true)
+    assert.equal(result.activated, false)
+    assert.equal(updaterVersion(pkg), OLD, 'version remains stable while bytes advance')
+    assert.match(fs.readFileSync(path.join(pkg, 'index.js'), 'utf8'), /same-version content update/)
+    assert.equal(updater.status().restartRequired, true)
+    assert.equal(updater.status().available, false)
+    const restarted = new PluginUpdater({ pkgDir: pkg, dataDir: data, runningVersion: OLD, processEpoch: 'next-process', settings: () => ({}), fetchImpl: fixture.fetchImpl, defaultSources: [rawSnapshot], manifestPublicKey: TEST_PUBLIC_KEY })
+    const activeAfterRestart = new PluginUpdater({ pkgDir: pkg, dataDir: data, runningVersion: OLD, processEpoch: 'next-process', settings: () => ({}), fetchImpl: fixture.fetchImpl, defaultSources: [rawSnapshot], manifestPublicKey: TEST_PUBLIC_KEY })
+    assert.equal(activeAfterRestart.status().restartRequired, false, 'a new host process makes the installed bytes current')
+  } finally { fs.rmSync(pkg, { recursive: true, force: true }); fs.rmSync(data, { recursive: true, force: true }) }
+})
 
 await checkAsync('a failed recheck retains the known target and a successful retry clears the error (issue #148)', async () => {
   const pkg = makePackage(OLD)
@@ -1130,7 +1176,7 @@ await checkAsync('a failed recheck retains the known target and a successful ret
 })
 
 /** Host loader stand-in; the real selfReload still performs every transition. */
-function reloadHost(mode) {
+function reloadHost(mode, pkgDir) {
   const previous = { apply() {}, version: OLD }
   const replacement = { apply() {}, version: NEW }
   let running = previous
@@ -1151,11 +1197,12 @@ function reloadHost(mode) {
         delete: callback => { if (running === callback) running = undefined },
       },
       loader: {
-        internal: { loadCache: new Map() },
+        internal: { loadCache: new Map([[pathToFileURL(path.join(pkgDir, 'index.js')).href, { source: 'reload fixture cache' }]]) },
         unwrapExports: value => value,
         import: async () => {
           if (mode === 'import-failure') throw new Error('replacement import refused')
-          return mode === 'stale-cache' ? previous : replacement
+          if (mode === 'stale-cache') return previous
+          return replacement
         },
       },
     },
@@ -1167,7 +1214,7 @@ for (const mode of ['import-failure', 'startup-failure', 'restore-failure', 'sta
     const pkg = makePackage(OLD)
     const data = makeDataDir()
     const updater = fixtureUpdater(pkg, data)
-    const host = reloadHost(mode)
+    const host = reloadHost(mode, pkg)
     let successor
     try {
       const operation = updater.apply({ activate: async () => {
@@ -1175,7 +1222,7 @@ for (const mode of ['import-failure', 'startup-failure', 'restore-failure', 'sta
         assert.equal(successor.status().applying, true, 'the successor sees the same in-flight upgrade')
         assert.equal(successor.status().lastApplied, undefined, 'no premature success record')
         await assert.rejects(() => successor.apply(), /already running/)
-        return selfReload(host.ctx, { logger: {}, expectedVersion: NEW })
+        return selfReload(host.ctx, { logger: {}, packageUrl: packageUrlOf(pathToFileURL(path.join(pkg, 'index.js')).href), entryUrl: entryUrlOf(pathToFileURL(path.join(pkg, 'index.js')).href), expectedVersion: NEW })
       } })
       if (mode === 'success') {
         await operation
@@ -1184,13 +1231,21 @@ for (const mode of ['import-failure', 'startup-failure', 'restore-failure', 'sta
         assert.equal(successor.status().lastApplied.ok, true, 'the successor observes the committed history')
         assert.equal(successor.status().lastApplied.activated, true)
         assert.equal(successor.status().recoveryRequired, false)
-      } else {
+      } else if (mode === 'restore-failure') {
         await assert.rejects(() => operation, /replacement|restore failed|activation version mismatch/)
         assert.equal(updaterVersion(pkg), OLD)
         assert.equal(updater.status().lastApplied.ok, false)
-        assert.equal(updater.status().recoveryRequired, mode === 'restore-failure')
-        if (mode !== 'restore-failure') assert.equal(host.running().version, OLD)
+        assert.equal(updater.status().recoveryRequired, true)
         assert.equal(updater.status().applying, false)
+      } else {
+        const result = await operation
+        assert.equal(result.restartRequired, true)
+        assert.equal(result.activated, false)
+        assert.equal(updaterVersion(pkg), NEW, 'verified new files stay installed for host restart')
+        assert.equal(updater.status().lastApplied.ok, true)
+        assert.equal(updater.status().restartRequired, true)
+        assert.equal(updater.status().recoveryRequired, false)
+        assert.equal(host.running().version, OLD, 'the live old generation stays intact')
       }
     } finally {
       fs.rmSync(pkg, { recursive: true, force: true })
@@ -1209,7 +1264,7 @@ for (const returnedVersion of [OLD, undefined]) {
         /activation version mismatch/)
       assert.equal(updaterVersion(pkg), OLD)
       assert.equal(updater.status().lastApplied.ok, false)
-      assert.equal(updater.status().phase, 'recovery-required', 'an unknown runtime cannot be declared restored')
+      assert.equal(updater.status().phase, 'recovery-required', 'an unconfirmed old runtime still requires recovery')
       assert.equal(updater.status().recoveryRequired, true)
     } finally {
       fs.rmSync(pkg, { recursive: true, force: true })
@@ -1222,7 +1277,7 @@ await checkAsync('reload and rollback failures remain visible across instances a
   const pkg = makePackage(OLD)
   const data = makeDataDir()
   const updater = fixtureUpdater(pkg, data)
-  const host = reloadHost('import-failure')
+  const host = reloadHost('import-failure', pkg)
   const original = fs.copyFileSync
   try {
     fs.copyFileSync = (from, to, ...args) => {
@@ -1231,19 +1286,19 @@ await checkAsync('reload and rollback failures remain visible across instances a
       }
       return original(from, to, ...args)
     }
-    await assert.rejects(() => updater.apply({ activate: () => selfReload(host.ctx, { logger: {} }) }),
-      /replacement import refused.*rollback also failed.*EPERM/)
-    const status = fixtureUpdater(pkg, data).status()
+    const outcome = await updater.apply({ activate: () => selfReload(host.ctx, { logger: {}, packageUrl: packageUrlOf(pathToFileURL(path.join(pkg, 'index.js')).href), entryUrl: entryUrlOf(pathToFileURL(path.join(pkg, 'index.js')).href) }) })
+    assert.equal(outcome.restartRequired, true)
+    const status = fixtureUpdater(pkg, data, OLD, updater.deps.processEpoch).status()
     assert.equal(status.current, OLD)
     assert.equal(status.installedVersion, NEW)
     assert.equal(status.versionMismatch, true)
-    assert.equal(status.recoveryRequired, true)
+    assert.equal(status.restartRequired, true)
+    assert.equal(status.recoveryRequired, false)
     assert.equal(status.applying, false, 'a terminated attempt is not permanently busy')
-    assert.equal(status.lastApplied.ok, false)
+    assert.equal(status.lastApplied.ok, true)
     assert.equal(status.lastApplied.to, NEW)
-    assert.match(status.error, /rollback also failed/)
-    assert.equal(updaterVersion(updater.backupDir), OLD, 'the repair material is retained')
-    await assert.rejects(() => fixtureUpdater(pkg, data).apply(), /requires recovery/)
+    assert.equal(updaterVersion(updater.backupDir), OLD, 'the retained prior copy remains available if needed')
+    await assert.rejects(() => fixtureUpdater(pkg, data).apply(), /restart the host/)
   } finally {
     fs.copyFileSync = original
   }

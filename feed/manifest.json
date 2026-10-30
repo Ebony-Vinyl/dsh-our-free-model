@@ -1,7 +1,7 @@
 {
   "version": "2.7.2",
   "base": "../",
-  "publishedAt": "2026-10-28T02:39:56.938Z",
+  "publishedAt": "2026-10-29T07:54:22.394Z",
   "notes": "",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 563410,
-      "sha256": "1b934f8c1414e12da4a446d9442ed973ed77eef22320e6ded6c31220f6ac976f"
+      "size": 564532,
+      "sha256": "d65215dbb252a8d1514a42a59decc5430b79ffa563fc11129c2db8c99379e8c4"
     },
     {
       "path": "cordis.patch.yml",
@@ -31,8 +31,8 @@
     },
     {
       "path": "index.js",
-      "size": 119510,
-      "sha256": "ec1ed60c7ba932f85c34f576ebd85e87f061f9d6ea12621b1a8b1e537c6a25a0"
+      "size": 121538,
+      "sha256": "872c66258fc33cedfee8ad6c003d45991e288b630b16acd6cebbbb9314f0b95b"
     },
     {
       "path": "LICENSE",
@@ -51,8 +51,8 @@
     },
     {
       "path": "package.json",
-      "size": 4637,
-      "sha256": "c661c214ab7c28b401d3ccad5a3cfd1494c219907cdfb1adb668a297b79ccc76"
+      "size": 4661,
+      "sha256": "4027b8b3467624ab96cae1c11c9313b11d0db2e6edc6c35f1a6c51c2878af8b8"
     },
     {
       "path": "src/adapter.js",
@@ -68,6 +68,11 @@
       "path": "src/anthropic.js",
       "size": 37282,
       "sha256": "f45027599e194a10cf56532fff9e13ae756fc03db8fbb58ecc69d5d467bdadb8"
+    },
+    {
+      "path": "src/bun-fetch.js",
+      "size": 7724,
+      "sha256": "07d7f5506edf2458308fdebb10291cb500c2e583e9ff772d45f63d10dce8b9db"
     },
     {
       "path": "src/catalog.js",
@@ -136,8 +141,8 @@
     },
     {
       "path": "src/egress.js",
-      "size": 37453,
-      "sha256": "2a444aea0a59a8dce1cbd85c72e6d1fa97c6a289934018fdaea997edebfd692d"
+      "size": 41845,
+      "sha256": "02ebd6a9dc85e1f78c8fed9bf31d5a4bd4cc86cb7dbbfba2dfea68b2dcf4da66"
     },
     {
       "path": "src/engine-parts/win32-x64.000.part",
@@ -296,8 +301,8 @@
     },
     {
       "path": "src/reload.js",
-      "size": 13782,
-      "sha256": "d6918993538bd1e35576594c1140bb41420e2499c19c96a8c4d9a04601efda02"
+      "size": 12391,
+      "sha256": "2dbf8b3a1ff3ff28b38c45521e03457957696ce9c929d02535544164b554b923"
     },
     {
       "path": "src/route/classify.js",
@@ -341,13 +346,13 @@
     },
     {
       "path": "src/updater.js",
-      "size": 53626,
-      "sha256": "b4081e68c92ce93ffacb121131762b85e1a7ff197363e7ed1d2765031e2651bc"
+      "size": 57483,
+      "sha256": "978b272e704cd2a5494e3a0508f6fb046f3ab8e7156b68796e76df4c941f291e"
     },
     {
       "path": "src/upstream.js",
-      "size": 27279,
-      "sha256": "4bf9db2c87a49e6ec9b4e81e65dd1e8f8e2046c286eb03c322d3c1896aa9cdca"
+      "size": 28910,
+      "sha256": "94d6b9efe9a118224541aff80a7572fd5646061dc5e894e6df346519b10febd1"
     },
     {
       "path": "src/vault-anchor.js",
@@ -400,5 +405,5 @@
       "sha256": "b2cbbd38d5461521f40d8fbd947bfa9be641481602eaec0f1fc5d29cca8d7e5f"
     }
   ],
-  "signature": "be7u9Wa3ySj1UfvTtVKgD72tbUHr+mnmja4jmQ1KtjjxCyDbNlgGcoQlLgqamlNjipquizXuL8hJ6ZwKl8WJBg=="
+  "signature": "0yRypH0K+bc2lmMmahNemYMNoUYr7pVVB35BOtLhSdsXQPJ7ONqNbIji0cHw57JnXBfHBxmUJK+cDhe2obCjCg=="
 }

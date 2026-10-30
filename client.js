@@ -315,6 +315,7 @@ window.__ModuleLoader__.load({
         'upgrade.current': '运行版本',
         'upgrade.installed': '磁盘版本',
         'upgrade.mismatch': '运行版本与磁盘版本不一致，请先确认安装状态，再重载或重启。',
+        'upgrade.restartHint': '当前宿主不能安全地热重载插件。升级文件会先安全安装，之后需要重启宿主应用才能生效。',
         'upgrade.recovery': '上次升级未完整恢复。请关闭应用，使用保留的备份恢复安装目录，重新启动后检查更新。',
         'upgrade.backup': '恢复备份',
         'upgrade.latest': '最新版本',
@@ -332,6 +333,7 @@ window.__ModuleLoader__.load({
         'upgrade.phase.reload': '正在热重载…',
         'upgrade.done': '已升级到 {version}，插件已热重载生效。',
         'upgrade.doneRefresh': '已升级到 {version}。点击刷新页面加载新界面。',
+        'upgrade.restart': '已升级到 {version}。文件已安全安装，请重启宿主应用后生效。',
         'upgrade.failed': '升级失败：{message}',
         'upgrade.history': '最近一次升级',
         'upgrade.from': '由 {from} 升级',
@@ -1090,6 +1092,8 @@ window.__ModuleLoader__.load({
         'upgrade.current': 'Running',
         'upgrade.installed': 'On disk',
         'upgrade.mismatch': 'The running and on-disk versions differ. Check the installation before reloading or restarting.',
+        'upgrade.restartHint': 'This host cannot safely hot-reload the plugin. Updates are installed safely and take effect after restarting the host application.',
+        'upgrade.restart': 'Upgraded to {version}. The files are installed safely; restart the host application to activate them.',
         'upgrade.recovery': 'The last upgrade was not fully restored. Close the app, restore the installation from the retained backup, restart, then check for updates.',
         'upgrade.backup': 'Recovery backup',
         'upgrade.latest': 'Latest',
@@ -4120,7 +4124,8 @@ window.__ModuleLoader__.load({
           control.current.phase = ''
           const version = event.detail?.version ?? ''
           setPhase(''); setError('')
-          setMessage(control.current.managed || version === '' ? '' : t('upgrade.done').replace('{version}', version))
+          setMessage(control.current.managed || version === '' ? '' : event.detail?.restartRequired === true
+           ? t('upgrade.restart').replace('{version}', version) : t('upgrade.done').replace('{version}', version))
           void status.reload()
         }
         window.addEventListener('ofm:upgraded', handler)
@@ -4162,7 +4167,8 @@ window.__ModuleLoader__.load({
           const result = await post('/update/apply', {}, 600_000)
           // The response releases controls even when hot reload closes SSE.
           if (!finish(token)) return
-          setMessage(result?.version === undefined ? t('upgrade.phase.install') : t('upgrade.doneRefresh').replace('{version}', result.version))
+          setMessage(result?.version === undefined ? t('upgrade.phase.install') : result.restartRequired === true
+            ? t('upgrade.restart').replace('{version}', result.version) : t('upgrade.doneRefresh').replace('{version}', result.version))
           void status.reload()
         } catch (err) {
           if (!finish(token)) return
@@ -4193,7 +4199,8 @@ window.__ModuleLoader__.load({
           !managed && data?.available === true ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot warn' }), t('upgrade.available').replace('{version}', data.latest)) : null,
           upToDate ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot ok' }), t('upgrade.upToDate')) : null,
           h('span', { className: 'ofm_pill' }, `${t('upgrade.checkedAt')}: ${data?.checkedAt ? ago(data.checkedAt, t.locale) : t('upgrade.never')}`)),
-        h('div', { className: 'ofm_row' },
+        data?.hotReloadAvailable === false || data?.restartRequired === true ? h('div', { className: 'ofm_callout', role: 'status' }, t('upgrade.restartHint')) : null,
+         h('div', { className: 'ofm_row' },
           h(Button, { disabled: managed || phase !== '' || status.status !== 'ready' || data?.applying === true, onClick: check }, !managed && phase === 'checking' ? t('upgrade.checking') : t('upgrade.check')),
           data?.available === true ? h(Button, { kind: 'primary', disabled: managed || status.status !== 'ready' || phase !== '' || data.applying === true || data.recoveryRequired === true, onClick: applyUpgrade }, !managed && phase === 'applying' ? t('upgrade.applying') : t('upgrade.apply')) : null,
           h('a', {
@@ -4221,8 +4228,8 @@ window.__ModuleLoader__.load({
           data.lastApplied.ok === false && data.lastApplied.error ? ` — ${data.lastApplied.error}` : '') : null,
         !managed ? h('p', { className: 'ofm_note' }, (settings.updateCheckHours ?? 0) > 0 ? t('upgrade.auto').replace('{n}', String(settings.updateCheckHours)) : t('upgrade.autoOff')) : null,
         h('div', { className: 'ofm_row' },
-          h(Button, { disabled: managed || status.status !== 'ready' || phase !== '' || data?.applying === true || data?.recoveryRequired === true, onClick: reload }, phase === 'reloading' && !managed ? t('reload.reloading') : t('reload.now')),
-          h(Switch, { checked: !managed && settings.autoReloadWatch === true, disabled: managed || status.status !== 'ready' || phase !== '' || busy, label: t('reload.auto'), onChange: () => { if (!control.current.managed && control.current.ready && control.current.phase === '' && !busy) onApply({ autoReloadWatch: !(settings.autoReloadWatch === true) }) } }),
+          h(Button, { disabled: managed || data?.hotReloadAvailable === false || data?.restartRequired === true || status.status !== 'ready' || phase !== '' || data?.applying === true || data?.recoveryRequired === true, onClick: reload }, phase === 'reloading' && !managed ? t('reload.reloading') : t('reload.now')),
+          h(Switch, { checked: !managed && data?.autoReloadWatch === true, disabled: managed || data?.hotReloadAvailable === false || status.status !== 'ready' || phase !== '' || busy, label: t('reload.auto'), onChange: () => { if (!control.current.managed && control.current.ready && control.current.data?.hotReloadAvailable !== false && control.current.phase === '' && !busy) onApply({ autoReloadWatch: !(control.current.data?.autoReloadWatch === true) }) } }),
           managed ? null : h('span', { className: 'ofm_note' }, t('reload.done').replace('{n}', String(settings.reloadCount ?? 0)))))
     }
 

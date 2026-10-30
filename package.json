@@ -47,6 +47,7 @@
     "src/adapter.js",
     "src/aggregate.js",
     "src/anthropic.js",
+    "src/bun-fetch.js",
     "src/catalog.js",
     "src/chan-relay.js",
     "src/channel.js",

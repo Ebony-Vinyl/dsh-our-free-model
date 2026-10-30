@@ -95,6 +95,9 @@ const suites = [
   ['standalone-settings-host', 'standalone-settings-host-test.mjs', []],
   ['standalone-login-terminal', 'standalone-login-terminal-test.mjs', []],
   ['standalone-package', 'standalone-package-test.mjs', ['--sources-only']],
+  ['bun-fetch', 'bun-fetch-test.mjs', []],
+  ['free-lane-compat', 'free-lane-compat-test.mjs', []],
+  ['stable-session', 'stable-session-test.mjs', []],
   ['egress', 'egress-test.mjs', []],
   ['egress-availability', 'egress-availability-test.mjs', []],
   ['effort', 'effort-test.mjs', []],
@@ -172,6 +175,9 @@ function runSuite(script, args) {
   return new Promise(resolve => {
     const child = spawn(process.execPath, [path.join(scriptsDir, script), ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Offline suites mock Node fetch. The Bun protocol has its own loopback
+      // tests; never let an existing mock accidentally send a live request.
+      env: { ...process.env, OUR_FREE_MODEL_FREE_TRANSPORT: 'node' },
     })
     let stdout = ''
     let stderr = ''

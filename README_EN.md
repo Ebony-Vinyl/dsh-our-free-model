@@ -40,9 +40,9 @@
 ## Community
 
 <div align="center">
-  <img src="docs/images/qq-group-11.png" alt="QR code for ai交流群11 (QQ group: 1127616546)" width="300">
+  <img src="docs/images/qq-group-12.png" alt="QR code for ai交流群12 (QQ group: 1130235133)" width="300">
   <br>
-  <b>QQ group: 1127616546 (ai交流群11)</b>
+  <b>QQ group: 1130235133 (ai交流群12)</b>
   <br>
   Scan the QR code or search for the group number to join, discuss the plugin, report issues and share tips.
 </div>
