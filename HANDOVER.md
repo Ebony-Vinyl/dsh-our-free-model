@@ -1048,3 +1048,110 @@ dijalankan. Coba ulang setelah jeda lebih lama atau pada waktu lain.
 
 Status: `glm-5.3-flash-free` tetap aktif di katalog dan di picker Zed,
 tetapi uji respons chat belum lulus saat ini.
+
+# SESI 15p — 2026-10-30 — Akar "Free usage limit reached" (429 FreeUsageLimitError)
+
+## 46. Pertanyaan user
+
+Kenapa `deepseek-v4.1-flash-free` dari OpenRouter selalu "Free usage limit
+reached" padahal sudah beda hari dan berganti IP / WiFi?
+
+## 47. Fakta yang diukur (2026-10-30, ±11.50 WIB)
+
+### 47.1 Status `availability.json` (probe terakhir `at: 1793335801619` = 30/10 11.50 WIB)
+
+Sebagian besar model free lane **semuanya `throttled`** dengan pesan persis sama:
+
+```jsonn{"state":"throttled","detail":"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go"}
+```
+
+Model yang `throttled` (probe 30/10 04.50Z): `deepseek-v4.1-flash-free`,
+`big-pickle`, `glm-5.3-flash-free`, `mimo-v2.6-flash-free`,
+`nemotron-3.5-lightning-free`, `nemotron-3.5-super-vl-free`, `beam-free`,
+`flint-40b-free`, `jev-1.13-free`.
+
+Model yang `unavailable` + `gated:true` (free tier only within OpenCode):
+`ling-3.1-flash-free`, `step-5-preview-free`, `cat-jam-free`,
+`muse-spark-1.2/1.3-contributor-free`, `ll-alpha-free`. Ini 403 FreeTierError
+(blokir klien/network), bukan kuota.
+
+12 model baru `llm7/*` dan `ovh/*` (keyless OpenRouter) semua `unavailable`
+pada 30/10 04.10Z — perlu diperiksa terpisah, bukan bagian dari lane opencode.
+
+### 47.2 Uji langsung ke gateway OFM (curl, `deepseek-v4.1-flash-free`)
+
+Gate OFM meneruskan pesan upstream apa adanya:
+
+```jsonn{"error":{"message":"Free usage limit reached...","type":"rate_limit_error","code":"RATE_LIMIT"}}
+```
+
+`glm-5.3-flash-free` identik.
+
+### 47.3 Uji langsung ke upstream OpenCode dengan **sesi baru yang dimint saat ini**
+
+Script temp `mintSessionId()` (encoding sama persis dengan `src/upstream.js`), ke
+`https://opencode.ai/zen/v1/chat/completions` dgn header lengkap v1
+(`Authorization: Bearer public`, `x-opencode-session` + affinity + id,
+`x-opencode-request`, `x-opencode-project`, UA `opencode/1.18.31`). Hasil:
+
+```
+SESSION ses_e74ae6993ffeZdAOleEpQXoZdU
+STATUS 429
+BODY {"type":"error","error":{"type":"FreeUsageLimitError","message":"Free usage limit reached..."}}
+```
+
+**Kesimpulan kunci**: sesi **baru** (baru dimint, bukan sesi lama dari
+session-map) tetap 429. Ini **membuktikan limit bukan per-sesi** — hipotesis
+awal (session-map lama dipakai ulang, 21 sesi dari 19 Okt) **gugur**.
+
+### 47.4 IP publik saat ini
+
+`curl -s https://api.ipify.org` → **`103.143.196.250`**.
+
+Ini **IP yang sama** yang tercatat diblokir sejak SESI 15n (19 Okt):
+`103.143.196.250` → 403 `LANE_LOCKED` "abusive traffic from this IP address".
+Jadi meski user merasa sudah ganti WiFi/koneksi, IP publik keluar tetap sama
+(ISP/ASN sama; NAT/load balancer tidak berubah), sehingga blokir IP terus
+berlaku — kini menyamar sebagai 429 FreeUsageLimitError.
+
+## 48. Interpretasi / akar masalah
+
+1. **Pesan "Free usage limit reached" adalah 429 FreeUsageLimitError dari
+   upstream OpenCode**, bukan error gateway OFM, bukan blokir kredensial.
+2. **Bukan per-sesi**: sesi fresh tetap 429 (uji 47.3).
+3. **Sangat mungkin per-IP/ASN**: IP publik keluar tidak berubah
+   (`103.143.196.250`, sama dengan yang diblokir `LANE_LOCKED` di sesi 15n).
+   Setelah blokir "abusive traffic" dikelola OpenCode, pesannya berubah jadi
+   kuota/rate-limit, tapi efeknya tetap sama: model free tidak bisa dipakai
+   dari IP ini.
+4. Ganti WiFi/koneksi tidak menolong bila IP publik keluar tetap sama. Baru
+   menolong bila IP publik berubah (tethering HP via operator lain, VPN dgn
+   egress berbeda).
+
+## 49. Rekomendasi / langkah pemakaian
+
+1. **Cek IP publik dulu** sebelum menyalahkan model: `curl -s https://api.ipify.org`.
+   Bila masih `103.143.196.250`, model free lane opencode **tidak akan jalan**
+   apa pun modelnya / sesinya.
+2. Untuk benar-benar memakai lane free opencode: gunakan **egress berbeda**
+   (VPS `103.141.234.177` — jangan sentuh, itu untuk hermes; atau tethering
+   HP operator lain, atau VPN dengan egress IP berbeda). Setelah IP publik
+   berubah, coba lagi.
+3. Ketik IP baru berbeda, model opencode free (`deepseek-v4.1-flash-free`,
+   `big-pickle`, `glm-5.3-flash-free`, dst) seharusnya bisa merespons lagi.
+
+## 50. Yang TIDAK perlu diubah (penegasan)
+
+- Jangan sentuh `forwardKey` (`ofm-X3NQCZ1UGsYzYI959kp00DOnvDSpvn-r`).
+- Jangan hapus label `· sementara` dari model — label tidak berpengaruh pada
+  error (sudah dibuktikan di §43.3).
+- Tidak ada bug di `src/upstream.js` / `src/http.js` untuk kasus ini —
+  `classifyFailure` sudah mengenali 429 → `CODE.quota`, dan pesan upstream
+  dipertahankan apa adanya. Perubahan kode tidak diperlukan.
+- Jangan probe beruntun (jeda ≥3 detik) — memperpanjang blokir IP.
+
+## 51. Status akhir
+
+- Working tree bersih (HEAD `ffce1ca`).
+- Tidak ada perubahan kode pada sesi ini (murni diagnosa).
+- Handover ini ditulis 2026-10-30.
