@@ -345,6 +345,10 @@ export class FreeModelAdapter {
     let attemptMessages = messages
     let attemptBudget = budget
     let nextIndex = 0
+    // 续写段可能把已经显示的正文整段重写一遍：模型经常无视续写指令里的
+    // 「不要重复」。这里记下上一段交给调用方的正文，交给读取层吞掉重复前缀，
+    // 而不是指望模型自觉。
+    let shownAnswer = ''
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
     let rejectedInputUsage = false
     const trustedOutcome = outcome => {
@@ -536,6 +540,8 @@ export class FreeModelAdapter {
       try {
         const reader = readStream(channel.read(), wire, renameMap, () => Date.now(), {
           startIndex: nextIndex, checkpointLimit: policy.checkpointLimit,
+          // 续写段重写已显示的正文时吞掉重复前缀，见 `BlockSink.suppressRepeat`。
+          ...recovering ? { suppressRepeat: shownAnswer } : {},
           onState: value => { partialOutcome = value },
         })
         let outcome
@@ -554,6 +560,7 @@ export class FreeModelAdapter {
               delivered = true
               if (firstDeltaAt === undefined) firstDeltaAt = Date.now()
             }
+            if (chunk.type === 'text-delta' && !recovering) shownAnswer += chunk.text
             blocks.accept(chunk)
             yield chunk
           }
