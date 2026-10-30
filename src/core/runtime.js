@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { FreeModelAdapter, ROUTE_MAIN, ROUTE_REGION } from '../adapter.js'
-import { buildCatalog, buildEacCatalog, buildKiloCatalog, isEacEntry, isKiloEntry, parseListing, reviveKiloCatalog } from '../catalog.js'
+import { buildCatalog, buildEacCatalog, buildKiloCatalog, buildLlm7Catalog, buildOvhCatalog, isEacEntry, isKiloEntry, isLlm7Entry, isOvhEntry, parseListing, reviveKiloCatalog } from '../catalog.js'
 import { buildAggregateCatalog, isAggregateEntry } from '../aggregate.js'
 import { buildComboCatalog, isComboEntry, normalizeCombos, pruneRotation } from '../combos.js'
 import { JsonStore, SETTINGS_INITIAL, STATS_INITIAL, STATS_VERSION, migrateStats, pruneDays, recordTurn, recordUsage, isModelHidden } from '../store.js'
@@ -65,6 +65,8 @@ export function createModelRuntime({
   let catalog = materializeCatalog(catalogStore.get().entries ?? [])
   let sealedCatalog = sealedCredential() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
   let kiloCatalog = reviveKiloCatalog(catalogStore.get().kiloRows)
+  let llm7Catalog = buildLlm7Catalog()
+  let ovhCatalog = buildOvhCatalog()
   /** The aggregate lane: one row per enabled provider/model the user configured.
    *  Derived from settings, not from a listing, so it is rebuilt on every merge. */
   let aggregateCatalog = []
@@ -93,7 +95,7 @@ export function createModelRuntime({
   const rebuildCatalog = () => {
     const seen = new Set()
     const merged = []
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...llm7Catalog, ...ovhCatalog, ...aggregateCatalog]) {
       if (entry === null || entry === undefined || seen.has(entry.id)) continue
       seen.add(entry.id)
       merged.push(entry)
@@ -269,7 +271,7 @@ export function createModelRuntime({
     // (whether a key is configured). A combo is excluded because it has no
     // endpoint of its own: probing one would send the chain's own id to the free
     // lane as a model name, spending quota to collect a verdict about nothing.
-    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry))
+    const probeable = catalog.filter(entry => !isEacEntry(entry) && !isKiloEntry(entry) && !isLlm7Entry(entry) && !isOvhEntry(entry) && !isAggregateEntry(entry) && !isComboEntry(entry))
     const results = await probeCatalog(probeable, { attributionUserAgent, signal: lifetime.signal }, (id, result) => {
       if (disposed) return
       availability.edit(value => ({
@@ -372,15 +374,21 @@ export function computeMembership(catalog, availabilitySnapshot, settings) {
   const results = availabilitySnapshot?.results ?? {}
   const expose = settings?.exposeRegionModels !== false
   const verdictOf = entry => results[entry.id]?.state
+  // Only the free lane is probed; every absorbed channel (eac/kilo/llm7/ovh/
+  // aggregate/combo) is advertised as-is. A verdict can only gate a free-lane
+  // row — if an old round recorded one under an absorbed channel id, it is
+  // stale and must not hide that channel.
   const probeable = catalog.filter(entry => !entry.channel)
+  const probeableIds = new Set(probeable.map(entry => entry.id))
+  const gateOf = entry => (probeableIds.has(entry.id) ? verdictOf(entry) : undefined)
   const refusedAll = probeable.length > 0 && probeable.every(entry => verdictOf(entry) === STATE.unavailable)
-  let usable = catalog.filter(entry => verdictOf(entry) !== STATE.unavailable)
+  let usable = catalog.filter(entry => gateOf(entry) !== STATE.unavailable)
   if (refusedAll) usable = catalog
   const main = []
   const region = []
   for (const entry of usable) {
     if (isModelHidden(entry, settings)) continue
-    const verdict = verdictOf(entry)
+    const verdict = gateOf(entry)
     if (verdict !== STATE.regionBlocked) main.push(entry.id)
     else if (expose) region.push(entry.id)
   }

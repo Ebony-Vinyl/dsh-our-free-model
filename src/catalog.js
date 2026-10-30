@@ -603,3 +603,73 @@ export function reviveKiloCatalog(stored) {
 export function isKiloEntry(entry) {
   return entry?.channel === KILO_CHANNEL
 }
+
+// Two more keyless channels absorbed the same way as Kilo. Their rosters are
+// static seeds rather than a live listing: the upstreams' model sets are small
+// and stable, and a bad listing round should not silently shrink the picker
+// the way a dynamic roster does. Both lanes speak the Chat wire.
+
+export const LLM7_CHANNEL = 'llm7'
+export const OVH_CHANNEL = 'ovh'
+
+/** One static channel row: the minimal fields the picker and adapter read. */
+function channelEntryOf(channel, id, name, vision, reasoning, contextWindow, maxOutput) {
+  return {
+    id,
+    name,
+    channel,
+    wire: 'chat',
+    vision,
+    reasoning,
+    contextWindow,
+    maxOutput,
+    canDisableThinking: false,
+    regionSensitive: false,
+  }
+}
+
+/**
+ * LLM7's free `turbo` roster, verified live on 2026-10-30.
+ *
+ * `minimax-m2.7` is omitted: the gateway advertises `stream:false` for it, so
+ * it cannot honour the lane's streaming discipline.
+ */
+export function buildLlm7Catalog() {
+  return [
+    channelEntryOf(LLM7_CHANNEL, 'llm7/codestral-latest', 'LLM7 Codestral', false, false, 32000, 8192),
+    channelEntryOf(LLM7_CHANNEL, 'llm7/gpt-oss:20b', 'LLM7 GPT-OSS 20B', false, false, 128000, 16384),
+    channelEntryOf(LLM7_CHANNEL, 'llm7/mistral-Nemo-Instruct-2407', 'LLM7 Mistral Nemo (2407)', false, false, 128000, 16384),
+    channelEntryOf(LLM7_CHANNEL, 'llm7/nemotron-3-nano:30b', 'LLM7 Nemotron 3 Nano 30B', false, true, 1000000, 16384),
+  ]
+}
+
+/**
+ * OVHcloud's chat roster, verified live on 2026-10-30.
+ *
+ * The endpoint's listing also names embeddings (`bge-*`, `Qwen3-Embedding-8B`),
+ * TTS (`nvr-tts-*`, `whisper-*`), image (`stable-diffusion-xl-base-v10`) and
+ * guard (`Qwen3Guard-*`) ids; those are not chat models, so only this seed
+ * reaches the picker.
+ */
+export function buildOvhCatalog() {
+  return [
+    channelEntryOf(OVH_CHANNEL, 'ovh/gpt-oss-120b', 'OVH GPT-OSS 120B', false, true, 131072, 32768),
+    channelEntryOf(OVH_CHANNEL, 'ovh/gpt-oss-20b', 'OVH GPT-OSS 20B', false, true, 131072, 32768),
+    channelEntryOf(OVH_CHANNEL, 'ovh/Qwen3.5-397B-A17B', 'OVH Qwen3.5 397B A17B', true, true, 262144, 65536),
+    channelEntryOf(OVH_CHANNEL, 'ovh/Qwen3.8-27B', 'OVH Qwen3.8 27B', true, true, 262144, 32768),
+    channelEntryOf(OVH_CHANNEL, 'ovh/Qwen3.6-27B', 'OVH Qwen3.6 27B', true, true, 262144, 65536),
+    channelEntryOf(OVH_CHANNEL, 'ovh/Qwen3.5-9B', 'OVH Qwen3.5 9B', true, true, 262144, 65536),
+    channelEntryOf(OVH_CHANNEL, 'ovh/Mistral-Small-3.2-24B-Instruct-2506', 'OVH Mistral Small 3.2 24B', true, false, 131072, 16384),
+    channelEntryOf(OVH_CHANNEL, 'ovh/Meta-Llama-3_3-70B-Instruct', 'OVH Llama 3.3 70B', false, false, 131072, 16384),
+  ]
+}
+
+/** Is this catalog row from the LLM7 channel? */
+export function isLlm7Entry(entry) {
+  return entry?.channel === LLM7_CHANNEL
+}
+
+/** Is this catalog row from the OVH channel? */
+export function isOvhEntry(entry) {
+  return entry?.channel === OVH_CHANNEL
+}
