@@ -6,6 +6,7 @@ import http from 'node:http'
 import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { restrictPermissions } from './private-file.js'
 import { loopbackFetch } from './loopback-fetch.js'
 
 const vendor = fileURLToPath(new URL('../vendor/magpie/', import.meta.url))
@@ -230,6 +231,7 @@ async function ownerLease(home) {
       await writeFile(temp, JSON.stringify({
         version: 1, port: lease.address().port, pid: process.pid, token: randomBytes(16).toString('hex'),
       }), { mode: 0o600, flag: 'wx' })
+      restrictPermissions(temp)
       // Atomic publication never overwrites another owner's lease record.
       await link(temp, file)
       return lease
@@ -252,6 +254,7 @@ async function writeJSON(file, value) {
   const temp = `${file}.${randomBytes(6).toString('hex')}.tmp`
   try {
     await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
+    restrictPermissions(temp)
     await rename(temp, file)
   } finally { await unlink(temp).catch(() => {}) }
 }

@@ -5,6 +5,7 @@ import crypto from 'node:crypto'
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { launchClientTerminal } from './client-terminal.mjs'
+import { restrictPermissions } from '../../src/private-file.js'
 
 const CLIENTS = [
   { id: 'codex', name: 'Codex CLI', kind: 'cli', command: 'codex' },
@@ -42,8 +43,11 @@ export function privateWrite(file, value) {
   try {
     fs.writeFileSync(temporary, value, { mode: 0o600, flag: 'wx' })
     // Apply the final mode to the temporary inode before replacement. If the
-    // permission operation fails, the old file remains untouched.
+    // permission operation fails, the old file remains untouched. chmodSync is
+    // the POSIX path (and the seam the tests inject failures through);
+    // restrictPermissions is what makes the promise hold on Windows.
     fs.chmodSync(temporary, 0o600)
+    restrictPermissions(temporary)
     fs.renameSync(temporary, file)
   } finally {
     try { fs.unlinkSync(temporary) } catch (failure) { if (failure.code !== 'ENOENT') throw failure }

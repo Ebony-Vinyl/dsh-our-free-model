@@ -57,6 +57,7 @@ import path from 'node:path'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { spawn } from 'node:child_process'
+import { restrictPermissions } from './private-file.js'
 
 /** The loopback address the relay listens on. Never a routable one. */
 const RELAY_HOST = '127.0.0.1'
@@ -165,6 +166,7 @@ export async function startEgressRelay({ config, dataDir, log = () => {}, onDead
       auth: outletAuth,
       logFile: path.join(dir, 'mihomo.log'),
     }), { mode: 0o600 })
+    restrictPermissions(configPath)
     child = spawn(binary, ['-d', dir, '-f', configPath], { windowsHide: true, stdio: 'ignore' })
     let spawnError = null
     let exited = null
