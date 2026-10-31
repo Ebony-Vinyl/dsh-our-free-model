@@ -139,9 +139,11 @@ export function nextUtc8DayStartMs(nowMs: number = Date.now()): number {
  *
  * ⚠️ 关键词必须**窄**：`balance` / `quota` 之类泛词会误伤正常内容（如模型正文
  * 里恰好讨论「余额」）。故只认明确的英文错误短语。
+ * 针对 Issue #721：QoderCN 每日配额耗尽时返回包含 `pricingUrl` 或
+ * `(112/model_error)` 的错误形态，需作为额度耗尽特征触发账号轮换。
  */
 export function looksLikeBillingError(text: string): boolean {
-  return /billing\s+daily\s+count\s+exceeded|daily\s+count\s+exceeded|billing_error/i.test(text)
+  return /billing\s+daily\s+count\s+exceeded|daily\s+count\s+exceeded|billing_error|\bpricingUrl\b|\b112\/model_error\b/i.test(text)
 }
 
 /**
