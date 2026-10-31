@@ -1872,10 +1872,12 @@ export function createApiRoutes(deps) {
       }
       if (method === 'POST' && routePath === '/eac/login/start') {
         const started = await deps.eacAuth.start()
+        if (started.error !== undefined) deps.logger?.warn?.(`our-free-model: eac login start failed (${started.error}${started.detail ? `: ${started.detail}` : ''})`)
         return send(started.error === undefined ? 200 : 404, started.error === undefined ? started : { error: started.error })
       }
       if (method === 'GET' && routePath === '/eac/login/poll') {
         const polled = await deps.eacAuth.poll(url.searchParams.get('link') ?? '')
+        if (polled.error !== undefined) deps.logger?.warn?.(`our-free-model: eac login poll failed (${polled.error}${polled.detail ? `: ${polled.detail}` : ''})`)
         const status = polled.error === undefined ? 200 : polled.error === 'bad-link' ? 400 : polled.error === 'no-lane' ? 404 : 502
         return send(status, polled)
       }
