@@ -14,6 +14,7 @@ function filterChannels(statuses, filter, search = '') {
     rows, labels: ['all', 'connected', 'pending'].map(id => (${label}))
   })`, {
     statuses, filter, search, selected: undefined,
+    providerText: (channel, field) => channel[field],
     providers: [
       { id: 'connected', name: '已接入渠道', org: '测试' },
       { id: 'pending', name: '待接入渠道', org: '测试' },
