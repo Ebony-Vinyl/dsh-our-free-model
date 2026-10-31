@@ -20,6 +20,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveDshHome, DATA_DIR_NAME } from './store.js'
+import { restrictPermissions } from './open-external.js'
 
 export const EAC_USER_FILE = 'eac-user.json'
 
@@ -65,6 +66,7 @@ export function writeEacUser({ token, login = '', avatar = '' }, file = eacUserP
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
     const temp = `${file}.${process.pid}.tmp`
     fs.writeFileSync(temp, JSON.stringify(record, undefined, 2), { mode: 0o600 })
+    restrictPermissions(temp)
     fs.renameSync(temp, file)
     return record
   } catch {

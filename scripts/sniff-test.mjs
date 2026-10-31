@@ -306,6 +306,14 @@ check('a 5xx that names the model is still a refusal', (await probeModel(entryOf
 scripts.set('mimo-v2.6-flash-free', { contentType: 'application/json', status: 200, body: JSON.stringify({ error: { message: 'no such model: mimo-v2.6-flash-free' } }) })
 check('a 200 envelope naming the model still probes as unavailable', (await probeModel(entryOf('mimo-v2.6-flash-free'))).state, 'unavailable')
 
+// ── a `-vl` suffix is the vendor's vision marker, not a text-only family (458) ─
+// The nemotron override keeps its measured entry; the suffix rule only rescues
+// future variants a family row predates.
+check('a nemotron -vl variant is vision-capable', buildCatalog(['nemotron-4-mini-vl-free'])[0].vision, true)
+check('the nemotron variant without -vl stays text-only', buildCatalog(['nemotron-4-mini-free'])[0].vision, false)
+check('the measured nemotron-3.5-super-vl override still wins', buildCatalog(['nemotron-3.5-super-vl-free'])[0].vision, true)
+check('uppercase -VL is honoured too', buildCatalog(['nemotron-4-mini-VL-free'])[0].vision, true)
+
 server.close()
 console.log(failures === 0 ? '\nsniff: the body decides, and the stream survives looking at it' : `\n${failures} check(s) failed`)
 process.exitCode = failures === 0 ? 0 : 1

@@ -19,6 +19,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { restrictPermissions } from './open-external.js'
 
 /** Same resolution the harness home-paths helper uses: `$DSH_HOME` else `~/.dsh`. */
 export function resolveDshHome() {
@@ -63,7 +64,11 @@ export class JsonStore {
       // settings — the forward key, the acknowledged announcements — are gone with
       // nothing on disk to recover and nothing in the log to explain.
       try {
-        if (fs.existsSync(this.file)) fs.copyFileSync(this.file, `${this.file}.corrupt-${Date.now()}`)
+        if (fs.existsSync(this.file)) {
+          const backup = `${this.file}.corrupt-${Date.now()}`
+          fs.copyFileSync(this.file, backup)
+          restrictPermissions(backup)
+        }
       } catch { /* a home we cannot write to is not this file's problem */ }
     }
   }
@@ -108,6 +113,7 @@ export class JsonStore {
       fs.mkdirSync(path.dirname(this.file), { recursive: true })
       const temp = `${this.file}.${process.pid}.tmp`
       fs.writeFileSync(temp, JSON.stringify(this.value, undefined, 2), { mode: 0o600 })
+      restrictPermissions(temp)
       fs.renameSync(temp, this.file)
       this.writeFailed = false
     } catch (error) {

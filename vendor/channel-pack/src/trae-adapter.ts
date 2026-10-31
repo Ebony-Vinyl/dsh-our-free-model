@@ -1,3 +1,5 @@
+import { withQueueAccountRotation } from './queue-rotation.js'
+import { checkQueuedResponse } from './model-queue.js'
 /**
  * TRAE（字节跳动 TRAE IDE）LLM 适配器。
  *
@@ -220,7 +222,7 @@ export interface TraeAdapterOptions {
    */
   resolveCredential: (modelId?: string) => Promise<TraeCredential | undefined>
   /** 静默续期凭据。 */
-  refresh: () => Promise<void>
+  refresh: (accountId?: string, reason?: 'auth') => Promise<void>
   /** 动态拉取远端模型列表；失败时回退到 `product.fallbackModels`。 */
   fetchRemoteModels?: () => Promise<TraeRemoteModel[]>
   fetchImpl?: typeof fetch
@@ -551,6 +553,27 @@ function isTransportError(error: unknown): boolean {
   if (message.includes('fetch failed')) return true
   if (message.includes('econnreset') || message.includes('epipe') || message.includes('socket hang up')) return true
   return false
+}
+
+/**
+ * Trae 用量帧里的缓存命中量（#213）。
+ *
+ * 上游实测（见 issue 的原始报文）发的是 Anthropic 口径的
+ * `cache_read_input_tokens`（写入量在 `cache_creation_input_tokens`），
+ * 不是 openai-compat.ts 读的 OpenAI 口径。三处来源按优先级取首个有值的：
+ * 兼容其它 Trae 端点沿用 OpenAI 拼写的可能。
+ */
+function traeCacheReadTokens(usage: Record<string, unknown>): number {
+  const anthropic = usage.cache_read_input_tokens
+  if (typeof anthropic === 'number' && anthropic > 0) return anthropic
+  const details = usage.prompt_tokens_details
+  if (details != null && typeof details === 'object') {
+    const cached = (details as { cached_tokens?: unknown }).cached_tokens
+    if (typeof cached === 'number' && cached > 0) return cached
+  }
+  const openai = usage.prompt_cache_hit_tokens
+  if (typeof openai === 'number' && openai > 0) return openai
+  return 0
 }
 
 /**
@@ -1048,7 +1071,7 @@ export class TraeAdapter extends LlmAdapter {
     // 4. 发送请求（401/403 时刷新一次凭据后重试）
     let response = await this.send(credential, body, options)
     if (!response.ok && (response.status === 401 || response.status === 403)) {
-      await this.options.refresh()
+      await this.options.refresh(undefined, 'auth')
       // 与主路径一致：按本模型选号（跳过正在限流的账号）。
       const refreshed = await this.options.resolveCredential(options.model)
       if (refreshed === undefined || refreshed.access_token.length === 0) {
@@ -1204,7 +1227,7 @@ export class TraeAdapter extends LlmAdapter {
         headers,
         body,
         signal: options.signal,
-      })
+      }).then(checkQueuedResponse)
     } catch (error) {
       if (options.signal?.aborted) throw error
       if (isTransportError(error)) {
@@ -1486,11 +1509,17 @@ export class TraeAdapter extends LlmAdapter {
                     const promptTokens = typeof ev.usage.prompt_tokens === 'number' ? ev.usage.prompt_tokens : 0
                     const completionTokens = typeof ev.usage.completion_tokens === 'number' ? ev.usage.completion_tokens : 0
                     const reasoningTokens = typeof ev.usage.reasoning_tokens === 'number' ? ev.usage.reasoning_tokens : undefined
+                    // prompt_tokens 是**含缓存**的总量（#213 实测：prompt_tokens 4233
+                    // 里已含 cache_read_input_tokens 4224），所以 inputTokens 只计
+                    // 未命中部分，命中量单列 cacheReadTokens —— 与 openai-compat.ts
+                    // 的 DSH 口径一致，否则缓存命中率恒为 0、账本全按 cacheMiss 计价。
+                    const cachedTokens = traeCacheReadTokens(ev.usage)
                     yield {
                       type: 'usage',
                       usage: {
-                        inputTokens: promptTokens,
+                        inputTokens: cachedTokens > 0 ? promptTokens - cachedTokens : promptTokens,
                         outputTokens: completionTokens,
+                        ...cachedTokens > 0 ? { cacheReadTokens: cachedTokens } : {},
                         ...reasoningTokens !== undefined && reasoningTokens > 0 ? { reasoningTokens } : {},
                       },
                     }
@@ -1565,6 +1594,7 @@ export class TraeAdapter extends LlmAdapter {
         }
       }
     } finally {
+      await reader.cancel().catch(() => {})
       reader.releaseLock()
     }
 
@@ -1823,7 +1853,7 @@ export class TraeAdapter extends LlmAdapter {
  */
 export function registerTraeLlm(ctx: Context, options: TraeAdapterOptions): TraeAdapter {
   const product = options.product ?? TRAE
-  const adapter = new TraeAdapter(options)
+  const adapter = withQueueAccountRotation(product.id, options, scoped => new TraeAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   // 返回实例：Channel Pack 的「显示列表」需要它的 `listAllModels()`（不受用户黑名单
   // 影响的全量目录，带最终展示名/倍率）。DSH 的 `ctx.llm` 不透传自定义方法，

@@ -38,13 +38,16 @@ import { qoderProductById } from './qoder-product.js'
 import { clineProductById } from './cline-product.js'
 import { zcodeProductById } from './zcode-product.js'
 import { GeminiAdapter } from './gemini-adapter.js'
+import { LoomyAdapter } from './loomy-adapter.js'
 import { GEMINI, GEMINI_DEFAULT_PROJECT, GEMINI_SESSION_LANE_SMOKE } from './gemini.js'
+import { LOOMY } from './loomy-product.js'
 import type { LobsteraiCredential } from './lobsterai.js'
 import type { QoderCredential } from './qoder.js'
 import type { ClineCredential } from './cline.js'
 import type { ZcodeCredential } from './zcode.js'
 import type { TraeCredential } from './trae.js'
 import type { GeminiCredential } from './gemini.js'
+import type { LoomyCredential } from './loomy.js'
 import type {
   ProbeAccountResult,
   ProbeModelResult,
@@ -89,6 +92,26 @@ const PROBE_SYSTEM = 'You are a helpful assistant.'
  * 单次探测的超时（毫秒）。
  */
 const PROBE_TIMEOUT_MS = 120_000
+
+/**
+ * 「测试」候选链最多试几个模型。
+ *
+ * 只测目录第一个模型会把「目录首个是自动路由占位模型」误报成「账号不可用」：
+ * TRAE 的目录第一个是 `doubao-for-auto`，实测回 `3003 model service is
+ * unavailable`，而同样凭据下前 12 个模型里有 10 个是通的（#681）。
+ */
+const PROBE_CANDIDATES_MAX = 4
+
+/** 候选链里单次尝试的超时。 */
+const PROBE_ATTEMPT_TIMEOUT_MS = 20_000
+
+/**
+ * 候选链的总预算。
+ *
+ * 客户端给 `account.test` 的 RPC 超时是 90s，4 次尝试必须留在里面，否则
+ * 「测试」会以超时收场 —— 那比一次明确的失败更难排查。
+ */
+const PROBE_TOTAL_BUDGET_MS = 80_000
 
 /**
  * 重测/重置所需的最小账号池接口。
@@ -144,6 +167,9 @@ async function probeWithAdapter(
   timeoutMs: number,
 ): Promise<ProbeModelResult> {
   if (!isSupportedProvider(entry.provider)) throw new Error('provider-unsupported: 不支持此渠道')
+  // 客户端要显示耗时，而它此前一直读 `value.ms` —— 服务端从没返回过这个字段，
+  // 于是界面永远显示「连接正常（— ms）」（#681）。
+  const startedAt = Date.now()
   const signal = AbortSignal.timeout(timeoutMs)
   const ref = credentialRef(entry.credentialRef)
 
@@ -203,6 +229,7 @@ async function probeWithAdapter(
     | ZcodeAdapter
     | TraeAdapter
     | GeminiAdapter
+    | LoomyAdapter
   if (lobsteraiProduct !== undefined) {
     adapter = new LobsteraiAdapter({
       credentialRef: ref,
@@ -247,6 +274,23 @@ async function probeWithAdapter(
       resolveCredential: async () => credential as ZcodeCredential,
       refresh: async () => {},
       product: zcodeProduct,
+    })
+  } else if (entry.provider === LOOMY.id) {
+    // Loomy（讯飞）→ LoomyAdapter。
+    //
+    // 它此前**没有分支**，于是「测试」必然落到 else 抛
+    // `Unsupported probe adapter: loomy`，而客户端又把原因读成空串，用户看到的
+    // 是一句「测试失败：」后面什么都没有（#681）。
+    //
+    // 探测场景下 `accountPool` / `fetchRemoteModels` 都可缺省：`loadModels()`
+    // 会退回 `product.fallbackModels`，`providerCatalogVisible` 在
+    // `accountPool === undefined` 时直接返回 true。`refresh` 同样置空 ——
+    // Loomy 没有 refresh 端点，凭据真过期就让它以 AUTH 失败如实上报。
+    adapter = new LoomyAdapter({
+      credentialRef: ref,
+      resolveCredential: async () => credential as LoomyCredential,
+      refresh: async () => {},
+      product: LOOMY,
     })
   } else if (entry.provider === TRAE_PROVIDER_ID) {
     // TRAE 只有一个产品（`TRAE` 常量），没有 productById 式的查表，
@@ -305,7 +349,7 @@ async function probeWithAdapter(
       // 消费整个流即可：能正常结束就说明服务端接受并完成了这次请求
       //（未被限流）。即使正文为空（少数模型只回 finish）也不算限流。
     }
-    return { modelId, ok: true }
+    return { modelId, ok: true, ms: Date.now() - startedAt }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (isRateLimitFailure(error)) {
@@ -319,9 +363,10 @@ async function probeWithAdapter(
         ok: false,
         message: `仍受限：${message}`,
         ...(parsed !== null ? { resetTimeMs: parsed.resetTimeMs } : {}),
+        ms: Date.now() - startedAt,
       }
     }
-    return { modelId, ok: false, message: `无法确认：${message}` }
+    return { modelId, ok: false, message: `无法确认：${message}`, ms: Date.now() - startedAt }
   }
 }
 
@@ -428,6 +473,76 @@ export function pickTestModel(
   const marked = Object.keys(entry.modelRateLimits ?? {})[0]
   if (marked !== undefined) return marked
   return catalogIds[0] ?? ''
+}
+
+/**
+ * 挑出「测试」要依次尝试的模型 id（纯函数，无 IO）。
+ *
+ * 优先级：调用方显式指定（**只测它**）> 已有的限流标记 > 全量目录顺序，
+ * 去重后截断到 {@link PROBE_CANDIDATES_MAX}。
+ *
+ * ## 为什么要一串而不是一个
+ *
+ * `catalogIds[0]` 不一定可调用：TRAE 的目录第一个是 `doubao-for-auto`
+ * （`solo_coder` 自动路由占位模型），实测回 `3003 model service is
+ * unavailable`，而同凭据下前 12 个模型里 10 个是通的。只测第一个会把
+ * 「账号好好的」报成「账号不可用」（#681）。
+ */
+export function pickTestModels(
+  entry: ProviderAccountEntry,
+  catalogIds: readonly string[],
+  requested?: string,
+  max: number = PROBE_CANDIDATES_MAX,
+): string[] {
+  // 显式指定即「我只想知道这个模型通不通」，不要自作主张换成别的。
+  if (typeof requested === 'string' && requested !== '') return [requested]
+  const seen = new Set<string>()
+  const picked: string[] = []
+  for (const id of [...Object.keys(entry.modelRateLimits ?? {}), ...catalogIds]) {
+    if (id === '' || seen.has(id)) continue
+    seen.add(id)
+    picked.push(id)
+    if (picked.length >= max) break
+  }
+  return picked
+}
+
+/**
+ * 「测试」单个账号，按候选链逐个试，**第一个成功即停**。
+ *
+ * 返回的 `value` 是**第一次**尝试的结果（全失败时也用它），`tried` 列出
+ * 实际试过的每一个，`ms` 是整条链的总耗时 —— 也就是用户实际等了多久。
+ *
+ * 预算：单次 20s，整条链 80s。客户端给这个 RPC 的超时是 90s，超出就会以
+ * 「超时」收场，那比一次明确的失败更难排查。
+ */
+export async function testAccountCandidates(
+  pool: ProbePool,
+  accountId: string,
+  modelIds: readonly string[],
+  deps: ProbeDeps = {},
+): Promise<RpcTestAccountResponse> {
+  const startedAt = Date.now()
+  const tried: { modelId: string; ok: boolean; message?: string }[] = []
+  let value: RpcTestAccountResponse | undefined
+  for (const [index, modelId] of modelIds.entries()) {
+    const remaining = PROBE_TOTAL_BUDGET_MS - (Date.now() - startedAt)
+    if (remaining <= 0) break
+    // 最后一个候选拿走剩余预算：只有一个候选时不该被 20s 截断。
+    const timeoutMs = index === modelIds.length - 1 ? remaining : Math.min(remaining, PROBE_ATTEMPT_TIMEOUT_MS)
+    const outcome = await testAccount(pool, accountId, modelId, { ...deps, timeoutMs })
+    tried.push({ modelId: outcome.modelId, ok: outcome.ok, ...outcome.message === undefined ? {} : { message: outcome.message } })
+    value ??= outcome
+    if (outcome.ok) {
+      value = outcome
+      break
+    }
+  }
+  return {
+    ...value ?? { accountId, modelId: modelIds[0] ?? '', ok: false, message: '没有可测试的模型' },
+    ms: Date.now() - startedAt,
+    tried,
+  }
 }
 
 /**

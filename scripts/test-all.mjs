@@ -54,6 +54,7 @@ const suites = [
   ['reload', 'reload-test.mjs', []],
   ['forward', 'forward-test.mjs', []],
   ['gemini-gateway', 'gemini-gateway-test.mjs', []],
+  ['private-file', 'private-file-permissions-test.mjs', []],
   ['subscriptions', 'subscriptions-test.mjs', []],
   ['subscription-completion', 'subscription-completion-test.mjs', []],
   ['subscription-wiring', 'subscription-wiring-test.mjs', []],
@@ -70,6 +71,7 @@ const suites = [
   ['turn-accounting', 'turn-accounting-test.mjs', []],
   ['chan-relay', 'chan-relay-test.mjs', []],
   ['channel-pack', 'channel-pack-test.mjs', []],
+  ['channel-pack-gate', 'channel-pack-gate-test.mjs', []],
   ['channel-source', 'channel-pack-test.mjs', ['--source', '--channels-only']],
   ['channel-network', 'channel-network-test.mjs', []],
   ['channel-credits-rpc', 'channel-credits-rpc-test.mjs', []],
@@ -94,11 +96,15 @@ const suites = [
   ['standalone-settings-host', 'standalone-settings-host-test.mjs', []],
   ['standalone-login-terminal', 'standalone-login-terminal-test.mjs', []],
   ['standalone-package', 'standalone-package-test.mjs', ['--sources-only']],
+  ['bun-fetch', 'bun-fetch-test.mjs', []],
+  ['free-lane-compat', 'free-lane-compat-test.mjs', []],
+  ['stable-session', 'stable-session-test.mjs', []],
   ['egress', 'egress-test.mjs', []],
   ['egress-availability', 'egress-availability-test.mjs', []],
   ['effort', 'effort-test.mjs', []],
   ['projection', 'projection-test.mjs', []],
   ['fingerprint', 'fingerprint-test.mjs', []],
+  ['wire-tool-alias', 'wire-tool-alias-test.mjs', []],
   ['opencode-parity', 'opencode-parity-test.mjs', []],
   ['free-lane-wire', 'free-lane-wire-test.mjs', []],
   ['freetier-gate', 'freetier-gate-test.mjs', []],
@@ -140,6 +146,8 @@ const suites = [
   ['bench-integration', 'bench-integration-test.mjs', []],
   ['plugin-bench-ui', 'plugin-bench-ui-test.mjs', []],
   ['gateway-source', 'gateway-source-test.mjs', []],
+  ['gateway-disconnect', 'gateway-disconnect-test.mjs', []],
+  ['standalone-nav', 'standalone-nav-test.mjs', []],
 ].filter(([name]) => (mode === 'contributor' ? !['manifest', 'release'].includes(name)
   : mode === 'release' ? releaseSuites.has(name) : true)
   && (only === null || name.startsWith(only)))
@@ -169,6 +177,9 @@ function runSuite(script, args) {
   return new Promise(resolve => {
     const child = spawn(process.execPath, [path.join(scriptsDir, script), ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Offline suites mock Node fetch. The Bun protocol has its own loopback
+      // tests; never let an existing mock accidentally send a live request.
+      env: { ...process.env, OUR_FREE_MODEL_FREE_TRANSPORT: 'node' },
     })
     let stdout = ''
     let stderr = ''

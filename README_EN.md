@@ -40,9 +40,9 @@
 ## Community
 
 <div align="center">
-  <img src="docs/images/qq-group-883073874.jpg" alt="QR code for ai技术交流群8 (QQ group: 883073874)" width="300">
+  <img src="docs/images/qq-group-13.png" alt="QR code for ai技术交流群13 (QQ group: 1023181017)" width="300">
   <br>
-  <b>QQ group: 883073874 (ai技术交流群8)</b>
+  <b>QQ group: 1023181017 (ai技术交流群13)</b>
   <br>
   Scan the QR code or search for the group number to join, discuss the plugin, report issues and share tips.
 </div>
@@ -101,7 +101,7 @@ the picker by itself as soon as a probe gets through.
 
 ## Install
 
-> **⚠️ Do not install this plugin from npm.**
+> **⚠️ Do not install the bare `dsh-our-free-model` package from npm.**
 >
 > The `dsh-our-free-model` package on npm **is not published by this repository.**
 > It is a third-party repackaging whose contents do not match this tree:
@@ -110,8 +110,18 @@ the picker by itself as soon as a probe gets through.
 > a build this project did not review, and you lose the signed-manifest
 > verification and in-app upgrades that this repository provides.
 >
-> Install only the ways documented below: a release package from this repository,
-> or a local source directory. For any same-named package from another channel,
+> This repository publishes the scoped **`@ebony-vinyl/dsh-our-free-model`**, built
+> from the same tree and version as the release `dsh-our-free-model-<version>.tgz`.
+> If you prefer npm:
+>
+> ```
+> dsh plugin --profile web add @ebony-vinyl/dsh-our-free-model@2.7.4
+> ```
+>
+> Its bundle id carries the scope (`@ebony-vinyl/dsh-our-free-model`), so it cannot
+> be mixed with the bare-name local install below in one profile — pick one.
+>
+> For any same-named package from another channel,
 > this repository is the source of truth.
 
 ### Command line (plain `dsh web`)
@@ -138,7 +148,7 @@ and installation contract rather than assuming every desktop shell shares this g
 To install manually as a real directory, use a trusted local tarball:
 
 1. Create `<DSH_HOME>/profiles/<profile>/vendor/`. From the reviewed repository, run `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`, or place an official same-version release tarball from this repository there. Local packing does not publish to npm.
-2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.7.2.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
+2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.7.4.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
 3. Append `"dsh-our-free-model"` to `dsh.profile.bundles`.
 
 When the package manager owns the installed bytes, set `distribution: 'managed'` in the bundle config or plugin `settings.json`. The package manager then handles updates; in-app upgrades, announcement polling and hot reload stand down while model access remains available. For later updates, replace the trusted tarball and update its dependency path so the old lockfile cannot restore an older copy.
@@ -696,6 +706,7 @@ it never touches files.
 ## Known limitations
 
 - **"No usage cap" means no cap to buy.** There is no balance, no plan and no per-token billing; the lane is metered by session rate, though, and hammering it surfaces as `429`. The plugin marks the model *quota reached* rather than hiding it, and the next probe clears the state.
+- **Upstream sessions are per-conversation.** Each conversation is pinned to one stable upstream session (the mapping is persisted in the data directory's `session-map.json`), so concurrent conversations never share upstream state. Turns that arrive without a conversation id (some host call shapes, local-gateway requests with no `user`/`conversation`) fall back to a reserved `global` session shared by all such turns, including their KV cache — run parallel sensitive conversations through a call shape that carries a conversation id; the plugin logs a one-time warning for the first id-less turn. The free lane meters quota per session, so a fresh session per id-less request is not an option — that is the cost of the quota model. Aggregate-lane requests additionally carry an `x-session-id` header so a provider that keeps per-session state cannot merge concurrent conversations on the same key; the EAC lane deliberately sends no session header, because its shared-pool admission gate does not recognize the free lane's session fingerprint.
 - **Some upstream models are slow.** `nemotron-3.5-lightning-free` measured over 30 s to first token in one run. That is upstream latency, and the dashboard reports it rather than hiding it.
 - **Output speed is sometimes `—`.** A model that answers in one or two large frames, or whose thinking never streams, has no window worth dividing. The panel says so instead of publishing the model's thinking time as decoding speed.
 - **Thinking is a silent wait, and it shares the output budget.** `mimo-v2.6-flash-free` measured 60–70 s of silence while the lane billed 3024 reasoning tokens and streamed not one reasoning frame; such a turn ends as `stop` with nothing visible, which clients report as an empty response. The forward endpoint and the LAN relay keep the connection alive with heartbeats — but that protects the connection, not the timeout: the SSE parser skips comment frames, and pi-ai's idle watchdog (`streamIdleTimeoutMs`, default 300 s) resets only when real content frames arrive, so a stall past 300 s on the wire still fails (issue #34). Only the caller can give it **budget**: raise the per-call output ceiling past 16k, or use a model the catalogue marks `reasoning: false`.

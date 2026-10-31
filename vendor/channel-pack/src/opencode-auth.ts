@@ -5,7 +5,7 @@
  *
  * 序列 = `[账号槽…（账号池手动顺序）] + [匿名槽（固定末位）]`。
  * 免费模型下全序列参与轮换；收费模型只由账号槽承载（匿名槽被剔除）。
- * 匿名殿后**只是位置，不是特权降级** —— 判据见 `pickSlot`（`opencode-adapter.ts`）。
+ * 匿名殿后**只是位置，不是特权降级** —— 判据见本模块的 `pickSlot`。
  *
  * ## 为什么「换 PC 指纹」在这里就落不了地
  *
@@ -21,7 +21,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import { OPENCODE } from './opencode-product.js'
+import { OPENCODE, isFreeOpencodeModel } from './opencode-product.js'
 import {
   deriveProjectId,
   normalizeProxy,
@@ -50,6 +50,27 @@ export interface IdentitySlot {
   readonly proxy: NormalizedProxy | undefined
   readonly fingerprint: OpencodeFingerprint
   readonly userAgent: string
+}
+
+/**
+ * 按「平权」规则选一个可用槽。
+ *
+ * ⚠️ **收费模型跳过匿名槽**：匿名凭证（字面量 `public`）只被服务端认作
+ * 免费通道，送付费模型必然 401/403。
+ *
+ * @param excluded 已试过的槽 id（`tried` 集合）——保证每个槽最多试一次。
+ */
+export function pickSlot(
+  slots: readonly IdentitySlot[],
+  modelId: string,
+  excluded: ReadonlySet<string>,
+): IdentitySlot | undefined {
+  for (const slot of slots) {
+    if (excluded.has(slot.id)) continue
+    if (slot.kind === 'anonymous' && !isFreeOpencodeModel(modelId)) continue
+    return slot
+  }
+  return undefined
 }
 
 /** 匿名槽的固定 id（与账号池 id 空间隔离，不可能撞）。 */

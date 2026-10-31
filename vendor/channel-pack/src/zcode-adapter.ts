@@ -1,3 +1,5 @@
+import { withQueueAccountRotation } from './queue-rotation.js'
+import { checkQueuedResponse, ModelQueuedError } from './model-queue.js'
 /**
  * ZCode（智谱 z.ai 免费额度）LLM 适配器。
  *
@@ -737,9 +739,9 @@ export class ZcodeAdapter extends LlmAdapter {
      * 见 {@link ZcodeAdapter.switchAccountOnQuota}。
      */
     const tried = new Set<string>()
+    let credential = await this.resolveCredentialOrThrow(options)
     let activeAccountId = this.options.currentAccountId?.()
     if (activeAccountId !== undefined && activeAccountId.length > 0) tried.add(activeAccountId)
-    let credential = await this.resolveCredentialOrThrow(options)
 
     /**
      * 2. 构造请求体（**Anthropic Messages 格式**）。
@@ -1381,8 +1383,9 @@ export class ZcodeAdapter extends LlmAdapter {
           signal,
         }),
         { signal },
-      )
+      ).then(checkQueuedResponse)
     } catch (error) {
+      if (error instanceof ModelQueuedError) throw error
       /**
        * ⚠ 用户中断（无论是等待闸门还是 fetch 本身）**必须原样上抛** ——
        * 让 harness 归为 aborted；把它翻译成 TIMEOUT/TRANSPORT 会让
@@ -1861,7 +1864,7 @@ export function httpErrorCodeForZcode(status: number, body: string): string {
  */
 export function registerZcodeLlm(ctx: Context, options: ZcodeAdapterOptions): ZcodeAdapter {
   const product = options.product ?? ZCODE
-  const adapter = new ZcodeAdapter(options)
+  const adapter = withQueueAccountRotation(product.id, options, scoped => new ZcodeAdapter(scoped))
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   return adapter
 }

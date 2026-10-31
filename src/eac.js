@@ -24,6 +24,9 @@
 import crypto from 'node:crypto'
 import https from 'node:https'
 import http from 'node:http'
+import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { Readable } from 'node:stream'
 // Web-stream adapter: http.js's readHead/readSse speak getReader(), so the
 // node:http response is converted into a proper WHATWG ReadableStream.
@@ -41,7 +44,111 @@ const TURN_TIMEOUT_MS = 300000
  * the signed bytes. Assignment is module-private by convention, exactly like
  * the free lane's upstream override.
  */
-export const lane = { fetch: null }
+export const lane = { fetch: null, proxy: undefined }
+
+const proxyDispatchers = new Map()
+let windowsProxy
+let windowsProxyAt = 0
+
+function proxyBypassed(target, patterns, windows = false) {
+  const hostname = target.hostname.toLowerCase()
+  const port = target.port || (target.protocol === 'https:' ? '443' : '80')
+  return String(patterns ?? '').split(/[;,\s]+/).filter(Boolean).some(raw => {
+    let pattern = raw.toLowerCase()
+    if (pattern === '*') return true
+    if (windows && pattern === '<local>') return !hostname.includes('.') && !hostname.includes(':')
+    const withPort = /^(.*):(\d+)$/.exec(pattern)
+    if (withPort) {
+      if (withPort[2] !== port) return false
+      pattern = withPort[1]
+    }
+    if (pattern.includes('*')) {
+      const escaped = pattern.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')
+      return new RegExp(`^${escaped}$`, 'i').test(hostname)
+    }
+    const domain = pattern.replace(/^\./, '')
+    return hostname === domain || (!windows && hostname.endsWith(`.${domain}`))
+  })
+}
+
+function parseWindowsProxy(output) {
+  const value = name => new RegExp(`^\\s*${name}\\s+REG_\\w+\\s+(.+)$`, 'mi').exec(output)?.[1]?.trim() ?? ''
+  if (Number(value('ProxyEnable')) !== 1 || value('ProxyServer') === '') return null
+  return { server: value('ProxyServer'), bypass: value('ProxyOverride') }
+}
+
+async function readWindowsProxy() {
+  const executable = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.exe')
+  try {
+    const { stdout } = await promisify(execFile)(executable, [
+      'query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+    ], { windowsHide: true, timeout: 2000, maxBuffer: 64 * 1024, encoding: 'utf8' })
+    return parseWindowsProxy(stdout)
+  } catch { return null }
+}
+
+function windowsProxyFor(target, config) {
+  if (proxyBypassed(target, config.bypass, true)) return null
+  if (!config.server.includes('=')) return config.server
+  const entries = new Map(config.server.split(';').map(row => {
+    const at = row.indexOf('=')
+    return [row.slice(0, at).trim().toLowerCase(), row.slice(at + 1).trim()]
+  }))
+  return entries.get(target.protocol.slice(0, -1)) ?? null
+}
+
+function supportedProxy(address) {
+  if (!address) return null
+  try {
+    const url = new URL(String(address).includes('://') ? String(address) : `http://${address}`)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? address : null
+  } catch { return null }
+}
+
+async function proxyFor(target) {
+  if (lane.proxy !== undefined) return typeof lane.proxy === 'function' ? lane.proxy(target) : lane.proxy
+  const env = process.env
+  const address = (target.protocol === 'https:' ? env.HTTPS_PROXY ?? env.https_proxy : env.HTTP_PROXY ?? env.http_proxy)
+    ?? env.ALL_PROXY ?? env.all_proxy
+  if (address) return proxyBypassed(target, env.NO_PROXY ?? env.no_proxy ?? '') ? null : supportedProxy(address)
+  if (process.platform !== 'win32') return null
+  if (windowsProxy === undefined || Date.now() - windowsProxyAt >= 30_000) {
+    windowsProxyAt = Date.now()
+    windowsProxy = readWindowsProxy()
+  }
+  const config = await windowsProxy
+  return config === null ? null : supportedProxy(windowsProxyFor(target, config))
+}
+
+// The proxy path needs undici's proxy-aware dispatcher. undici ships only as a
+// dev dependency (the DSH host does not hand it to every plugin), so it loads
+// on first proxy use. A configured proxy without it must fail loudly instead
+// of silently falling back to a direct connection — that would leak the signed
+// bytes (and the user's address) past the proxy they asked for.
+let undiciModule
+async function loadUndici() {
+  if (undiciModule === undefined) {
+    try { undiciModule = await import('undici') } catch { undiciModule = null }
+  }
+  return undiciModule
+}
+
+async function dispatcherFor(address) {
+  const url = new URL(String(address).includes('://') ? String(address) : `http://${address}`)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error(`unsupported EAC proxy protocol ${url.protocol}`)
+  const mod = await loadUndici()
+  if (mod === null) {
+    throw new UpstreamError(
+      `an EAC proxy is configured (${url.host}) but undici is unavailable in this host; install undici or clear the proxy`,
+      CODE.transport,
+    )
+  }
+  const key = url.href
+  if (!proxyDispatchers.has(key)) {
+    proxyDispatchers.set(key, new mod.EnvHttpProxyAgent({ httpProxy: key, httpsProxy: key, noProxy: '' }))
+  }
+  return proxyDispatchers.get(key)
+}
 
 /**
  * Test seam for the per-user authorization token (src/eac-user.js), same
@@ -81,11 +188,24 @@ export { laneFetch as directFetch }
  * is what http.js's readHead/readSse consume; nothing is buffered before the
  * sniff window, so first tokens still flow out unheld.
  */
-function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal } = {}) {
+async function laneFetch(url, { method = 'GET', headers = {}, body = undefined, signal } = {}) {
   if (signal?.aborted === true) return Promise.reject(new UpstreamError('request aborted', CODE.aborted))
   if (typeof lane.fetch === 'function') return lane.fetch(url, { method, headers, body, signal })
+  const target = new URL(url)
+  const proxy = await proxyFor(target)
+  if (signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
+  if (proxy) {
+    if ((await loadUndici()) === null) {
+      throw new UpstreamError(
+        `an EAC proxy is configured (${new URL(proxy).host}) but undici is unavailable in this host; install undici or clear the proxy`,
+        CODE.transport,
+      )
+    }
+    return (await loadUndici()).fetch(target, {
+      method, headers, body, signal, redirect: 'manual', dispatcher: await dispatcherFor(proxy),
+    })
+  }
   return new Promise((resolve, reject) => {
-    const target = new URL(url)
     const transport = target.protocol === 'http:' ? http : https
     const request = transport.request({
       protocol: target.protocol,

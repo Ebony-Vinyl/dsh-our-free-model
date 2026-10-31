@@ -440,8 +440,8 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     } else if (method === 'POST' && pathname === `${PREFIX}/models/refresh`) {
       const body = await readBody(req)
       if (body.probe !== undefined && typeof body.probe !== 'boolean') throw fail(400, msg(req, 'probe 必须是布尔值', 'probe must be a boolean'))
-      await runtime.refreshCatalog({ probe: body.probe === true, force: body.probe === true })
-      json(res, 200, summary())
+      const { sources } = await runtime.refreshCatalog({ probe: body.probe === true, force: body.probe === true, report: true })
+      json(res, 200, { ...summary(), sources })
     } else if (method === 'POST' && pathname === `${PREFIX}/models/test`) {
       const body = await readBody(req)
       if (stores.settings.get().enabled === false) throw fail(503, msg(req, '推理服务已暂停，请先在服务设置中启用', 'Inference service paused; enable it in settings first'))

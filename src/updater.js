@@ -28,8 +28,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { restrictPermissions } from './open-external.js'
 
 const REPO = 'Ebony-Vinyl/dsh-our-free-model'
+/** This package's own name, as a package manager records it in the profile. */
+const PACKAGE_NAME = 'dsh-our-free-model'
 
 /**
  * A GitHub raw proxy. On networks where `raw.githubusercontent.com` and
@@ -149,6 +152,10 @@ const MAX_ENGINE_BYTES = 128 * 1024 * 1024
 const MAX_FILES = 128
 const ENGINE_BINARY = /^vendor\/magpie\/bin\/magpie-(?:win32-(?:x64|arm64)\.exe|(?:linux|darwin)-(?:x64|arm64))$/
 const SHA_RE = /^[0-9a-f]{64}$/
+const RESTART_MARKER = Symbol.for('our-free-model.restart-required-versions')
+const PROCESS_EPOCH = Symbol.for('our-free-model.process-epoch')
+const processEpoch = globalThis[PROCESS_EPOCH] ??= crypto.randomUUID()
+const restartRequiredVersions = globalThis[RESTART_MARKER] ??= new Map()
 // Hot reload evaluates a fresh updater module before the old request finishes.
 // A process-wide lock keeps the successor from starting a second transaction.
 const UPGRADE_LOCKS = Symbol.for('our-free-model.upgrade-locks')
@@ -186,6 +193,19 @@ export function compareVersions(a, b) {
     if (x !== y) return x < y ? -1 : 1
   }
   return 0
+}
+
+/** Detect a plugin install whose package files still belong to a package-manager store. */
+export function packageUsesHardLinks(pkgDir) {
+  for (const rel of ['package.json', 'index.js', 'client.js']) {
+    try { if (fs.statSync(path.join(pkgDir, rel)).nlink > 1) return true } catch { /* incomplete package: normal startup diagnostics handle it */ }
+  }
+  return false
+}
+
+/** Detect host rollback to a package version older than the code in memory. */
+export function installationIsManaged(pkgDir) {
+  return packageUsesHardLinks(pkgDir)
 }
 
 /**
@@ -841,6 +861,103 @@ export function verifyInstalled(pkgDir, manifest) {
 }
 
 /**
+ * Does a package manager own the installed copy?
+ *
+ * The desktop "real directory" install adds the plugin to the profile's
+ * `dependencies`, which hands `<profile>/node_modules/dsh-our-free-model` to
+ * pnpm. With the default `distribution: self` the in-app upgrader then becomes
+ * a second writer on a pnpm-owned directory; on Windows pnpm's own atomic
+ * replace fails partway and leaves `dsh-our-free-model_tmp_<pid>_<n>` behind.
+ *
+ * Two exact, filesystem-local records prove that ownership, both read beside
+ * the profile root (two levels above `pkgDir`):
+ *
+ * - the profile's `pnpm-lock.yaml` declares this package as a dependency: a
+ *   `specifier` entry keyed by the package name;
+ * - the profile's `node_modules/.modules.yaml` lists
+ *   `dsh-our-free-model@<specifier>` under `hoistedLocations`.
+ *
+ * A `node_modules/` directory inside the plugin copy is deliberately not a
+ * signal: under pnpm's hoisted linker a tarball dependency installs without
+ * one, so that heuristic would miss exactly the installs this guards.
+ *
+ * @param {string} pkgDir - the installed package directory
+ * @returns {boolean}
+ */
+export function isPackageManagerOwned(pkgDir) {
+  const profileDir = path.dirname(path.dirname(path.resolve(pkgDir)))
+  const lockfile = readTextFile(path.join(profileDir, 'pnpm-lock.yaml'))
+  if (lockfile !== undefined && lockfileDeclaresPackage(lockfile, PACKAGE_NAME)) return true
+  const modules = readTextFile(path.join(profileDir, 'node_modules', '.modules.yaml'))
+  return modules !== undefined && modulesHoistsPackage(modules, PACKAGE_NAME)
+}
+
+function readTextFile(file) {
+  try { return fs.readFileSync(file, 'utf8') } catch { return undefined }
+}
+
+/** True when a pnpm lockfile records a `specifier` for `name` as a dependency.
+ *  The importer's dependency entry is the only place the package name appears
+ *  as a bare mapping key with a `specifier` child; pinned `packages:` and
+ *  `snapshots:` keys carry `name@<specifier>` and cannot match.
+ *
+ *  A `link:` specifier is deliberately not ownership: pnpm records no version
+ *  and no integrity for a link, so it owns the junction and never the bytes.
+ *  Refusing there would disable the one self-upgrade shape that survives a
+ *  full install — a real tree inside the profile declared as a relative
+ *  `link:`. A `file:`, tarball-URL or registry specifier does record a source
+ *  pnpm can re-extract, and stays "owned". */
+function lockfileDeclaresPackage(text, name) {
+  const lines = text.split(/\r?\n/)
+  const entry = new RegExp(`^(\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*$`)
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = entry.exec(lines[index])
+    if (match === null) continue
+    const indent = match[1].length
+    for (let child = index + 1; child < lines.length; child += 1) {
+      const line = lines[child]
+      if (line.trim() === '') continue
+      if (line.length - line.trimStart().length <= indent) break
+      if (/^\s*"?specifier"?\s*:\s*['"]?link:/.test(line)) return false
+      if (/^\s*"?specifier"?\s*:/.test(line)) return true
+    }
+  }
+  return false
+}
+
+/** True when `node_modules/.modules.yaml` hoists `name@<specifier>`. pnpm
+ *  writes this file as JSON on newer releases and as YAML on older ones, so
+ *  the JSON spelling is parsed and the YAML spelling scanned by indentation. */
+function modulesHoistsPackage(text, name) {
+  let parsed
+  try { parsed = JSON.parse(text) } catch { parsed = undefined }
+  if (parsed !== undefined) {
+    const hoisted = parsed?.hoistedLocations
+    if (hoisted === null || typeof hoisted !== 'object') return false
+    return Object.keys(hoisted).some(key => key.startsWith(`${name}@`))
+  }
+  const lines = text.split(/\r?\n/)
+  const header = /^(\s*)"?hoistedLocations"?\s*:/
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = header.exec(lines[index])
+    if (match === null) continue
+    const indent = match[1].length
+    for (let child = index + 1; child < lines.length; child += 1) {
+      const line = lines[child]
+      if (line.trim() === '') continue
+      if (line.length - line.trimStart().length <= indent) break
+      if (line.includes(`${name}@`)) return true
+    }
+  }
+  return false
+}
+
+/** The refusal `apply` raises for a package-manager-owned copy. Carries
+ *  `statusCode: 409`, the settings API's refusal convention for an install
+ *  whose bytes another writer owns (see index.js `MANAGED_MESSAGE`). */
+const PACKAGE_MANAGER_REFUSAL = 'this installation is owned by pnpm; the in-app upgrade would be a second writer and can corrupt the copy — update it with pnpm (or reinstall from a release)'
+
+/**
  * The upgrade lifecycle. The optional activate callback lets the Host include
  * hot reload in the transaction; standalone release audits only install files.
  */
@@ -856,9 +973,10 @@ export class PluginUpdater {
    *   throwaway keypair here, installs pin the release key
    * @param {string} [deps.runningVersion] - version captured by the running module
    */
-  constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEY, runningVersion }) {
-    this.deps = { pkgDir, dataDir, settings, log, fetchImpl, defaultSources, manifestPublicKey, runningVersion }
+  constructor({ pkgDir, dataDir, settings, log = () => {}, fetchImpl = fetch, defaultSources = DEFAULT_MANIFEST_SOURCES, manifestPublicKey = PINNED_MANIFEST_PUBLIC_KEY, runningVersion, processEpoch: epoch = processEpoch }) {
+    this.deps = { pkgDir, dataDir, settings, log, fetchImpl, defaultSources, manifestPublicKey, runningVersion, processEpoch: epoch }
     this.latest = undefined
+    this.latestContentDrift = false
     this.checkedAt = 0
     this.error = ''
     this.applying = false
@@ -887,11 +1005,20 @@ export class PluginUpdater {
     fs.mkdirSync(this.deps.dataDir, { recursive: true })
     const pending = `${this.stateFile}.tmp`
     fs.writeFileSync(pending, JSON.stringify(state), { mode: 0o600 })
+    restrictPermissions(pending)
     fs.renameSync(pending, this.stateFile)
   }
 
   reconcileRecovery() {
     const state = this.loadUpgradeState()
+    const restartMarker = restartRequiredVersions.get(this.deps.pkgDir)
+    if (!upgradeLocks.has(this.deps.pkgDir) && state?.phase === 'complete' && state.restartRequired === true
+      && restartMarker?.version === state.to && restartMarker.epoch === this.deps.processEpoch
+      && (this.deps.runningVersion ?? this.currentVersion()) === state.from && this.currentVersion() === state.from) {
+      restartRequiredVersions.delete(this.deps.pkgDir)
+      this.saveUpgradeState({ ...state, phase: 'rolled-back', restartRequired: false, diskRestored: true, runtimeRestored: true })
+      return
+    }
     if (upgradeLocks.has(this.deps.pkgDir) || !['installing', 'activating', 'recovery-required'].includes(state?.phase)) return
     try {
       verifySnapshot(this.deps.pkgDir, backupSnapshot(this.backupDir))
@@ -936,7 +1063,11 @@ export class PluginUpdater {
     const active = upgradeLocks.has(this.deps.pkgDir)
     const unfinished = ['installing', 'activating'].includes(state?.phase)
     const recoveryRequired = state?.phase === 'recovery-required' || (unfinished && !active)
-    const available = this.latest !== undefined && compareVersions(this.latest.version, current) > 0
+    const restartMarker = restartRequiredVersions.get(this.deps.pkgDir)
+    const restartRequired = restartMarker?.epoch === this.deps.processEpoch && restartMarker.version === installedVersion
+    const versionOrder = this.latest === undefined ? -1 : compareVersions(this.latest.version, current)
+    const available = !restartRequired && this.latest !== undefined
+      && (versionOrder > 0 || (versionOrder === 0 && this.latestContentDrift))
     this.history = this.loadHistory()
     return {
       current,
@@ -944,6 +1075,7 @@ export class PluginUpdater {
       installedVersion,
       versionMismatch: current !== installedVersion,
       recoveryRequired,
+      restartRequired,
       phase: state?.phase ?? 'idle',
       latest: this.latest?.version ?? '',
       available,
@@ -979,14 +1111,24 @@ export class PluginUpdater {
         throw new Error(`update path requires at least ${manifest.minSupported}; ${current} is installed`)
       }
       this.latest = manifest
+      this.latestContentDrift = compareVersions(manifest.version, current) === 0 && !this.installedMatches(manifest)
       this.manifestUrl = source
       this.checkedAt = Date.now()
       this.error = ''
       this.deps.log?.(`our-free-model: update check via ${source} -> ${manifest.version} (installed ${current})`)
-      return { available: compareVersions(manifest.version, current) > 0, current, latest: manifest.version }
+      return { available: compareVersions(manifest.version, current) > 0 || this.latestContentDrift, current, latest: manifest.version }
     } catch (error) {
       this.error = String(error?.message ?? error)
       throw error
+    }
+  }
+
+  installedMatches(manifest) {
+    try {
+      verifyInstalled(this.deps.pkgDir, manifest)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -996,7 +1138,15 @@ export class PluginUpdater {
    * @returns {Promise<{version: string, files: number, bytes: number, previous: string}>}
    */
   async apply({ version, onProgress = () => {}, activate } = {}) {
+    if (this.status().restartRequired) throw new Error('the installed version is ready; restart the host before applying another update')
     if (upgradeLocks.has(this.deps.pkgDir)) throw new Error('an upgrade is already running')
+    // A package-manager-owned copy is refused before any transaction state is
+    // touched or a manifest is fetched: the in-app upgrader would be a second
+    // writer on a directory pnpm replaces atomically, which corrupts the
+    // install on Windows.
+    if (isPackageManagerOwned(this.deps.pkgDir)) {
+      throw Object.assign(new Error(PACKAGE_MANAGER_REFUSAL), { statusCode: 409 })
+    }
     this.reconcileRecovery()
     const priorState = this.loadUpgradeState()
     if (['installing', 'activating', 'recovery-required'].includes(priorState?.phase)) {
@@ -1009,6 +1159,7 @@ export class PluginUpdater {
     let state
     let installed = false
     let activated = false
+    let restartRequired = false
     try {
       // Re-check immediately before installing: the owner may have pushed a new
       // manifest since the last check, and a stale cached manifest would verify
@@ -1048,39 +1199,62 @@ export class PluginUpdater {
           this.saveUpgradeState(state)
           onProgress({ phase: 'reload' })
           const activation = await activate(result)
-          if (activation?.ok !== true) {
-            throw Object.assign(new Error(activation?.error ?? 'hot reload did not confirm activation'), { runtimeRestored: activation?.restored === true })
-          }
-          if (activation.version !== manifest.version) {
+          if (activation?.restartRequired === true) {
+            // The installed files are fully verified, but this host cannot safely
+            // replace its live module graph. Keep the good disk install and ask
+            // for a host restart instead of rolling the package back.
+            restartRequired = true
+          } else if (activation?.ok !== true) {
+            if (activation?.restored === true) {
+              // The previous module graph is intact, while the new files are
+              // already hash-verified on disk. Keep them and activate after
+              // restart instead of silently restoring the old package bytes.
+              restartRequired = true
+            } else {
+              throw Object.assign(new Error(activation?.error ?? 'hot reload did not confirm activation'), { runtimeRestored: false })
+            }
+          } else if (activation.version !== manifest.version) {
             throw new Error(`activation version mismatch: expected ${manifest.version}, got ${String(activation.version ?? '(missing)')}`)
+          } else {
+            activated = true
           }
-          activated = true
         }
       } catch (error) {
         // The installed copy is now in an unknown state: put the old one back
         // before surfacing the failure, so the next boot still works. A failed
         // restore must not mask the install failure that caused it, and the
         // "previous version restored" claim is only true when it succeeded.
+        const safeToKeepInstalled = state.phase === 'activating' && error.runtimeRestored === true
         let restoreError = null
-        try { restoreBackup(this.backupDir, this.deps.pkgDir) } catch (rollbackError) { restoreError = rollbackError }
+        if (!safeToKeepInstalled) {
+          try { restoreBackup(this.backupDir, this.deps.pkgDir) } catch (rollbackError) { restoreError = rollbackError }
+        } else {
+          restartRequired = true
+        }
         state = {
           ...state,
-          phase: restoreError !== null || (state.phase === 'activating' && error.runtimeRestored !== true) ? 'recovery-required' : 'rolled-back',
-          diskRestored: restoreError === null,
+          phase: safeToKeepInstalled ? 'complete' : restoreError !== null || (state.phase === 'activating' && error.runtimeRestored !== true) ? 'recovery-required' : 'rolled-back',
+          diskRestored: safeToKeepInstalled || restoreError === null,
           runtimeRestored: state.phase !== 'activating' || error.runtimeRestored === true,
         }
-        if (restoreError !== null) {
+        if (safeToKeepInstalled) {
+          // Activation failed, but selfReload restored the old in-memory
+          // generation. The new signed files are verified on disk; require a
+          // process restart rather than rolling them back invisibly.
+        } else if (restoreError !== null) {
           throw new Error(`upgrade failed (${error?.message ?? error}); rollback also failed (${restoreError?.message ?? restoreError})`)
         }
-        throw new Error(`upgrade failed, previous files restored (${error?.message ?? error})`)
+        if (!safeToKeepInstalled) throw new Error(`upgrade failed, previous files restored (${error?.message ?? error})`)
       }
-      this.saveUpgradeState({ ...state, phase: 'complete', activated })
+      this.saveUpgradeState({ ...state, phase: 'complete', activated, restartRequired })
+      if (restartRequired) restartRequiredVersions.set(this.deps.pkgDir, { version: manifest.version, epoch: this.deps.processEpoch })
+      this.latestContentDrift = false
       try { fs.rmSync(this.stageDir, { recursive: true, force: true }) } catch (error) { this.deps.log?.(`our-free-model: staging cleanup failed (${error?.message ?? error})`) }
-      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, reused: staged.reused }
+      const record = { from: previous, to: manifest.version, at: Date.now(), ok: true, files: manifest.files.length, bytes: staged.bytes, backedUp, activated, restartRequired, reused: staged.reused }
       this.recordHistory(record)
       this.checkedAt = Date.now()
       this.deps.log?.(`our-free-model: upgraded ${previous} -> ${manifest.version} (${manifest.files.length} files)`)
-      return result
+      return activate === undefined ? result : { ...result, activated, restartRequired }
     } catch (error) {
       this.error = String(error?.message ?? error)
       if (state !== undefined && installed) {

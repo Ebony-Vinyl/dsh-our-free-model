@@ -22,7 +22,8 @@
     "notes": "Reasoning arrives as think tags on this route (FCC profile).",
     "website": "https://agnes-ai.com/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://apihub.agnes-ai.com/v1/models"
   },
   {
     "id": "alibaba_cloud",
@@ -920,7 +921,8 @@
     "notes": "Zhipu open-platform coding endpoint (mainland China), distinct from the z.ai international records.",
     "website": "https://open.bigmodel.cn",
     "local": false,
-    "source": "9router"
+    "source": "9router",
+    "modelsUrl": "https://open.bigmodel.cn/api/paas/v4/models"
   },
   {
     "id": "groq",
@@ -1092,7 +1094,8 @@
     "notes": "Moonshot platform key; caller extra_body is rejected on this route (FCC profile).",
     "website": "https://www.kimi.com/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.moonshot.ai/v1/models"
   },
   {
     "id": "kimi_code",
@@ -1180,7 +1183,8 @@
     "notes": "Kimi Code subscription; ids from the 9router kimi registry (same host, api.kimi.com/coding/v1).",
     "website": "https://www.kimi.com/code",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.kimi.com/coding/v1/models"
   },
   {
     "id": "lightning",
@@ -1326,7 +1330,8 @@
     "notes": "Reasoning is split out of the text stream (FCC profile); speech/image ids omitted.",
     "website": "https://www.minimax.io/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.minimax.io/v1/models"
   },
   {
     "id": "minimax-cn",
@@ -1375,7 +1380,8 @@
     "source": "9router",
     "headers": {
       "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14"
-    }
+    },
+    "modelsUrl": "https://api.minimaxi.com/v1/models"
   },
   {
     "id": "mistral",
@@ -1536,7 +1542,8 @@
     "source": "fcc",
     "freeModelsHint": [
       "kimi-k3-free"
-    ]
+    ],
+    "modelsUrl": "https://router.bynara.id/v1/models"
   },
   {
     "id": "nebius",
@@ -1594,7 +1601,8 @@
     "notes": "FCC README example id.",
     "website": "https://novita.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.novita.ai/openai/v1/models"
   },
   {
     "id": "openai_api",
@@ -2005,7 +2013,8 @@
     "notes": "Opper gateway (v3/compat base).",
     "website": "https://opper.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.opper.ai/v3/models"
   },
   {
     "id": "orcarouter",
@@ -2033,7 +2042,8 @@
     "source": "fcc",
     "freeModelsHint": [
       "deepseek/deepseek-v4-flash-free"
-    ]
+    ],
+    "modelsUrl": "https://api.orcarouter.ai/v1/models"
   },
   {
     "id": "perplexity",
@@ -2226,7 +2236,8 @@
     "notes": "QwenCloud Coding Plan endpoint (9router alicode-intl, same base URL as FCC).",
     "website": "https://qwencloud.com/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://coding-intl.dashscope.aliyuncs.com/v1/models"
   },
   {
     "id": "sambanova",
@@ -2277,7 +2288,8 @@
     "notes": "Scaleway Generative APIs; SCW secret key.",
     "website": "https://www.scaleway.com/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.scaleway.ai/v1/models"
   },
   {
     "id": "siliconflow",
@@ -2966,7 +2978,8 @@
     "notes": "ByteDance Volcengine coding endpoint (CN); 9router registry declares the key URL.",
     "website": "https://console.volcengine.com/ark",
     "local": false,
-    "source": "9router"
+    "source": "9router",
+    "modelsUrl": "https://ark.cn-beijing.volces.com/api/coding/v3/models"
   },
   {
     "id": "wafer",
@@ -3313,7 +3326,8 @@
     "notes": "Z.ai pay-as-you-go endpoint; ids are shared across Z.ai routes per the 9router glm registry.",
     "website": "https://z.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "fcc",
+    "modelsUrl": "https://api.z.ai/api/paas/v4/models"
   },
   {
     "id": "zenmux",
@@ -4131,7 +4145,8 @@
     "source": "fcc",
     "freeModelsHint": [
       "openrouter/free"
-    ]
+    ],
+    "modelsUrl": "https://openrouter.ai/api/v1/models"
   },
   {
     "id": "opencode_zen",
@@ -4678,7 +4693,8 @@
       "muse-spark-1.3-contributor-free",
       "muse-spark-1.2-contributor-free",
       "jev-1.13-free"
-    ]
+    ],
+    "modelsUrl": "https://opencode.ai/zen/v1/models"
   },
   {
     "id": "llamacpp",

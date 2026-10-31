@@ -86,9 +86,17 @@ function schema(value) {
     }
     if (['anyOf', 'allOf', 'oneOf', 'prefixItems'].includes(key) && Array.isArray(child)) return [key, child.map(schema)]
     if (['items', 'additionalProperties', 'not', 'contains'].includes(key)) return [key, schema(child)]
+    // Gemini's strict schema validation rejects an empty string as an enum
+    // member (`enum[0]: cannot be empty`, 400) where the OpenAI shape tolerated
+    // it as "may be blank" — drop those members, and a members-only-of-"" enum
+    // becomes an unconstrained string rather than an empty enum (#251).
+    if (key === 'enum' && Array.isArray(child)) {
+      const kept = child.filter(member => member !== '')
+      return kept.length ? [key, kept] : null
+    }
     // Defaults, enum members and examples are data, not nested schemas.
     return [key, child]
-  }))
+  }).filter(entry => entry !== null))
 }
 
 /** Translate only settings that the shared completion contract can honor. */

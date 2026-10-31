@@ -1,3 +1,4 @@
+import { throwIfModelQueued } from './model-queue.js'
 /**
  * TRAE（字节跳动 TRAE IDE）协议常量、凭据结构与请求转换。
  *
@@ -1733,6 +1734,7 @@ export function parseTraeSSELine(eventName: string, dataLine: string): TraeSSEEv
     return { event }
   }
 
+  throwIfModelQueued(raw)
   const ev: TraeSSEEvent = { event }
   switch (event) {
     case 'output':

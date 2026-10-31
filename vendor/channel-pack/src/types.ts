@@ -250,6 +250,8 @@ export interface ProbeModelResult {
    * 探测发现「仍受限」时，上游给出的**新重置时刻**（epoch ms）。
    */
   resetTimeMs?: number
+  /** 这一次探测从发出到结束的耗时（ms）。成功与失败都带。 */
+  ms?: number
 }
 
 /** 单个账号的重测结果。 */
@@ -313,6 +315,20 @@ export interface RpcTestAccountResponse {
   message?: string
   /** 失败且上游给出重置时刻时带出（**不落盘**）。 */
   resetTimeMs?: number
+  /**
+   * 这次「测试」的耗时（ms）。
+   *
+   * 服务端此前**从不返回**这个字段，而客户端一直在读 `value.ms`，于是界面
+   * 永远显示「连接正常（— ms）」（#681）。
+   */
+  ms?: number
+  /**
+   * 候选链里**实际试过**的模型，按顺序排列。
+   *
+   * 只测一个模型会把「目录第一个是自动路由占位模型」误报成「账号不可用」，
+   * 故现在按候选链逐个试；这一项让用户看到试了哪些、各自什么结果。
+   */
+  tried?: { modelId: string; ok: boolean; message?: string }[]
 }
 
 /** 重置单个账号的限流标记（不测试，直接清除）。 */

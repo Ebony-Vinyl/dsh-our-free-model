@@ -178,7 +178,13 @@ export function capabilitiesFor(modelId) {
   const base = baseModelId(modelId)
   const override = FREE_ID_OVERRIDES[base]
   if (override !== undefined) return { reasoning: true, ...override }
-  for (const entry of CAPABILITIES) if (entry.match.test(base)) return entry
+  for (const entry of CAPABILITIES) if (entry.match.test(base)) {
+    // A `-vl` segment is the vendor's own vision-language marker (nemotron's
+    // `nemotron-3.5-super-vl` shipped this way): a family row that predates the
+    // variant must not advertise the variant as text-only (#458).
+    if (!entry.vision && /(?:^|[-_])vl(?:$|[-_.])/i.test(base)) return { ...entry, vision: true }
+    return entry
+  }
   return { vision: false, reasoning: true, contextWindow: 131072, maxOutput: 32768 }
 }
 

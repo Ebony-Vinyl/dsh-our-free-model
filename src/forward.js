@@ -885,19 +885,33 @@ async function chatCompletions(req, res, complete, options = {}) {
       if (chunk.type === 'tool-call-delta') {
         const action = tools.admit(chunk)
         if (action.kind === 'drop') return
-        sendSse(res, {
-          id, object: 'chat.completion.chunk', created, model,
-          choices: [{
-            index: 0,
-            delta: {
-              tool_calls: [{
-                index: action.openAiIndex,
-                ...(action.first ? { id: action.id, function: { name: action.name ?? '', arguments: '' } } : {}),
-              }],
-            },
-            finish_reason: null,
-          }],
-        })
+        // OpenAI's delta protocol puts `id` and `function.name` on the opening
+        // frame only, and every later frame is still a *function* delta. The
+        // shape this branch used to emit for a non-opening frame was a bare
+        // `{"index":N}` — no `function` at all — which a client that validates
+        // `delta.tool_calls[0].function` as an object rejects on the spot, and
+        // which carries nothing an accumulator could use anyway (#452). A frame
+        // with neither the opening fields nor argument bytes is now simply not
+        // sent. `type: 'function'` goes on the opening frame because the
+        // non-streaming branch already spells it and the official chunk shape
+        // carries it.
+        if (action.first) {
+          sendSse(res, {
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{
+              index: 0,
+              delta: {
+                tool_calls: [{
+                  index: action.openAiIndex,
+                  id: action.id,
+                  type: 'function',
+                  function: { name: action.name ?? '', arguments: '' },
+                }],
+              },
+              finish_reason: null,
+            }],
+          })
+        }
         if (action.args) {
           sendSse(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { tool_calls: [{ index: action.openAiIndex, function: { arguments: action.args } }] }, finish_reason: null }] })
         }
@@ -1040,7 +1054,16 @@ async function responsesEndpoint(req, res, complete, options = {}) {
 
   if (body.stream === true) {
     openStreamHeaders(res, options.heartbeatMs)
-    const say = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`)
+    // `sequence_number` is a required field on every Responses stream event and
+    // has to increase strictly within one response. An accumulator that checks
+    // it (the documented one does: `Number.isInteger(event.sequence_number) &&
+    // event.sequence_number > lastSequence`) throws "Non-increasing event
+    // sequence" on the very first frame when the field is absent, which makes
+    // the whole streaming surface unusable for those clients (#548). Stamping
+    // it in the writer keeps every event covered, including the failure and
+    // suppressed-stream frames that leave by a different branch.
+    let sequence = 0
+    const say = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...payload, sequence_number: sequence++ })}\n\n`)
     const response = (over = {}) => ({
       id, object: 'response', created_at: created, model, status: 'in_progress',
       output: [], usage: undefined, ...over,

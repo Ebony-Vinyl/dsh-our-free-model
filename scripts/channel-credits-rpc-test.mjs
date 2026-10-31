@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 /** 使用实际已打包 RPC，只提供账号池 ref，禁止真实网络与旧单凭据回退。 */
-export async function verifyChannelCreditsRpc({ ctx, call, creds }) {
+export async function verifyChannelCreditsRpc({ ctx, call, creds, adapters }) {
   const originalFetch = globalThis.fetch
   const providers = ['qoder', 'qodercn', 'loomy', 'minimax', 'lobsterai', 'zcode', 'gemini']
   let quotaRequests = 0, quotaFailed = true
@@ -68,6 +68,33 @@ export async function verifyChannelCreditsRpc({ ctx, call, creds }) {
     assert.equal(quotaRequests, 2, '手动重试必须真正查询上游替身')
     assert.equal(freshQuota.value.accounts[0].balance.total, 60)
     await verifyRefreshDispatch({ ctx, call })
+    for (const provider of ['qoder', 'qodercn']) {
+      const service = ctx[`${provider}Auth`], saved = service.refreshAccountCredential, calls = []
+      const ref = `FIXTURE_CREDITS_${provider.toUpperCase()}`
+      // 默认账号之外的 B 必须由实际注册接线按 id 刷新，不能重新选默认 ref。
+      const otherId = `fixture-auth-${provider}-b`, otherRef = `FIXTURE_AUTH_${provider.toUpperCase()}_B`
+      try {
+        creds.set(otherRef, { value: '{"access_token":"fixture-b"}' })
+        await ctx.accountPool.addAccount({ id: otherId, provider, nickname: 'B', credentialRef: otherRef, enabled: true, refreshable: true, createdAt: 1 })
+        // qoder 的缺凭据测试刚删除了默认 ref，这里恢复为有效 A，确保错误实现会选中它。
+        creds.set(ref, { value: '{"access_token":"fixture-a"}' })
+        service.refreshAccountCredential = async (...args) => { calls.push(args) }
+        await adapters.get(provider).options.refresh(otherId)
+        assert.deepEqual(calls, [[otherRef, ctx.accountPool, otherId]], `${provider}: 实际认证续期绑定 B`)
+        const lookup = ctx.accountPool.findAccountIdByCredential
+        try {
+          assert.equal(await adapters.get(provider).options.queueAccountIdForCredential({ access_token: 'fixture-b' }), otherId)
+          ctx.accountPool.findAccountIdByCredential = async () => { throw new Error('fixture strict lookup failed') }
+          await assert.rejects(adapters.get(provider).options.queueAccountIdForCredential({ access_token: 'fixture-b' }), /strict lookup failed/)
+        } finally { ctx.accountPool.findAccountIdByCredential = lookup }
+        await assert.rejects(adapters.get(provider).options.refresh('missing-account'), /当前请求的账号已移除/)
+        assert.equal(calls.length, 1, '账号删除后不得退回 A 续期')
+      } finally {
+        service.refreshAccountCredential = saved
+        await ctx.accountPool.removeAccount(otherId)
+        creds.delete(otherRef)
+      }
+    }
   } finally {
     ctx.credentials.resolve = originalResolve
     globalThis.fetch = originalFetch

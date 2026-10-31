@@ -69,7 +69,8 @@ console.log('\n=== 3. a caller tool that already carries the official definition
   const map = applyFingerprint(body, false)
   check('no duplicate and no alias', declared(body), ['read', 'shell'])
   check('nothing was aliased', map.size, 0)
-  check('no placeholder note is added', noteOf(body), '""')
+  check('no placeholder note is added', /placeholders? that do nothing/.test(noteOf(body)), false)
+  check('environment context is still supplied', /<env>/.test(noteOf(body)), true)
 }
 
 console.log('\n=== 4. duplicate declarations of one gate name keep the first ===')

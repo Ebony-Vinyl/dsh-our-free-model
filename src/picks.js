@@ -19,6 +19,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { restrictPermissions } from './open-external.js'
 
 /** The repositories the page advertises, in display order. */
 export const PICK_REPOS = Object.freeze([
@@ -129,6 +130,7 @@ export function createPickStats({ repos = PICK_REPOS, fetchImpl = fetch, cacheFi
       fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
       const temp = `${cacheFile}.${process.pid}.tmp`
       fs.writeFileSync(temp, JSON.stringify({ at: state.at, repos: state.repos }), { mode: 0o600 })
+      restrictPermissions(temp)
       fs.renameSync(temp, cacheFile)
     } catch (error) {
       log(`pick stats: could not keep the cache (${error?.message ?? error})`)

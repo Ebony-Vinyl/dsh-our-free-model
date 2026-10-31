@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { createToolResultMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import {
   DEFAULT_IMAGE_LIMITS,
@@ -267,6 +267,24 @@ export function createGatewayMessage(
 }
 
 /**
+ * 委托当前宿主构造工具结果：≤0.1.6 使用 user/tool-result 包裹块，
+ * 0.1.7+ 使用一等 tool 消息。外部 provider 没有 channel-pack 的兼容层，
+ * 固定其中任何一种形状都会让另一代宿主丢失工具应答或拒绝请求。
+ * 工厂在两代内核中均存在，同时负责 id、source 与不可变内容。
+ */
+export function createGatewayToolMessage(
+  toolCallId: string,
+  content: Message['content'],
+  isError?: boolean,
+): Message {
+  return createToolResultMessage({
+    callId: toolCallId as never,
+    content,
+    isError: isError === true,
+  })
+}
+
+/**
  * Chat 入站的思考文本。优先 `reasoning_content`，否则认 `reasoning`。
  * 不 trim：`" "` 是 DeepSeek V4 接受的占位，trim 掉就又变成没回传。
  */
@@ -345,11 +363,12 @@ async function convertMessage(
     // 图片走与 user 消息**同一份**入站实现（附件服务落盘），故这里复用
     // `partsFromContent`；各适配器本就递归消费 `tool-result` 的内嵌图片
     // （见 `trae-adapter.ts` 的 `collectImages` / `userContentParts`）。
-    return createGatewayMessage('user', [{
-      type: 'tool-result',
-      toolCallId: value.tool_call_id as never,
-      content: await partsFromContent(value.content, bridge, limits),
-    }], { kind: 'tool', callId: value.tool_call_id as never })
+    //
+    // 形状由当前宿主决定，外部 provider 必须收到与该内核匹配的工具消息。
+    return createGatewayToolMessage(
+      value.tool_call_id,
+      await partsFromContent(value.content, bridge, limits),
+    )
   }
   throw new OpenAiGatewayError(`unsupported message role: ${String(role)}`)
 }

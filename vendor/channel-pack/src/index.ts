@@ -268,6 +268,12 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
     'llm-minimax', 'llm-zcode', 'llm-gemini',
   )
   const pool = new AccountPool(ctx)
+  const accountForRefresh = async (provider: string, accountId?: string) => {
+    if (accountId === undefined) return pool.getAvailableAccount(provider, '')
+    const entry = pool.listAccountsByProvider(provider).find(account => account.id === accountId)
+    if (entry === undefined) throw new LlmError(`${provider}: 当前请求的账号已移除`, 'MISSING_CREDENTIAL')
+    return { entry }
+  }
 
   // 「已失效模型」剔除：注入 ctx 只为把日志接进 DSH logger 并复用同一份 home
   // 解析。必须在任何 `registerXxxLlm` 之前调用 —— 各适配器经
@@ -356,7 +362,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId?: string) => {
       // 必须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref。
       //
       // 为什么：resolveCredential（上面）优先从账号池取
@@ -369,7 +375,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
       //
       // 与 Go 一致：`handler.go:197-209` 也是先 Pick 出账号、再对该账号
       // `RefreshToken(acct)`（而非某个全局单例）。
-      const available = await pool.getAvailableAccount(LOBSTERAI.id, '')
+      const available = await accountForRefresh(LOBSTERAI.id, accountId)
       if (available) await lobsterai.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
       else await lobsterai.refresh()
     },
@@ -433,7 +439,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId?: string) => {
       // 必须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref。
       //
       // 为什么：resolveCredential（上面）优先从账号池取
@@ -443,7 +449,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
       // 那份未更新的过期凭据 → 带着过期 token 发请求 → 401。
       // 用户看到的是「刚在 Channel Pack 登录好，却一直认证失败」，
       // 而日志里续期全是成功的，极难排查。
-      const available = await pool.getAvailableAccount(QODER.id, '')
+      const available = await accountForRefresh(QODER.id, accountId)
       if (available) await qoder.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
       else await qoder.refresh()
     },
@@ -457,6 +463,18 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
     product: QODER,
     // 额度受限时标记「本次实际使用的账号」（理由见 `activeQoderAccountId` 注释）。
     currentAccountId: () => activeQoderAccountId.get(QODER.id),
+    // 以本次实际凭据查账号，避免并发请求间共享的 activeQoderAccountId 串号。
+    queueAccountIdForCredential: async credential => {
+      const id = await pool.findAccountIdByCredential(QODER.id, credential.access_token)
+      return id.length > 0 ? id : undefined
+    },
+    onQueueAccountSwitch: () => {
+      ctx.logger?.info?.(`[channel-pack] ${QODER.displayName} 排队时已尝试切换账号`)
+    },
+    onQueueRotationFailure: reason => {
+      ctx.logger?.warn?.(`[channel-pack] ${QODER.displayName} 排队换号失败，将继续等待并重试`)
+      if (reason !== undefined) ctx.logger?.debug?.(`[channel-pack] ${QODER.id} queue rotation detail: ${String(reason)}`)
+    },
   })
 
   // ===== Qoder 中国版（qodercn）=====
@@ -492,12 +510,12 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId?: string) => {
       // ⚠️ 必须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref。
       // 理由与国际版那条真实缺陷完全同因：resolveCredential 优先取池内凭据，
       // 而 refresh() 读写 QODERCN_ACCESS_TOKEN，两者错配会让日志里续期全成功、
       // 用户却「刚登录却一直认证失败」。
-      const available = await pool.getAvailableAccount(QODER_CN.id, '')
+      const available = await accountForRefresh(QODER_CN.id, accountId)
       if (available) await qoderCn.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
       else await qoderCn.refresh()
     },
@@ -511,6 +529,17 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
     // ⚠️ 取「**本次实际使用**的账号」而非池里默认那一个：池的默认账号可能与之
     // 不同（例如本账号被限流、池已切到别的账号），标错就会让标记落在无辜账号上。
     currentAccountId: () => activeQoderAccountId.get(QODER_CN.id),
+    queueAccountIdForCredential: async credential => {
+      const id = await pool.findAccountIdByCredential(QODER_CN.id, credential.access_token)
+      return id.length > 0 ? id : undefined
+    },
+    onQueueAccountSwitch: () => {
+      ctx.logger?.info?.(`[channel-pack] ${QODER_CN.displayName} 排队时已尝试切换账号`)
+    },
+    onQueueRotationFailure: reason => {
+      ctx.logger?.warn?.(`[channel-pack] ${QODER_CN.displayName} 排队换号失败，将继续等待并重试`)
+      if (reason !== undefined) ctx.logger?.debug?.(`[channel-pack] ${QODER_CN.id} queue rotation detail: ${String(reason)}`)
+    },
   })
 
   // ===== TRAE（字节 TRAE IDE）服务 =====
@@ -541,8 +570,8 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
-      const available = await pool.getAvailableAccount(TRAE.id, '')
+    refresh: async (accountId?: string) => {
+      const available = await accountForRefresh(TRAE.id, accountId)
       if (available) await trae.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
       else await trae.refresh()
     },
@@ -602,7 +631,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId?: string) => {
       // 必须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref。
       //
       // 为什么：resolveCredential（上面）优先从账号池取
@@ -612,7 +641,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
       // 那份未更新的过期凭据 → 带着过期 token 发请求 → 401。
       // 用户看到的是「刚在 Channel Pack 登录好，却一直认证失败」，
       // 而日志里续期全是成功的，极难排查。
-      const available = await pool.getAvailableAccount(CLINE.id, '')
+      const available = await accountForRefresh(CLINE.id, accountId)
       if (available) await cline.refreshAccountCredential(available.entry.credentialRef, pool, available.entry.id)
       else await cline.refresh()
     },
@@ -900,13 +929,13 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId?: string) => {
       // ⚠️ MiniMax **有** refresh 端点（`/oauth2/token` 的 refresh_token 授权），
       // 这里是真续期（与 Loomy 的「只能探测有效性」不同）。
       //
       // 仍须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref ——
       // 否则续期的是另一份凭据，用户会看到「刚登录好却一直认证失败」。
-      const available = await pool.getAvailableAccount(MINIMAX.id, '')
+      const available = await accountForRefresh(MINIMAX.id, accountId)
       if (available) {
         // ⚠️ **必须传 pool + entry.id**：续期成功后要把新的 `expiresAt` 写回
         // 账号池，否则 UI 会一直显示「已过期」而实际能正常发消息
@@ -993,10 +1022,10 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
         return undefined
       }
     },
-    refresh: async () => {
+    refresh: async (accountId?: string) => {
       // ⚠️ 必须刷新**解析凭据时所用的那一个**账号，而不是默认单凭据 ref ——
       // 否则续期的是另一份凭据，用户会看到「刚登录好却一直认证失败」。
-      const available = await pool.getAvailableAccount(GEMINI.id, '')
+      const available = await accountForRefresh(GEMINI.id, accountId)
       if (available) {
         // ⚠️ **必须传 pool + entry.id**：续期成功后要把新的 `expiresAt` 写回
         // 账号池，否则 UI 一直显示「已过期」而实际能正常发消息。
@@ -1474,8 +1503,10 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
   if (config.disableOpencode !== true) {
     const opencodeUA = lazyOpencodeUserAgent()
     opencodeAdapter = registerOpencodeLlm(ctx, {
-      identitySlots: async () => listIdentitySlots(
-        await Promise.all(pool.listAccountsByProvider(OPENCODE.id).map(async (entry) => {
+      identitySlots: async (model?: string) => listIdentitySlots(
+        await Promise.all(pool.listAccountsByProvider(OPENCODE.id).filter(entry =>
+          model === undefined || !((entry.modelRateLimits?.[model] ?? 0) > Date.now()),
+        ).map(async (entry) => {
           const resolved = await ctx.credentials
             .resolve(credentialRef(entry.credentialRef))
             .catch(() => undefined)

@@ -286,6 +286,35 @@ try {
     assert.doesNotThrow(() => assertEngineMutation('GET', '/api/plugins/add', { spec: PACKAGE }))
   })
 
+  await check('third-party prose that names an excluded channel is rewritten, not dropped', async () => {
+    // A real market listing (Agent Office) reads the session files of many
+    // desktop tools and its summary names the excluded ones. It is not the
+    // channel: it stays, but no spelling of the names survives the boundary.
+    const agentOffice = {
+      package: '@magpie-community/page-agent-office', name: 'Agent Office', community: true, kind: 'page',
+      summary: {
+        en: 'Reads the session files of Claude Code, Codex, WorkBuddy and CodeBuddy on this computer.',
+        zh: '读取本机 Claude Code、Codex、WorkBuddy、CodeBuddy 的会话文件。',
+      },
+    }
+    const filtered = filterEngineJSON('/api/plugins/listings', {
+      listings: [structuredClone(agentOffice), { package: PACKAGE, name: 'WorkBuddy', providers: IDS }],
+    })
+    assert.equal(filtered.listings.length, 1, 'the channel listing is dropped')
+    assert.equal(filtered.listings[0].package, agentOffice.package, 'the unrelated listing stays')
+    assert.equal(filtered.listings[0].name, 'Agent Office')
+    assert.match(filtered.listings[0].summary.en, /a desktop coding tool/)
+    assert.doesNotMatch(filtered.listings[0].summary.en, /workbuddy|codebuddy/i)
+    assert.match(filtered.listings[0].summary.zh, /某桌面编码工具/)
+    assert.doesNotMatch(filtered.listings[0].summary.zh, /workbuddy|codebuddy/i)
+    assert.equal(filterEngineJSON('/api/plugins/npm', { npm: { [agentOffice.package]: { description: agentOffice.summary.en } } })
+      .npm[agentOffice.package].description.includes('WorkBuddy'), false, 'npm prose is rewritten too')
+    // Id-bearing surfaces stay untouched: the deprecation list needs exact ids.
+    const providers = { movable: ['workbuddy', 'workbuddy-ai', 'zcode'], presets: [{ id: 'zcode', name: 'ZCode' }] }
+    assert.deepEqual(filterEngineJSON('/api/providers', structuredClone(providers)).movable,
+      ['workbuddy', 'workbuddy-ai', 'zcode'], 'provider ids are not redacted')
+  })
+
   console.log(`magpie-policy: ${checks} checks passed`)
 } finally {
   await engine.close()

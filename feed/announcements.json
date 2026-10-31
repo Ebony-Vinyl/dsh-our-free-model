@@ -2,6 +2,30 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-10-31-v2.7.4-plugin-release",
+      "title": "v2.7.4：社区修复合并与稳定性大扫除",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-31T04:00:00Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.7.4",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.7.4 合并了 19 个社区修复 PR 与 8 项本地修复，覆盖转发、渠道、工作台与升级链路。</b>流式工具调用帧补齐 id/name 与连续 index，Responses 流补 sequence_number；上游 5xx 空响应体时会说明是哪一层失败并提示请求带了图片；keepalive 注释帧不再无限续命空闲死线；瞬时网络失败带上 code，可正常重试。</p><p>并发会话不再共享全局会话；-vl 视觉模型不再被标成纯文本；Gemini 工具 schema 的空串 enum 成员会被剔除。渠道端修复 trae 缓存命中率恒为 0、渠道账号「测试」恒失败、渠道模型隐藏后会话选择器不刷新等问题；EAC 登录支持 Windows 系统代理。</p><p>工作台修复 Windows 保留端口段导致的「启动失败」与展开瞬间丢失收起按钮；Windows 上私有文件 0600 权限经 icacls 实际生效；pnpm 托管的安装会拒绝应用内升级并交还原安装方式。本次仅发布插件包，桌面应用版本与安装包不随本次升级更新。</p><p><b>新增 npm 渠道：</b>本仓库现发布带 scope 的 <b>@ebony-vinyl/dsh-our-free-model</b>，与 Release 的 tarball 同源同版本，可用 <code>dsh plugin --profile web add @ebony-vinyl/dsh-our-free-model@2.7.4</code> 安装。npm 上那个裸名的 dsh-our-free-model 仍是第三方打包，请勿安装。</p>"
+    },
+    {
+      "id": "2026-10-30-v2.7.3-plugin-release",
+      "title": "v2.7.3：免费车道兼容、账号排队换号与安全升级",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-10-30T06:49:33Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.7.3",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.7.3 更新 DSH 插件端。</b>免费车道接入 Bun 传输、补全环境信息并迁移旧会话映射；针对真实 DSH 工具集增加可逆工具别名，保留工具描述、参数与宿主执行能力。账号渠道支持对明确排队响应进行同渠道、同模型换号，并修复匿名槽轮换、账号归属和认证续期预算。</p><p>客户端取消或断连时及时释放上游连接与并发槽；代理握手中的取消也会立即清理。宿主无法安全热重载时，升级文件安装后提示重启生效，托管安装继续由宿主管理。中英文 README 同步交流群12。</p><p><b>使用前提：</b>默认 OpenCode 免费推理需要用户自行安装原生 Bun，插件不会自动下载；可用 OUR_FREE_MODEL_BUN 指定路径。本次仅发布插件包，桌面应用版本与安装包不随本次升级更新。兼容修复不解除上游实际额度、地区或账号限制。</p>"
+    },
+    {
       "id": "2026-10-25-v2.7.1-channel-exclusion",
       "title": "v2.7.1：彻底移除 WorkBuddy 国内版/国际版与华为云渠道",
       "level": "update",

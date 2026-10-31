@@ -113,11 +113,12 @@ import {
 } from './trae-credits.js'
 import {
   pickTestModel,
+  pickTestModels,
+  testAccountCandidates,
   resetAccount,
   resetAllAccounts,
   retestAccount,
   retestAllAccounts,
-  testAccount,
 } from './account-probe.js'
 import { exportBackup, importBackup } from './backup.js'
 import { handleOpencodeRpc } from './opencode-rpc.js'
@@ -643,6 +644,8 @@ type LlmServiceLike = {
    * 只是每个模型不带档位字段。
    */
   resolveModelInfo?(provider: string, model: string, signal?: AbortSignal): Promise<unknown>
+  /** Host notification that makes the conversation picker re-read listModels. */
+  emitAdaptersUpdated?: () => void
 }
 
 /**
@@ -808,7 +811,26 @@ export interface ModelCatalogSource {
  * ⚠️ **通知失败不能反噬已经落盘的开关**：否则用户看到「切换失败」而实际已生效，
  * 再点一次又因幂等而看似「无效」，比不提示更难排查。故这里自行吞掉异常只记日志。
  */
+function llmEmitAdaptersUpdated(ctx: Context): void {
+  const read = (target: Context | undefined) => {
+    if (target == null) return undefined
+    try { return llmServiceOf(target) } catch { return undefined }
+  }
+  const root = (ctx as Context & { root?: Context }).root
+  const llm = read(ctx) ?? (root != null && root !== ctx ? read(root) : undefined)
+  llm?.emitAdaptersUpdated?.()
+}
+
 function broadcastCatalogChanged(ctx: Context): void {
+  // `ctx.emit` from the connection fiber does not reach the composer. The host
+  // LLM service's `emitAdaptersUpdated` is what refreshes `session.modelCatalog`.
+  // The plain emit stays so a composition without that method, and tests that
+  // capture `llm/adapters-updated`, still observe the change.
+  try {
+    llmEmitAdaptersUpdated(ctx)
+  } catch (error) {
+    ctx.logger.warn(`[channel-pack] 通知模型目录刷新失败：${String(error)}`)
+  }
   try {
     ctx.emit('llm/adapters-updated')
   } catch (error) {
@@ -2243,8 +2265,11 @@ if (provider === LOBSTERAI.id) {
         //
         // 目录也读不出来时如实报错，**不**猜一个模型名发出去（猜错会得到与账号
         // 无关的 404，把「账号不可用」和「模型名不对」两件事混成一条报错）。
-        let modelId = pickTestModel(entry, [], req.modelId)
-        if (modelId === '') {
+        // ⚠️ 拿到的是**候选链**而不是单个模型：目录第一个未必可调用
+        //（TRAE 的 `doubao-for-auto` 是自动路由占位模型，回 3003），只测它
+        // 会把好好的账号报成不可用（#681）。显式指定时链长为 1。
+        let candidates = pickTestModels(entry, [], req.modelId)
+        if (candidates.length === 0) {
           const catalog = await fullCatalogIds(ctx, modelAdapters, entry.provider)
           if ('error' in catalog) {
             return {
@@ -2252,16 +2277,16 @@ if (provider === LOBSTERAI.id) {
               error: { code: 'bad-request', message: `无法确定要测试的模型：${catalog.error}` },
             }
           }
-          modelId = pickTestModel(entry, catalog.ids, req.modelId)
+          candidates = pickTestModels(entry, catalog.ids, req.modelId)
         }
-        if (modelId === '') {
+        if (candidates.length === 0) {
           return {
             ok: false,
             error: { code: 'bad-request', message: `${entry.provider} 没有可测试的模型` },
           }
         }
 
-        const value: RpcTestAccountResponse = await testAccount(pool, accountId, modelId)
+        const value: RpcTestAccountResponse = await testAccountCandidates(pool, accountId, candidates)
         return { ok: true, value }
       }
 

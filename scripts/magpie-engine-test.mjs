@@ -467,7 +467,7 @@ async function fixtureTests() {
     assert.throws(() => owned.gateway(), /not running/)
     await assert.rejects(owned.start(), /closed/)
   })
-  await check('restart preserves gateway port/key and account consent; occupied saved port fails clearly', async () => {
+  await check('restart preserves gateway port/key and account consent; occupied saved port moves instead of failing', async () => {
     const prefsPath = path.join(settings.config, 'magpie', 'settings.json')
     const prefs = JSON.parse(await readFile(prefsPath, 'utf8'))
     await writeFile(prefsPath, JSON.stringify({ ...prefs, noAccountDiscovery: false, theme: 'dark' }))
@@ -484,7 +484,19 @@ async function fixtureTests() {
     const occupied = net.createServer()
     await listen(occupied, new URL(gateway.url).port)
     const conflict = engine({ dataDir, binary: process.execPath })
-    await assert.rejects(conflict.start(), /gateway port is occupied/)
+    try { await conflict.start() } catch (error) {
+      console.error(await readFile(path.join(dataDir, 'magpie', 'fixture-trace.jsonl'), 'utf8'))
+      throw error
+    }
+    // The saved port is a preference, not a requirement: a listener that took
+    // it (or a Windows reserved range that drifted, #688) must not block
+    // startup — the engine moves to a fresh port and persists it.
+    const savedPort = Number(new URL(gateway.url).port)
+    const movedPort = Number(new URL(conflict.gateway().url).port)
+    assert.notEqual(movedPort, savedPort, 'the occupied port was abandoned')
+    assert.notEqual(movedPort, occupied.address().port, 'the new port is really free')
+    const movedPrefs = JSON.parse(await readFile(prefsPath, 'utf8'))
+    assert.equal(movedPrefs.port, movedPort, 'the moved port is persisted for the next boot')
     await conflict.close()
     await new Promise(resolve => occupied.close(resolve))
   })

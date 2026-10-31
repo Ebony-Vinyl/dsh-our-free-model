@@ -11,6 +11,8 @@ const dataDir = path.join(scratch, 'data')
 const model = 'mimo-v2.6-flash-free'
 const kilo = 'nvidia/nemotron-3.5-lightning:free'
 let calls = 0
+let failedListing = ''
+let emptyFreeListing = false
 let holdNextCall = false
 let notifyCall
 let notifyClosed
@@ -18,10 +20,16 @@ const upstream = http.createServer((req, res) => {
   req.resume()
   req.on('end', () => {
     if (req.method === 'GET') {
+      const source = req.url === '/models' ? 'kilo' : 'free'
+      if (failedListing === source) {
+        res.writeHead(503, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: '模拟清单刷新失败' }))
+        return
+      }
       res.writeHead(200, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ data: req.url === '/models'
+      res.end(JSON.stringify({ data: source === 'kilo'
         ? [{ id: kilo, isFree: true, name: '测试免费模型' }]
-        : [{ id: model }] }))
+        : emptyFreeListing ? [] : [{ id: model }] }))
     } else {
       calls++
       if (holdNextCall) {
@@ -264,6 +272,105 @@ try {
     assert.equal(stats.turns, 1)
     assert.equal(stats.grand.input, 11)
     assert.equal(stats.grand.output, 7)
+  })
+  await check('刷新逐来源报告失败与保留的行数，恢复后不残留失败状态', async () => {
+    const before = calls
+    const refresh = async () => {
+      const response = await request('/api/management/models/refresh', { body: {} })
+      assert.equal(response.status, 200)
+      const result = await response.json()
+      assert.deepEqual(result.catalog.map(row => row.id), [model, kilo])
+      assert.equal(result.dataDir, dataDir)
+      assert.ok(!JSON.stringify(result).includes(key))
+      return result.sources
+    }
+    try {
+      for (const source of ['free', 'kilo']) {
+        failedListing = source
+        const sources = await refresh()
+        assert.deepEqual(sources[source], { ok: false, count: 1 })
+        assert.deepEqual(sources[source === 'free' ? 'kilo' : 'free'], { ok: true, count: 1 })
+        assert.deepEqual(sources.sealed, { ok: true, count: 0, skipped: true })
+      }
+      failedListing = ''
+      emptyFreeListing = true
+      assert.deepEqual((await refresh()).free, { ok: false, count: 1 })
+      emptyFreeListing = false
+      const sources = await refresh()
+      assert.deepEqual(sources.free, { ok: true, count: 1 })
+      assert.deepEqual(sources.kilo, { ok: true, count: 1 })
+      assert.equal(calls, before, '清单失败不能触发推理或探测')
+    } finally { failedListing = ''; emptyFreeListing = false }
+  })
+  await check('账号渠道刷新逐供应商返回失败、行数和恢复结果', async () => {
+    const channelDir = path.join(scratch, 'channel-refresh')
+    fs.mkdirSync(channelDir, { recursive: true })
+    const fixtureFile = path.join(channelDir, 'refresh-fixture.json')
+    const fixture = {
+      trae: { models: [{ id: 'fixture-trae', name: 'TRAE 测试模型' }] },
+      qodercn: { models: [{ id: 'fixture-qoder', name: 'Qoder 测试模型' }] },
+    }
+    const save = () => fs.writeFileSync(fixtureFile, JSON.stringify(fixture))
+    save()
+    const argv = [...process.execArgv]
+    let instance
+    try {
+      process.execArgv.push('--import', new URL('./lib/standalone-refresh-fixture.mjs', import.meta.url).href)
+      instance = await startStandalone({ dataDir: channelDir, port: 0, refresh: false, logger: { warn() {} } })
+      await instance.ready
+      const forwardKey = JSON.parse(fs.readFileSync(instance.keyFile, 'utf8')).forwardKey
+      for (const failed of [false, true, false]) {
+        fixture.trae.fail = failed
+        save()
+        const response = await fetch(instance.url + '/api/management/models/refresh', {
+          method: 'POST', headers: { authorization: `Bearer ${forwardKey}`, 'content-type': 'application/json' },
+          body: '{}', signal: AbortSignal.timeout(10000),
+        })
+        assert.equal(response.status, 200)
+        const result = await response.json()
+        assert.deepEqual(result.sources.trae, { ok: !failed, count: failed ? 0 : 1 })
+        assert.deepEqual(result.sources.qodercn, { ok: true, count: 1 })
+        assert.deepEqual(result.sources.free, { ok: true, count: 1 })
+        assert.equal(result.catalog.filter(row => row.channel === 'trae').length, failed ? 0 : 1)
+        assert.equal(JSON.stringify(result).includes('fixture-private-token'), false)
+      }
+      const listing = instance.channels.refresh()
+      const report = instance.channels.refresh({ report: true })
+      assert.ok(Array.isArray(await listing), '既有渠道调用仍返回模型数组')
+      assert.deepEqual((await report).sources.trae, { ok: true, count: 1 })
+    } finally {
+      process.execArgv.splice(0, process.execArgv.length, ...argv)
+      await instance?.close()
+    }
+  })
+  await check('EAC 清单成功或失败前授权已切换时，返回跳过且不覆盖当前目录', async () => {
+    const { createRuntimeStores, createModelRuntime } = await import('../src/core/runtime.js')
+    const { lane } = await import('../src/eac.js')
+    const stores = createRuntimeStores({ dataDir: path.join(scratch, 'sealed-refresh'), logger: { warn() {} } })
+    stores.catalogStore.update({ sealIds: ['fixture-cached'] })
+    let credential = { mode: 'direct', base, apiKey: 'fixture-sealed-key', userToken: 'fixture-old-user' }
+    const runtime = createModelRuntime({ ...stores, sealedCredential: () => credential, logger: { warn() {} } })
+    const cached = runtime.catalog.filter(row => row.channel === 'eac').map(row => row.id)
+    const originalFetch = lane.fetch
+    try {
+      assert.equal(cached.length, 1)
+      for (const failed of [false, true]) {
+        credential = { ...credential, userToken: 'fixture-old-user' }
+        lane.fetch = async () => {
+          credential = { ...credential, userToken: 'fixture-new-user' }
+          return new Response(JSON.stringify(failed ? { error: { message: 'refused' } } : { data: [{ id: 'fixture-stale' }] }), { status: failed ? 401 : 200 })
+        }
+        const result = await runtime.refreshCatalog({ report: true })
+        assert.deepEqual(result.sources.sealed, { ok: false, count: 1, skipped: true })
+        assert.deepEqual(runtime.catalog.filter(row => row.channel === 'eac').map(row => row.id), cached)
+        assert.equal(JSON.stringify(result.sources).includes('fixture-old-user'), false)
+        assert.equal(JSON.stringify(result.sources).includes('fixture-new-user'), false)
+      }
+    } finally {
+      lane.fetch = originalFetch
+      runtime.dispose()
+      stores.dispose()
+    }
   })
   await check('取消单模型测试会关闭真实上游请求且管理会话仍可使用', async () => {
     const started = new Promise(resolve => { notifyCall = resolve })

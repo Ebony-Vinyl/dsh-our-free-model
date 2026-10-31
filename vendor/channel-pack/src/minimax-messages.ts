@@ -1,3 +1,4 @@
+import { throwIfModelQueued } from './model-queue.js'
 /**
  * MiniMax **Anthropic Messages** 协议层：请求体构造 + SSE 消费。
  *
@@ -510,6 +511,7 @@ export async function* consumeMinimaxSse(
       return
     }
     if (typeof parsed !== 'object' || parsed === null) return
+    throwIfModelQueued(parsed)
     const frame = parsed as Record<string, unknown>
     // ⚠️ 帧自带 `type`，优先用它（`event:` 行可能缺失或被代理吞掉）。
     const type = typeof frame.type === 'string' ? frame.type : eventName
@@ -630,6 +632,7 @@ export async function* consumeMinimaxSse(
       for (const rawLine of lines) yield* processLine(rawLine)
     }
   } finally {
+    await reader.cancel().catch(() => {})
     reader.releaseLock?.()
   }
 

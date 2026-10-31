@@ -190,7 +190,7 @@ try {
   creds.delete('AUTO_LOOMY_FIXTURE')
   console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 10 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
   if (sourceMode) await verifySourceRegressions({ ctx, adapters, call, creds })
-  await verifyChannelCreditsRpc({ ctx, call, creds })
+  await verifyChannelCreditsRpc({ ctx, call, creds, adapters })
   console.log('ok  实际渠道 RPC：七渠道仅账号池凭据即可查余额，ZCode 账号池回退及缺凭据反馈')
 
   // A failed browser callback must become a terminal, readable poll result.
@@ -315,9 +315,74 @@ try {
 }
 
 async function verifySourceRegressions({ ctx, adapters, call, creds }) {
+  const { verifyChannelQueueRotation } = await import('./channel-queue-rotation-test.mjs')
+  await verifyChannelQueueRotation()
   const { verifyChannelPrFixes } = await import('./channel-pr-fixes-test.mjs')
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
+  await verifyGatewayToolCallFrames()
+
+  // ── #681：探测分派表、候选链与耗时回传 ─────────────────────────────────
+  //
+  // 三处缺陷，各自独立：
+  // 1. `probeWithAdapter` 没有 loomy 分支 → 「测试」必然抛
+  //    `Unsupported probe adapter: loomy`；
+  // 2. `account.test` 只测目录第一个模型 → TRAE 的 `doubao-for-auto`（自动路由
+  //    占位模型，回 3003）把好好的账号报成不可用；
+  // 3. 服务端从不返回 `ms`，客户端却一直在读它。
+  {
+    const probe = await import('../vendor/channel-pack/src/account-probe.ts')
+    const sse = (...frames) => new Response(frames.map(row => `data: ${JSON.stringify(row)}\n\n`).join('') + 'data: [DONE]\n\n')
+
+    // 候选链的挑选规则：显式指定只测它；否则「已有标记 → 目录顺序」去重截断。
+    assert.deepEqual(
+      probe.pickTestModels({ provider: 'trae', modelRateLimits: { b: 1, a: 2 } }, ['a', 'c', 'd', 'e', 'f']),
+      ['b', 'a', 'c', 'd'],
+      'marked models come first, then catalog order, deduped and capped',
+    )
+    assert.deepEqual(probe.pickTestModels({ provider: 'trae' }, ['a', 'b'], 'only'), ['only'], 'an explicit model is tested alone')
+    assert.deepEqual(probe.pickTestModels({ provider: 'trae' }, []), [], 'no candidates stays empty rather than guessing')
+
+    // 候选链的执行：第一个成功即停，失败的留在 `tried` 里。
+    const chainEntry = { id: 'chain', provider: 'trae', credentialRef: 'CHAIN', enabled: true, createdAt: 1 }
+    const attempted = []
+    const chained = await probe.testAccountCandidates({ findAccount: () => chainEntry }, 'chain', ['m0', 'm1', 'm2'], {
+      timeoutMs: 1000,
+      probe: async (_entry, modelId) => {
+        attempted.push(modelId)
+        return modelId === 'm0' ? { modelId, ok: false, message: '无法确认：3003 model service is unavailable' } : { modelId, ok: true }
+      },
+    })
+    assert.deepEqual(attempted, ['m0', 'm1'], 'the chain stops at the first model that answers')
+    assert.equal(chained.ok, true)
+    assert.equal(chained.modelId, 'm1')
+    assert.deepEqual(chained.tried.map(row => [row.modelId, row.ok]), [['m0', false], ['m1', true]])
+    assert.equal(typeof chained.ms, 'number', 'the latency the client renders is actually reported')
+
+    // loomy 走真实 RPC：没有分支时这里拿到的是 `ok: false` +
+    // `无法确认：Unsupported probe adapter: loomy`。
+    const loomyId = 'probe-loomy-fixture', loomyRef = 'PROBE_LOOMY_FIXTURE'
+    creds.set(loomyRef, { value: JSON.stringify({ access_token: 'probe-token', userid: '123456789012345678', phone: '13800138000' }) })
+    await ctx.accountPool.addAccount({ id: loomyId, provider: 'loomy', nickname: 'Probe fixture', credentialRef: loomyRef, enabled: true, refreshable: false, createdAt: 1 })
+    const savedAudit = auditFetch
+    try {
+      auditFetch = async input => {
+        const url = String(input)
+        if (url.endsWith('/chat/completions')) return sse({ choices: [{ delta: { content: '收到' }, finish_reason: 'stop' }] })
+        throw new Error(`unexpected offline request: ${url}`)
+      }
+      const result = await call('account.test', { accountId: loomyId, modelId: 'deepseek-v4-flash-0731' })
+      assert.equal(result.ok, true, 'account.test itself succeeds')
+      assert.equal(result.value.ok, true, `loomy probe must reach the adapter: ${result.value.message ?? ''}`)
+      assert.equal(result.value.modelId, 'deepseek-v4-flash-0731')
+      assert.equal(typeof result.value.ms, 'number', 'and reports how long it took')
+    } finally {
+      auditFetch = savedAudit
+      await ctx.accountPool.removeAccount(loomyId)
+      creds.delete(loomyRef)
+    }
+    console.log('ok  #681 probe: loomy has an adapter, the chain skips dead models, latency is reported')
+  }
   // 目录 `efforts` 的键序不是强度序（`dfmodel` 实测是 high/max/low），
   // 官方客户端还会按强度稳定排序；这条回归保证下发给 DSH 的档位序也是强度序。
   {
@@ -325,6 +390,344 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
     const { qoderEffortsFor, sortEffortsByStrength } = await import('../vendor/channel-pack/src/qoder-adapter.ts')
     verifyQoderEffortOrder(qoderEffortsFor, sortEffortsByStrength)
     console.log('ok  qoder effort order: 档位按强度序下发（关闭思考在最左、max 在最右），未登记 id 排末尾且保持原序')
+  }
+  {
+    const { QoderAdapter } = await import('../vendor/channel-pack/src/qoder-adapter.ts')
+    const { QoderEncryptedInfer } = await import('../vendor/channel-pack/src/qoder-wasm.ts')
+    const { QODER_CN } = await import('../vendor/channel-pack/src/qoder-product.ts')
+    const originalCreate = QoderEncryptedInfer.create
+    const originalEnvTimeout = process.env.DSH_QODER_QUEUE_TIMEOUT_MS
+    const credential = token => ({
+      access_token: token, security_oauth_token: token, machine_id: `machine-${token}`, uid: `uid-${token}`,
+    })
+    const queueError = { code: '10605', message: JSON.stringify({ isQueued: true, retryAfterSeconds: 1 }) }
+    const envelope = body => `data: ${JSON.stringify({ body: JSON.stringify(body) })}\n\n`
+    const queuedSse = () => new Response(envelope(queueError))
+    const answerSse = text => new Response(envelope({
+      choices: [{ delta: { content: text }, finish_reason: 'stop' }],
+    }) + 'data: [DONE]\n\n')
+    const collect = async iterable => { const out = []; for await (const item of iterable) out.push(item); return out }
+    const qoderOptions = {
+      model: 'fixture-qoder-model',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    }
+
+    // 模拟不同账号的请求签名输入，专注验证重试状态机；不访问 Qoder 或消耗真实额度。
+    QoderEncryptedInfer.create = async () => ({ prepareInfer: () => ({ url: 'fixture:', headers: {}, body: '{}' }) })
+    const run = async ({
+      kind, candidates = ['b'], responseForAttempt, abortOnSleep = false,
+      addCandidateAfterLookup = false, product, queueTimeoutMs, allowRefresh = false,
+    }) => {
+      const sent = []
+      const lookupSets = []
+      const marked = []
+      const switched = []
+      const rotationFailures = []
+      const providers = []
+      const slept = []
+      const refreshed = []
+      let defaultCredential = credential('token-a')
+      let nowMs = 1_000
+      const controller = new AbortController()
+      const accounts = candidates.map(id => ({
+        entry: { id },
+        credential: id === 'broken'
+          ? { access_token: `token-${id}`, security_oauth_token: `token-${id}`, machine_id: 'broken-machine' }
+          : credential(`token-${id}`),
+      }))
+      const lateAccount = addCandidateAfterLookup ? {
+        entry: { id: 'late-b' }, credential: credential('token-late-b'),
+      } : undefined
+      const adapter = new QoderAdapter({
+        credentialRef: 'FIXTURE',
+        resolveCredential: async () => defaultCredential,
+        refresh: async accountId => {
+          if (!allowRefresh) throw new Error('queue retry must not refresh credentials')
+          const id = accountId ?? 'a'
+          refreshed.push(id)
+          if (id === 'a') defaultCredential = credential('token-a-new')
+          else accounts.find(row => row.entry.id === id).credential = credential(`token-${id}-new`)
+        },
+        currentAccountId: () => 'a',
+        queueAccountIdForCredential: async current => current.access_token === 'token-a' ? 'a' : undefined,
+        onQueueAccountSwitch: () => switched.push('queue-switch'),
+        onQueueRotationFailure: () => rotationFailures.push('no-alternative'),
+        now: () => nowMs,
+        product,
+        accountPool: {
+          getAvailableAccount: async (provider, _model, excluded) => {
+            providers.push(provider)
+            lookupSets.push([...excluded].sort())
+            const available = accounts.find(row => !excluded.has(row.entry.id))
+            if (available) return available
+            if (lateAccount && lookupSets.length >= 2 && !excluded.has(lateAccount.entry.id)) return lateAccount
+            return null
+          },
+          updateModelRateLimit: async (...args) => marked.push(args),
+          resolveCredentialForAccount: async id => id === 'a' ? defaultCredential : accounts.find(row => row.entry.id === id)?.credential,
+        },
+        fetchImpl: async () => { throw new Error('overridden sendEncrypted should be used') },
+        sleep: async (ms, signal) => {
+          slept.push(ms)
+          nowMs += ms
+          if (abortOnSleep) controller.abort()
+        },
+      })
+      let attempt = 0
+      adapter.sendEncrypted = async (_request, _options) => {
+        const token = _request.body
+        sent.push(token)
+        return responseForAttempt(++attempt, token)
+      }
+      // 把 token 写进测试请求，便于断言每次发送实际使用了哪个账号。
+      QoderEncryptedInfer.create = async ({ user }) => ({
+        prepareInfer: () => ({ url: 'fixture:', headers: {}, body: user.securityOauthToken }),
+      })
+      let error
+      let chunks = []
+      const priorTimeout = process.env.DSH_QODER_QUEUE_TIMEOUT_MS
+      if (queueTimeoutMs !== undefined) process.env.DSH_QODER_QUEUE_TIMEOUT_MS = queueTimeoutMs
+      try { for await (const chunk of adapter.stream({ ...qoderOptions, signal: controller.signal })) chunks.push(chunk) }
+      catch (caught) { error = caught }
+      finally {
+        if (priorTimeout === undefined) delete process.env.DSH_QODER_QUEUE_TIMEOUT_MS
+        else process.env.DSH_QODER_QUEUE_TIMEOUT_MS = priorTimeout
+      }
+      return { sent, lookupSets, providers, marked, switched, rotationFailures, slept, chunks, error, kind, refreshed }
+    }
+
+    try {
+      for (const product of [undefined, QODER_CN]) {
+        for (const expiredB of [false, true]) {
+          const creds = new Map(['a', 'b'].map(id => [id, {
+            ...credential(`token-${id}`), ...(expiredB && id === 'b' ? { expire_time: 1 } : {}),
+          }]))
+          let sharedId
+          let sharedReads = 0
+          const bSelected = Promise.withResolvers(), sent = [], refreshed = []
+          const adapter = new QoderAdapter({
+            credentialRef: 'FIXTURE', product,
+            resolveCredential: async model => {
+              const id = model.endsWith('-a') ? 'a' : 'b'
+              sharedId = id
+              if (id === 'a') await bSelected.promise
+              else bSelected.resolve()
+              return creds.get(id)
+            },
+            currentAccountId: () => { sharedReads++; return sharedId },
+            queueAccountIdForCredential: async value => value.access_token.startsWith('token-a') ? 'a' : 'b',
+            refresh: async id => {
+              const target = id ?? 'a'
+              refreshed.push(target)
+              creds.set(target, credential(`token-${target}-new`))
+            },
+            accountPool: { resolveCredentialForAccount: async id => creds.get(id) },
+          })
+          adapter.sendEncrypted = async (request, options) => {
+            sent.push([options.model, request.body])
+            return request.body.endsWith('-new') ? answerSse('bound-ok') : Response.json({ code: 105, message: 'expired' }, { status: 401 })
+          }
+          QoderEncryptedInfer.create = async ({ user }) => ({ prepareInfer: () => ({ url: 'fixture:', headers: {}, body: user.securityOauthToken }) })
+          await Promise.all(['a', 'b'].map(id => collect(adapter.stream({ ...qoderOptions, model: `fixture-${id}` }))))
+          assert.deepEqual(sent.filter(([model]) => model === 'fixture-a').map(([, token]) => token), ['token-a', 'token-a-new'])
+          assert.deepEqual(sent.filter(([model]) => model === 'fixture-b').map(([, token]) => token), expiredB ? ['token-b-new'] : ['token-b', 'token-b-new'])
+          assert.deepEqual(refreshed.sort(), ['a', 'b'], '并发认证与初始过期续期都必须绑定实际账号')
+          adapter.options.queueAccountIdForCredential = async () => { throw new Error('fixture identity lookup failed') }
+          const count = sent.length
+          await assert.rejects(collect(adapter.stream({ ...qoderOptions, model: 'fixture-a' })), /identity lookup failed/)
+          assert.equal(sent.length, count, '身份反查失败不能退回共享账号发送')
+          assert.equal(sharedReads, 0, '已提供凭据反查时，禁止读取共享默认账号')
+        }
+      }
+      // HTTP 403 排队：第 3 次排队后换到健康账号；略过缺少 uid 的坏条目，且不误写额度限制。
+      const http = await run({
+        kind: 'http', candidates: ['broken', 'b'],
+        responseForAttempt: (attempt, token) => {
+          if (token === 'token-a' && attempt <= 3) {
+            return new Response(JSON.stringify(queueError), { status: 403 })
+          }
+          return answerSse('http-rotated-ok')
+        },
+      })
+      assert.equal(http.error, undefined)
+      assert.deepEqual(http.sent, ['token-a', 'token-a', 'token-a', 'token-b'])
+      assert.deepEqual(http.lookupSets, [['a'], ['a', 'broken']])
+      assert.deepEqual(http.switched, ['queue-switch'])
+      assert.deepEqual(http.marked, [], '排队不得被记录成额度耗尽')
+      assert.ok(http.chunks.some(row => row.type === 'text-delta' && row.text === 'http-rotated-ok'))
+
+      // HTTP 200 + SSE 内嵌排队：必须走同一换号逻辑，而不是落回通用重试。
+      const sse = await run({
+        kind: 'sse',
+        responseForAttempt: (attempt, token) => token === 'token-a' && attempt <= 3
+          ? queuedSse() : answerSse('sse-rotated-ok'),
+      })
+      assert.equal(sse.error, undefined)
+      assert.deepEqual(sse.sent, ['token-a', 'token-a', 'token-a', 'token-b'])
+      assert.deepEqual(sse.marked, [])
+      assert.ok(sse.chunks.some(row => row.type === 'text-delta' && row.text === 'sse-rotated-ok'))
+
+      // 新的备用账号在等待期间出现时，会在下一批检查中被当前请求发现。
+      const solo = await run({
+        kind: 'solo', candidates: [], addCandidateAfterLookup: true,
+        responseForAttempt: (attempt, token) => attempt <= 5
+          ? new Response(JSON.stringify({
+              ...queueError, message: JSON.stringify({ isQueued: true, retryAfterSeconds: 10 }),
+            }), { status: 403 }) : answerSse('solo-ok'),
+      })
+      assert.equal(solo.error, undefined)
+      assert.equal(solo.sent.length, 6)
+      assert.deepEqual(solo.sent.slice(0, 5), Array(5).fill('token-a'))
+      assert.equal(solo.sent[5], 'token-late-b')
+      assert.equal(solo.lookupSets.length, 2, '账号池会按有限批次重新检查新添加的账号')
+      assert.deepEqual(solo.slept, [10_000, 10_000, 10_000, 10_000])
+      assert.deepEqual(solo.marked, [])
+      assert.equal(solo.rotationFailures.length, 1, '无备用账号只提示一次，不重复刷屏')
+      assert.deepEqual(solo.switched, ['queue-switch'])
+
+      // 中国版使用同一状态机，但换号仍只从 qodercn 自己的账号池取。
+      const cn = await run({
+        kind: 'sse-cn', product: QODER_CN,
+        responseForAttempt: (attempt, token) => token === 'token-a' && attempt <= 3
+          ? queuedSse() : answerSse('cn-rotated-ok'),
+      })
+      assert.deepEqual(cn.sent, ['token-a', 'token-a', 'token-a', 'token-b'])
+      assert.ok(cn.providers.every(provider => provider === QODER_CN.id))
+
+      for (const product of [undefined, QODER_CN]) {
+        const canceled = []
+        let pending = false
+        const opened = await run({
+          kind: 'open-queue', product,
+          responseForAttempt: (_attempt, token) => {
+            assert.equal(pending, false, 'Qoder 重发前必须通过信封转换流取消旧上游')
+            if (token !== 'token-a') return answerSse('open-rotated-ok')
+            pending = true
+            return new Response(new ReadableStream({
+              start(controller) { controller.enqueue(new TextEncoder().encode(envelope(queueError))) },
+              cancel() { pending = false; canceled.push(token) },
+            }))
+          },
+        })
+        assert.equal(opened.error, undefined)
+        assert.deepEqual(opened.sent, ['token-a', 'token-a', 'token-a', 'token-b'])
+        assert.deepEqual(canceled, ['token-a', 'token-a', 'token-a'])
+      }
+
+      // 排队换号不能破坏原有额度换号：仍按真实账号标记额度，并重置其重试状态。
+      const quota = await run({
+        kind: 'quota',
+        responseForAttempt: (_attempt, token) => token === 'token-a'
+          ? new Response(JSON.stringify({ code: 110, message: 'Billing daily count exceeded' }), { status: 403 })
+          : answerSse('quota-rotated-ok'),
+      })
+      assert.equal(quota.error, undefined)
+      assert.deepEqual(quota.sent, ['token-a', 'token-b'])
+      assert.deepEqual(quota.marked.map(row => row[0]), ['a'])
+      assert.deepEqual(quota.switched, [])
+      assert.ok(quota.chunks.some(row => row.type === 'text-delta' && row.text === 'quota-rotated-ok'))
+
+      for (const product of [undefined, QODER_CN]) {
+        for (const transport of ['http', 'sse']) {
+          const mixed = await run({
+            kind: 'queue-then-quota', candidates: ['b', 'c'], product,
+            responseForAttempt: (_attempt, token) => {
+              if (token === 'token-a') return transport === 'http'
+                ? Response.json(queueError, { status: 403 }) : queuedSse()
+              if (token === 'token-b') {
+                const billing = { code: 110, message: 'Billing daily count exceeded' }
+                return transport === 'http' ? Response.json(billing, { status: 403 }) : new Response(envelope(billing))
+              }
+              return answerSse('mixed-ok')
+            },
+          })
+          assert.equal(mixed.error, undefined)
+          assert.deepEqual(mixed.sent, ['token-a', 'token-a', 'token-a', 'token-b', 'token-c'])
+          assert.deepEqual(mixed.marked.map(row => row[0]), ['b'], '仅标记真正额度不足的 B')
+        }
+        for (const refreshDefaultFirst of [false, true]) {
+          for (const status of [401, 403]) {
+            const mixed = await run({
+              kind: 'queue-then-auth', candidates: ['b', 'c'], product, allowRefresh: true,
+              responseForAttempt: (attempt, token) => {
+                if ((refreshDefaultFirst && attempt === 1) || token === 'token-b' || token === 'token-c') return Response.json({ code: 105, message: 'expired' }, { status })
+                if (token.startsWith('token-a')) return Response.json(queueError, { status: 403 })
+                if (token === 'token-b-new') {
+                  const billing = { code: 110, message: 'Billing daily count exceeded' }
+                  return status === 401 ? Response.json(billing, { status: 403 }) : new Response(envelope(billing))
+                }
+                return answerSse('auth-and-quota-ok')
+              },
+            })
+            assert.equal(mixed.error, undefined)
+            assert.deepEqual(mixed.sent, refreshDefaultFirst
+              ? ['token-a', 'token-a-new', 'token-a-new', 'token-a-new', 'token-b', 'token-b-new', 'token-c', 'token-c-new']
+              : ['token-a', 'token-a', 'token-a', 'token-b', 'token-b-new', 'token-c', 'token-c-new'])
+            assert.deepEqual(mixed.refreshed, refreshDefaultFirst ? ['a', 'b', 'c'] : ['b', 'c'])
+            assert.deepEqual(mixed.marked.map(row => row[0]), ['b'])
+          }
+        }
+        const denied = await run({
+          kind: 'queue-auth-still-denied', candidates: ['b'], product, allowRefresh: true,
+          responseForAttempt: (_attempt, token) => token === 'token-a'
+            ? Response.json(queueError, { status: 403 })
+            : Response.json({ code: 105, message: 'still expired' }, { status: 401 }),
+        })
+        assert.equal(denied.error?.code, 'AUTH')
+        assert.deepEqual(denied.sent, ['token-a', 'token-a', 'token-a', 'token-b', 'token-b-new'])
+        assert.deepEqual(denied.refreshed, ['b'], '每个账号最多续期一次，不回退默认账号')
+        assert.deepEqual(denied.marked, [])
+      }
+
+      // 用户把等待上限设为 0 时，不能被默认值覆盖，也不应该睡眠或重发。
+      const zeroTimeout = await run({
+        kind: 'zero-timeout', queueTimeoutMs: '0',
+        responseForAttempt: () => new Response(JSON.stringify(queueError), { status: 403 }),
+      })
+      assert.equal(zeroTimeout.sent.length, 1)
+      assert.equal(zeroTimeout.error?.code, 'QUEUE')
+      assert.deepEqual(zeroTimeout.slept, [])
+      assert.deepEqual(zeroTimeout.lookupSets, [])
+
+      // 没有备用号时，间隔回查不能频繁打磁盘；约 20 秒重试一次并发现后加入的号。
+      const interval = await run({
+        kind: 'interval', candidates: [], addCandidateAfterLookup: true,
+        responseForAttempt: (attempt, token) => attempt <= 5
+          ? new Response(JSON.stringify({
+              ...queueError, message: JSON.stringify({ isQueued: true, retryAfterSeconds: 10 }),
+            }), { status: 403 }) : answerSse('interval-ok'),
+      })
+      assert.deepEqual(interval.slept, [10_000, 10_000, 10_000, 10_000])
+      assert.equal(interval.lookupSets.length, 2)
+      assert.equal(interval.sent.at(-1), 'token-late-b')
+
+      // 用户在排队间隔点击停止时要立即终止，不再发第二次请求。
+      const canceled = await run({
+        kind: 'abort', abortOnSleep: true,
+        responseForAttempt: () => new Response(JSON.stringify(queueError), { status: 403 }),
+      })
+      assert.equal(canceled.sent.length, 1)
+      assert.equal(canceled.error?.code, 'QUEUE')
+      assert.equal(canceled.lookupSets.length, 0)
+
+      // 已经向用户发出部分正文后遇到排队帧，不能重放整轮或切账号。
+      const partial = await run({
+        kind: 'partial', candidates: ['b'],
+        responseForAttempt: () => new Response(
+          envelope({ choices: [{ delta: { content: 'partial-answer' }, finish_reason: null }] })
+          + envelope(queueError),
+        ),
+      })
+      assert.ok(partial.error)
+      assert.equal(partial.sent.length, 1)
+      assert.equal(partial.lookupSets.length, 0)
+      assert.ok(partial.chunks.some(row => row.type === 'text-delta' && row.text === 'partial-answer'))
+      console.log('ok  source qoder: HTTP/SSE queue rotates after bounded grace, preserves quota/abort/output safety and skips unusable accounts')
+    } finally {
+      QoderEncryptedInfer.create = originalCreate
+      if (originalEnvTimeout === undefined) delete process.env.DSH_QODER_QUEUE_TIMEOUT_MS
+      else process.env.DSH_QODER_QUEUE_TIMEOUT_MS = originalEnvTimeout
+    }
   }
   let hostValidate
   await realLlmInvariant.apply({ invariants: { register(_name, install) {
@@ -415,6 +818,30 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
       { index: 0, id: 'call-1', function: { name: 'read', arguments: '{}' } },
     ] }, 'tool_calls'))))
     assert.equal(tools.at(-1).reason.kind, 'tool-calls', `${provider}: tools remain valid`)
+    // Issue #474: arguments that are complete but syntactically invalid (a bare
+    // value, all brackets closed) are not a cut — report tool-calls so the
+    // schema violation reaches the model; only a structurally incomplete value
+    // still downgrades to max-tokens.
+    const invalidArgs = await collect(consume(response(frame({ tool_calls: [
+      { index: 0, id: 'call-1', function: { name: 'read', arguments: '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}' } },
+    ] }, 'tool_calls'))))
+    assert.equal(invalidArgs.at(-1).reason.kind, 'tool-calls', `${provider}: complete-but-invalid arguments are not a cut`)
+    // The invalid arguments must reach the host verbatim — normalize must not
+    // forge them into a legal-looking '{}' (the exact trap its own comment
+    // forbids); only then can the model see and fix its real mistake.
+    assert.equal(assemble(invalidArgs).find(block => block.type === 'tool-call')?.arguments,
+      '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}', `${provider}: invalid arguments pass through verbatim`)
+    const cutArgs = await collect(consume(response(frame({ tool_calls: [
+      { index: 0, id: 'call-1', function: { name: 'read', arguments: '{"pattern": "un' } },
+    ] }, 'tool_calls'))))
+    assert.equal(cutArgs.at(-1).reason.kind, 'max-tokens', `${provider}: an unclosed string is still a cut`)
+    // A negative depth is the lost-prefix fragment (`"path.txt"}` — both
+    // quotes present, the opening `{` lost) — still a cut, it belongs on the
+    // proven retry path.
+    const lostPrefix = await collect(consume(response(frame({ tool_calls: [
+      { index: 0, id: 'call-1', function: { name: 'read', arguments: '"some/path.txt"}' } },
+    ] }, 'tool_calls'))))
+    assert.equal(lostPrefix.at(-1).reason.kind, 'max-tokens', `${provider}: a lost-prefix fragment is still a cut`)
     const callDelta = { tool_calls: [{ index: 0, id: 'call-1', function: { name: 'read', arguments: '{}' } }] }
     for (const rows of [
       [frame({ content: ' \n', ...callDelta }, 'tool_calls')],
@@ -703,4 +1130,49 @@ async function verifyLoopResumeEvents() {
     if (savedMax === undefined) delete process.env.DSH_REASONING_LOOP_AUTO_RESUME_MAX
     else process.env.DSH_REASONING_LOOP_AUTO_RESUME_MAX = savedMax
   }
+}
+
+/**
+ * 网关的 OpenAI 流式输出：`delta.tool_calls[]` 的 `id` 与 `function.name` 只能随该调用的首帧
+ * 出现一次，`index` 必须是客户端能直接当下标的连续调用序号。
+ * 官方客户端的流式累加器对这两个字段是**字符串拼接**（openai-python 的 `accumulate_delta`
+ * 会把每帧的 name 追加），每帧重发就会把工具名拼成 `readreadread`，客户端随后报
+ * 「未找到指定的工具」；DSH 侧 issue #20 记录的是同一机制的另一条通路。
+ * 这里按客户端语义重放一遍，修复前会得到 `readread` 与翻倍的 id。
+ */
+async function verifyGatewayToolCallFrames() {
+  const { toOpenAiSse } = await import('../vendor/channel-pack/src/openai-gateway/stream.ts')
+  const upstream = async function* () {
+    yield { type: 'reasoning-delta', text: '先想一下' } // 推理块占掉 DSH 的块 0
+    yield { type: 'tool-call-delta', index: 1, id: 'call_a', name: 'read', argumentsDelta: '{"file":' }
+    yield { type: 'tool-call-delta', index: 1, id: 'call_a', name: 'read', argumentsDelta: '"x.md"}' }
+    yield { type: 'tool-call-delta', index: 2, id: 'call_b', name: 'write', argumentsDelta: '{}' }
+    yield { type: 'finish', reason: { kind: 'tool-calls' } }
+  }
+  const frames = []
+  for await (const chunk of toOpenAiSse(upstream(), 'chatcmpl-fixture', 'fixture-model')) {
+    for (const part of chunk.split('\n\n')) {
+      if (part.startsWith('data: ') && part !== 'data: [DONE]') frames.push(JSON.parse(part.slice('data: '.length)))
+    }
+  }
+  const calls = frames.flatMap(frame => frame.choices?.[0]?.delta?.tool_calls ?? [])
+  const callAt = index => calls.filter(call => call.index === index)
+  assert.deepEqual(calls.map(call => call.index), [0, 0, 1], 'index 必须从 0 起连续编号，不能透传 DSH 的块序号')
+  assert.deepEqual(callAt(0).filter(call => call.id !== undefined).map(call => call.id), ['call_a'], 'id 只随首帧发一次')
+  assert.deepEqual(callAt(0).filter(call => call.function.name !== undefined).map(call => call.function.name), ['read'], 'function.name 只随首帧发一次')
+  assert.equal(callAt(0).map(call => call.function.arguments).join(''), '{"file":"x.md"}', 'arguments 仍是每帧增量')
+  assert.equal(callAt(1).map(call => call.function.arguments).join(''), '{}')
+  const accumulated = []
+  for (const call of calls) {
+    const slot = accumulated[call.index] ?? { id: '', name: '', arguments: '' }
+    slot.id += call.id ?? ''
+    slot.name += call.function.name ?? ''
+    slot.arguments += call.function.arguments ?? ''
+    accumulated[call.index] = slot
+  }
+  assert.deepEqual(accumulated, [
+    { id: 'call_a', name: 'read', arguments: '{"file":"x.md"}' },
+    { id: 'call_b', name: 'write', arguments: '{}' },
+  ], '按客户端累加器拼接后，工具名与 id 不能重复')
+  console.log('ok  openai-gateway tool-call frames: id/name 只在首帧、index 从 0 起，客户端拼接后工具名不重复')
 }

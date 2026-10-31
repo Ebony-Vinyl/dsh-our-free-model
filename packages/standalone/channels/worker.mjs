@@ -59,11 +59,13 @@ const ctx = {
 }
 
 async function models() {
+  const sources = Object.fromEntries([...adapters.keys()].map(provider => [provider, { ok: false, count: 0 }]))
   const onError = (provider, error) => logger.warn(`${provider} 模型目录读取失败：${error.message}`)
   const groups = (await Promise.all([...adapters.keys()].map(provider => collectGatewayModels({
     listProviders: () => [{ id: provider }],
     listModels: id => ctx.llm.listModels(id),
   }, onError)))).flat()
+  for (const { provider, models } of groups) sources[provider] = { ok: true, count: models.length }
   const infos = new Map()
   const views = await collectGatewayEffortViews({
     async resolveModelInfo(provider, model) {
@@ -72,11 +74,12 @@ async function models() {
       return info
     },
   }, groups, onError)
-  return toOpenAiModels(groups, views).map(row => ({
+  const rows = toOpenAiModels(groups, views).map(row => ({
     ...row, channel: row.owned_by, vision: row.input?.includes('image') === true,
     context_window: row.context_window ?? infos.get(row.id)?.context?.contextWindow,
     max_tokens: row.max_tokens ?? infos.get(row.id)?.defaultMaxTokens,
   }))
+  return { rows, sources }
 }
 
 async function rpc(call, signal) {

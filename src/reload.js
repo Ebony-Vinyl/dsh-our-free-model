@@ -27,36 +27,9 @@
 
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { createRequire, registerHooks } from 'node:module'
+import { createRequire } from 'node:module'
 
 let inFlight = null
-const hooksKey = Symbol.for('our-free-model.reload-hooks')
-const reloadHooks = globalThis[hooksKey] ??= new Map()
-
-/** Carry the entry's generation into its dependencies when the host hides its cache. */
-function enableFreshDependencies(packageUrl) {
-  if (reloadHooks.has(packageUrl)) return
-  const packagePath = fs.realpathSync(fileURLToPath(packageUrl))
-  const hook = registerHooks({
-    resolve(specifier, context, nextResolve) {
-      const resolved = nextResolve(specifier, context)
-      const parentPath = context.parentURL?.startsWith('file:')
-        ? fs.realpathSync(fileURLToPath(new URL(context.parentURL)))
-        : null
-      const resolvedPath = resolved.url.startsWith('file:')
-        ? fs.realpathSync(fileURLToPath(new URL(resolved.url)))
-        : null
-      if (parentPath === null || resolvedPath === null
-        || !parentPath.startsWith(packagePath) || !resolvedPath.startsWith(packagePath)) return resolved
-      const generation = new URL(context.parentURL).searchParams.get('ofm-reload')
-      if (generation === null) return resolved
-      const target = new URL(resolved.url)
-      target.searchParams.set('ofm-reload', generation)
-      return { ...resolved, url: target.href }
-    },
-  })
-  reloadHooks.set(packageUrl, hook)
-}
 
 /** Whether a reload is currently running; guards against overlapping swaps. */
 export function isReloading() {
@@ -85,6 +58,19 @@ export function packageCacheKeys(loadCache, packageUrl) {
     if (normalized.startsWith(base)) keys.push(key)
   }
   return keys
+}
+
+/**
+ * A host is considered reload-capable only when it exposes entries for this
+ * package in the cache that `purgeCaches` can safely back up and restore.
+ * Guessing via a query-string import bypasses some hosts' module resolvers.
+ */
+export function canSafelyHotReload(loader, packageUrl = packageUrlOf(import.meta.url)) {
+  if (typeof loader?.import !== 'function' || typeof loader?.unwrapExports !== 'function') return false
+  const cache = loader?.internal?.loadCache
+  return cache !== null && cache !== undefined && typeof cache.keys === 'function'
+    && typeof cache.get === 'function' && typeof cache.delete === 'function'
+    && packageCacheKeys(cache, packageUrl).length > 0
 }
 
 /**
@@ -146,7 +132,7 @@ export function restoreCaches(internal, backup) {
  *
  * @param {object} ctx - the context `apply` received
  * @param {{logger?: object, packageUrl?: string, entryUrl?: string, expectedVersion?: string}} [options]
- * @returns {Promise<{ok: true, version: string, fibers: number} | {ok: false, error: string, restored: boolean}>}
+ * @returns {Promise<{ok: true, version: string, fibers: number} | {ok: false, error: string, restored: boolean, restartRequired?: boolean}>}
  */
 export function selfReload(ctx, options = {}) {
   if (inFlight !== null) return inFlight
@@ -179,38 +165,23 @@ export function selfReload(ctx, options = {}) {
 
     const internal = loader.internal
     const backup = purgeCaches(internal, packageUrl)
-    logger.info?.(`our-free-model: hot reload purging ${backup.esm.size} cached module(s)`)
-    if (backup.esm.size === 0 && internal?.loadCache instanceof Map) {
-      // Diagnostic for kernels whose loadCache keys use a different shape.
-      const sample = [...internal.loadCache.keys()].slice(0, 6).map(key => String(key).slice(-70))
-      globalThis[Symbol.for('our-free-model.purge-sample')] = { packageUrl: packageUrl.slice(-70), sample }
+    if (backup.esm.size === 0) {
+      logger.warn?.('our-free-model: host module cache is unavailable; hot reload requires a host restart')
+      return { ok: false, error: 'safe hot reload is unavailable in this host; restart the host to load installed files', restored: true, restartRequired: true }
     }
+    logger.info?.(`our-free-model: hot reload purging ${backup.esm.size} cached module(s)`)
 
     const importFresh = async url => loader.unwrapExports(await loader.import(url, () => []))
     let replacement
-    let busted = false
     try {
       replacement = await importFresh(entryUrl)
       if (replacement === undefined || typeof replacement.apply !== 'function') {
         throw new Error('reloaded module does not export apply()')
       }
-      if (backup.esm.size === 0 || replacement === previous || replacement.apply === previous
+      if (replacement === previous || replacement.apply === previous
         || (typeof previous.apply === 'function' && replacement.apply === previous.apply)) {
-        // The cache purge did not take effect on this kernel (the loadCache shape
-        // changed across Node versions). Force a fresh evaluation of the entry
-        // with a generation query shared by static and lazy dependencies.
-        enableFreshDependencies(packageUrl)
-        const freshUrl = new URL(entryUrl)
-        freshUrl.searchParams.set('ofm-reload', `${Date.now()}-${Math.random().toString(36).slice(2)}`)
-        replacement = await importFresh(freshUrl.href)
-        busted = true
-        if (replacement === undefined || typeof replacement.apply !== 'function') {
-          throw new Error('reloaded module does not export apply()')
-        }
-        if (replacement === previous || replacement.apply === previous
-          || (typeof previous.apply === 'function' && replacement.apply === previous.apply)) {
-          throw new Error('replacement is still the previous plugin after cache invalidation')
-        }
+        restoreCaches(internal, backup)
+        return { ok: false, error: 'the host returned the cached plugin after cache clearing; restart the host to load installed files', restored: true, restartRequired: true }
       }
       if (options.expectedVersion !== undefined && replacement.version !== options.expectedVersion) {
         throw new Error(`activation version mismatch: expected ${options.expectedVersion}, got ${String(replacement.version ?? '(missing)')}`)
@@ -219,7 +190,7 @@ export function selfReload(ctx, options = {}) {
       restoreCaches(internal, backup)
       return { ok: false, error: `re-import failed, old code still running (${error?.message ?? error})`, restored: true }
     }
-    globalThis[Symbol.for('our-free-model.last-reload')] = { at: Date.now(), purged: backup.esm.size, busted }
+    globalThis[Symbol.for('our-free-model.last-reload')] = { at: Date.now(), purged: backup.esm.size }
 
     try {
       registry.delete(previous)

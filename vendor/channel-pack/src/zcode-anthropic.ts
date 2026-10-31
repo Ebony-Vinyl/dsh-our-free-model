@@ -1,3 +1,4 @@
+import { throwIfModelQueued } from './model-queue.js'
 /**
  * ZCode 免费额度通道的 **Anthropic Messages 协议层**。
  *
@@ -561,6 +562,7 @@ export async function* consumeAnthropicSse(
      * 无内容」，UI 表现为「干净地停止、无任何报错」。
      * Anthropic 的错误既可能在 `event: error` 行，也可能在 `payload.type`。
      */
+    throwIfModelQueued(payload)
     if (eventName === 'error' || payload.type === 'error') {
       const error = payload.error
       const message = typeof error === 'object' && error !== null

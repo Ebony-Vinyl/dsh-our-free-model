@@ -37,10 +37,11 @@ const sourceFiles = [
   'packages/standalone/web/assets.json',
   ...['adapter', 'aggregate', 'anthropic', 'catalog', 'channel', 'combos', 'deferred-response', 'disclaimer', 'eac', 'eac-login', 'eac-user', 'effort',
     'egress', 'engine-payload', 'failure', 'forward', 'gemini', 'http', 'image-pricing', 'kilo', 'local-optimize',
-    'loopback-fetch', 'magpie-engine', 'magpie-models', 'magpie-policy', 'messages', 'model-test', 'probe', 'recovery',
+    'loopback-fetch', 'magpie-engine', 'magpie-models', 'magpie-policy', 'messages', 'model-test', 'open-external', 'probe', 'recovery',
     'store', 'stream', 'subscriptions', 'subscription-completion', 'subscription-adapter', 'token-saver', 'trust', 'upstream', 'vault', 'vault-data', 'vault-anchor']
     .map(name => `src/${name}.js`),
   ...['completion', 'runtime', 'stats'].map(name => `src/core/${name}.js`),
+  'src/bun-fetch.js',
   'src/providers/index.js',
   'src/providers/registry.json',
   'src/route/classify.js',

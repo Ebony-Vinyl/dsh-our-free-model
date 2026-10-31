@@ -88,7 +88,7 @@ const refusingServer = http.createServer((req, res) => {
   req.on('end', () => {
     let body = {}
     try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') } catch { /* scripted failure */ }
-    refusingRequests.push({ path: url, body })
+    refusingRequests.push({ path: url, body, headers: { ...req.headers } })
     res.writeHead(429, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ error: { message: 'rate limit exceeded', type: 'rate_limit_error' } }))
   })
@@ -138,6 +138,10 @@ fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({
   }],
 }))
 
+// Dynamic on purpose: upstream.js pins `UPSTREAM_BASE` from the environment at
+// module level, so it must evaluate after the stub base is exported, exactly
+// the order index.js's own import gives it.
+const up = await import('../src/upstream.js')
 const { apply, inject } = await import('../index.js')
 const routes = []
 const ctx = fakeContext({ inject, mounted: ['llm', 'webServer', 'timer', 'connection', 'attachments'], onRegister: route => routes.push(route) })
@@ -241,6 +245,10 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   check('and the turn finished cleanly', finish?.reason?.kind, 'stop')
   checkThat('the free lane saw the retry', freeLane.requests.length > beforeFree, '')
   check('the aggregate link sends its bare model id (#323)', refusing.requests.at(-1)?.body.model, 'alpha-model')
+  // The conversation's stable upstream session rides the aggregate link too, so
+  // a provider that keeps per-session state cannot merge this conversation with
+  // another one running on the same key (#532).
+  checkThat('the aggregate link carries the conversation session', up.isCanonicalSession(refusing.requests.at(-1)?.headers?.['x-session-id'] ?? ''), refusing.requests.at(-1)?.headers?.['x-session-id'])
 
   const stats = (await get('/stats')).json
   const comboRow = stats.models.find(row => row.model === 'combo:never-fails')
@@ -249,6 +257,38 @@ const post = (url, body) => callRoute(api(), 'POST', `/api/our-free-model${url}`
   check('not a failed turn', comboRow?.failedTurns, 0)
   const refuseRow = stats.models.find(row => row.model === 'open_router/alpha-model')
   checkThat('the refused link is still recorded physically', refuseRow !== undefined && refuseRow.failed > 0, JSON.stringify(refuseRow))
+}
+
+// ── 3b. the session dimension and its one-time warning (#532) ───────────────
+{
+  const firstSession = refusing.requests.at(-1)?.headers?.['x-session-id']
+  const warnLines = () => ctx.__logs.filter(line => line.includes('shares the reserved "global" upstream session')).length
+  // An id-less turn is the shape the reserved "global" session exists for. It
+  // must still answer, and it must say once — not on every title generation
+  // that follows — that such turns share one upstream session.
+  const warnedBefore = warnLines()
+  const idLess = {
+    provider: 'our-free-model',
+    model: 'deepseek-v4-flash-free',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+  }
+  const chunks = []
+  for await (const chunk of adapter.stream(idLess, null, undefined)) chunks.push(chunk)
+  checkThat('an id-less turn still answers', chunks.some(chunk => chunk.type === 'text-delta'), JSON.stringify(chunks).slice(0, 200))
+  check('and it warns once about the shared global session', warnLines(), warnedBefore + 1)
+  for await (const chunk of adapter.stream(idLess, null, undefined)) void chunk
+  check('and the second id-less turn stays quiet', warnLines(), warnedBefore + 1)
+  // A named conversation keeps the same upstream session across turns.
+  const beforeRefuse = refusing.requests.length
+  const again = {
+    provider: 'our-free-model',
+    model: 'combo:never-fails',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'again' }] }],
+    sessionId: 'wiring:combo',
+  }
+  for await (const chunk of adapter.stream(again, null, undefined)) void chunk
+  check('and a repeat of the same conversation keeps its session',
+    refusing.requests.slice(beforeRefuse).at(-1)?.headers?.['x-session-id'], firstSession)
 }
 
 // ── 4. the forward listener's Anthropic surface ──────────────────────────────

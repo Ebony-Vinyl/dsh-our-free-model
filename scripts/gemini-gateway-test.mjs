@@ -304,6 +304,29 @@ try {
     })
   })
 
+  await check('empty-string enum members are dropped before the strict upstream schema check (#251)', async () => {
+    let seen
+    run = async (request, emit) => {
+      seen = request.tools[0].parameters
+      emit({ type: 'text-delta', index: 0, text: 'done' })
+      emit({ type: 'finish', reason: { kind: 'stop' } })
+      return {}
+    }
+    const response = await post(`${path}:generateContent`, {
+      ...prompt,
+      tools: [{ functionDeclarations: [
+        { name: 'style-tool', parameters: { type: 'OBJECT', properties: {
+          style: { type: 'STRING', enum: ['', 'dark', 'light'], description: 'may be blank' },
+          blank: { type: 'STRING', enum: [''] },
+        } } },
+      ] }],
+    })
+    assert.equal(response.status, 200)
+    assert.deepEqual(seen.properties.style.enum, ['dark', 'light'], 'empty members are filtered, the rest survive')
+    assert.equal(Object.hasOwn(seen.properties.blank, 'enum'), false, 'a members-only-of-"" enum becomes unconstrained')
+    assert.equal(seen.properties.blank.description, undefined)
+  })
+
   await check('stream fallback keeps outcome-only text and deduplicates calls without ids', async () => {
     run = async (request, emit) => {
       emit({ type: 'tool-call-delta', index: 5, name: 'read', argumentsDelta: '{}' })

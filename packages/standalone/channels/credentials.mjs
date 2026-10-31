@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { restrictPermissions } from '../../../src/open-external.js'
 
 /** 独立应用凭据仓库。同步原子写入，失败冒泡；从不读取 DSH 文件。 */
 export function createCredentials(dataDir) {
@@ -21,6 +22,7 @@ export function createCredentials(dataDir) {
     const temp = `${file}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`
     try {
       fs.writeFileSync(temp, JSON.stringify(next, null, 2), { mode: 0o600, flag: 'wx' })
+      restrictPermissions(temp)
       fs.renameSync(temp, file)
       values = next
     } finally { if (fs.existsSync(temp)) fs.unlinkSync(temp) }

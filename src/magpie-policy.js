@@ -86,60 +86,88 @@ function filterProviders(state) {
 
 /** Vendor-status answers are keyed by provider id, so the excluded id goes too. */
 function filterUpstream(body) {
-  if (!body || typeof body !== 'object' || !body.providers || typeof body.providers !== 'object') return body
+  if (!body || typeof body !== 'object' || !body.providers || typeof body !== 'object') return body
   for (const id of Object.keys(body.providers)) if (deniedId(id) || deniedText(id)) delete body.providers[id]
   return body
 }
 
+/**
+ * Third-party prose can name the excluded channels without offering them: a
+ * market listing for an unrelated plugin may mention that it can read the
+ * session files of "WorkBuddy and CodeBuddy". The structural filters above
+ * rightly keep such a plugin, but the names still must not reach the user, so
+ * every string of a third-party answer has them rewritten out. Id-bearing
+ * surfaces (/api/providers, /api/upstream, /api/importapps) are exempt — the
+ * deprecation list and the add sheet need the exact ids to stay whole.
+ */
+const DENIED_TEXT_GLOBAL = new RegExp(DENIED_TEXT.source, 'gi')
+const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/
+const redactString = value => DENIED_TEXT.test(value)
+  ? value.replace(DENIED_TEXT_GLOBAL, CJK.test(value) ? '某桌面编码工具' : 'a desktop coding tool')
+  : value
+function redactExcludedNames(value) {
+  if (typeof value === 'string') return redactString(value)
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) value[index] = redactExcludedNames(value[index])
+    return value
+  }
+  if (value && typeof value === 'object') {
+    for (const key of Object.keys(value)) value[key] = redactExcludedNames(value[key])
+    return value
+  }
+  return value
+}
+const redacted = filter => body => redactExcludedNames(filter(body))
+
 const RESPONSE_FILTERS = {
-  '/api/plugins/listings': body => {
+  '/api/plugins/listings': redacted(body => {
     if (Array.isArray(body.listings)) body.listings = body.listings.filter(listing => !deniedListing(listing))
     return body
-  },
-  '/api/plugins/market': body => {
+  }),
+  '/api/plugins/market': redacted(body => {
     if (Array.isArray(body.listings)) body.listings = body.listings.filter(listing => !deniedListing(listing))
     filterPluginsState(body.state)
     return body
-  },
-  '/api/plugins': body => {
+  }),
+  '/api/plugins': redacted(body => {
     if (Array.isArray(body.plugins)) body.plugins = body.plugins.filter(entry => !deniedEntry(entry))
     return body
-  },
-  '/api/plugins/check': body => {
+  }),
+  '/api/plugins/check': redacted(body => {
     if (Array.isArray(body.plugins)) {
       body.plugins = body.plugins.filter(row => !deniedText(row?.spec) && !deniedText(row?.package))
     }
     filterPluginsState(body.state)
     return body
-  },
-  '/api/plugins/updates': body => {
+  }),
+  '/api/plugins/updates': redacted(body => {
     if (Array.isArray(body.waiting)) {
       body.waiting = body.waiting.filter(row => !deniedText(row?.spec) && !deniedText(row?.package))
     }
     if (Array.isArray(body.updated)) body.updated = body.updated.filter(row => !deniedText(row?.package))
     return body
-  },
-  '/api/plugins/search': body => {
+  }),
+  '/api/plugins/search': redacted(body => {
     if (Array.isArray(body.hits)) body.hits = body.hits.filter(hit => !deniedText(hit?.package))
     return body
-  },
-  '/api/plugins/npm': body => {
+  }),
+  '/api/plugins/npm': redacted(body => {
     if (body.npm && typeof body.npm === 'object') {
       for (const name of Object.keys(body.npm)) if (deniedText(name)) delete body.npm[name]
     }
     return body
-  },
-  '/api/plugins/github': body => {
+  }),
+  '/api/plugins/github': redacted(body => {
     if (Array.isArray(body.repos)) {
       body.repos = body.repos.filter(repo => !deniedText(repo?.package) &&
         !deniedText(repo?.spec) && !deniedText(repo?.repo))
     }
     return body
-  },
+  }),
   '/api/providers': filterProviders,
   '/api/upstream': filterUpstream,
-  '/api/plugin-pages': body => Array.isArray(body) ? body.filter(page => !deniedText(page?.spec)) : body,
-  '/api/plugin-panels': body => Array.isArray(body) ? body.filter(panel => !deniedText(panel?.spec)) : body,
+  '/api/plugin-pages': redacted(body => Array.isArray(body) ? body.filter(page => !deniedText(page?.spec)) : body),
+  '/api/plugin-panels': redacted(body => Array.isArray(body) ? body.filter(panel => !deniedText(panel?.spec)) : body),
   '/api/login/usage': body => Array.isArray(body) ? body.filter(card => !deniedCard(card)) : body,
   '/api/usage/quotas': body => Array.isArray(body) ? body.filter(card => !deniedCard(card)) : body,
   '/api/importapps': body => Array.isArray(body)

@@ -34,6 +34,47 @@ import { classifyFailure, describeVerdict, shouldAdvance } from './route/classif
 import { FALLBACK_IMAGE_PRICING } from './image-pricing.js'
 import { isSubscriptionEntry, subscriptionChunks } from './subscription-adapter.js'
 
+/**
+ * How long a combo candidate may stay silent before the chain counts the try as
+ * failed.
+ *
+ * `runCombo` commits to a candidate only once an answer-bearing chunk arrives,
+ * and a candidate whose upstream accepts the request and then sends nothing —
+ * keepalive comments only, no deltas — never settles `iterator.next()`. With no
+ * deadline that single await blocks the whole chain, so the fallback that exists
+ * for exactly this case never reaches its next link. Availability probes do not
+ * cover the shape either: the gateway answers 200, so the probe reads it as up.
+ *
+ * Only the pre-commit window is bounded. Once an answer delta has been handed
+ * over the answer belongs to the caller and the original unbounded await stays,
+ * so a slow-but-alive model is never cut off mid-stream — a reasoning model that
+ * thinks for a minute while streaming its thoughts keeps resetting the clock.
+ */
+const CHAIN_SILENCE_MS = 25_000
+
+/** Distinguishes "the watchdog fired" from a row the iterator really produced. */
+const SILENT_CANDIDATE = Symbol('ofm-silent-candidate')
+
+/**
+ * Await one iterator step, giving up when the candidate stays silent for `ms`.
+ * A timeout is reported as an advanceable end-of-try, so `runCombo` walks on
+ * exactly as it would after a classified failure.
+ */
+async function nextOrSilence(iterator, ms) {
+  let timer
+  try {
+    const silence = new Promise(resolve => { timer = setTimeout(() => resolve(SILENT_CANDIDATE), ms) })
+    const row = await Promise.race([iterator.next(), silence])
+    if (row !== SILENT_CANDIDATE) return row
+    // Best effort: a pending next() cannot be interrupted, but the generator's
+    // own finally blocks abort its transport once it settles.
+    try { iterator.return?.(undefined) } catch {}
+    return { done: true, value: { advance: true, verdict: null } }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export const ROUTE_MAIN = 'our-free-model'
 export const ROUTE_REGION = 'our-free-model-region'
 
@@ -44,6 +85,11 @@ export const ROUTE_LABELS = {
 }
 
 const STYLE_FOR_WIRE = { chat: 'chat', responses: 'flat', messages: 'claude' }
+
+// One process-level flag, not per-turn: the first id-less turn that lands on the
+// reserved "global" session is what the user needs to hear about, not every
+// title generation or summary that follows it.
+let globalSessionWarned = false
 
 export class FreeModelAdapter {
   /**
@@ -252,7 +298,7 @@ export class FreeModelAdapter {
       let result
       const held = []
       while (true) {
-        const row = await iterator.next()
+        const row = committed ? await iterator.next() : await nextOrSilence(iterator, CHAIN_SILENCE_MS)
         if (row.done === true) { result = row.value; break }
         if (committed) { yield row.value; continue }
         held.push(row.value)
@@ -341,6 +387,16 @@ export class FreeModelAdapter {
     const declared = toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
     const session = sessionForConversation(options.sessionId)
+    // A turn without a conversation id lands on the reserved "global" session,
+    // shared by every such turn on this machine. Minting a fresh session per
+    // id-less turn is not an option: the free lane accounts quota per session,
+    // so a new id per request would burn the allowance into 429s. The stable
+    // shared session is the price of that quota model — make it visible once
+    // instead of letting concurrent id-less conversations silently share state.
+    if (globalSessionWarned === false && !(typeof options.sessionId === 'string' && options.sessionId.trim() !== '')) {
+      globalSessionWarned = true
+      this.deps.warn?.('our-free-model: a turn arrived without a conversation id; it shares the reserved "global" upstream session with every other id-less turn')
+    }
     const recoveryId = mintRequestId()
     let attemptMessages = messages
     let attemptBudget = budget
@@ -465,6 +521,7 @@ export class FreeModelAdapter {
               providerId: entry.providerId,
               modelId: entry.modelId,
               body: payload,
+              session,
               signal: controller.signal,
               onData: value => channel.push(value),
             })

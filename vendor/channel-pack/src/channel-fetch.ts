@@ -78,6 +78,9 @@ function windowsProxyFor(target: URL, config: WindowsProxy): string | undefined 
 /** 只显示路由类型和错误码，避免将代理密码、OAuth code 或令牌写进日志。 */
 export class ChannelNetworkError extends Error {
   override name = 'ChannelNetworkError'
+  /** DSH 的重试分类。不设则记为 UNKNOWN，而 UNKNOWN 不在重试白名单里； */
+  /** 赋成白名单内的 TRANSPORT / TIMEOUT，瞬时网络抖动才会被重试。 */
+  code?: string
 }
 
 function networkFailure(error: unknown, route: string): Error {
@@ -89,7 +92,11 @@ function networkFailure(error: unknown, route: string): Error {
     if (typeof record.code === 'string' && /^[A-Z][A-Z0-9_]{1,80}$/.test(record.code)) codes.add(record.code)
     current = record.cause
   }
-  return new ChannelNetworkError(`渠道网络请求失败（${route}${codes.size ? `；${[...codes].join('、')}` : ''}）：请检查代理连通性后重试`, { cause: error })
+  const failure = new ChannelNetworkError(`渠道网络请求失败（${route}${codes.size ? `；${[...codes].join('、')}` : ''}）：请检查代理连通性后重试`, { cause: error })
+  // DSH 的重试白名单是 EMPTY_RESPONSE / RATE_LIMIT / SERVER / TIMEOUT / TRANSPORT。
+  // 这里之前没有 code，DSH 记为 UNKNOWN → 瞬时抖动不重试、整轮直接失败。
+  failure.code = codes.has('ETIMEDOUT') ? 'TIMEOUT' : 'TRANSPORT'
+  return failure
 }
 
 export interface ChannelFetchOptions {

@@ -28,7 +28,7 @@ import {
   stripCourseLeakIfEnabled,
 } from './sse.js'
 import { normalizeHarnessMessages } from './message-shape.js'
-import { isBillingBusinessCode, looksLikeBillingError, parseQueueError, queueDelayMs } from './model-queue.js'
+import { isBillingBusinessCode, looksLikeBillingError, parseQueueError, queueDelayMs, ModelQueuedError, throwIfModelQueued } from './model-queue.js'
 
 /** 将消息内容载荷展平为纯文本字符串。 */
 export function contentToText(content: unknown): string {
@@ -302,22 +302,7 @@ export function httpErrorCode(status: number): string {
  * `DEFAULT_RETRYABLE_CODES` 不含 `QUEUE`，这样万一没人捕获，它会**直接失败**
  * 并把「排队」这一语义暴露给用户，而不是被 harness 当作 `SERVER` 静默快重试。
  */
-export class ModelQueuedError extends LlmError {
-  /** 解析出的排队信息（`isQueued` / `serviceAvailable` / `waitTime` 等）。 */
-  readonly queueInfo: Readonly<Record<string, unknown>>
-  /** 服务端要求的等待时长（毫秒）；无法解析时为 undefined。 */
-  readonly retryAfterMs: number | undefined
-
-  constructor(
-    message: string,
-    options: { queueInfo: Readonly<Record<string, unknown>>; retryAfterMs?: number },
-  ) {
-    super(message, 'QUEUE')
-    this.name = 'ModelQueuedError'
-    this.queueInfo = options.queueInfo
-    this.retryAfterMs = options.retryAfterMs
-  }
-}
+export { ModelQueuedError } from './model-queue.js'
 
 /**
  * 判断是否为传输级错误（可重试的 TRANSPORT）。
@@ -581,6 +566,7 @@ export async function* consumeOpenAiSse(
         } catch {
           continue
         }
+        throwIfModelQueued(data)
         // 旁路观测（如 Cline 的网关路由元数据）：失败绝不影响这次推理。
         if (config.onFrame !== undefined) {
           try {
@@ -891,6 +877,8 @@ export async function* consumeOpenAiSse(
       }
     }
   } finally {
+    // releaseLock 不会终止上游，必须先取消响应再允许换号重发。
+    await reader.cancel().catch(() => {})
     reader.releaseLock()
   }
 
@@ -1057,6 +1045,7 @@ export async function* consumeOpenAiSse(
   if (!sawDataFrame) {
     let data: unknown
     try { data = JSON.parse(rawJson) } catch {}
+    throwIfModelQueued(data)
     if (typeof data === 'object' && data !== null && !Array.isArray(data)
       && config.isQuotaError?.(data as Record<string, unknown>)) {
       throw new LlmError(`${label}: ${errorDetail(rawJson)}`, 'QUOTA_EXCEEDED')

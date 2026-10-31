@@ -5,6 +5,7 @@ import net from 'node:net'
 import os from 'node:os'
 import { execFile, spawn as spawnProcess } from 'node:child_process'
 import { promisify } from 'node:util'
+import { restrictPermissions } from '../../src/open-external.js'
 
 const runFile = promisify(execFile)
 const encode = value => Buffer.from(value, 'utf16le').toString('base64')
@@ -36,6 +37,7 @@ function safeDirectory(directory, create = false) {
 function privateFile(file, contents) {
   safeDirectory(path.dirname(file))
   fs.writeFileSync(file, contents, { mode: 0o600, flag: 'wx' })
+  restrictPermissions(file)
 }
 
 function validate(plan, platform, profileDir) {

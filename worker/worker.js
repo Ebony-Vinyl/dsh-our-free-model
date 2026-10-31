@@ -179,6 +179,12 @@ export default {
           'user-agent': 'dsh-our-free-model-gateway',
         },
         body: route.body === true ? body : undefined,
+        // Carry the caller's cancellation into the relay connection. Without
+        // it a client that hangs up while the relay is still thinking leaves
+        // the upstream request running: the relay keeps billing capacity for an
+        // answer nobody will read, and on the self-hosted node host the
+        // concurrency slot stays held until the process restarts (#680).
+        signal: request.signal,
       })
       const headers = new Headers({ 'cache-control': 'no-store' })
       for (const name of PASS_HEADERS) {
@@ -188,6 +194,10 @@ export default {
       console.log(JSON.stringify({ lane: 'eac', path: url.pathname, status: relayed.status, ms: Date.now() - started }))
       return new Response(relayed.body, { status: relayed.status, headers })
     } catch (error) {
+      // A cancellation is the expected way out when the caller hangs up, not a
+      // gateway fault: logging it as a 500 makes an operator chase a server
+      // error that never happened.
+      if (request.signal.aborted) return new Response(null, { status: 499 })
       console.log(JSON.stringify({ lane: 'eac', path: url.pathname, status: 500, ms: Date.now() - started, fault: String(error?.message ?? error).slice(0, 120) }))
       return JSON_ERROR(500, 'gateway request failed')
     }

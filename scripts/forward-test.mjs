@@ -226,6 +226,40 @@ await checkAsync('streaming tool_calls renumber from 0 after reasoning blocks', 
   assert.equal(args, '{"file":"x"}')
 })
 
+await checkAsync('every streamed tool-call frame carries a function delta (#452)', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  // Arguments arriving one fragment per frame is the shape that used to leak a
+  // bare `{"index":0}` ahead of every increment: the opening frame was the only
+  // one with a `function`, and the rest carried nothing but the index.
+  lane.script = () => ({
+    chunks: [
+      { type: 'tool-call-delta', index: 0, id: 'call_t', name: 'mytool', argumentsDelta: '{"x":' },
+      { type: 'tool-call-delta', index: 0, argumentsDelta: '1' },
+      { type: 'tool-call-delta', index: 0, argumentsDelta: '}' },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+    outcome: { text: '', toolCalls: [{ slot: 0, id: 'call_t', name: 'mytool', arguments: '{"x":1}' }] },
+  })
+  const response = await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free', stream: true,
+    tools: [{ type: 'function', function: { name: 'mytool', parameters: { type: 'object', properties: {} } } }],
+  })
+  assert.equal(response.status, 200)
+  const frames = toolCallDeltas(await response.text())
+  // A strict client validates `delta.tool_calls[0].function` as an object on
+  // every frame, so one bare index frame aborts the whole stream.
+  assert.deepEqual(frames.filter(frame => frame.function === undefined).map(frame => frame.index), [],
+    `every frame must carry a function delta, got ${JSON.stringify(frames)}`)
+  const opening = frames[0]
+  assert.equal(opening.id, 'call_t')
+  assert.equal(opening.type, 'function', 'the opening frame carries the official chunk type')
+  assert.equal(opening.function.name, 'mytool')
+  assert.equal(opening.function.arguments, '')
+  assert.equal(frames.filter(frame => frame.id !== undefined).length, 1, 'id rides the opening frame only')
+  assert.equal(frames.map(frame => frame.function.arguments).join(''), '{"x":1}')
+})
+
 await checkAsync('a decoy tool call never reaches the streaming client', async () => {
   const lane = makeLane()
   const base = await serve(lane)
@@ -482,6 +516,13 @@ await checkAsync('responses endpoint streams events and reports usage', async ()
     'response.output_text.delta', 'response.output_text.delta', 'response.output_text.done',
     'response.content_part.done', 'response.output_item.done', 'response.completed'])
   const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  // #548: a strict accumulator rejects the stream on the first event when
+  // `sequence_number` is missing, so every frame has to carry one, starting at
+  // 0 and strictly increasing.
+  assert.equal(frames.length, types.length, 'every event must come with a data frame')
+  assert.deepEqual(frames.map(frame => frame.sequence_number), frames.map((_, position) => position),
+    'sequence_number must start at 0 and increase by one per event')
+  assert.equal(frames.every(frame => Number.isInteger(frame.sequence_number)), true)
   const added = frames.find(frame => frame.type === 'response.output_item.added')
   const done = frames.find(frame => frame.type === 'response.output_item.done')
   assert.equal(added.item.id, done.item.id, 'native Codex requires a stable output item ID')
@@ -516,6 +557,8 @@ await checkAsync('responses streaming gives text and calls distinct output index
   assert.equal(response.status, 200)
   const body = await response.text()
   const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  assert.deepEqual(frames.map(frame => frame.sequence_number), frames.map((_, position) => position),
+    'the counter must run across mixed text and tool-call frames too')
   const added = frames.filter(frame => frame.type === 'response.output_item.added')
   assert.deepEqual(added.map(frame => frame.output_index), [0, 1, 2], `indexes must be distinct and sequential, got ${added.map(frame => frame.output_index)}`)
   assert.deepEqual(added.map(frame => frame.item.type), ['message', 'function_call', 'function_call'])
@@ -739,6 +782,29 @@ await checkAsync('a nameless tool call downgrades its turn to max-tokens (#92)',
     chatFrame({ tool_calls: [{ index: 0, id: 'call_ok', function: { name: 'glob', arguments: ':1}' } }] }),
   ])
   assert.equal(named.state.brokenToolCall, false)
+})
+
+// Issue #474: a structurally complete argument that merely fails to parse (a
+// bare value with all brackets closed) is not a cut — the call must reach the
+// host so the schema violation comes back as a fixable error. Flagging it
+// masqueraded as max-tokens and killed every recovery path. An unclosed string
+// is still a cut.
+await checkAsync('complete-but-invalid arguments stay executable; an unclosed string stays broken (#474)', async () => {
+  const invalid = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_inv', function: { name: 'glob', arguments: '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}' } }] }),
+  ])
+  assert.equal(invalid.state.brokenToolCall, false, 'a complete-but-invalid argument must not flag the turn')
+  const cut = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_cut', function: { name: 'glob', arguments: '{"pattern": "un' } }] }),
+  ])
+  assert.equal(cut.state.brokenToolCall, true, 'an unclosed string is still a cut')
+  // A lost-prefix fragment (`"some/path.txt"}` — both quotes present, the
+  // opening `{` lost) has a negative depth — still a cut, it stays on the
+  // retry path.
+  const lostPrefix = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_lp', function: { name: 'read', arguments: '"some/path.txt"}' } }] }),
+  ])
+  assert.equal(lostPrefix.state.brokenToolCall, true, 'a lost-prefix fragment is still a cut')
 })
 
 const fakeResponse = () => {

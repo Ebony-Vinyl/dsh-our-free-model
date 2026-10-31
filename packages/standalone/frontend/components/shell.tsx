@@ -27,6 +27,18 @@ const navigation = [
   { label: t('nav.groupSponsor'), items: [{ id: 'sponsor', name: t('nav.sponsor'), icon: Coffee }] },
 ] as const
 
+/**
+ * 侧边栏能到达的每一个页面，按侧边栏顺序排列。
+ *
+ * `App` 用它当导航白名单：不在这份名单里的页面会被 `host.navigate` **静默丢弃**。
+ * 此前 `app.tsx` 自己又写了一份同样的数组，两份一漂移就出了「模型工作台」
+ * 点了没反应 —— 侧边栏有这一项、白名单里没有，`navigate('workspace')` 直接被
+ * `includes` 短路，无报错、无 loading、内容区不切换（#678）。
+ *
+ * 从侧边栏**推导**而不是重述，是让这两份永远不可能再漂移的唯一办法。
+ */
+export const navigationPages: Page[] = navigation.flatMap(group => group.items.map(item => item.id))
+
 type Origin = { x: number; y: number }
 
 function useTheme() {
