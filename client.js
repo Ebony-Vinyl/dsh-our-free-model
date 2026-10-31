@@ -570,6 +570,11 @@ window.__ModuleLoader__.load({
         'chan.auto.ran': '今日已自动签到',
         'chan.auto.off': '今日尚未签到',
         'chan.auto.last': '上次结果：{result}',
+        'badge.toggle': '输入框旁显示余额',
+        'badge.toggleHint': '在输入框旁显示当前渠道还剩多少额度和积分。',
+        'badge.label': '剩余 {value}',
+        'badge.loading': '读取余额…',
+        'badge.refresh': '刷新余额',
         'nav.tab.aggregate': '聚合渠道',
         'nav.tab.workspace': '模型工作台',
         'engine.start': '打开工作台',
@@ -1347,6 +1352,11 @@ window.__ModuleLoader__.load({
         'chan.auto.ran': 'Checked in today',
         'chan.auto.off': 'Not checked in today',
         'chan.auto.last': 'Last result: {result}',
+        'badge.toggle': 'Show balance by the input box',
+        'badge.toggleHint': 'Shows how much credit and quota the current provider has left, right next to the input box.',
+        'badge.label': '{value} left',
+        'badge.loading': 'Reading balance…',
+        'badge.refresh': 'Refresh balance',
         'nav.tab.aggregate': 'Aggregate',
         'nav.tab.workspace': 'Model workspace',
         'engine.start': 'Open workspace',
@@ -1737,6 +1747,15 @@ window.__ModuleLoader__.load({
 .ofm_switch[aria-checked="true"] i::after{transform:translateX(16px);background:#fff}
 .ofm_switch[aria-checked="true"]:active i::after{transform:translateX(13px)}
 .ofm_switch:focus-visible i{box-shadow:0 0 0 3px color-mix(in srgb,var(--dsw-alias-state-business-primary) 22%,transparent)}
+/* ══ 输入框旁的余额徽标 ══════════════════════════════════════════════════ */
+.ofm_balancebadge{display:inline-flex;align-items:center;gap:2px;margin-right:2px;font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary);white-space:nowrap}
+.ofm_balancebadge[data-ofm-state="stale"] .ofm_balancetext{opacity:.6}
+.ofm_balancerefresh{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;transition:background .16s ease,color .16s ease}
+.ofm_balancerefresh:hover:not(:disabled){background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 14%,transparent);color:var(--dsw-alias-label-secondary)}
+.ofm_balancerefresh:focus-visible{outline:2px solid color-mix(in srgb,var(--dsw-alias-state-business-primary) 45%,transparent);outline-offset:1px}
+.ofm_balancerefresh:disabled{cursor:default;opacity:.55}
+.ofm_balancebadge[data-ofm-state="loading"] .ofm_balancerefresh span{display:inline-block;animation:ofmspin 1s linear infinite}
+@keyframes ofmspin{to{transform:rotate(360deg)}}
 .ofm_mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;padding:7px 10px;border-radius:9px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);overflow-x:auto;white-space:pre;color:var(--dsw-alias-label-secondary)}
 /* ══ 提示条 ════════════════════════════════════════════════════════════ */
 .ofm_callout{display:flex;gap:9px;padding:10px 12px;border-radius:11px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 9%,transparent);font-size:11.5px;line-height:1.5;color:var(--dsw-alias-label-primary)}
@@ -4500,6 +4519,123 @@ window.__ModuleLoader__.load({
       return { available: transport !== null, rpc }
     }
 
+    /**
+     * Which channel a composer selection belongs to, or `undefined` for a model
+     * this plugin does not bill by account (the free lane, EAC, a combo).
+     *
+     * The badge is a reading of ONE provider's accounts, so a selection that is
+     * not a channel model has nothing to read — returning `undefined` is what
+     * keeps the badge off every other model in the picker. The provider comes
+     * from the selection itself: the pack registers its channel routes under the
+     * same ids its RPC takes, so no model-id parsing is involved.
+     */
+    function channelOfSelection(selection) {
+      const provider = selection?.provider
+      if (typeof provider !== 'string' || provider === '') return undefined
+      return CHANNEL_PROVIDERS.find(channel => channel.id === provider)?.id
+    }
+
+    /**
+     * The one-line reading: a subscription window's tightest percentage when the
+     * channel reports windows, otherwise the channel's whole balance.
+     *
+     * The total is summed from every package a `credits.balances` row carries
+     * (`balance.total`), which is the same figure the settings page prints — one
+     * channel, one number. Reading only the matched plan package instead would
+     * print a smaller figure than that page for a channel whose balance is split
+     * across a plan plus top-up packages (Qoder CN), and two different numbers
+     * for the same channel read as a defect.
+     *
+     * Every non-answer collapses to `undefined` so the badge hides rather than
+     * prints a number it cannot stand behind: a failed query is NOT a zero
+     * balance, and an empty account list is not "0 left". Zero itself is a real
+     * reading and is shown.
+     */
+    function badgeReading(data, t) {
+      if (data === undefined) return undefined
+      const accounts = Array.isArray(data.accounts) ? data.accounts.filter(row => row?.balance != null) : []
+      if (accounts.length === 0) return undefined
+      const subscription = data.subscription
+      if (subscription?.kind === 'windows') {
+        const row = (Array.isArray(subscription.accounts) ? subscription.accounts : [])
+          .flatMap(account => Array.isArray(account?.windows) ? account.windows : [])
+          .filter(window => Number.isFinite(window?.remainingPercent))
+          .sort((left, right) => left.remainingPercent - right.remainingPercent)[0]
+        if (row !== undefined) return t('badge.label').replace('{value}', `${Math.round(row.remainingPercent)}%`)
+      }
+      const total = accounts.reduce((sum, row) => sum + (Number.isFinite(row.balance.total) ? row.balance.total : 0), 0)
+      return t('badge.label').replace('{value}', formatBadgeAmount(total))
+    }
+
+    /** Up to two decimals, thousands grouped; a huge balance stays readable. */
+    function formatBadgeAmount(value) {
+      return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
+    }
+
+    /**
+     * The composer's balance badge.
+     *
+     * Sits in the `conversation.input.right` seat — the same one `dsh-wb` uses
+     * for its credit badge — so it reads as an annotation on the composer rather
+     * than a control of its own. It reads through the channel pack's own
+     * `usage.badge` RPC, which the host already caches for two minutes; polling
+     * on a minute therefore costs one upstream round per two polls instead of
+     * one per account per poll.
+     *
+     * Owner-set behaviour: always visible, no per-model switch. The settings
+     * toggle simply mounts or unmounts this component.
+     */
+    function BalanceBadge(props) {
+      const { rpc, provider, t } = props
+      const [state, setState] = useState({ status: 'idle', data: undefined })
+      const mounted = useRef(false)
+      const seq = useRef(0)
+
+      const read = useCallback(async force => {
+        if (rpc === null || provider === undefined) return
+        const current = ++seq.current
+        setState(previous => ({ status: previous.data === undefined ? 'loading' : 'stale', data: previous.data }))
+        try {
+          const value = await rpc('usage.badge', { provider, ...force ? { force: true } : {} }, 90_000)
+          if (!mounted.current || current !== seq.current) return
+          setState({ status: 'ready', data: value?.provider === provider ? value : undefined })
+        } catch {
+          if (!mounted.current || current !== seq.current) return
+          setState({ status: 'failed', data: undefined })
+        }
+      }, [rpc, provider])
+
+      useEffect(() => {
+        mounted.current = true
+        return () => { mounted.current = false }
+      }, [])
+
+      useEffect(() => {
+        if (rpc === null || provider === undefined) { setState({ status: 'idle', data: undefined }); return undefined }
+        void read(false)
+        const timer = setInterval(() => { void read(false) }, 60_000)
+        return () => clearInterval(timer)
+      }, [read, rpc, provider])
+
+      if (rpc === null || provider === undefined) return null
+      const text = badgeReading(state.data, t)
+      // First mount paints the loading word; a refresh keeps the previous number
+      // on screen (dimmed through `data-ofm-state`) instead of flashing text out
+      // and back in. A lane with no answer renders nothing at all.
+      if (text === undefined && state.status !== 'loading') return null
+      return h('span', { className: 'ofm_balancebadge', 'data-ofm-state': text === undefined ? state.status : 'ready' },
+        h('button', {
+          type: 'button',
+          className: 'ofm_balancerefresh',
+          title: t('badge.refresh'),
+          'aria-label': t('badge.refresh'),
+          'aria-busy': state.status === 'loading' ? 'true' : 'false',
+          disabled: state.status === 'loading',
+          onClick: () => { void read(true) },
+        }, h('span', { 'aria-hidden': 'true' }, '\u21bb')),
+        h('span', { className: 'ofm_balancetext' }, text ?? t('badge.loading')))
+    }
+
     const ZCODE_PROVIDER_KEY = 'ofm:zcode:login-provider'
     function closeLoginPopup(popup) {
       try { if (popup && !popup.closed) popup.close() } catch { /* best effort */ }
@@ -4986,7 +5122,7 @@ window.__ModuleLoader__.load({
     }
 
     function ChannelsPage(props) {
-      const { t, ctx, summary } = props
+      const { t, ctx, summary, settings, onApply, busy } = props
       const { available, rpc } = useChannelRpc(ctx)
       const [query, setQuery] = useState('')
       const [filter, setFilter] = useState('')
@@ -5089,7 +5225,18 @@ window.__ModuleLoader__.load({
             h(Switch, { checked: auto.enabled === true, label: t('chan.auto.title'), onChange: () => void toggleAuto() }),
             h(Pill, { tone: auto.running === true ? 'warn' : auto.ranToday === true ? 'ok' : '' },
               auto.running === true ? t('chan.auto.running') : auto.ranToday === true ? t('chan.auto.ran') : t('chan.auto.off')),
-            typeof auto.lastResult === 'string' && auto.lastResult !== '' ? h('span', { className: 'ofm_note', title: auto.lastResult }, t('chan.auto.last').replace('{result}', auto.lastResult.length > 60 ? `${auto.lastResult.slice(0, 60)}…` : auto.lastResult)) : null)),
+            typeof auto.lastResult === 'string' && auto.lastResult !== '' ? h('span', { className: 'ofm_note', title: auto.lastResult }, t('chan.auto.last').replace('{result}', auto.lastResult.length > 60 ? `${auto.lastResult.slice(0, 60)}…` : auto.lastResult)) : null),
+          h('div', { className: 'ofm_row', title: t('badge.toggleHint') },
+            h(Switch, {
+              checked: settings?.showBalanceBadge !== false,
+              label: t('badge.toggle'),
+              disabled: busy === true || typeof onApply !== 'function',
+              onChange: () => {
+                if (busy === true || typeof onApply !== 'function') return
+                void onApply({ showBalanceBadge: settings?.showBalanceBadge === false })
+              },
+            }),
+            h('span', { className: 'ofm_note' }, t('badge.toggleHint')))),
         failed ? h('div', { className: 'ofm_callout ofm_error' },
           h('div', null, t('chan.pack.failed').replace('{reason}', pack.error ?? ''), h('div', { className: 'ofm_note' }, t('chan.pack.hint')))) : null,
         !available ? h('div', { className: 'ofm_callout' }, h('div', null, t('chan.rpc.unavailable'))) : null,
@@ -6823,6 +6970,9 @@ window.__ModuleLoader__.load({
         try {
           await post('/settings', patch)
           summary.reload(); stats.reload()
+          // The composer badge is mounted outside this page, so it learns about a
+          // write the same way several other cross-page refreshes do here.
+          try { window.dispatchEvent(new CustomEvent('ofm:settings', { detail: patch })) } catch { /* no window */ }
         } catch (error) {
           // The route can refuse a patch — a routable forward bind, for one — and a
           // rejection nobody shows is a button that appears to do nothing.
@@ -7206,7 +7356,7 @@ window.__ModuleLoader__.load({
 
       const page = tab === 'workspace'
         ? h(WorkspacePage, { t, summary, section: workspaceSection, onSelect: setWorkspaceSection })        : tab === 'channels'
-        ? h(ChannelsPage, { t, ctx, summary })
+        ? h(ChannelsPage, { t, ctx, summary, settings: data.settings, onApply: apply, busy })
         : tab === 'aggregate'
           ? h(AggregatePage, { t, summary })
           : tab === 'saver'
@@ -7634,6 +7784,59 @@ window.__ModuleLoader__.load({
         order: -50,
         locale: NS,
       }, props => h(AnnouncementGate, { ...props, t: Object.assign(x => t(x), { locale: localeTag(ctx) }) })))
+
+      ctx.inject(['modelDirectories'], scope => {
+        scope.slots.inject('conversation.input.right', () => scope.slots.register({
+          name: 'conversation.input.right',
+          id: 'our-free-model-balance',
+          order: 20,
+          locale: NS,
+          inject: sessionId => ({
+            directory: scope.modelDirectories.directoryFor(sessionId).store,
+            t,
+          }),
+        }, props => h(BalanceBadgeSeat, { ...props, ctx })))
+      })
+    }
+
+    /**
+     * The seat wrapper: resolves the session's current selection, then decides
+     * whether the badge applies at all.
+     *
+     * Two host facts gate it, and both are re-read live rather than latched at
+     * mount: the owner's settings switch (`showBalanceBadge`), and the channel
+     * pack's RPC transport, which only exists once the pack has finished
+     * importing. A selection that is not a channel model renders nothing, so the
+     * seat stays empty for the free and EAC lanes instead of showing a stale
+     * number from whichever channel was selected before.
+     */
+    function BalanceBadgeSeat(props) {
+      const { directory, ctx, t } = props
+      const [selection, setSelection] = useState(() => directory.getSnapshot().current)
+      const { rpc } = useChannelRpc(ctx)
+      // `undefined` until the settings read answers: the switch defaults to ON,
+      // but painting the badge before that answer would flash a badge the owner
+      // has switched off. A failed read keeps it hidden — the switch is an owner
+      // setting, so the safe default when it cannot be read is "respect it".
+      const [enabled, setEnabled] = useState(undefined)
+      useEffect(() => {
+        setSelection(directory.getSnapshot().current)
+        return directory.subscribe(() => setSelection(directory.getSnapshot().current))
+      }, [directory])
+      useEffect(() => {
+        let alive = true
+        const load = () => {
+          api('/summary')
+            .then(payload => { if (alive) setEnabled(payload?.settings?.showBalanceBadge !== false) })
+            .catch(() => { if (alive) setEnabled(false) })
+        }
+        load()
+        window.addEventListener('ofm:settings', load)
+        return () => { alive = false; window.removeEventListener('ofm:settings', load) }
+      }, [])
+      if (enabled !== true) return null
+      const provider = channelOfSelection(selection)
+      return provider === undefined ? null : h(BalanceBadge, { rpc, provider, t })
     }
     /**
      * Owns the announcement's readiness.
