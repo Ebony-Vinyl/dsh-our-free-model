@@ -91,10 +91,13 @@ export const CAPABILITIES = [
  * ### Where this table departs from models.dev, and why
  *
  * - `contextWindow`: models.dev publishes `200000` for the `-free` ids, but
- *   the same upstream accepted a ~1M-token prompt on `deepseek-v4.1-flash-free`
- *   (1025229 prompt tokens, 200) and on `glm-5.3-flash-free` (900694, 200), so
- *   the published figure is a floor, not the wire's limit. The served window
- *   is used, matching what `deepseek-v4.1-flash` (the paid id) publishes.
+ *   that figure is a floor, not the wire's limit. The wire's own ceiling on
+ *   `deepseek-v4.1-flash-free` is 285000: a request past it comes back as the
+ *   upstream's context-length error ("more tokens than this model's maximum
+ *   context length allows"). An earlier probe had a 1025229-token prompt
+ *   answered 200, which is why this table declared ~1M; 285K is the measured
+ *   ceiling. `glm-5.3-flash-free` still answers a ~1M-token prompt (900694,
+ *   200).
  * - `disabled` rung: offered only where the model's own `effort.values`
  *   includes `none`. GLM 5.3 Flash does not list `none`, and four samples at
  *   `none` still spent a median 552 reasoning tokens — an Off rung there would
@@ -107,7 +110,7 @@ export const CAPABILITIES = [
 const FREE_ID_OVERRIDES = {
   // models.dev: effort low|high|max; limit 200000/32000 (floor — see above).
   'deepseek-v4.1-flash-free': {
-    vision: true, contextWindow: 1048576, maxOutput: 384000,
+    vision: true, contextWindow: 285000, maxOutput: 384000,
     efforts: ['disabled', 'low', 'high', 'max'], effortDefault: 'high',
     effortPatch: { reasoning_effort: '$effort' },
     effortOffPatch: { reasoning_effort: 'none' },
