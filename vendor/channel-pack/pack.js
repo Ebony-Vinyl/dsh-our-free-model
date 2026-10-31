@@ -27882,7 +27882,7 @@ function nextUtc8DayStartMs(nowMs = Date.now()) {
   return nowMs + (864e5 - msIntoDay);
 }
 function looksLikeBillingError(text) {
-  return /billing\s+daily\s+count\s+exceeded|daily\s+count\s+exceeded|billing_error/i.test(text);
+  return /billing\s+daily\s+count\s+exceeded|daily\s+count\s+exceeded|billing_error|\bpricingUrl\b|\b112\/model_error\b/i.test(text);
 }
 var QUEUE_MAX_DELAY_MS = 1e4;
 var QUEUE_MAX_ATTEMPTS = 180;
