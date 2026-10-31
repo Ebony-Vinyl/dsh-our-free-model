@@ -6,7 +6,7 @@
 **简体中文** | [English](README_EN.md)
 
   <img alt="许可证" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square">
-  <img alt="零依赖" src="https://img.shields.io/badge/dependencies-zero-4b6fff?style=flat-square">
+  <img alt="依赖：默认零，tls 传输可选" src="https://img.shields.io/badge/dependencies-0%2B1%20optional-4b6fff?style=flat-square">
   <img alt="无构建步骤" src="https://img.shields.io/badge/build%20step-none-7da1de?style=flat-square">
   <img alt="适配内核" src="https://img.shields.io/badge/dsh-0.1.5--0.1.7--rc.2-2f6f4f?style=flat-square">
   <img alt="状态" src="https://img.shields.io/badge/status-beta-f0a441?style=flat-square">
@@ -30,7 +30,7 @@
 > 模型清单跟随上游刷新，可用性由**你自己这台机器的网络出口**实测得出，
 > 思考强度下发的是真实预算而不是提示词，另附一个 OpenAI 兼容的本地转发端口。
 >
-> 纯插件挂载：不改内核、无构建步骤、零依赖。
+> 纯插件挂载：不改内核、无构建步骤；默认零依赖，`tls` 传输为可选依赖。
 
 </div>
 
@@ -610,6 +610,8 @@ cordis context 上、真实内核则指将插件装入 dsh 后启动。三者的
 
 部分模型上游本身延迟较高。nemotron-3.5-lightning-free 曾实测首字延迟超过 30 秒。此为上游延迟，看板会如实显示。
 
+免费车道的传输可切换，见 [docs/oc-free-transport.md](docs/oc-free-transport.md)：默认走本机 Bun；`OUR_FREE_MODEL_FREE_TRANSPORT=tls` 改用 tls-client（本机无需 Bun，首次使用需下载约 26 MB 原生库，设置页有进度与「下载并准备」按钮）；`=node` 是旧路径，上游已开始按客户端指纹拒绝。tls 档的响应体由 C ABI 一次性返回，SSE 只能整段缓冲后按帧重放——首字延迟等于整轮生成时间，中途取消只停止重放，省不下已经花掉的额度。
+
 输出速度有时会显示 —。答案集中在一两个大帧中落地、或思考过程根本不流式返回的模型，不存在可用于计算的时间窗。看板宁可留空，也不会将"思考耗时"计入"输出速度"。
 
 思考过程为静默等待，且与正文共享输出预算。实测 mimo-v2.6-flash-free 可在思考阶段静默 60–70 秒，期间上游计费 3024 个 reasoning token 但不发送任何思考帧；此类回合会以 stop 收尾而正文为空，客户端容易报告"空响应"。转发端点与局域网中继通过心跳保持连接，但心跳维持的是连接，不能解决超时问题：注释帧会被 SSE 解析器跳过，pi-ai 的空闲看门狗（streamIdleTimeoutMs，默认 300 秒）仅在读到真实内容帧时重置，链路滞留超过该值仍会以 TIMEOUT 失败（实测时间线见 issue #34）。预算只能由调用方给出：将单次输出上限提升至 16k 以上，或改用模型卡中标注 reasoning: false 的模型。
@@ -716,7 +718,7 @@ DeepSeek Harness 桌面端（Electron 壳）与 DSH Tauri：使用内核提供�
 
 关于隐私与信任，说明如下：
 
-没有号池、没有中转、没有二道贩子。上表即为本插件全部出网目标；npm test 的离线套件完全不出网（共享测试脚手架会把两条免密来源都默认指向已关闭的本机端口，杜绝任何套件"顺带"打到真实网关），仅 scripts/host-selftest.mjs 与 scripts/probes/ 会主动请求这些地址，且需手动运行。若将来引入新的来源，本节会先于功能更新，不会默认将流量分配给第三方。
+没有号池、没有中转、没有二道贩子。上表即为本插件全部出网目标——唯一例外是 `OUR_FREE_MODEL_FREE_TRANSPORT=tls` 时首次使用要下载的那份原生库（`github.com/bogdanfinn/tls-client/releases`，26 MB，只下这一次，可由 `OUR_FREE_MODEL_TLS_LIB` 指向本地文件完全避免）；npm test 的离线套件完全不出网（共享测试脚手架会把两条免密来源都默认指向已关闭的本机端口，杜绝任何套件"顺带"打到真实网关），仅 scripts/host-selftest.mjs 与 scripts/probes/ 会主动请求这些地址，且需手动运行。若将来引入新的来源，本节会先于功能更新，不会默认将流量分配给第三方。
 
 你的 prompt、工具结果与随附图像会作为正常推理请求发送至所选模型对应的上游——与调用任何模型 API 相同。除此之外插件不上传任何内容：用量看板数据、设置、转发 Key 均只落在本机 DSH_HOME/our-free-model/。
 

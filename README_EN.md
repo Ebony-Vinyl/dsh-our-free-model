@@ -6,7 +6,7 @@
 [简体中文](README.md) | **English**
 
   <img alt="license" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square">
-  <img alt="zero dependencies" src="https://img.shields.io/badge/dependencies-zero-4b6fff?style=flat-square">
+  <img alt="Dependencies: zero by default, optional tls transport" src="https://img.shields.io/badge/dependencies-0%2B1%20optional-4b6fff?style=flat-square">
   <img alt="build step" src="https://img.shields.io/badge/build%20step-none-7da1de?style=flat-square">
   <img alt="dsh kernels" src="https://img.shields.io/badge/dsh-0.1.5--0.1.7--rc.2-2f6f4f?style=flat-square">
   <img alt="status" src="https://img.shields.io/badge/status-beta-f0a441?style=flat-square">
@@ -31,7 +31,7 @@
 > egress, the thinking-effort control sends a real budget instead of a prompt hint, and
 > a local OpenAI-compatible forward port comes included.
 >
-> It mounts as a pure plugin: no core changes, no build step, zero dependencies.
+> It mounts as a pure plugin: no core changes, no build step; zero dependencies by default, with the `tls` transport as an optional one.
 
 </div>
 
@@ -698,6 +698,7 @@ it never touches files.
 - **"No usage cap" means no cap to buy.** There is no balance, no plan and no per-token billing; the lane is metered by session rate, though, and hammering it surfaces as `429`. The plugin marks the model *quota reached* rather than hiding it, and the next probe clears the state.
 - **Upstream sessions are per-conversation.** Each conversation is pinned to one stable upstream session (the mapping is persisted in the data directory's `session-map.json`), so concurrent conversations never share upstream state. Turns that arrive without a conversation id (some host call shapes, local-gateway requests with no `user`/`conversation`) fall back to a reserved `global` session shared by all such turns, including their KV cache — run parallel sensitive conversations through a call shape that carries a conversation id; the plugin logs a one-time warning for the first id-less turn. The free lane meters quota per session, so a fresh session per id-less request is not an option — that is the cost of the quota model. Aggregate-lane requests additionally carry an `x-session-id` header so a provider that keeps per-session state cannot merge concurrent conversations on the same key; the EAC lane deliberately sends no session header, because its shared-pool admission gate does not recognize the free lane's session fingerprint.
 - **Some upstream models are slow.** `nemotron-3.5-lightning-free` measured over 30 s to first token in one run. That is upstream latency, and the dashboard reports it rather than hiding it.
+- **The free lane's transport is switchable.** See [docs/oc-free-transport.md](docs/oc-free-transport.md). The default is a local Bun binary; `OUR_FREE_MODEL_FREE_TRANSPORT=tls` uses tls-client instead (no Bun needed, but the first use downloads a ~26 MB native library — the settings page shows progress and offers a *fetch and prepare* button); `=node` is the old path, which the upstream has started refusing on client fingerprint. The tls transport receives the body in one piece from the C ABI, so an SSE turn is buffered and replayed frame by frame: first byte arrives when the answer is finished, and cancelling stops the replay, not the quota already spent.
 - **Output speed is sometimes `—`.** A model that answers in one or two large frames, or whose thinking never streams, has no window worth dividing. The panel says so instead of publishing the model's thinking time as decoding speed.
 - **Thinking is a silent wait, and it shares the output budget.** `mimo-v2.6-flash-free` measured 60–70 s of silence while the lane billed 3024 reasoning tokens and streamed not one reasoning frame; such a turn ends as `stop` with nothing visible, which clients report as an empty response. The forward endpoint and the LAN relay keep the connection alive with heartbeats — but that protects the connection, not the timeout: the SSE parser skips comment frames, and pi-ai's idle watchdog (`streamIdleTimeoutMs`, default 300 s) resets only when real content frames arrive, so a stall past 300 s on the wire still fails (issue #34). Only the caller can give it **budget**: raise the per-call output ceiling past 16k, or use a model the catalogue marks `reasoning: false`.
 - **Automatic recovery has request, time and context limits.** It handles only reasoning-only EOF and reasoning-only silent stops (a normal `stop` ending with no answer text) and adds at most one request. Answer text, tool calls, cancellation and explicit errors exclude recovery. A checkpoint request cannot preserve internal upstream state that was never sent, and success is not guaranteed. Usage with a missing report is only the known part.
@@ -781,7 +782,11 @@ request on the day it was wired in:
 On privacy and trust, plainly:
 
 - **No account pool, no relay, no reseller.** The tables above are the complete
-  set of destinations the plugin can contact. `npm test` touches no network at
+  set of destinations the plugin can contact — with one exception: under
+  `OUR_FREE_MODEL_FREE_TRANSPORT=tls`, the first use fetches a 26 MB native
+  library from `github.com/bogdanfinn/tls-client/releases`. It is fetched once,
+  and `OUR_FREE_MODEL_TLS_LIB` pointing at a local file avoids it entirely.
+  `npm test` touches no network at
   all — the shared test scaffolding points both keyless upstreams at closed
   loopback ports by default, so no suite can "incidentally" reach a real gateway —
   and the only things that do are `scripts/host-selftest.mjs` and
