@@ -741,6 +741,29 @@ await checkAsync('a nameless tool call downgrades its turn to max-tokens (#92)',
   assert.equal(named.state.brokenToolCall, false)
 })
 
+// Issue #474: a structurally complete argument that merely fails to parse (a
+// bare value with all brackets closed) is not a cut — the call must reach the
+// host so the schema violation comes back as a fixable error. Flagging it
+// masqueraded as max-tokens and killed every recovery path. An unclosed string
+// is still a cut.
+await checkAsync('complete-but-invalid arguments stay executable; an unclosed string stays broken (#474)', async () => {
+  const invalid = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_inv', function: { name: 'glob', arguments: '{"pattern": **/*billion-context*/package.json, "path": "D:/", "limit": 50}' } }] }),
+  ])
+  assert.equal(invalid.state.brokenToolCall, false, 'a complete-but-invalid argument must not flag the turn')
+  const cut = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_cut', function: { name: 'glob', arguments: '{"pattern": "un' } }] }),
+  ])
+  assert.equal(cut.state.brokenToolCall, true, 'an unclosed string is still a cut')
+  // A lost-prefix fragment (`"some/path.txt"}` — both quotes present, the
+  // opening `{` lost) has a negative depth — still a cut, it stays on the
+  // retry path.
+  const lostPrefix = await readChat([
+    chatFrame({ tool_calls: [{ index: 0, id: 'call_lp', function: { name: 'read', arguments: '"some/path.txt"}' } }] }),
+  ])
+  assert.equal(lostPrefix.state.brokenToolCall, true, 'a lost-prefix fragment is still a cut')
+})
+
 const fakeResponse = () => {
   const res = {
     writes: [],

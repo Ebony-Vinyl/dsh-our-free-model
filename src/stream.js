@@ -61,6 +61,32 @@ function mintToolCallId() {
   return `call_${crypto.randomBytes(12).toString('hex')}`
 }
 
+// Arguments that never parse split into two kinds (issue #474): a structurally
+// incomplete value (unclosed string, unbalanced brackets — output cut by the
+// ceiling or lost frames) and a complete-but-invalid one (a bare value with all
+// brackets closed). Only the first marks the turn broken; the second is a
+// normal tool-call whose schema violation comes back to the model as a
+// fixable error, while flagging it would masquerade as max-tokens and kill
+// every recovery path.
+function argumentsCutMidway(raw) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (const ch of raw) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+    } else if (ch === '"') inString = true
+    else if (ch === '{' || ch === '[') depth += 1
+    else if (ch === '}' || ch === ']') depth -= 1
+  }
+  // Unbalanced is incomplete in either direction: a negative depth is the
+  // lost-prefix fragment shape (`"path.txt"}`), which belongs on the
+  // proven retry path, not on the complete-but-invalid one.
+  return inString || depth !== 0
+}
+
 class BlockSink {
   constructor(yieldChunk, startIndex, checkpointLimit, onProgress) {
     this.emit = yieldChunk
@@ -191,7 +217,7 @@ class BlockSink {
         // cannot be trusted; the adapter downgrades such a turn to max-tokens,
         // which makes the harness's assembler prune the call instead of
         // executing it and looping on the model's retry.
-        try { JSON.parse(block.args === '' ? '{}' : block.args) } catch { this.brokenToolCall = true }
+        try { JSON.parse(block.args === '' ? '{}' : block.args) } catch { this.brokenToolCall = argumentsCutMidway(block.args) }
         // So is a call that never learned its name (issue #92): a relayed model
         // leaked its tool markup mid-text, the gateway half-parsed it into an
         // empty-named call shell, and the harness executed the nameless call as

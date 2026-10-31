@@ -29910,7 +29910,7 @@ function normalizeToolArguments(raw) {
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    return "{}";
+    return isTruncatedArguments(trimmed) ? "{}" : trimmed;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return "{}";
   return trimmed;
@@ -29922,8 +29922,20 @@ function isTruncatedArguments(raw) {
     JSON.parse(trimmed);
     return false;
   } catch {
-    return true;
   }
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (const ch of trimmed) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") depth += 1;
+    else if (ch === "}" || ch === "]") depth -= 1;
+  }
+  return inString || depth !== 0;
 }
 var REASONING_LOOP_CODE = "REASONING_LOOP";
 function resolveSliceChars(raw) {
