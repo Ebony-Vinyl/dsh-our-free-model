@@ -1,9 +1,18 @@
 // Explicitly opt-in: this sends ONE real free-lane request and may consume quota.
 import assert from 'node:assert/strict'
+import os from 'node:os'
+import path from 'node:path'
 import { applyFingerprint, mintSessionId, endpointFor } from '../src/upstream.js'
 import { postStreamed } from '../src/http.js'
-import { startEgressRelay } from '../src/egress.js'
+import { configureTlsTransport, startEgressRelay } from '../src/egress.js'
 if (!process.argv.includes('--live')) { console.log('Skipped: pass --live to send an actual request.'); process.exit(0) }
+// The tls transport needs a data directory before its first request; without
+// one it would fall through to the package's own downloader and skip the
+// path this script is meant to exercise.
+configureTlsTransport({
+  dataDir: path.join(os.tmpdir(), 'ofm-tls-live'),
+  log: message => console.error(message),
+})
 const modelIndex = process.argv.indexOf('--model')
 const model = modelIndex >= 0 ? process.argv[modelIndex + 1] : 'deepseek-v4.1-flash-free'
 if (!model || model.startsWith('--')) throw new Error('--model requires a model ID')

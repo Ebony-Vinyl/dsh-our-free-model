@@ -157,6 +157,11 @@ window.__ModuleLoader__.load({
         'egress.active': '出口生效中',
         'egress.inactive': '未启用',
         'egress.outlet': '当前出口',
+        'egress.transport': '免费车道传输',
+        'egress.transportIdle': '尚未启动（首次请求时建立）',
+        'egress.downloading': '原生库下载中',
+        'egress.prepare': '下载并准备',
+        'egress.transportError': '传输启动失败：{message}',
         'egress.node': '当前最佳节点',
         'egress.latency': '访问 opencode',
         'egress.measuring': '测量中…',
@@ -888,6 +893,11 @@ window.__ModuleLoader__.load({
         'egress.active': 'Outlet active',
         'egress.inactive': 'Not enabled',
         'egress.outlet': 'Current outlet',
+        'egress.transport': 'Free-lane transport',
+        'egress.transportIdle': 'not started (opens on the first request)',
+        'egress.downloading': 'Downloading the native library',
+        'egress.prepare': 'Fetch and prepare',
+        'egress.transportError': 'Transport failed: {message}',
         'egress.node': 'Best node',
         'egress.latency': 'opencode access',
         'egress.measuring': 'measuring…',
@@ -3868,7 +3878,7 @@ window.__ModuleLoader__.load({
     function Egress(props) {
       const { settings, t, onApply, busy } = props
       const [draft, setDraft] = useState(settings.egress ?? {})
-      useEffect(() => setDraft(settings.egress ?? {}), [settings.egress?.enabled, settings.egress?.mode, settings.egress?.urlLabel, settings.egress?.hasUrl, settings.egress?.active, settings.egress?.error])
+      useEffect(() => setDraft(settings.egress ?? {}), [settings.egress?.enabled, settings.egress?.mode, settings.egress?.urlLabel, settings.egress?.hasUrl, settings.egress?.active, settings.egress?.error, settings.egress?.transport?.mode, settings.egress?.transport?.ready])
       const [urlShown, setUrlShown] = useState(false)
       const [urlValue, setUrlValue] = useState('')
       const [copied, setCopied] = useState('')
@@ -3880,6 +3890,18 @@ window.__ModuleLoader__.load({
       // when an outlet is actually running.
       const live = useAsync(() => api('/outlet'), [settings.egress?.enabled, settings.egress?.active])
       const reloadOutlet = live.reload
+      // Fetching the native library is the one step that can take minutes, and
+      // it happens inside the first request — so the page polls a counter read
+      // once a second while it runs, and lazily the rest of the time.
+      const lane = useAsync(() => api('/transport'), [])
+      const reloadLane = lane.reload
+      const laneTransport = lane.data ?? draft?.transport ?? {}
+      const downloading = laneTransport.download ?? null
+      const downloadingNow = downloading !== null
+      useEffect(() => {
+        const timer = setInterval(() => reloadLane(), downloadingNow ? 1000 : 15000)
+        return () => clearInterval(timer)
+      }, [downloadingNow, reloadLane])
       const running = settings.egress?.active === true
       useEffect(() => {
         if (!running) return undefined
@@ -3892,6 +3914,19 @@ window.__ModuleLoader__.load({
       const latencyMs = Number(status?.latencyMs ?? 0)
       const subscription = draft?.mode !== 'client'
       const statusLine = text => h('code', { className: 'ofm_mono', style: { padding: '4px 8px', flex: 1, minWidth: 200 } }, text)
+      // Which TLS stack carries the free lane is an environment choice, not a
+      // stored setting, so this row is a reading rather than a control.
+      const transportLabel = laneTransport.mode === 'tls'
+        ? `tls · ${laneTransport.ready === true ? (laneTransport.library || 'ok') : t('egress.transportIdle')}`
+        : String(laneTransport.mode ?? 'auto')
+      const downloadPct = downloadingNow && downloading.total > 0
+        ? Math.min(100, Math.floor((downloading.received / downloading.total) * 100))
+        : 0
+      const downloadLabel = downloadingNow
+        ? `${(downloading.received / 1048576).toFixed(1)}${downloading.total > 0 ? ` / ${(downloading.total / 1048576).toFixed(1)} MB` : ' MB'}`
+          + `${downloading.total > 0 ? ` (${downloadPct}%)` : ''}`
+          + `${downloading.rate > 0 ? ` · ${(downloading.rate / 1048576).toFixed(1)} MB/s` : ''}`
+        : ''
       // The stored address is never in the payload this panel was rendered
       // from, so "see it" and "copy it" both cost one on-demand fetch, and the
       // masked form is all this page holds the rest of the time.
@@ -3922,6 +3957,26 @@ window.__ModuleLoader__.load({
         h('div', { className: 'ofm_row' },
           h(Switch, { checked: draft?.enabled === true, label: t('egress.enabled'), onChange: () => setDraft(c => ({ ...c, enabled: !(c?.enabled === true) })) }),
           h('span', { className: 'ofm_pill' }, h('span', { className: `ofm_dot ${draft?.active === true ? 'ok' : draft?.error ? 'err' : ''}` }), draft?.active === true ? t('egress.active') : t('egress.inactive'))),
+        h('div', { className: 'ofm_row' },
+          h('span', { className: 'ofm_note' }, t('egress.transport')),
+          statusLine(transportLabel),
+          // The first turn would otherwise pay for the download while the caller
+          // waits; this starts it here, where the progress bar is.
+          laneTransport.mode === 'tls' && laneTransport.ready !== true
+            ? h(Button, { kind: 'ghost', disabled: downloadingNow, onClick: () => {
+              void post('/transport/prepare').catch(() => {})
+              setTimeout(() => reloadLane(), 400)
+            } }, downloadingNow ? t('egress.downloading') : t('egress.prepare'))
+            : null),
+        downloadingNow ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 } },
+          h('div', { className: 'ofm_row' },
+            h('span', { className: 'ofm_note' }, t('egress.downloading')),
+            statusLine(downloadLabel)),
+          h('div', {
+            className: 'ofm_meter', role: 'progressbar',
+            'aria-valuenow': downloadPct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': t('egress.downloading'),
+          }, h('i', { style: { width: `${downloadPct}%` } }))) : null,
+        laneTransport.error ? h('div', { className: 'ofm_callout ofm_error' }, t('egress.transportError').replace('{message}', laneTransport.error)) : null,
         h('div', { className: 'ofm_row' },
           h(Switch, { checked: subscription, label: t('egress.modeSubscription'), onChange: () => setDraft(c => ({ ...c, mode: subscription ? 'client' : 'subscription' })) })),
         h('div', { className: 'ofm_row' },

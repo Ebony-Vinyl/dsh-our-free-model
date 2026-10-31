@@ -36,7 +36,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError } from './src/http.js'
-import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
+import { configureTlsTransport, egressActive, egressFetch, freeLaneTransport, outletLabel, prepareTlsTransport, readOutletSelection, startEgressRelay } from './src/egress.js'
 import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
@@ -143,6 +143,14 @@ export function apply(ctx, config) {
   const home = resolveDshHome()
   const dataDir = path.resolve(home, DATA_DIR_NAME)
   fs.mkdirSync(dataDir, { recursive: true })
+  // The tls transport downloads its native library through this install's
+  // outlet, so it needs the egress seam and the data directory before the first
+  // request — not when it is first selected.
+  configureTlsTransport({
+    dataDir,
+    log: message => logger.info?.(`our-free-model ${message}`),
+    fetch: egressFetch,
+  })
   const packageVersion = version
 
   // A hot reload re-enters apply with fresh stores; the generation counter lives
@@ -1326,6 +1334,10 @@ export function apply(ctx, config) {
       // `dead` is the managed mihomo dying after startup — surfaced through the
       // same field so the settings page shows why traffic fell back to direct.
       error: outletError !== '' ? outletError : (outletRelay?.dead ?? ''),
+      // Which TLS stack the free lane would use, and whether the tls pool is
+      // already open. The outlet says where traffic leaves; this says what
+      // carries it.
+      transport: freeLaneTransport(),
     }),
     // The settings page polls this while the outlet is on: which node url-test is
     // carrying traffic on is mihomo's own state, and it changes without anything
@@ -1781,6 +1793,18 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())
+      }
+      // Cheap enough to poll once a second while the native library is being
+      // fetched; `/outlet` is not, because it measures a gateway round trip.
+      if (method === 'GET' && routePath === '/transport') {
+        return send(200, freeLaneTransport())
+      }
+      // Starts the download ahead of the first turn and answers immediately: the
+      // page watches it through `/transport`, not through this response.
+      if (method === 'POST' && routePath === '/transport/prepare') {
+        if (freeLaneTransport().mode !== 'tls') return send(409, { error: 'the tls transport is not selected' })
+        void prepareTlsTransport().catch(() => {})
+        return send(202, freeLaneTransport())
       }
       if (routePath === '/subscriptions' || routePath.startsWith('/subscriptions/')) {
         const action = routePath.slice('/subscriptions'.length)
@@ -2433,6 +2457,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
       latencyMs: egressInfo?.latencyMs ?? 0,
       latencyAt: egressInfo?.latencyAt ?? 0,
       error: egressInfo?.error ?? '',
+      transport: egressInfo?.transport ?? { mode: 'auto', ready: false, library: '', error: '', download: null },
     },
   }
 }

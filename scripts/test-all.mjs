@@ -97,6 +97,7 @@ const suites = [
   ['standalone-login-terminal', 'standalone-login-terminal-test.mjs', []],
   ['standalone-package', 'standalone-package-test.mjs', ['--sources-only']],
   ['bun-fetch', 'bun-fetch-test.mjs', []],
+  ['tls-client', 'tls-client-test.mjs', []],
   ['free-lane-compat', 'free-lane-compat-test.mjs', []],
   ['stable-session', 'stable-session-test.mjs', []],
   ['egress', 'egress-test.mjs', []],

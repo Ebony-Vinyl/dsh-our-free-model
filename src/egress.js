@@ -54,7 +54,7 @@ import tls from 'node:tls'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { spawn } from 'node:child_process'
 import { bunFetch, findBunExecutable } from './bun-fetch.js'
@@ -106,16 +106,24 @@ export function egressActive() {
 export async function egressFetch(url, init) {
   const relay = activeRelay
   const targetUrl = new URL(url instanceof Request ? url.url : String(url))
-  // Only the official OC inference lane uses Bun. Kilo/EAC/catalogs and local
-  // test endpoints keep their existing fetch path. Never retry a failed turn
-  // through a second transport: a prior request may already have spent tokens.
+  // Only the official OC inference lane picks a TLS stack (Bun or tls-client).
+  // Kilo/EAC/catalogs and local test endpoints keep their existing fetch path.
+  // Never retry a failed turn through a second transport: a prior request may
+  // already have spent tokens.
   const officialFreeLane = targetUrl.protocol === 'https:' && targetUrl.hostname === 'opencode.ai'
     && (targetUrl.port === '' || targetUrl.port === '443') && targetUrl.pathname.startsWith('/inference/')
   const transport = process.env.OUR_FREE_MODEL_FREE_TRANSPORT ?? 'auto'
+  if (transport !== 'auto' && transport !== 'bun' && transport !== 'tls' && transport !== 'node') {
+    throw new Error('OUR_FREE_MODEL_FREE_TRANSPORT must be auto, bun, tls, or node')
+  }
+  if (officialFreeLane && transport === 'tls') {
+    // tls-client opens its own socket. Routing it through this relay would
+    // terminate TLS in Node and hand the upstream the Node fingerprint instead.
+    return tlsFetch(url, init, { proxy: outletProxy(relay) })
+  }
   if (officialFreeLane && transport !== 'node') {
-    if (transport !== 'auto' && transport !== 'bun') throw new Error('OUR_FREE_MODEL_FREE_TRANSPORT must be auto, bun, or node')
     const executable = findBunExecutable()
-    if (!executable) throw new Error('OpenCode free inference requires a local Bun executable; install Bun or set OUR_FREE_MODEL_BUN to its executable path (OUR_FREE_MODEL_FREE_TRANSPORT=node restores the legacy transport)')
+    if (!executable) throw new Error('OpenCode free inference requires a local Bun executable; install Bun, set OUR_FREE_MODEL_BUN, or select OUR_FREE_MODEL_FREE_TRANSPORT=tls (tls-client) or =node (legacy Node transport)')
     if (relay?.dead) throw new Error('the configured egress relay is not running')
     const proxy = relay ? `http://ofm:${relay.key}@${RELAY_HOST}:${relay.port}` : undefined
     if (url instanceof Request) {
@@ -407,6 +415,25 @@ function relayConnect(req, client, head) {
 /** The outlet the running relay dials; `null` between generations. */
 function activeRelayOutlet() {
   return activeRelay?.outlet ?? null
+}
+
+/**
+ * The outlet as a proxy URL a transport dials itself.
+ *
+ * A managed mihomo that exited leaves its mixed port closed, so a dead relay is
+ * reported here instead of becoming one dial timeout per turn. `socks5h` is
+ * curl's spelling for "resolve at the proxy" and is not a scheme tls-client
+ * recognises.
+ */
+function outletProxy(relay) {
+  if (relay === null) return null
+  if (relay.dead) throw new Error('the configured egress outlet is not running')
+  const outlet = relay.outlet
+  if (outlet === null || outlet === undefined || outlet.kind !== 'url') return null
+  const url = outlet.url
+  const protocol = url.protocol === 'socks5h:' ? 'socks5:' : url.protocol
+  const auth = url.username === '' ? '' : `${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}@`
+  return `${protocol}//${auth}${url.host}`
 }
 
 /** The relay is loopback-only: a non-2xx here is a local misconfiguration, answered as JSON like every other local refusal. */
@@ -927,4 +954,473 @@ function controllerJson(managed, path, timeoutMs) {
     request.on('error', reject)
     request.end()
   })
+}
+
+/* ------------------------------------------------------------------------- *
+ * The tls transport
+ *
+ * `OUR_FREE_MODEL_FREE_TRANSPORT=tls` carries the free lane through
+ * `tlsclientwrapper` with the Bun 1.4.2 ClientHello, for machines with no Bun
+ * binary. Nothing below runs for any other value: the package import, the
+ * native library and the worker pool all sit behind the first request that
+ * takes this branch.
+ *
+ * The body arrives complete — the C ABI returns one string — so an SSE turn is
+ * replayed from that buffer in frame-sized chunks. The first byte therefore
+ * lands when the answer is done, and an abort stops the replay rather than the
+ * upstream call. `streamOutputPath` in the same ABI is the route to real
+ * streaming once its behaviour is verified.
+ * ------------------------------------------------------------------------- */
+
+/** The Bun 1.4.2 profile measured upstream, reproduced field for field. */
+export const BUN_PROFILE = {
+  ja3String: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49161-49171-49162-49172-156-157-47-53,'
+    + '0-23-65281-10-11-35-16-5-13-18-51-45-43,4588-29-23-24,0',
+  alpnProtocols: ['http/1.1'],
+  supportedVersions: ['1.3', '1.2'],
+  keyShareCurves: ['X25519MLKEM768', 'X25519'],
+  supportedSignatureAlgorithms: [
+    'ECDSAWithP256AndSHA256',
+    'PSSWithSHA256',
+    'PKCS1WithSHA256',
+    'ECDSAWithP384AndSHA384',
+    'PSSWithSHA384',
+    'PKCS1WithSHA384',
+    'PSSWithSHA512',
+    'PKCS1WithSHA512',
+    'PKCS1WithSHA1',
+  ],
+}
+
+/** The order Bun 1.4.2 emits. Go-managed names are listed so tls-client places them too. */
+export const HEADER_ORDER = [
+  'authorization',
+  'content-type',
+  'x-opencode-client',
+  'x-opencode-project',
+  'x-opencode-session',
+  'x-opencode-session-id',
+  'x-session-affinity',
+  'x-session-id',
+  'connection',
+  'user-agent',
+  'accept',
+  'host',
+  'accept-encoding',
+]
+
+/** The version `tlsclientwrapper@4.3.0` pins internally; its ABI must match the library. */
+const NATIVE_VERSION = '1.15.1'
+const NATIVE_BASE = 'https://github.com/bogdanfinn/tls-client/releases/download'
+const NATIVE_PREFIX = 'tls-client-xgo'
+/** Ten minutes, matching the profile the fingerprint was measured under. */
+const TLS_TIMEOUT_MS = 600_000
+/** Headers that no longer describe the body once Go has decompressed it. */
+const DROPPED_RESPONSE_HEADERS = new Set([
+  'content-encoding', 'content-length', 'transfer-encoding', 'connection', 'keep-alive', 'trailer', 'upgrade',
+])
+
+/** Set once at apply time; the egress seam is injected so this section never imports itself. */
+let tlsState = { dataDir: '', log: () => {}, fetch: (...args) => fetch(...args) }
+let tlsClient = null
+let tlsOpen = false
+/** Why the last open attempt failed, so a failed download is not silent. */
+let tlsError = ''
+/** Basename of the shared library the open client is using, for the settings page. */
+let tlsLibraryName = ''
+/** Live download reading while the native library is being fetched; null otherwise. */
+let tlsDownload = null
+
+/**
+ * Wire the tls transport to this generation's data directory, logger and egress.
+ *
+ * A hot reload re-enters `apply`, so the previous worker pool is torn down here
+ * rather than left to the old closure.
+ */
+export function configureTlsTransport({ dataDir, log, fetch: fetchImpl } = {}) {
+  tlsState = {
+    dataDir: String(dataDir ?? ''),
+    log: typeof log === 'function' ? log : () => {},
+    fetch: typeof fetchImpl === 'function' ? fetchImpl : (...args) => fetch(...args),
+  }
+  tlsError = ''
+  void closeTlsClient()
+}
+
+/** Stop the worker pool; safe to call when nothing was ever opened. */
+async function closeTlsClient() {
+  const pending = tlsClient
+  tlsClient = null
+  tlsOpen = false
+  if (pending === null) return
+  try {
+    const opened = await pending
+    await opened.module.terminate?.()
+  } catch { /* a pool that never opened has nothing to stop */ }
+}
+
+/**
+ * What the free lane would use right now, for the settings page.
+ *
+ * `ready` is whether the pool is actually open — the setting alone says nothing
+ * about whether a request would succeed.
+ */
+export function freeLaneTransport() {
+  const raw = String(process.env.OUR_FREE_MODEL_FREE_TRANSPORT ?? 'auto').trim().toLowerCase()
+  const mode = ['auto', 'bun', 'tls', 'node'].includes(raw) ? raw : 'auto'
+  return {
+    mode,
+    ready: tlsOpen,
+    library: tlsLibraryName,
+    error: tlsError,
+    download: tlsDownload === null ? null : { ...tlsDownload },
+  }
+}
+
+/**
+ * Open the tls pool — and fetch the native library — without sending a request.
+ *
+ * The first real turn otherwise pays for the download while the caller waits,
+ * with nothing on screen to show for it.
+ */
+export async function prepareTlsTransport() {
+  await tlsClientFor()
+}
+
+/** The native library directory inside this install's data directory. */
+function tlsNativeDir() {
+  return tlsState.dataDir === '' ? '' : path.join(tlsState.dataDir, 'tls')
+}
+
+/** Platform → the release asset suffix, mirroring the wrapper's own table. */
+function tlsDistribution() {
+  const arch = process.arch
+  if (process.platform === 'win32') return arch.includes('64') ? 'windows-amd64' : 'windows-386'
+  if (process.platform === 'darwin') return arch === 'arm64' ? 'darwin-arm64' : 'darwin-amd64'
+  if (process.platform === 'linux') {
+    const map = {
+      arm64: 'linux-arm64',
+      x64: 'linux-amd64',
+      ia32: 'linux-386',
+      arm: 'linux-arm-7',
+      ppc64: 'linux-ppc64le',
+      riscv64: 'linux-riscv64',
+      s390x: 'linux-s390x',
+    }
+    return map[arch] ?? 'linux-amd64'
+  }
+  return ''
+}
+
+function tlsExtension() {
+  if (process.platform === 'win32') return 'dll'
+  if (process.platform === 'darwin') return 'dylib'
+  return 'so'
+}
+
+/** Any `tls-client-xgo-*` build for this platform, whatever version the package pinned. */
+function findTlsNative(dir) {
+  const suffix = `-${tlsDistribution()}.${tlsExtension()}`
+  let entries
+  try { entries = fs.readdirSync(dir) } catch { return null }
+  for (const entry of entries) {
+    if (entry.startsWith(`${NATIVE_PREFIX}-`) && entry.endsWith(suffix)) return path.join(dir, entry)
+  }
+  return null
+}
+
+/** Download through the configured outlet: the release host is not reachable from every network. */
+async function downloadTlsNative(target) {
+  const url = `${NATIVE_BASE}/v${NATIVE_VERSION}/${path.basename(target)}`
+  tlsState.log(`tls transport: native library missing, fetching ${url}`)
+  const response = await tlsState.fetch(url, { redirect: 'follow' })
+  if (!response.ok) throw new Error(`the native library download answered HTTP ${response.status}`)
+  // Read in chunks rather than `arrayBuffer()`: a 26 MB download over a slow
+  // link is indistinguishable from a hang without a running count.
+  const total = Number(response.headers.get('content-length') ?? 0)
+  const startedAt = Date.now()
+  tlsDownload = { received: 0, total, startedAt, rate: 0 }
+  const chunks = []
+  let received = 0
+  let reportedAt = Date.now()
+  let reportedBytes = 0
+  try {
+    if (response.body !== null && typeof response.body?.[Symbol.asyncIterator] === 'function') {
+      for await (const chunk of response.body) {
+        chunks.push(Buffer.from(chunk))
+        received += chunk.length
+        const now = Date.now()
+        if (now - reportedAt >= 500) {
+          const rate = (received - reportedBytes) / ((now - reportedAt) / 1000)
+          tlsDownload = { received, total, startedAt, rate }
+          tlsState.log(`tls transport: ${progressLine(received, total, rate)}`)
+          reportedAt = now
+          reportedBytes = received
+        }
+      }
+    } else {
+      const whole = Buffer.from(await response.arrayBuffer())
+      chunks.push(whole)
+      received = whole.length
+    }
+  } finally {
+    tlsDownload = null
+  }
+  const bytes = Buffer.concat(chunks)
+  // A truncated body would be written out and then crash the worker on load,
+  // which surfaces as an uncaught throw rather than a rejected request.
+  if (total > 0 && bytes.length !== total) {
+    throw new Error(`the native library download stopped at ${bytes.length} of ${total} bytes`)
+  }
+  const digest = createHash('sha256').update(bytes).digest('hex')
+  const expected = String(process.env.OUR_FREE_MODEL_TLS_SHA256 ?? '').trim().toLowerCase()
+  if (expected !== '' && expected !== digest) {
+    throw new Error(`the native library digest ${digest} does not match OUR_FREE_MODEL_TLS_SHA256`)
+  }
+  const temporary = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
+  await fs.promises.writeFile(temporary, bytes, { mode: 0o600 })
+  await fs.promises.rename(temporary, target)
+  tlsState.log(`tls transport: native library ready (${bytes.length} bytes, sha256 ${digest})`)
+  return target
+}
+
+/** `12.4 MB / 25.1 MB (49%) 1.8 MB/s`, or without the total when the host omits it. */
+function progressLine(received, total, rate) {
+  const mb = value => `${(value / 1048576).toFixed(1)} MB`
+  const parts = [total > 0 ? `${mb(received)} / ${mb(total)}` : mb(received)]
+  if (total > 0) parts.push(`(${Math.floor((received / total) * 100)}%)`)
+  if (rate > 0) parts.push(`${mb(rate)}/s`)
+  return parts.join(' ')
+}
+
+/**
+ * The native library this request should use, or `null` to let the package fetch
+ * its own pinned build — which also means this install cannot verify it.
+ */
+async function ensureTlsNative() {
+  const explicit = String(process.env.OUR_FREE_MODEL_TLS_LIB ?? '').trim()
+  if (explicit !== '') {
+    if (!fs.existsSync(explicit)) throw new Error(`OUR_FREE_MODEL_TLS_LIB points at a missing file: ${explicit}`)
+    return explicit
+  }
+  const dir = tlsNativeDir()
+  if (dir === '') return null
+  const existing = findTlsNative(dir)
+  if (existing !== null) return existing
+  await fs.promises.mkdir(dir, { recursive: true })
+  const target = path.join(dir, `${NATIVE_PREFIX}-${NATIVE_VERSION}-${tlsDistribution()}.${tlsExtension()}`)
+  try {
+    return await downloadTlsNative(target)
+  } catch (error) {
+    // The package knows its own pinned version; a release this section guessed
+    // wrong must not make the lane unusable.
+    tlsState.log(`tls transport: falling back to the package downloader (${error?.message ?? error})`)
+    return null
+  }
+}
+
+/** One worker pool and one session per generation, opened on the first request. */
+async function tlsClientFor() {
+  if (tlsClient !== null) return tlsClient
+  tlsClient = (async () => {
+    let mod
+    try {
+      mod = await import('tlsclientwrapper')
+    } catch (error) {
+      throw new Error(`the tls transport needs tlsclientwrapper installed (npm i tlsclientwrapper): ${error?.message ?? error}`)
+    }
+    const native = await ensureTlsNative()
+    const options = { maxThreads: 2 }
+    if (native !== null) options.customLibraryPath = native
+    const dir = tlsNativeDir()
+    if (native === null && dir !== '') {
+      await fs.promises.mkdir(dir, { recursive: true })
+      options.customLibraryDownloadPath = dir
+    }
+    const module = new mod.ModuleClient(options)
+    await module.open()
+    // The package may have downloaded its own build, so the name is read back
+    // from the directory rather than assumed from the URL this section built.
+    tlsLibraryName = path.basename(native ?? findTlsNative(tlsNativeDir()) ?? '')
+    tlsOpen = true
+    tlsError = ''
+    tlsState.log(`tls transport: worker pool open (${tlsLibraryName || 'shared library'})`)
+    // The HTTP methods live on SessionClient, which wraps the pool. The cookie
+    // jar stays off so two conversations never see each other's `set-cookie`.
+    // The wrapper ships a Chrome `User-Agent` and a 60-second `timeoutSeconds`
+    // in its defaults; both would collide with this lane's own headers and its
+    // millisecond budget, so they are cleared here.
+    return {
+      module,
+      session: new mod.SessionClient(module, {
+        withoutCookieJar: true,
+        defaultHeaders: {},
+        timeoutSeconds: undefined,
+      }),
+    }
+  })().catch(error => {
+    tlsClient = null
+    tlsOpen = false
+    tlsError = String(error?.message ?? error)
+    throw error
+  })
+  return tlsClient
+}
+
+/** Plain header record from whatever `init.headers` carried. */
+function tlsHeaderObject(input) {
+  const out = {}
+  if (input === null || input === undefined) return out
+  if (typeof input?.entries === 'function' && typeof input?.append === 'function') {
+    for (const [name, value] of input) out[name] = value
+    return out
+  }
+  for (const [name, value] of Object.entries(input)) {
+    if (value !== null && value !== undefined) out[name] = String(value)
+  }
+  return out
+}
+
+/**
+ * Split an SSE body on frame boundaries, keeping the blank line that ends each
+ * frame. A partial trailing frame is returned as its own chunk so no bytes are
+ * lost when a connection stops mid-event.
+ */
+export function splitSseFrames(text) {
+  const frames = []
+  let start = 0
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== '\n') continue
+    if (text[index + 1] === '\n') {
+      frames.push(text.slice(start, index + 2))
+      start = index + 2
+      index += 1
+      continue
+    }
+    if (text[index + 1] === '\r' && text[index + 2] === '\n') {
+      frames.push(text.slice(start, index + 3))
+      start = index + 3
+      index += 2
+    }
+  }
+  if (start < text.length) frames.push(text.slice(start))
+  return frames
+}
+
+/** The gateway answers SSE frames under a JSON content type, so the body decides. */
+function looksLikeSse(text) {
+  return text.startsWith('data:') || text.startsWith(':')
+}
+
+function tlsAbortReason(signal) {
+  const reason = signal?.reason
+  if (reason instanceof Error) return reason
+  const error = new Error('The operation was aborted.')
+  error.name = 'AbortError'
+  return error
+}
+
+/** Replay the buffered body, yielding between frames so the host can paint. */
+function streamFromText(text, sse, signal) {
+  const encoder = new TextEncoder()
+  const chunks = sse ? splitSseFrames(text) : [text]
+  let index = 0
+  return new ReadableStream({
+    async pull(controller) {
+      if (signal?.aborted === true) {
+        controller.error(tlsAbortReason(signal))
+        return
+      }
+      if (index >= chunks.length) {
+        controller.close()
+        return
+      }
+      controller.enqueue(encoder.encode(chunks[index]))
+      index += 1
+      await new Promise(resolve => setImmediate(resolve))
+    },
+  })
+}
+
+/** A fetch-shaped `Response` from one completed tls-client call. */
+function responseFromTls(result, { method, signal }) {
+  const status = Number(result?.status) || 0
+  if (status === 0) throw new Error(`the tls transport failed before a response: ${String(result?.body ?? '').slice(0, 200)}`)
+  const headers = new Headers()
+  for (const [name, values] of Object.entries(result.headers ?? {})) {
+    if (DROPPED_RESPONSE_HEADERS.has(name.toLowerCase())) continue
+    for (const value of Array.isArray(values) ? values : [values]) headers.append(name, String(value))
+  }
+  const empty = method === 'HEAD' || status === 204 || status === 205 || status === 304
+  if (empty) return new Response(null, { status, headers })
+  // `isByteResponse` hands back a data URI carrying base64 of the decompressed
+  // bytes. That keeps tls-client's charset conversion out of the path: it sniffs
+  // the opening block and falls back to windows-1252, so a stream whose first
+  // bytes were pure ASCII came back as mojibake while a later one did not.
+  const text = byteResponse(result.body).toString('utf8')
+  const sse = looksLikeSse(text) || (headers.get('content-type') ?? '').includes('text/event-stream')
+  return new Response(streamFromText(text, sse, signal), { status, headers })
+}
+
+/** Decode the `data:…;base64,…` envelope `isByteResponse` produces. */
+function byteResponse(body) {
+  const raw = String(body ?? '')
+  const comma = raw.startsWith('data:') ? raw.indexOf(',') : -1
+  return Buffer.from(comma >= 0 ? raw.slice(comma + 1) : raw, 'base64')
+}
+
+/**
+ * `fetch` through tls-client with the Bun profile.
+ *
+ * `init.signal` stops the response from being replayed, but the upstream request
+ * has already completed by then — aborting here saves the caller's wait, not the
+ * quota.
+ */
+async function tlsFetch(url, init = {}, { proxy = null } = {}) {
+  const signal = init.signal
+  signal?.throwIfAborted()
+  const target = url instanceof Request ? url.url : String(url)
+  const method = String((url instanceof Request ? url.method : init.method) ?? 'GET').toUpperCase()
+  const headers = tlsHeaderObject(url instanceof Request ? url.headers : init.headers)
+  let body = init.body
+  if (url instanceof Request && body === undefined) body = await url.text().catch(() => null)
+  const payload = body === null || body === undefined
+    ? null
+    : typeof body === 'string' ? body : Buffer.from(body).toString('utf8')
+
+  const options = {
+    headers,
+    headerOrder: HEADER_ORDER,
+    // The wrapper defaults to `chrome_146` and refuses a request carrying both
+    // an identifier and a custom profile; an explicit undefined overrides that
+    // default and drops out of the JSON payload.
+    tlsClientIdentifier: undefined,
+    customTlsClient: BUN_PROFILE,
+    forceHttp1: true,
+    disableHttp3: true,
+    isByteResponse: true,
+    followRedirects: init.redirect === 'follow',
+    // Three attempts by default would spend the free quota twice on a turn that
+    // already produced tokens.
+    retryIsEnabled: false,
+    catchPanics: true,
+    // Randomised by default, which changes the ClientHello per connection.
+    withRandomTLSExtensionOrder: false,
+    timeoutMilliseconds: TLS_TIMEOUT_MS,
+    proxyUrl: proxy === null ? null : String(proxy),
+  }
+
+  const { session } = await tlsClientFor()
+  // The wrapper gives body-carrying methods a different arity than GET/HEAD.
+  const call = {
+    GET: () => session.get(target, options),
+    HEAD: () => session.head(target, options),
+    DELETE: () => session.delete(target, options),
+    OPTIONS: () => session.options(target, options),
+    POST: () => session.post(target, payload, options),
+    PUT: () => session.put(target, payload, options),
+    PATCH: () => session.patch(target, payload, options),
+  }[method]
+  if (call === undefined) throw new Error(`the tls transport does not implement ${method}`)
+  return responseFromTls(await call(), { method, signal })
 }

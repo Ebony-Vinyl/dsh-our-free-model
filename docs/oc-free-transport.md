@@ -12,12 +12,71 @@ The old `canonicalizeSession(seed)` hash produced a plausible shape but not a re
 
 ## Runtime prerequisite
 
-Install Bun independently or point `OUR_FREE_MODEL_BUN` at a native Bun executable. Nothing is downloaded by this plugin. Discovery checks the explicit path, `BUN_INSTALL/bin`, `~/.bun/bin`, PATH, and the Windows npm Bun executable directory. Windows `.cmd` and `.ps1` shell shims are not executed as subprocess binaries.
+Install Bun independently or point `OUR_FREE_MODEL_BUN` at a native Bun executable. The Bun path downloads nothing. Discovery checks the explicit path, `BUN_INSTALL/bin`, `~/.bun/bin`, PATH, and the Windows npm Bun executable directory. Windows `.cmd` and `.ps1` shell shims are not executed as subprocess binaries.
 
 `OUR_FREE_MODEL_FREE_TRANSPORT` accepts:
 
 - `auto` (default) / `bun`: use the native Bun worker for official OC inference. If Bun is absent, report a transport configuration error.
+- `tls`: use `tlsclientwrapper` (koffi + the tls-client shared library) with the Bun 1.4.2 profile transcribed into a custom TLS client. No Bun binary is needed.
 - `node`: restore the previous Node transport for diagnosis/rollback. This does not guarantee upstream acceptance.
+
+## The tls transport
+
+Selected by `OUR_FREE_MODEL_FREE_TRANSPORT=tls`. Nothing below happens for any
+other value: the package import, the native library and the worker pool all sit
+behind the first request that actually takes this branch.
+
+**Native library.** `tlsclientwrapper` ships no binary; it fetches
+`tls-client-xgo-<version>-<platform>.<ext>` from the bogdanfinn/tls-client
+releases. This plugin downloads it itself through the configured egress outlet
+(the release host is not reachable from every network) into
+`<data dir>/tls/`, then hands the path to the wrapper so the wrapper's own
+downloader never runs. A download that fails falls back to the wrapper's
+downloader, which knows the version it was built against.
+
+| Variable | Meaning |
+| --- | --- |
+| `OUR_FREE_MODEL_TLS_LIB` | Absolute path to a shared library to use as-is. No probe, no download. |
+| `OUR_FREE_MODEL_TLS_SHA256` | Expected digest of the downloaded file. Unset means the digest is only logged. |
+
+**Profile.** `src/egress.js` carries the ja3 string, ALPN list,
+supported versions, key-share curves, signature algorithms and header order
+measured from Bun 1.4.2. Three wrapper defaults are overridden per request:
+`retryIsEnabled` (three attempts by default, which would spend the free quota
+twice), `withRandomTLSExtensionOrder` (randomised by default, which changes the
+ClientHello per connection), and `tlsClientIdentifier` (a Chrome identifier that
+cannot coexist with a custom profile). The wrapper's Chrome `User-Agent` and
+60-second timeout are cleared at the session.
+
+**Response body.** The C ABI returns one complete string, so an SSE turn is
+replayed from that buffer in frame-sized chunks: the first byte arrives when the
+answer is finished, and aborting stops the replay rather than the upstream call.
+Requests set `isByteResponse`, so the body arrives as base64 of the decompressed
+bytes and is decoded as UTF-8 here. Without that, tls-client converts the body
+using a charset it sniffs from the opening block and falls back to windows-1252 —
+an SSE stream whose first kilobyte is pure ASCII came back as mojibake while one
+that opened with Chinese did not, which is why the corruption looked random.
+`accept-encoding` is negotiated by Go (`gzip, deflate, br`) rather than by the
+Bun profile (`gzip, deflate`); the body is already decompressed when it reaches
+the caller. `streamOutputPath` in the same ABI is the route to real streaming.
+
+**Threads.** The wrapper's default pool is `cpus * 2`; this module caps it at 2
+and terminates it on hot reload.
+
+**Seeing which transport is live.** The settings page (设置 → Our Free Model →
+出口代理) carries a `免费车道传输` row: the mode from the environment, and for
+`tls` the library it opened or `尚未启动（首次请求时建立）`. While the library is
+missing the row offers a *fetch and prepare* button, which starts the download
+without waiting for a turn. The same reading is in
+`GET /api/our-free-model/summary` at `settings.egress.transport`
+(`{ mode, ready, library, error, download }`), and `GET /transport` returns it
+alone for the page's once-a-second poll.
+
+**Download progress.** The download is read in chunks and logs
+`12.4 MB / 25.1 MB (49%) 1.8 MB/s` every half second, so a slow link does not
+look like a hang. A body shorter than its `content-length` is discarded rather
+than written: a truncated library crashes the worker on load instead of
+rejecting the request.
 
 ## Streaming, proxy and cleanup
 

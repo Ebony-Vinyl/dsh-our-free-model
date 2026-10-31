@@ -141,6 +141,9 @@
     "typescript": "^5.9.2",
     "undici": "8.11.2"
   },
+  "optionalDependencies": {
+    "tlsclientwrapper": "^4.3.0"
+  },
   "overrides": {
     "dsh-llm-legacy": {
       "@deepseek-ai/dsh-brand": "0.1.5-rc.2",
