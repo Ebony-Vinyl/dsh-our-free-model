@@ -200,6 +200,10 @@ export const SETTINGS_INITIAL = {
   tokenSaver: {
     enabled: true,
     rtk: true,
+    // Blank a prior assistant turn's reasoning_content before it ships (the
+    // newest turn keeps its reasoning for gateways that pair it with the tool
+    // call). Deterministic, so it never disturbs upstream prompt caches.
+    stripHistoryReasoning: true,
     prompts: { caveman: 'off', ponytail: 'off' },
   },
   /** The aggregate lane: third-party providers reached with the user's own key.

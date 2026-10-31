@@ -345,6 +345,17 @@ window.__ModuleLoader__.load({
         'reload.done': '插件已热重载（第 {n} 次）。',
         'reload.refresh': '刷新页面',
         'reload.auto': '文件变化自动热重载',
+        'health.title': '桌面客户端健康',
+        'health.unknown': 'cookie 库不可读（可能未在此机运行桌面版）',
+        'health.fine': 'cookie 库正常（{kb} KB）',
+        'health.bloated': 'cookie 库疑似膨胀（{kb} KB），可能触发登录失败',
+        'health.scriptReady': '修复脚本已就位',
+        'health.scriptMissing': '修复脚本未生成',
+        'health.hint': '桌面版每次启动端口随机，认证 cookie 会同域堆积，攒满后触发 "Web authentication failed"。生成修复脚本后，完整退出 DSH 并运行它（可加 -Wait 自动等待退出），重启桌面版即自愈。',
+        'health.generate': '生成 / 刷新修复脚本',
+        'health.generating': '生成中…',
+        'health.generated': '脚本已写入',
+        'health.failed': '生成失败：{message}',
         'toast.annTitle': '新公告',
         'toast.updateTitle': '插件可升级',
         'toast.updateBody': '发现新版本 {latest}（当前 {current}），可到设置页升级。',
@@ -717,6 +728,8 @@ window.__ModuleLoader__.load({
         'saver.rtk': 'RTK 工具输出压缩',
         'saver.rtkWhat': '压缩的是工具结果：git diff / status / log、grep、find、ls、tree、构建日志、带行号的文件转储，以及重复的日志行。',
         'saver.rtkSafety': '安全边界：报错的工具结果原样保留，小体积内容不碰，替换只在新文本更小且非空时发生——压缩结果永远不会比原文更大。',
+        'saver.stripReasoning': '剥离历史推理',
+        'saver.stripReasoningWhat': '上一轮的思维链不会帮模型回答下一轮，却每轮都按输入 Token 付费。开启后只保留最近一轮助手的推理（部分网关要求推理与紧随的工具调用成对出现），旧的全部置空。压缩是确定性的，不会破坏上游缓存。',
         'saver.promptTitle': '提示词压缩',
         'saver.promptHint': '在系统提示里追加一条写作指令。这是唯一能减少输出 Token 的压缩，因为它改变的是模型怎么写。',
         'saver.caveman': 'Caveman',
@@ -1122,6 +1135,17 @@ window.__ModuleLoader__.load({
         'reload.done': 'Plugin hot-reloaded (#{n}).',
         'reload.refresh': 'Reload page',
         'reload.auto': 'Hot-reload on file change',
+        'health.title': 'Desktop client health',
+        'health.unknown': 'Cookie database unreadable (the desktop shell may not run on this machine)',
+        'health.fine': 'Cookie database healthy ({kb} KB)',
+        'health.bloated': 'Cookie database looks bloated ({kb} KB) — sign-in failures likely',
+        'health.scriptReady': 'Repair script in place',
+        'health.scriptMissing': 'Repair script not generated',
+        'health.hint': "The desktop shell picks a random port each launch, and its auth cookie name embeds that port — cookies pile up per-origin until sign-in fails with \"Web authentication failed\". Generate the repair script, fully quit DSH, then run it (append -Wait to wait for the exit); relaunching the desktop shell finishes the heal.",
+        'health.generate': 'Generate / refresh repair script',
+        'health.generating': 'Generating…',
+        'health.generated': 'Script written to',
+        'health.failed': 'Generation failed: {message}',
         'toast.annTitle': 'New announcement',
         'toast.updateTitle': 'Plugin update available',
         'toast.updateBody': 'Version {latest} is out (installed {current}). Upgrade from the settings page.',
@@ -1494,6 +1518,8 @@ window.__ModuleLoader__.load({
         'saver.rtk': 'RTK tool-output compaction',
         'saver.rtkWhat': 'What it compacts: tool results — git diff / status / log, grep, find, ls, tree, build logs, numbered file dumps and duplicate log lines.',
         'saver.rtkSafety': 'Safety rules: an error result is left untouched, small bodies are not touched, and a blob is replaced only when the new text is non-empty and strictly smaller — a compacted result is never larger than the original.',
+        'saver.stripReasoning': 'Strip history reasoning',
+        'saver.stripReasoningWhat': 'A previous turn’s chain of thought does not help the model answer the next one, yet every request pays for it as input tokens. When on, only the newest assistant reasoning is kept (some gateways pair reasoning with the tool call that follows it); older turns are blanked. The rewrite is deterministic, so upstream prompt caches stay intact.',
         'saver.promptTitle': 'Prompt shaping',
         'saver.promptHint': 'Appends a writing instruction to the system prompt. It is the only saver that can cut output tokens, because it changes what the model writes.',
         'saver.caveman': 'Caveman',
@@ -4237,7 +4263,54 @@ window.__ModuleLoader__.load({
       const { t, settings, onApply, busy } = props
       return h('div', { className: 'ofm_page' },
         h(PageHero, { title: t('section.upgrade'), sub: t('section.upgradeHint') }),
-        h(UpgradePanel, { t, settings, onApply, busy }))
+        h(UpgradePanel, { t, settings, onApply, busy }),
+        h(ClientHealthCard, { t }))
+    }
+
+    // ── 桌面客户端健康 ────────────────────────────────────────────────────────
+    // 这张卡只回答两个问题：桌面壳的 cookie 库是否在膨胀（431 认证失败的
+    // 前兆），以及一键修复脚本是否已经就位。检测是纯 stat()——大小和时间戳，
+    // 永远不读 cookie 内容；修复是生成脚本而不是插件自己删文件，因为库被
+    // Chromium 锁着，假装删除比诚实给出脚本更糟。
+    function ClientHealthCard(props) {
+      const { t } = props
+      const health = useAsync(() => api('/client-health'), [])
+      const [fixing, setFixing] = useState(false)
+      const [fixNote, setFixNote] = useState('')
+      const [fixError, setFixError] = useState('')
+      const data = health.data
+      const db = data?.cookieDb
+      const unknown = db?.state !== 'ok'
+      const suspect = db?.suspect === true
+      const script = data?.repairScript
+      const regenerate = async () => {
+        setFixing(true); setFixNote(''); setFixError('')
+        try {
+          const result = await post('/client-health/cookie-fix')
+          setFixNote(result?.hint ?? '')
+          health.reload()
+        } catch (error) {
+          setFixError(String(error?.message ?? error))
+        } finally { setFixing(false) }
+      }
+      return h(Panel, null,
+        h('div', { className: 'ofm_upgradecards' },
+          h('span', { className: 'ofm_pill strong' }, t('health.title')),
+          unknown
+            ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot' }), t('health.unknown'))
+            : suspect
+              ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot warn' }), t('health.bloated').replace('{kb}', String(Math.round((db.bytes ?? 0) / 1024))))
+              : h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot ok' }), t('health.fine').replace('{kb}', String(Math.round((db.bytes ?? 0) / 1024)))),
+          script?.exists === true
+            ? h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot ok' }), t('health.scriptReady'))
+            : h('span', { className: 'ofm_pill' }, h('span', { className: 'ofm_dot' }), t('health.scriptMissing'))),
+        h('p', { className: 'ofm_note' }, t('health.hint')),
+        h('div', { className: 'ofm_row' },
+          h(Button, { disabled: fixing || health.status !== 'ready', onClick: regenerate }, fixing ? t('health.generating') : t('health.generate')),
+          data?.hint ? h('span', { className: 'ofm_note' }, data.hint) : null),
+        fixNote !== '' ? h('p', { className: 'ofm_note' }, `${t('health.generated')}: ${fixNote}`) : null,
+        fixError !== '' ? h('div', { className: 'ofm_callout ofm_error' }, t('health.failed').replace('{message}', fixError)) : null,
+        health.status === 'error' ? h('div', { className: 'ofm_callout ofm_error' }, t('loadFailed'), ' ', health.error) : null)
     }
 
     // ── 推荐项目页 ────────────────────────────────────────────────────────────
@@ -6477,6 +6550,13 @@ window.__ModuleLoader__.load({
                     onChange: () => { if (busy === '') saveSaver({ rtk: saver.rtk !== true }) },
                   })),
                 h('p', { className: 'ofm_note' }, t('saver.rtkSafety')))),
+            h(Section, { title: t('saver.stripReasoning'), hint: t('saver.stripReasoningWhat') },
+              h('div', { className: 'ofm_panel ofm_rise' },
+                h('div', { className: 'ofm_row' },
+                  h(Switch, {
+                    checked: saver.stripHistoryReasoning !== false, label: t('saver.stripReasoning'), disabled: busy !== '',
+                    onChange: () => { if (busy === '') saveSaver({ stripHistoryReasoning: saver.stripHistoryReasoning === false }) },
+                  })))),
             h(Section, { title: t('saver.localTitle'), hint: t('saver.localHint') },
               h('div', { className: 'ofm_panel ofm_rise' },
                 h('div', { className: 'ofm_row' },
