@@ -386,7 +386,10 @@ export class FreeModelAdapter {
     const budget = budgetFor(options.reasoningEffort, entry, options.maxTokens, settings.defaultMaxTokens)
     const declared = toToolDefs(options.tools, style)
     const policy = recoveryPolicy(settings.streamRecovery)
-    const session = sessionForConversation(options.sessionId)
+    const sessionSeed = typeof options.purpose === 'string' && options.purpose.trim() !== ''
+      ? `${options.purpose.trim()}:${options.sessionId ?? 'global'}`
+      : options.sessionId
+    const session = sessionForConversation(sessionSeed)
     // A turn without a conversation id lands on the reserved "global" session,
     // shared by every such turn on this machine. Minting a fresh session per
     // id-less turn is not an option: the free lane accounts quota per session,
