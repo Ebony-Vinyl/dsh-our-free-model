@@ -249,8 +249,8 @@
     },
     {
       "path": "src/open-external.js",
-      "size": 2404,
-      "sha256": "bfe6bcbf88c91ff2a15eab733ef4fcb2892260006e7e0084ef2704a585219b81"
+      "size": 4234,
+      "sha256": "79a40e87f3776da52e5b18951ea5bb5fc8cdc864e5b2284e6fa952bb3868124e"
     },
     {
       "path": "src/picks.js",

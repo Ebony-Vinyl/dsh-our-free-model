@@ -1,7 +1,7 @@
 {
   "version": "2.8.0",
   "base": "../",
-  "publishedAt": "2026-11-01T04:21:52.870Z",
+  "publishedAt": "2026-11-04T02:19:00.144Z",
   "notes": "",
   "files": [
     {
@@ -251,8 +251,8 @@
     },
     {
       "path": "src/open-external.js",
-      "size": 2404,
-      "sha256": "bfe6bcbf88c91ff2a15eab733ef4fcb2892260006e7e0084ef2704a585219b81"
+      "size": 4234,
+      "sha256": "79a40e87f3776da52e5b18951ea5bb5fc8cdc864e5b2284e6fa952bb3868124e"
     },
     {
       "path": "src/picks.js",
@@ -390,5 +390,5 @@
       "sha256": "579832a2d994b73f0431e062c93d9358550e00701acf7f58c6fa5d3293551a11"
     }
   ],
-  "signature": "RK4SrLF3RRWokcQR6OYRl+a5P+R+1CcKFhypu3ffhjX456yjo1GkSJuSSIMYo9ucsPWTPBsxW9xBcIDaTOvEDw=="
+  "signature": "x5WYY34ey6gQ5U36S0QQx2zJnFo+ItkU3r5BfuOR2kDY9lEOwoVfcN8sjTLwL8NGO0joRm+mdGMRyTIdFqSDDA=="
 }
