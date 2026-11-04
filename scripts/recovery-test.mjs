@@ -246,6 +246,25 @@ const check = async (name, fn) => {
 }
 
 try {
+  await check('辅助 purpose 隔离上游会话，重试稳定且普通会话保持兼容', async () => {
+    const model = 'mimo-v2.6-flash-free'
+    const wire = wireFor(model)
+    const session = async options => {
+      const run = await drive(model, [{ body: deltas(wire, { text: ANSWER }) + terminal(wire) }], { options })
+      checkFinal(run, 'stop', 1)
+      const headers = run.scenario.requests[0].headers
+      assert.equal(headers['x-session-id'], headers['x-opencode-session'])
+      assert.equal(headers['x-session-affinity'], headers['x-opencode-session'])
+      return headers['x-opencode-session']
+    }
+    const normal = await session({ sessionId: 'shared-conversation' })
+    const title = await session({ sessionId: 'shared-conversation', purpose: 'session-title' })
+    assert.notEqual(title, normal)
+    assert.equal(await session({ sessionId: 'shared-conversation', purpose: 'session-title' }), title)
+    assert.equal(await session({ sessionId: 'shared-conversation', purpose: '  ' }), normal)
+    assert.notEqual(await session({ sessionId: 'other-conversation', purpose: 'session-title' }), title)
+    assert.notEqual(await session({ sessionId: undefined, purpose: 'session-title' }), await session({ sessionId: undefined }))
+  })
   // 遍历目录中的不同能力和未知型号，禁止把恢复条件限定为型号白名单。
   for (const model of MODELS) {
     await check(`${model}: 纯推理 EOF 续写正文并正常结束`, async () => {

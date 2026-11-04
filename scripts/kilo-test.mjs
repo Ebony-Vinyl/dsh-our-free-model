@@ -87,6 +87,7 @@ const KILO_MODELS = [
   { id: 'kilo-auto/free', name: 'Auto Free', isFree: true, context_length: 256000, top_provider: { max_completion_tokens: 32768 }, architecture: { input_modalities: ['text'] }, supported_parameters: ['max_tokens', 'reasoning'] },
   { id: 'anthropic/claude-sonnet-5', name: 'Anthropic: Claude Sonnet 5', isFree: false },
 ]
+let kiloTurnError
 let kiloListing = { status: 200, payload: { data: KILO_MODELS } }
 const turns = []
 const kiloServer = http.createServer((req, res) => {
@@ -100,6 +101,10 @@ const kiloServer = http.createServer((req, res) => {
       return
     }
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+    if (kiloTurnError !== undefined) {
+      res.writeHead(kiloTurnError.status, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(kiloTurnError.payload)); return
+    }
     turns.push(body)
     if (String(body.model).startsWith('anthropic/')) {
       res.writeHead(401, { 'content-type': 'application/json' })
@@ -242,6 +247,23 @@ try {
 check('a paid id keyless fails as a plain request defect', paidFailure?.code, 'CLIENT_ERROR')
 check('with the message naming the lane, not a credential store',
   /not on the free pool/.test(paidFailure?.message ?? ''), true)
+
+// Error details go through the real HTTP poster and preserve status classification.
+for (const [raw, provider, detail] of [
+  ['temporarily rate-limited upstream', 'fixture', 'temporarily rate-limited upstream (fixture)'],
+  [JSON.stringify({ error: { message: 'no upstreams available' } }), 'fixture', 'no upstreams available (fixture)'],
+  [JSON.stringify({ message: 'provider overloaded' }), undefined, 'provider overloaded'],
+  ['', undefined, ''],
+  [{ unexpected: true }, undefined, ''],
+]) {
+  kiloTurnError = { status: 503, payload: { error: { message: 'Provider returned error', metadata: { raw, provider_name: provider } } } }
+  let failure
+  try { await postKiloStreamed({ body: { model: 'kilo-auto/free' }, onData() {} }) }
+  catch (error) { failure = error }
+  check('Kilo raw detail ' + JSON.stringify(raw), failure?.message, 'Provider returned error' + (detail ? ': ' + detail : ''))
+  check('Kilo raw metadata preserves the upstream status', failure?.status, 503)
+}
+kiloTurnError = undefined
 
 // Drive actual catalog refreshes; an HTTP success with no free models is an
 // authoritative roster, while a failed listing is not an empty-pool signal.
