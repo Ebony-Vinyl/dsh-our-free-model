@@ -1,7 +1,7 @@
 {
   "version": "2.8.0",
   "base": "../",
-  "publishedAt": "2026-11-04T02:20:12.633Z",
+  "publishedAt": "2026-11-04T02:28:42.678Z",
   "notes": "",
   "files": [
     {
@@ -366,8 +366,8 @@
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2846251,
-      "sha256": "ba30f4abd8018c6a068d184029512dc16f527edc74eb54abb05aa7ee1a9fcc9c"
+      "size": 2847080,
+      "sha256": "9d48c3b718814ecbb55e7b940806e0677cec7a1df5b493721b6c9c120e45effd"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
@@ -390,5 +390,5 @@
       "sha256": "579832a2d994b73f0431e062c93d9358550e00701acf7f58c6fa5d3293551a11"
     }
   ],
-  "signature": "nAEPXdhF2sGCGjk8DEbKk5fkyti4NtDgbttJ6m6lGby8Iq9UTqJdw0DgGJlpN/Sew+Hk0kdnFYutf43VemeDBg=="
+  "signature": "sm3eUAAiM19oMmRn0DPMZGtPbOgJaxuvSgX39cqRrKh19B0jmwWtriY73nAOY445JgtIX6rkx6ZG2Td6ib/GAQ=="
 }
