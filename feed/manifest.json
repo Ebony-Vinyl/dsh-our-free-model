@@ -1,7 +1,7 @@
 {
   "version": "2.8.0",
   "base": "../",
-  "publishedAt": "2026-11-04T02:19:00.144Z",
+  "publishedAt": "2026-11-04T02:20:12.633Z",
   "notes": "",
   "files": [
     {
@@ -52,12 +52,12 @@
     {
       "path": "package.json",
       "size": 5110,
-      "sha256": "4882d32520a19a2a2468827ae331e439d735270b47928ceabe86e65921da5b99"
+      "sha256": "5438b75fa1835d7e69aa41480468280c9e42ac6fc7697fefa91f43432a016417"
     },
     {
       "path": "src/adapter.js",
-      "size": 50060,
-      "sha256": "0bd08b3949b198175f42a0512fe8b0c896f17b8054862ba8077af1672d826642"
+      "size": 50242,
+      "sha256": "e8c81ec379ceeb08470861f56d05ce40dc0b46ec8c3bc838549f36a484a2bcc9"
     },
     {
       "path": "src/aggregate.js",
@@ -71,8 +71,8 @@
     },
     {
       "path": "src/bun-fetch.js",
-      "size": 7724,
-      "sha256": "07d7f5506edf2458308fdebb10291cb500c2e583e9ff772d45f63d10dce8b9db"
+      "size": 8958,
+      "sha256": "d09c94fb85aa9e8bece541dd1e7682b79702dcb09f58c2d5760b5a0bc9a0670c"
     },
     {
       "path": "src/catalog.js",
@@ -206,8 +206,8 @@
     },
     {
       "path": "src/kilo.js",
-      "size": 7745,
-      "sha256": "8ece253a9ae295973103e72473b6812c2024fa26f48830295cdc7cfb56a22018"
+      "size": 8760,
+      "sha256": "3bb4973960b859e48a6fc45b4f0198f1108ce3cd9203938506153e10c849a4e5"
     },
     {
       "path": "src/local-optimize.js",
@@ -361,13 +361,13 @@
     },
     {
       "path": "vendor/channel-pack/NOTICE.md",
-      "size": 3426,
-      "sha256": "e943ad8a7aa09b5fdbcba63ca9e8bfa90a38b6653bdcf1db37b9370f2a3dff3d"
+      "size": 3447,
+      "sha256": "6fa67d4bbf58ee2693f59a166c8272468385083866ec5f2edc68fe1512659805"
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2623050,
-      "sha256": "7aedc6da911dd9745fe0fd099dbca33fb6af8cff7f2da04f6d1fca7293a31c2e"
+      "size": 2846251,
+      "sha256": "ba30f4abd8018c6a068d184029512dc16f527edc74eb54abb05aa7ee1a9fcc9c"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
@@ -390,5 +390,5 @@
       "sha256": "579832a2d994b73f0431e062c93d9358550e00701acf7f58c6fa5d3293551a11"
     }
   ],
-  "signature": "x5WYY34ey6gQ5U36S0QQx2zJnFo+ItkU3r5BfuOR2kDY9lEOwoVfcN8sjTLwL8NGO0joRm+mdGMRyTIdFqSDDA=="
+  "signature": "nAEPXdhF2sGCGjk8DEbKk5fkyti4NtDgbttJ6m6lGby8Iq9UTqJdw0DgGJlpN/Sew+Hk0kdnFYutf43VemeDBg=="
 }
