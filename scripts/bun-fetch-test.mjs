@@ -150,6 +150,37 @@ try {
       fs.rmSync(scratch, { recursive: true, force: true });
     }
   });
+  await test('worker falls back when creating the data directory or writing the file fails', async () => {
+    const previousHome = process.env.DSH_HOME;
+    for (const failure of ['mkdir', 'write']) {
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-worker-fallback-'));
+      let fallback;
+      try {
+        process.env.DSH_HOME = scratch;
+        if (failure === 'mkdir') fs.writeFileSync(path.join(scratch, 'our-free-model'), 'blocked');
+        else fs.mkdirSync(path.join(scratch, 'our-free-model', 'run', 'worker.mjs'), { recursive: true });
+        const fresh = await import(`../src/bun-fetch.js?fallback=${failure}`);
+        fallback = fresh.bunWorkerPath();
+        assert.notEqual(fallback, path.join(scratch, 'our-free-model', 'run', 'worker.mjs'));
+        assert.match(path.basename(path.dirname(fallback)), /^ofm-bun-worker-/);
+        assert(fs.statSync(fallback).isFile());
+        // Exercise the actual child transport after fallback, then delete the
+        // worker and verify a second request recovers without a plugin restart.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await fresh.bunFetch(base + '/echo', { method: 'POST', body: failure }, nodeOptions);
+          assert.equal(await response.text(), failure);
+          fs.rmSync(fallback);
+          const next = fresh.bunWorkerPath();
+          if (next !== fallback) fs.rmSync(path.dirname(fallback), { recursive: true, force: true });
+          fallback = next;
+        }
+      } finally {
+        if (fallback) fs.rmSync(path.dirname(fallback), { recursive: true, force: true });
+        fs.rmSync(scratch, { recursive: true, force: true });
+        if (previousHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previousHome;
+      }
+    }
+  });
   const bun = findBunExecutable();
   if (bun) {
     await test('native Bun loopback byte and streaming verification', async () => {

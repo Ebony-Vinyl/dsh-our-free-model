@@ -54,21 +54,20 @@ let workerPath;
  */
 export function bunWorkerPath() {
   if (workerPath !== undefined && existsSync(workerPath)) return workerPath;
-  const file = join(workerDir(), 'worker.mjs');
-  writeFileSync(file, WORKER_SOURCE, { mode: 0o600 });
-  workerPath = file;
-  return workerPath;
-}
-
-/** Directory holding the worker: the plugin data dir, or temp when unwritable. */
-function workerDir() {
   try {
     const dir = join(resolveDshHome(), DATA_DIR_NAME, 'run');
     mkdirSync(dir, { recursive: true });
-    return dir;
+    const file = join(dir, 'worker.mjs');
+    writeFileSync(file, WORKER_SOURCE, { mode: 0o600 });
+    workerPath = file;
   } catch {
-    return mkdtempSync(join(tmpdir(), 'ofm-bun-worker-'));
+    // mkdir may succeed for an existing directory even when writing the worker
+    // fails. Both operations must be covered by the fallback.
+    const dir = mkdtempSync(join(tmpdir(), 'ofm-bun-worker-'));
+    workerPath = join(dir, 'worker.mjs');
+    writeFileSync(workerPath, WORKER_SOURCE, { mode: 0o600 });
   }
+  return workerPath;
 }
 
 /** Locate a native executable, never a shell shim. No installation or download. */
