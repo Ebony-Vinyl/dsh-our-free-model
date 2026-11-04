@@ -39,9 +39,9 @@
 ## 交流群
 
 <div align="center">
-  <img src="docs/images/qq-group-14.png" alt="ai技术交流群14入群二维码（群号：1132961812）" width="300">
+  <img src="docs/images/qq-group-1128351712.png" alt="AI技术交流群15入群二维码（群号：1128351712）" width="300">
   <br>
-  <b>QQ 群：1132961812（ai技术交流群14）</b>
+  <b>QQ 群：1128351712（AI技术交流群15）</b>
   <br>
   扫码或搜索群号加入群聊，一起交流插件使用心得、反馈问题与分享玩法。
 </div>
