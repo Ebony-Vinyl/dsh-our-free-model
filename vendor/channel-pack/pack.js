@@ -56934,6 +56934,8 @@ function utc8DateString(nowMs = Date.now()) {
 }
 var DSH_CHANNEL_PACK_AUTO_CHECKIN_DELAY_MS = "DSH_CHANNEL_PACK_AUTO_CHECKIN_DELAY_MS";
 var AUTO_CHECKIN_DELAY_MS = 3e4;
+var AUTO_CHECKIN_TICK_MS = 150 * 60 * 1e3;
+var AUTO_CHECKIN_RETRY_MS = 60 * 60 * 1e3;
 function autoCheckinDelayMs(env = process.env) {
   const raw = env[DSH_CHANNEL_PACK_AUTO_CHECKIN_DELAY_MS];
   if (typeof raw !== "string" || raw.trim().length === 0) return AUTO_CHECKIN_DELAY_MS;
@@ -57035,6 +57037,8 @@ function createAutoCheckin(deps) {
   let running2 = false;
   let inflight = null;
   let pending = null;
+  let tick = null;
+  let lastAttemptAt = doc.lastAt;
   const today = () => utc8DateString(now());
   function state() {
     return {
@@ -57050,6 +57054,7 @@ function createAutoCheckin(deps) {
     };
   }
   async function performRun() {
+    lastAttemptAt = now();
     const totals = emptyTotals2();
     let providers = [];
     try {
@@ -57149,7 +57154,7 @@ function createAutoCheckin(deps) {
       return state();
     },
     start() {
-      if (pending !== null) return;
+      if (pending !== null || tick !== null) return;
       const ms = deps.delayMs ?? autoCheckinDelayMs();
       const fire = () => {
         pending = null;
@@ -57157,9 +57162,18 @@ function createAutoCheckin(deps) {
       };
       if (ms <= 0) {
         fire();
-        return;
+      } else {
+        pending = (deps.schedule ?? defaultSchedule)(fire, ms);
       }
-      pending = (deps.schedule ?? defaultSchedule)(fire, ms);
+      const tickMs = deps.tickMs ?? AUTO_CHECKIN_TICK_MS;
+      if (tickMs > 0) {
+        tick = (deps.scheduleTick ?? defaultScheduleTick)(() => {
+          if (doc.lastDate !== "" && doc.lastDate === today()) return;
+          const attemptedToday = lastAttemptAt > 0 && utc8DateString(lastAttemptAt) === today();
+          if (attemptedToday && now() - lastAttemptAt < AUTO_CHECKIN_RETRY_MS) return;
+          void runIfDue();
+        }, tickMs);
+      }
     },
     runIfDue,
     async dismiss() {
@@ -57174,6 +57188,8 @@ function createAutoCheckin(deps) {
     stop() {
       pending?.cancel();
       pending = null;
+      tick?.cancel();
+      tick = null;
     }
   };
 }
@@ -57181,6 +57197,11 @@ function defaultSchedule(fn, ms) {
   const timer = setTimeout(fn, ms);
   timer.unref?.();
   return { cancel: () => clearTimeout(timer) };
+}
+function defaultScheduleTick(fn, ms) {
+  const timer = setInterval(fn, ms);
+  timer.unref?.();
+  return { cancel: () => clearInterval(timer) };
 }
 
 // vendor/channel-pack/src/channel-pack-rpc.ts
