@@ -38,14 +38,52 @@ export async function openExternal(value, {
   } catch { return false }
 }
 
+/**
+ * The account this process runs as, spelled so `icacls` cannot misresolve it.
+ *
+ * A bare account name is ambiguous: `icacls <file> /grant:r <USERNAME>:F` is
+ * resolved against both the account database and the computer account, and when
+ * the two differ only in case the computer account wins. The ACE then names
+ * `S-1-5-21-<machine>` — a SID no user token carries — while `inheritance:r` in
+ * the same call has already removed the inherited ACEs. The file is left with a
+ * DACL nothing can satisfy, so the writer's own `renameSync` fails EPERM and the
+ * file becomes unreadable, unwritable and undeletable (issue #738).
+ *
+ * `whoami /user` reports the SID of the current token and a SID has nothing to
+ * resolve. Its output is ASCII, so the OEM code page problem that kept the
+ * account name out of `whoami` in the first place (issue #456, PR #637) cannot
+ * reach it: a SID carries no localizable text. The qualified name stays as the
+ * fallback for a missing or failing `whoami`, and is still strictly safer than
+ * the bare name because it names the account domain instead of letting icacls
+ * choose between two candidates.
+ *
+ * Memoized: a token's SID cannot change while the process runs, and the stores
+ * this serves flush on a timer, so one `whoami` per process is enough.
+ */
+let granteeCache
+function currentUserGrantee(system32) {
+  if (granteeCache !== undefined) return granteeCache
+  try {
+    const out = execFileSync(path.join(system32, 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'],
+      { encoding: 'latin1', windowsHide: true, shell: false })
+    const sid = /"(S-1-[0-9-]+)"/.exec(out)?.[1]
+    if (sid !== undefined) {
+      granteeCache = `*${sid}`
+      return granteeCache
+    }
+  } catch { /* fall through to the qualified name */ }
+  const user = process.env.USERNAME ?? ''
+  const domain = process.env.USERDOMAIN ?? ''
+  granteeCache = domain === '' ? user : `${domain}\\${user}`
+  return granteeCache
+}
+
 export function restrictPermissions(file, directory = false) {
   if (process.platform !== 'win32') return fs.chmodSync(file, directory ? 0o700 : 0o600)
   const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')
-  // whoami prints the account in the OEM code page, which corrupts non-ASCII
-  // machine names once decoded as UTF-8; Node reads env vars through the
-  // UTF-16 APIs, so USERNAME is always a correct Unicode string.
-  const user = process.env.USERNAME ?? ''
+  // The `*` prefix marks the grantee as a SID, not a name icacls should look up.
+  const grantee = currentUserGrantee(system32)
   execFileSync(path.join(system32, 'icacls.exe'),
-    [file, '/inheritance:r', '/grant:r', `${user}:${directory ? '(OI)(CI)F' : 'F'}`],
+    [file, '/inheritance:r', '/grant:r', `${grantee}:${directory ? '(OI)(CI)F' : 'F'}`],
     { stdio: 'ignore', windowsHide: true, shell: false })
 }
