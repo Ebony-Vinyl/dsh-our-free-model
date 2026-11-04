@@ -36,9 +36,11 @@
  *   `<env>` + skill listing, per wire), replacing the bare env block; the
  *   2026-10-28 finding that a bare env block suffices stays true, but the full
  *   prompt is what the reference sends.
- * - **Per-request 40-hex `x-opencode-project`** replaces the shared `global`
- *   bucket: free-tier quota is ledged per project id × egress, so a shared id
- *   is one shared bucket that arrives pre-burned.
+ * - **A stable 40-hex `x-opencode-project` per conversation** replaces the
+ *   shared `global` bucket. The reference can mint a project for an omitted
+ *   signal; this adapter supplies its canonical session instead, so retries,
+ *   continuations and listing refreshes cannot move a turn to another quota
+ *   identity.
  * - **Endpoints follow the 2.1 client's provider-family grouping**
  *   (`/inference/openai/v1/...`, `/inference/anthropic/v1/messages?beta=true`);
  *   the flat `/inference/v1/...` routes still answer but are the older shape.
@@ -302,16 +304,23 @@ export function wireFor(modelId) {
  * @param {string} options.session - canonical session (all four session headers)
  * @param {boolean} [options.stream] - drives the default `accept`
  * @param {string} [options.accept] - explicit `accept` override
- * @param {string} [options.project] - caller project signal; **defaults to a
- *   fresh 40-hex id per request**, the quota-spread the reference mints when
- *   the client names no project (the old shared `global` bucket arrived
- *   pre-burned). A literal `global` or 40-hex commit passes through verbatim.
+ * @param {string} [options.project] - caller project signal; defaults to the
+ *   canonical conversation session (hashed by o2a to a 40-hex id). A literal
+ *   `global` or 40-hex commit passes through verbatim. The old shared
+ *   `global` bucket arrived pre-burned.
  * @param {string} [options.childSession] - child session for
  *   `x-opencode-session-id`; defaults to `session`
  * @param {boolean} [options.anthropic] - add the Messages-lane beta header
  */
 export function gatewayHeaders(options) {
-  return o2aGatewayHeaders(options)
+  // o2a mints a fresh project when the caller omits one. At this adapter's
+  // boundary the conversation's canonical session is that caller-supplied
+  // project signal: one downstream conversation must keep one quota identity
+  // across listing refreshes, transport retries and continuations. Pinning it
+  // here (rather than changing the reference port) also works for caller-
+  // supplied canonical sessions and catalog/probe sessions.
+  const project = options?.project ?? options?.session
+  return o2aGatewayHeaders({ ...options, project })
 }
 
 function toolNameOf(tool) {

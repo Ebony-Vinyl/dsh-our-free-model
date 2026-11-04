@@ -10,6 +10,8 @@ The free-lane payload includes a short environment block containing the actual p
 
 The old `canonicalizeSession(seed)` hash produced a plausible shape but not a real creation timestamp. An identical gateway request failed with both its old ID and a fresh hash-derived ID, then succeeded twice using the same real-timestamp ID (2026-10-28). `sessionForConversation()` now mints once with `mintSessionId()` and persists it. Existing IDs exactly matching the legacy hash mapping are migrated once on use; other canonical remembered/caller IDs stay unchanged. No error or retry rotates the session. Map version2 remains compatible with the prior `sessions` object shape.
 
+The project quota id is derived from that same canonical conversation id. o2a can mint an id for a caller that supplies no project, but the plugin supplies its session at the adapter boundary. Consequently a retry, continuation, or catalog refresh does not silently turn one conversation into a succession of upstream projects. A caller-provided project still takes precedence.
+
 ## Runtime prerequisite
 
 Install Bun independently or point `OUR_FREE_MODEL_BUN` at a native Bun executable. Nothing is downloaded by this plugin. Discovery checks the explicit path, `BUN_INSTALL/bin`, `~/.bun/bin`, PATH, and the Windows npm Bun executable directory. Windows `.cmd` and `.ps1` shell shims are not executed as subprocess binaries.

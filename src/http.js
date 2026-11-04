@@ -40,6 +40,7 @@ export const CODE = {
   // the whole lane (403 FreeTierError). Not a credential, not a model, not
   // retryable — a refusal this install cannot retry away.
   laneLocked: 'LANE_LOCKED',
+  configuration: 'CONFIG_DISABLED',
   permission: 'PERMISSION_DENIED',
   exhausted: 'QUOTA_EXHAUSTED',
   transport: 'TRANSPORT',
@@ -431,7 +432,9 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
     // `TimeoutError`/user Error rather than `AbortError` — testing the name alone
     // reported a cancelled turn as `TRANSPORT`, which is retryable.
     if (signal?.aborted === true || error?.name === 'AbortError') throw new UpstreamError('request aborted', CODE.aborted)
-    throw new UpstreamError(`our-free-model: upstream request failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
+    throw new UpstreamError(
+      `our-free-model: upstream request failed: ${error?.message ?? error}${transportCause(error)}`,
+      error?.code === 'CONFIG_DISABLED' ? CODE.configuration : CODE.transport)
   }
 
   const setRetry = retryAfter(response.headers.get('retry-after'))
@@ -646,7 +649,9 @@ export async function getJson(path, { session, attributionUserAgent, signal, tim
     if (error instanceof UpstreamError) throw error
     if (callerAborted || signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
     if (error?.name === 'AbortError') throw new UpstreamError('our-free-model: upstream GET timed out', CODE.timeout)
-    throw new UpstreamError(`our-free-model: upstream GET failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
+    throw new UpstreamError(
+      `our-free-model: upstream GET failed: ${error?.message ?? error}${transportCause(error)}`,
+      error?.code === 'CONFIG_DISABLED' ? CODE.configuration : CODE.transport)
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener?.('abort', onCallerAbort)

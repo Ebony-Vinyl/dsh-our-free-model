@@ -23,6 +23,7 @@ export function forwardFailure(outcome, anthropic = false) {
     QUOTA_EXHAUSTED: [429, 'insufficient_quota'],
     RATE_LIMIT: [429, 'rate_limit_error'],
     CLIENT_ERROR: [400, 'invalid_request_error'],
+    CONFIG_DISABLED: [400, 'invalid_request_error'],
     ABORTED: [400, 'invalid_request_error'],
     TIMEOUT: [504, 'server_error'],
     EAC_UPSTREAM_FAILED: [502, 'server_error'],

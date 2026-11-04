@@ -90,11 +90,11 @@ export const CAPABILITIES = [
  *
  * ### Where this table departs from models.dev, and why
  *
- * - `contextWindow`: models.dev publishes `200000` for the `-free` ids, but
- *   the same upstream accepted a ~1M-token prompt on `deepseek-v4.1-flash-free`
- *   (1025229 prompt tokens, 200) and on `glm-5.3-flash-free` (900694, 200), so
- *   the published figure is a floor, not the wire's limit. The served window
- *   is used, matching what `deepseek-v4.1-flash` (the paid id) publishes.
+ * - `contextWindow`: the `-free` ids use models.dev's published `200000`.
+ *   A one-off large-prompt acceptance probe is not a reliable conversation
+ *   limit: current upstream conversations reject around 200k–262k tokens. The
+ *   advertised window must let DSH compact before that hard refusal, rather
+ *   than wait for a 1M window that never arrives in an ordinary session.
  * - `disabled` rung: offered only where the model's own `effort.values`
  *   includes `none`. GLM 5.3 Flash does not list `none`, and four samples at
  *   `none` still spent a median 552 reasoning tokens — an Off rung there would
@@ -107,7 +107,7 @@ export const CAPABILITIES = [
 const FREE_ID_OVERRIDES = {
   // models.dev: effort low|high|max; limit 200000/32000 (floor — see above).
   'deepseek-v4.1-flash-free': {
-    vision: true, contextWindow: 1048576, maxOutput: 384000,
+    vision: true, contextWindow: 200000, maxOutput: 384000,
     efforts: ['disabled', 'low', 'high', 'max'], effortDefault: 'high',
     effortPatch: { reasoning_effort: '$effort' },
     effortOffPatch: { reasoning_effort: 'none' },
@@ -115,7 +115,7 @@ const FREE_ID_OVERRIDES = {
   // models.dev: effort low|high|max. No `none` in the set, and thinking does
   // not switch off in practice, so the menu starts at low.
   'glm-5.3-flash-free': {
-    vision: true, contextWindow: 1048576, maxOutput: 131072,
+    vision: true, contextWindow: 200000, maxOutput: 131072,
     efforts: ['low', 'high', 'max'], effortDefault: 'high',
     effortPatch: { reasoning_effort: '$effort' },
   },

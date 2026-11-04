@@ -88,11 +88,13 @@ console.log('\n=== 2. the four v2 session headers, and no v1-only request header
   // its outbound bytes, 2026-10-31); the body's stream flag drives SSE.
   check('no accept header on the v2 lane', 'accept' in headers, false)
   check('an explicit accept override still ships', up.gatewayHeaders({ session, accept: 'application/json' }).accept, 'application/json')
-  // v1.4.6: the project id is a bare 40-hex id, fresh per request when the
-  // caller names no project — the shared `global` bucket arrived pre-burned.
+  // The adapter binds the project quota to the conversation, so a retry or a
+  // continuation cannot accidentally turn into a new project allocation.
   const project = headers['x-opencode-project']
   check('the project id is a bare 40-hex id', /^[0-9a-f]{40}$/.test(project), true)
-  check('a second request mints a fresh project id', up.gatewayHeaders({ session, stream: true })['x-opencode-project'] !== project, true)
+  check('a retry keeps the same project id', up.gatewayHeaders({ session, stream: true })['x-opencode-project'], project)
+  check('a listing on the same conversation keeps its project id', up.gatewayHeaders({ session, stream: false })['x-opencode-project'], project)
+  check('an explicit caller project still takes precedence', up.gatewayHeaders({ session, project: 'project-b' })['x-opencode-project'] !== project, true)
   check('a caller project of `global` passes through', up.gatewayHeaders({ session, project: 'global' })['x-opencode-project'], 'global')
 }
 
@@ -121,6 +123,9 @@ console.log('\n=== 3. the session id must carry the descending encoding the gate
   check('an ascending caller id is re-encoded', reencoded === ascending, false)
   check('and the re-encoded id is canonical', up.isCanonicalSession(reencoded), true)
   check('and it stays stable per conversation', up.sessionForConversation(ascending), reencoded)
+  const canonicalProject = up.gatewayHeaders({ session: caller })['x-opencode-project']
+  check('a canonical caller session gets its own project', canonicalProject !== up.gatewayHeaders({ session: id })['x-opencode-project'], true)
+  check('the caller session project is stable across retries', up.gatewayHeaders({ session: caller })['x-opencode-project'], canonicalProject)
 }
 
 console.log('\n=== 4. the v2 tool gate: read + shell, official definitions, no tool_choice none ===')
@@ -191,9 +196,19 @@ console.log('\n=== 6. 目录请求与推理请求使用同一串 v2 UA ===')
     timeoutMs: 5000,
   })
   check('推理请求使用同一串', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
+  const firstTurnProject = seen.at(-1).headers['x-opencode-project']
   const unrelated = 'other-client/3.0 (+https://example.com/our-free-model-standalone)'
   await getJson('/inference/v1/models', { attributionUserAgent: unrelated })
   check('任何归属串都不再改变线上 UA', seen.at(-1).headers['user-agent'], up.CLIENT_UA)
+  await postStreamed({
+    path: up.endpointFor('mimo-v2.6-flash-free'),
+    body: { model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'continue' }], stream: true },
+    session: up.sessionForConversation('wire:standalone'),
+    attributionUserAgent,
+    onData: () => {},
+    timeoutMs: 5000,
+  })
+  check('续写与目录仍保持该会话的项目 ID', seen.at(-1).headers['x-opencode-project'], firstTurnProject)
 }
 
 console.log('\n=== 7. an empty 5xx body names the hop instead of saying "HTTP 502" (issue #549) ===')

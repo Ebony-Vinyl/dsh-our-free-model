@@ -44,6 +44,11 @@ try {
   const newConversation = reloaded.sessionForConversation('new-conversation')
   assert.notEqual(newConversation, upgraded)
   assert.equal(reloaded.sessionForConversation('new-conversation'), newConversation)
+  const first = up.gatewayHeaders({ session: upgraded })
+  const second = up.gatewayHeaders({ session: upgraded })
+  assert.equal(first['x-opencode-project'], second['x-opencode-project'])
+  assert.notEqual(first['x-opencode-project'], up.gatewayHeaders({ session: real })['x-opencode-project'])
+  assert.equal(reloaded.gatewayHeaders({ session: upgraded })['x-opencode-project'], first['x-opencode-project'])
   console.log('PASS stable sessions: one-time legacy migration, real timestamp, no retry rotation, persisted reload, caller ID preservation')
 } finally {
   if (previous === undefined) delete process.env.DSH_HOME
