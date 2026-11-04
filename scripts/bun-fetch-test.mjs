@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { bunFetch, findBunExecutable } from '../src/bun-fetch.js';
+import { bunFetch, bunWorkerPath, findBunExecutable } from '../src/bun-fetch.js';
 
 const server = http.createServer();
 const sockets = new Set();
@@ -121,6 +124,62 @@ try {
       });
     } finally { if (old === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = old; }
     await assert.rejects(call('/echo', {}, { executable: 'missing-bun-executable-123456' }), /Bun worker failed to start/);
+  });
+  await test('worker survives a temp sweep: missing file is re-materialized', async () => {
+    // A fresh module instance has its own memoized path, so this exercises the
+    // real lifecycle without disturbing the instance the suite already uses.
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-sweep-'));
+    const previousHome = process.env.DSH_HOME;
+    process.env.DSH_HOME = scratch;
+    try {
+      const fresh = await import('../src/bun-fetch.js?sweep=1');
+      const first = fresh.bunWorkerPath();
+      assert.equal(first, path.join(scratch, 'our-free-model', 'run', 'worker.mjs'),
+        'the worker must live under the plugin data directory, not the OS temp directory');
+      assert(fs.existsSync(first));
+
+      // What an external temp sweep does to the old layout.
+      fs.rmSync(first, { force: true });
+      assert.equal(fs.existsSync(first), false);
+
+      const second = fresh.bunWorkerPath();
+      assert.equal(second, first, 'the path stays stable across re-materialization');
+      assert(fs.existsSync(second), 'a missing worker must be rewritten, not left missing');
+    } finally {
+      if (previousHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previousHome;
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+  await test('worker falls back when creating the data directory or writing the file fails', async () => {
+    const previousHome = process.env.DSH_HOME;
+    for (const failure of ['mkdir', 'write']) {
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-worker-fallback-'));
+      let fallback;
+      try {
+        process.env.DSH_HOME = scratch;
+        if (failure === 'mkdir') fs.writeFileSync(path.join(scratch, 'our-free-model'), 'blocked');
+        else fs.mkdirSync(path.join(scratch, 'our-free-model', 'run', 'worker.mjs'), { recursive: true });
+        const fresh = await import(`../src/bun-fetch.js?fallback=${failure}`);
+        fallback = fresh.bunWorkerPath();
+        assert.notEqual(fallback, path.join(scratch, 'our-free-model', 'run', 'worker.mjs'));
+        assert.match(path.basename(path.dirname(fallback)), /^ofm-bun-worker-/);
+        assert(fs.statSync(fallback).isFile());
+        // Exercise the actual child transport after fallback, then delete the
+        // worker and verify a second request recovers without a plugin restart.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const response = await fresh.bunFetch(base + '/echo', { method: 'POST', body: failure }, nodeOptions);
+          assert.equal(await response.text(), failure);
+          fs.rmSync(fallback);
+          const next = fresh.bunWorkerPath();
+          if (next !== fallback) fs.rmSync(path.dirname(fallback), { recursive: true, force: true });
+          fallback = next;
+        }
+      } finally {
+        if (fallback) fs.rmSync(path.dirname(fallback), { recursive: true, force: true });
+        fs.rmSync(scratch, { recursive: true, force: true });
+        if (previousHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = previousHome;
+      }
+    }
   });
   const bun = findBunExecutable();
   if (bun) {

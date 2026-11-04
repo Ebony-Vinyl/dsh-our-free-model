@@ -1,15 +1,17 @@
-import { accessSync, constants, statSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, statSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { PassThrough, Readable } from 'node:stream';
+import { DATA_DIR_NAME, resolveDshHome } from './store.js';
 
 /**
  * The worker source, inlined so the published package stays inside the
  * historical updater's 80-file ceiling (adding a second file overran it).
- * It is written once to a private temporary directory and reused for the
- * process lifetime. It speaks one JSON line on stdin and returns one metadata
- * line plus raw response bytes on stdout; no request content is evaluated.
+ * It is written once to the plugin data directory and reused for the process
+ * lifetime, re-created when an external sweep deletes it. It speaks one JSON
+ * line on stdin and returns one metadata line plus raw response bytes on
+ * stdout; no request content is evaluated.
  */
 const WORKER_SOURCE = `import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -37,13 +39,34 @@ try {
 
 let workerPath;
 
-/** Materialize the inlined worker once; never executes request content. */
+/**
+ * Materialize the inlined worker; never executes request content.
+ *
+ * The file lives under the plugin's own data directory rather than the OS temp
+ * directory, and its existence is re-checked on every call. Both details are
+ * load-bearing: the path used to be memoized into `tmpdir()`, so a temp sweep
+ * that deleted `ofm-bun-worker-*` left every later request in that process
+ * failing with `Bun worker failed before completing the response` — bun exits 1
+ * on a missing entry script, before it can reach the network — until the whole
+ * plugin was restarted. Re-materializing a missing file makes the sweep
+ * self-healing, and an unwritable home still falls back to temp so the lane
+ * degrades to the previous behavior rather than failing to start.
+ */
 export function bunWorkerPath() {
-  if (workerPath !== undefined) return workerPath;
-  const dir = mkdtempSync(join(tmpdir(), 'ofm-bun-worker-'));
-  const file = join(dir, 'worker.mjs');
-  writeFileSync(file, WORKER_SOURCE, { mode: 0o600 });
-  workerPath = file;
+  if (workerPath !== undefined && existsSync(workerPath)) return workerPath;
+  try {
+    const dir = join(resolveDshHome(), DATA_DIR_NAME, 'run');
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, 'worker.mjs');
+    writeFileSync(file, WORKER_SOURCE, { mode: 0o600 });
+    workerPath = file;
+  } catch {
+    // mkdir may succeed for an existing directory even when writing the worker
+    // fails. Both operations must be covered by the fallback.
+    const dir = mkdtempSync(join(tmpdir(), 'ofm-bun-worker-'));
+    workerPath = join(dir, 'worker.mjs');
+    writeFileSync(workerPath, WORKER_SOURCE, { mode: 0o600 });
+  }
   return workerPath;
 }
 
