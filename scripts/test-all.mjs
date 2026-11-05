@@ -153,6 +153,7 @@ const suites = [
   ['gateway-source', 'gateway-source-test.mjs', []],
   ['gateway-disconnect', 'gateway-disconnect-test.mjs', []],
   ['standalone-nav', 'standalone-nav-test.mjs', []],
+  ['subagent-routes', 'subagent-routes-test.mjs', []],
 ].filter(([name]) => (mode === 'contributor' ? !['manifest', 'release'].includes(name)
   : mode === 'release' ? releaseSuites.has(name) : true)
   && (only === null || name.startsWith(only)))
