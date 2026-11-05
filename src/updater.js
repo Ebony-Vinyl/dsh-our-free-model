@@ -488,28 +488,30 @@ function isTransientDownloadError(error) {
  *  mutable branch's raw bytes could move between the manifest read and the file
  *  download, which is exactly what pinning exists to prevent.
  *
- *  Both jsDelivr edges are recognized as origins here, because the manifest may
- *  itself have been discovered on either one: a gcore-sourced manifest composes
- *  gcore file URLs, and those need the same fallbacks. */
+ *  A manifest may be discovered on either jsDelivr edge, raw, or the raw proxy;
+ *  each official pinned source gets fallbacks to the same commit and file. */
 function stagedFileSources(manifestUrl, manifest, relativePath) {
   const file = fileUrlOf(manifestUrl, manifest, relativePath)
   const url = new URL(file)
-  const prefix = `/gh/${REPO}@`
-  const jsdelivr = url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'gcore.jsdelivr.net'
-  if (url.protocol !== 'https:' || !jsdelivr || url.port
-    || url.username || url.password || !url.pathname.startsWith(prefix)
-    || !/^[a-f0-9]{40}\//.test(url.pathname.slice(prefix.length))) return [file]
-  const sha = url.pathname.slice(prefix.length).split('/')[0]
-  const rest = url.pathname.slice(prefix.length + sha.length + 1)
-  const cdn = new URL(url)
-  cdn.hostname = 'cdn.jsdelivr.net'
-  const gcore = new URL(url)
-  gcore.hostname = 'gcore.jsdelivr.net'
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return [file]
+  const cdnPrefix = `/gh/${REPO}@`
+  const rawPrefix = `/${REPO}/`
+  const proxyPrefix = `/https://raw.githubusercontent.com/${REPO}/`
+  let suffix
+  if (['cdn.jsdelivr.net', 'gcore.jsdelivr.net'].includes(url.hostname) && url.pathname.startsWith(cdnPrefix)) {
+    suffix = url.pathname.slice(cdnPrefix.length)
+  } else if (url.hostname === 'raw.githubusercontent.com' && url.pathname.startsWith(rawPrefix)) {
+    suffix = url.pathname.slice(rawPrefix.length)
+  } else if (url.hostname === 'gh-proxy.com' && url.pathname.startsWith(proxyPrefix)) {
+    suffix = url.pathname.slice(proxyPrefix.length)
+  } else return [file]
+  if (!/^[a-f0-9]{40}\//.test(suffix)) return [file]
+  const [sha, ...pathParts] = suffix.split('/')
+  const rest = pathParts.join('/')
+  const cdn = `https://cdn.jsdelivr.net/gh/${REPO}@${sha}/${rest}`
+  const gcore = `https://gcore.jsdelivr.net/gh/${REPO}@${sha}/${rest}`
   const raw = `https://raw.githubusercontent.com/${REPO}/${sha}/${rest}`
-  // Keep the origin that was actually asked first, then the other edge, then the
-  // two raw transports at the same pinned commit.
-  const others = [cdn.href, gcore.href].filter(href => href !== file)
-  return [file, ...others, raw, viaRawProxy(`${REPO}/${sha}/${rest}`)]
+  return [...new Set([file, cdn, gcore, raw, viaRawProxy(`${REPO}/${sha}/${rest}`)])]
 }
 
 export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl = fetch, concurrency = 4, onProgress = () => {}, timeoutMs = 30000 }) {
@@ -542,9 +544,9 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
       let lastError
       for (let attempt = 1; attempt <= STAGE_ATTEMPTS; attempt += 1) {
         try {
-          const signal = AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
           let body
           for (let mirror = 0; mirror < sources.length; mirror++) {
+            const signal = AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
             try {
               const response = await fetchImpl(bustCdnCache(sources[mirror]), { redirect: 'error', signal })
               if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -557,11 +559,13 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
               // jsDelivr structurally cannot serve: its size ceiling answers 403
               // for the vendored engine binary, so the same pinned commit's raw
               // transport is tried instead. Any other 403 still stops here.
+              const host = new URL(sources[mirror]).hostname
               const oversized = status === '403' && ENGINE_BINARY.test(file.path)
+                && (host === 'cdn.jsdelivr.net' || host === 'gcore.jsdelivr.net')
               const canFallback = status
                 ? /^(3\d\d|404|429|5\d\d)$/.test(status) || oversized
                 : isTransientDownloadError(error)
-              if (!canFallback || mirror === sources.length - 1 || signal?.aborted) throw error
+              if (!canFallback || mirror === sources.length - 1) throw error
             }
           }
           if (body.length !== file.size) throw new Error(`size ${body.length} != manifest ${file.size}`)
