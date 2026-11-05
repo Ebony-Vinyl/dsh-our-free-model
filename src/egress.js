@@ -60,6 +60,11 @@ import { spawn } from 'node:child_process'
 import { bunFetch, findBunExecutable } from './bun-fetch.js'
 import { restrictPermissions } from './open-external.js'
 
+/** A local prerequisite is missing; retrying the same request cannot fix it. */
+function configurationError(message) {
+  return Object.assign(new Error(message), { code: 'CONFIG_DISABLED' })
+}
+
 /** The loopback address the relay listens on. Never a routable one. */
 const RELAY_HOST = '127.0.0.1'
 /** Carries the absolute target URL from `egressFetch` to the relay. */
@@ -113,9 +118,9 @@ export async function egressFetch(url, init) {
     && (targetUrl.port === '' || targetUrl.port === '443') && targetUrl.pathname.startsWith('/inference/')
   const transport = process.env.OUR_FREE_MODEL_FREE_TRANSPORT ?? 'auto'
   if (officialFreeLane && transport !== 'node') {
-    if (transport !== 'auto' && transport !== 'bun') throw new Error('OUR_FREE_MODEL_FREE_TRANSPORT must be auto, bun, or node')
+    if (transport !== 'auto' && transport !== 'bun') throw configurationError('OUR_FREE_MODEL_FREE_TRANSPORT must be auto, bun, or node')
     const executable = findBunExecutable()
-    if (!executable) throw new Error('OpenCode free inference requires a local Bun executable; install Bun or set OUR_FREE_MODEL_BUN to its executable path (OUR_FREE_MODEL_FREE_TRANSPORT=node restores the legacy transport)')
+    if (!executable) throw configurationError('OpenCode free inference requires a local Bun executable; install Bun or set OUR_FREE_MODEL_BUN to its executable path (OUR_FREE_MODEL_FREE_TRANSPORT=node restores the legacy transport)')
     if (relay?.dead) throw new Error('the configured egress relay is not running')
     const proxy = relay ? `http://ofm:${relay.key}@${RELAY_HOST}:${relay.port}` : undefined
     if (url instanceof Request) {

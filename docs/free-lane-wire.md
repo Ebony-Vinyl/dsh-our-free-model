@@ -126,7 +126,7 @@ vendored 的 `vendor/channel-pack/src/opencode*.ts`）保持同一套形状。
 | 客户工具 | 原名保留（两个已知坏名进别名表） | **全部改名**为 `clint_<sha256[:12]>`，`tool_choice`/历史/`input` 调用行同步改名，响应侧折叠还原 |
 | 官方工具集 | `read` + `shell` 两个逐字定义 | **13 个官方工具全量**（捕获自 2.1 CLI 的 `opencode_tools.json`；chat 线带 `strict:false`，Windows 主机 shell 描述写 powershell） |
 | 系统提示 | 裸 `<env>` 块 | **官方 CLI 提示全量**：base prompt + `<env>`（模型/目录/平台/日期）+ 内置 skills；已带 marker 的请求体跳过 |
-| `x-opencode-project` | 恒 `global`（共享配额桶） | **每请求一个 40-hex**（调用方给的 `global`/git commit 直通，其余哈希成 40-hex） |
+| `x-opencode-project` | 恒 `global`（共享配额桶） | **每会话一个稳定的 40-hex**（默认由会话派生，调用方给的 `global`/git commit 直通，其余哈希成 40-hex；重试/续写不换项目） |
 | 端点 | `/inference/v1/…` | **族路径** `/inference/openai/v1/…`、`/inference/anthropic/v1/messages?beta=true`（2.1 客户端形状；旧扁平路径仍可用） |
 | UA | `opencode/latest/2.0.26/cli` | `opencode/latest/2.1.1/cli`（跟随参考实现的 `v2ClientVersion`） |
 | Chat 体 | — | 流式补 `stream_options.include_usage:true`；无上限时补 `max_completion_tokens:32000` |

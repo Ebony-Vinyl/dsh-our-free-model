@@ -130,8 +130,8 @@ check('a rung the plugin does not declare is recorded as the default it became',
 // channels use. A model with no declared set keeps the ladder untouched.
 const DS = catalog('deepseek-v4.1-flash-free')
 const GLM = catalog('glm-5.3-flash-free')
-check('the served capacity is the measured 1M window, not the published floor', DS.contextWindow, 1048576)
-check('and the same for glm', GLM.contextWindow, 1048576)
+check('the served capacity follows the enforced conversation window', DS.contextWindow, 200000)
+check('and the same for glm', GLM.contextWindow, 200000)
 check('deepseek declares its own level menu', DS.efforts, ['disabled', 'low', 'high', 'max'])
 check('glm declares only the levels it honours — no Off rung', GLM.efforts, ['low', 'high', 'max'])
 check('glm therefore cannot be told to stop thinking', GLM.canDisableThinking, false)

@@ -3,6 +3,8 @@ import http from 'node:http'
 import net from 'node:net'
 import { applyFingerprint, ensureFreeLaneEnvironment } from '../src/upstream.js'
 import { startEgressRelay, egressFetch } from '../src/egress.js'
+import { postStreamed, CODE } from '../src/http.js'
+import { findBunExecutable } from '../src/bun-fetch.js'
 
 const body = { messages: [{ role: 'system', content: 'Original caller rules' }, { role: 'user', content: 'ping' }] }
 applyFingerprint(body, false)
@@ -60,6 +62,31 @@ try {
   else process.env.OUR_FREE_MODEL_FREE_TRANSPORT = savedMode
 }
 console.log('PASS transport routing: unrelated URLs unchanged; explicit Node rollback')
+
+if (findBunExecutable() === undefined) {
+  delete process.env.OUR_FREE_MODEL_FREE_TRANSPORT
+  const previousBase = process.env.OUR_FREE_MODEL_BASE
+  process.env.OUR_FREE_MODEL_BASE = 'https://opencode.ai'
+  try {
+    let failure
+    try {
+      await postStreamed({
+        path: '/inference/openai/v1/chat/completions',
+        body: { model: 'deepseek-v4.1-flash-free', messages: [] },
+        session: 'missing-bun-fixture',
+        onData: () => {},
+      })
+    } catch (error) { failure = error }
+    assert.equal(failure?.code, CODE.configuration)
+    assert.match(failure?.message, /local Bun executable/)
+    console.log('PASS missing Bun is a non-retryable configuration error, before any network request')
+  } finally {
+    if (previousBase === undefined) delete process.env.OUR_FREE_MODEL_BASE
+    else process.env.OUR_FREE_MODEL_BASE = previousBase
+    if (savedMode === undefined) delete process.env.OUR_FREE_MODEL_FREE_TRANSPORT
+    else process.env.OUR_FREE_MODEL_FREE_TRANSPORT = savedMode
+  }
+} else console.log('SKIP missing Bun classification: Bun is installed')
 
 const sockets = new Set()
 const proxy = http.createServer()
