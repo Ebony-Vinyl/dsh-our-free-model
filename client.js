@@ -392,15 +392,89 @@ window.__ModuleLoader__.load({
         'picks.design.tag4': '真实文件导出',
         'free.title': '免费模型',
         'free.sub': '匿名免费与 Kilo 模型统一展示：水位表示可选比例，实测状态单独显示。',
+        'lane.opencode': 'OpenCode 免费池',
+        'lane.kilo': 'Kilo 免费池',
+        'lane.extensions': '扩展渠道',
+        'lane.open': '可用',
+        'lane.busy': '待验证',
+        'lane.blocked': '受阻断路',
+        'lane.models': '{n} 个模型',
+        'lane.poolLine': '匿名免费 {ok} 可用 / 共 {total} 个',
+        'lane.proxyOn': '独立出口已启用',
+        'lane.kiloNote': 'Kilo 公共网关免费池，免密直连；免费池提示词可能被上游记录。',
+        'lane.extMeta': '启用 {enabled} / 已装 {installed}',
+        'lane.extNote': '扩展渠道贡献了 {n} 个模型。',
+        'lane.extEmpty': '还没有安装任何扩展渠道。',
+        'lane.openMarket': '打开扩展市场',
+        'lane.checkOnce': '检测一次',
+        'lane.clearAndRetry': '换出口后重试一次',
+        'lane.quota': 'OpenCode 免费额度窗口开启中',
+        'lane.quotaHint': '本出口的免费额度已用尽，预计 {time} 后重置。Kilo 与扩展渠道不受影响；换一个出口代理可立即重试。',
+        'lane.quotaSoon': '本出口的免费额度已用尽，窗口即将结束。Kilo 与扩展渠道不受影响。',
+        'lane.locked': '车道被上游客户端校验拦下',
+        'lane.lockedHint': '上游只服务官方 OpenCode 客户端（FreeTierError）。换一个出口代理可重试；等待不会解除。',
+        'lane.passive': '被动模式：状态来自真实请求，绝不自动探测。',
+        'explorer.search': '搜索模型',
+        'explorer.all': '全部',
+        'explorer.groupFree': 'OpenCode 免费',
+        'explorer.groupKilo': 'Kilo 免费',
+        'explorer.groupExt': '扩展渠道',
+        'explorer.empty': '没有匹配的模型。',
+        'explorer.extEmpty': '没有可用模型——去扩展市场安装一个渠道试试。',
+        'explorer.viewList': '列表',
+        'explorer.viewCards': '卡片',
+        'explorer.count': '{n} 个',
+        'freeproxy.title': 'OpenCode 出口代理',
+        'freeproxy.hintTitle': '免费额度按出口 IP 计——这条车道可以单独走你自己的代理',
+        'freeproxy.hint': '填一个代理地址（http/https/socks5），OpenCode 车道的请求就单独从它出去；留空则跟随全局出口，再不然读 HTTP_PROXY/HTTPS_PROXY/NO_PROXY 环境变量。这就是 issue #708 里「zen 配额绕过」的合法等价物：换出口，不做任何自动轮换。',
+        'freeproxy.placeholder': 'http://127.0.0.1:8000 或 socks5://…（留空跟随全局）',
+        'freeproxy.test': '测试出口',
+        'freeproxy.echo': '出口 IP：{ip}（{source}）',
+        'freeproxy.proxied': '经代理',
+        'freeproxy.direct': '直连',
+        'nav.tab.extensions': '扩展',
+        'ext.title': 'OFM 扩展',
+        'ext.sub': '渠道与增强模块的市场：签名索引、沙箱运行、与本体解耦；装一个渠道，模型立即出现在免费页。',
+        'ext.tabDiscover': '发现',
+        'ext.tabInstalled': '已安装',
+        'ext.tabSecurity': '安全',
+        'ext.install': '安装',
+        'ext.installing': '安装中…',
+        'ext.installed': '已安装',
+        'ext.update': '更新',
+        'ext.updateAvailable': '有更新',
+        'ext.enable': '启用',
+        'ext.disable': '停用',
+        'ext.uninstall': '卸载',
+        'ext.channel': '渠道',
+        'ext.enhancement': '增强',
+        'ext.verified': '已签名',
+        'ext.verifiedTitle': '该扩展来自 Ed25519 签名的官方索引',
+        'ext.refresh': '刷新索引',
+        'ext.empty': '扩展索引不可达',
+        'ext.failed': '操作失败',
+        'ext.security': '安全模型',
+        'ext.securityBody': '扩展是可执行代码——只安装这份签名索引里的扩展。安装时会校验 Ed25519 签名与 SHA-256 摘要，做静态扫描（拒绝 node:*、process、eval、动态 import 与压缩产物）；运行在独立 Worker 的 VM 沙箱里，唯一的 import 是受控的 ofm:sdk；网络只能访问 manifest 里声明过的域名，密钥只进不出，每个 hook 都有超时熔断。',
+        'ext.securityBody2': '这套防御针对的是意外与草率，不是蓄意作者——真正的门是签名、人工审核与这份索引的提交历史。发现可疑扩展请通过 ofm-extensions 仓库的 SECURITY.md 举报。',
+        'ext.openRepo': '打开 ofm-extensions 仓库',
+        'ext.detail': '详情',
+        'ext.confirmRemove': '卸载 {name}？它的配置与密钥会一并删除。',
+        'ext.notRunning': '未运行',
+        'ext.count': '索引 {n} 个扩展',
+        'ext.discoverEmpty': '没有匹配的扩展。',
+        'ext.installedEmpty': '还没有安装任何扩展。去「发现」页挑一个。',
+        'ext.permissions': '权限',
+        'ext.permNetwork': '网络：可访问 {n} 个已声明的域名',
+        'ext.permSecrets': '密钥：{n} 项（只写不读回）',
+        'ext.openHomepage': '打开主页',
+        'ext.secretPlaceholder': '输入后保存，仅显示尾 4 位',
+        'ext.close': '关闭',
         'sponsor.bannerTag': '中转站',
         'sponsor.bannerTitle': '北辰 API 中转站',
         'sponsor.bannerDescription': 'OFM 官方合作中转站，为用户提供稳定、开放、高性价比的大模型 API 接入服务。支持 Claude、ChatGPT、Grok、Gemini、智谱 GLM、Kimi、DeepSeek 等主流模型，适合在 Codex、Gemini CLI、Claude Code 及其他开发工具中统一配置使用。邀请可获百分之十的返现。',
         'sponsor.bannerCta': '立即查看',
         'free.tankLabel': '免费池可选占比',
-        'free.tankNote': '水位 = 未受限可选模型 / 总数（{selectable}/{total}）；未探测计为候选，不代表实测成功率。',
-        'free.tankEmpty': '免费池暂未发现模型。',
         'free.statHint': '五格状态计数相加 = 匿名免费与 Kilo 模型总数（{total}）；仅列出但未测试的模型计入「未探测」。',
-        'free.sources': '匿名免费 {anonymous} · Kilo {kilo}',
         'eac.title': 'EAC 模型',
         'eac.sub': '桌面端协付渠道：GitHub 登录并 star 本仓库后解锁，与免费车道互不影响。',
         'eac.tankLabel': '协付池压力',
@@ -1169,15 +1243,89 @@ window.__ModuleLoader__.load({
         'picks.design.tag4': 'Real file export',
         'free.title': 'Free models',
         'free.sub': 'Anonymous free and Kilo models share this pool. Water shows the selectable share; measured availability is shown separately.',
+        'lane.opencode': 'OpenCode free pool',
+        'lane.kilo': 'Kilo free pool',
+        'lane.extensions': 'Extension channels',
+        'lane.open': 'Open',
+        'lane.busy': 'Unverified',
+        'lane.blocked': 'Breaker open',
+        'lane.models': '{n} models',
+        'lane.poolLine': '{ok} anonymous models available of {total}',
+        'lane.proxyOn': 'dedicated exit on',
+        'lane.kiloNote': "Kilo's public gateway free pool, keyless and direct; the upstream may log prompts.",
+        'lane.extMeta': '{enabled} enabled / {installed} installed',
+        'lane.extNote': 'Extension channels contribute {n} models.',
+        'lane.extEmpty': 'No extension channels installed yet.',
+        'lane.openMarket': 'Open the marketplace',
+        'lane.checkOnce': 'Check once',
+        'lane.clearAndRetry': 'Retry after changing the exit',
+        'lane.quota': 'OpenCode free quota window is open',
+        'lane.quotaHint': 'This exit has spent its free quota; the window should reset around {time}. Kilo and extension channels are unaffected — switching the exit proxy retries immediately.',
+        'lane.quotaSoon': 'This exit has spent its free quota; the window is about to end. Kilo and extension channels are unaffected.',
+        'lane.locked': 'The lane was refused by the upstream client gate',
+        'lane.lockedHint': 'The upstream serves the official OpenCode client only (FreeTierError). Switching the exit proxy may retry; waiting will not lift it.',
+        'lane.passive': 'Passive mode: availability comes from real requests, never automatic probes.',
+        'explorer.search': 'Search models',
+        'explorer.all': 'All',
+        'explorer.groupFree': 'OpenCode free',
+        'explorer.groupKilo': 'Kilo free',
+        'explorer.groupExt': 'Extension channels',
+        'explorer.empty': 'No models match.',
+        'explorer.extEmpty': 'No models available — install a channel from the marketplace.',
+        'explorer.viewList': 'List',
+        'explorer.viewCards': 'Cards',
+        'explorer.count': '{n}',
+        'freeproxy.title': 'OpenCode exit proxy',
+        'freeproxy.hintTitle': 'Free quota is counted per egress IP — this lane can leave through your own proxy',
+        'freeproxy.hint': "Paste a proxy address (http/https/socks5) and the OpenCode lane dials out through it alone; leave it empty to follow the global outlet, then the HTTP_PROXY/HTTPS_PROXY/NO_PROXY environment. This is the legitimate equivalent of issue #708's \"zen quota bypass\": change the exit, never auto-rotate.",
+        'freeproxy.placeholder': 'http://127.0.0.1:8000 or socks5://… (empty follows the global outlet)',
+        'freeproxy.test': 'Test the exit',
+        'freeproxy.echo': 'Exit IP: {ip} ({source})',
+        'freeproxy.proxied': 'via proxy',
+        'freeproxy.direct': 'direct',
+        'nav.tab.extensions': 'Extensions',
+        'ext.title': 'OFM Extensions',
+        'ext.sub': 'A marketplace for channel and enhancement modules: signed index, sandboxed runs, decoupled from the core — install a channel and its models appear on the free page.',
+        'ext.tabDiscover': 'Discover',
+        'ext.tabInstalled': 'Installed',
+        'ext.tabSecurity': 'Safety',
+        'ext.install': 'Install',
+        'ext.installing': 'Installing…',
+        'ext.installed': 'Installed',
+        'ext.update': 'Update',
+        'ext.updateAvailable': 'Update ready',
+        'ext.enable': 'Enable',
+        'ext.disable': 'Disable',
+        'ext.uninstall': 'Uninstall',
+        'ext.channel': 'Channel',
+        'ext.enhancement': 'Enhancement',
+        'ext.verified': 'Signed',
+        'ext.verifiedTitle': 'This extension comes from the Ed25519-signed index',
+        'ext.refresh': 'Refresh index',
+        'ext.empty': 'The extension registry is unreachable',
+        'ext.failed': 'The action failed',
+        'ext.security': 'The safety model',
+        'ext.securityBody': 'Extensions are executable code — install only what this signed index carries. An install verifies the Ed25519 signature and the SHA-256 digest and runs a static scan (node:*, process, eval, dynamic import and minified bundles are refused); the code runs inside a Worker VM sandbox whose only import is the controlled ofm:sdk; the network is limited to the domains the manifest declares, secrets go in and never come out, and every hook has a timeout breaker.',
+        'ext.securityBody2': "These defenses target accidents and carelessness, not a determined author — the real gates are the signature, human review, and this index's commit history. Report anything suspicious through SECURITY.md in the ofm-extensions repository.",
+        'ext.openRepo': 'Open the ofm-extensions repository',
+        'ext.detail': 'Details',
+        'ext.confirmRemove': 'Uninstall {name}? Its configuration and secrets are removed too.',
+        'ext.notRunning': 'Not running',
+        'ext.count': '{n} extensions in the index',
+        'ext.discoverEmpty': 'No extensions match.',
+        'ext.installedEmpty': 'Nothing installed yet — pick something on the Discover tab.',
+        'ext.permissions': 'Permissions',
+        'ext.permNetwork': 'Network: {n} declared host(s)',
+        'ext.permSecrets': 'Secrets: {n} (write-only)',
+        'ext.openHomepage': 'Open homepage',
+        'ext.secretPlaceholder': 'Type to save; only the last 4 are shown',
+        'ext.close': 'Close',
         'sponsor.bannerTag': 'Relay',
         'sponsor.bannerTitle': 'Beichen API relay',
         'sponsor.bannerDescription': 'OFM’s official relay partner provides stable, open and cost-effective model API access. Claude, ChatGPT, Grok, Gemini, GLM, Kimi and DeepSeek are supported for one consistent setup in Codex, Gemini CLI, Claude Code and other developer tools. Invite others to receive 10% cashback.',
         'sponsor.bannerCta': 'View now',
         'free.tankLabel': 'Selectable free-pool models',
-        'free.tankNote': 'Water = unblocked candidates / total ({selectable}/{total}); untested models remain candidates, not verified successes.',
-        'free.tankEmpty': 'No models have been discovered in this free pool.',
         'free.statHint': 'The five status counts add up to all anonymous free and Kilo models ({total}); listed but untested models are counted as not probed.',
-        'free.sources': 'Anonymous free {anonymous} · Kilo {kilo}',
         'eac.title': 'EAC models',
         'eac.sub': 'The desktop co-paid lane: unlocked by a GitHub login plus a star, independent of the free lane.',
         'eac.tankLabel': 'Co-paid pool pressure',
@@ -2665,6 +2813,49 @@ window.__ModuleLoader__.load({
  .ofm_shell .ofm_navtools .ofm_switch span{display:none}
  .ofm_shell .ofm_navtools .ofm_starbtn{font-size:0;padding:6px;gap:0}
 }
+/* ══ 2.9 免费页重设计：额度横幅 · 车道卡 · 模型浏览器 · 扩展市场 ═════════ */
+.ofm_poolStrip{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ofm_poolStrip .ofm_row{margin-left:auto}
+.ofm_banner{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:14px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 9%,transparent)}
+.ofm_banner.err{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 8%,transparent)}
+.ofm_bannerbody{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.ofm_bannerbody b{font-size:13px}
+.ofm_bannerbody p{margin:0;font-size:11.5px;color:var(--dsw-alias-label-secondary);line-height:1.5}
+.ofm_banneracts{flex:none;display:flex;gap:8px}
+.ofm_lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:10px}
+.ofm_lane{position:relative;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:14px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-3) 80%,transparent);box-shadow:inset 0 1px 0 rgb(255 255 255 / 5%),0 1px 2px rgb(0 0 0 / 4%);overflow:hidden;transition:border-color .2s var(--ease-instrument),box-shadow .24s var(--ease-instrument)}
+.ofm_lane::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:linear-gradient(180deg,var(--dsw-alias-state-business-primary),transparent);opacity:.35;transition:opacity .2s ease}
+.ofm_lane[data-tone="ok"]::before{background:linear-gradient(180deg,var(--dsw-alias-state-success-primary),transparent);opacity:.7}
+.ofm_lane[data-tone="over"]::before{background:linear-gradient(180deg,var(--dsw-alias-state-error-primary),transparent);opacity:.75}
+.ofm_lane:hover{border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 45%,var(--dsw-alias-border-l2))}
+.ofm_lanehead{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.ofm_lanename{font-size:13.5px;font-weight:660;letter-spacing:-.1px}
+.ofm_lane .ofm_poolbadge{padding:3px 10px;font-size:11.5px}
+.ofm_lane .ofm_row{margin-top:auto;align-items:center;gap:8px;flex-wrap:wrap}
+.ofm_lane .ofm_tank{width:120px;height:64px;flex:none;margin-left:auto}
+.ofm_explorer{display:flex;flex-direction:column;gap:10px}
+.ofm_toolrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ofm_search{max-width:260px;flex:1 1 180px}
+.ofm_grouphd{display:flex;align-items:baseline;gap:8px;padding:2px 2px 4px;border-bottom:1px dashed var(--dsw-alias-border-l1)}
+.ofm_mlist{display:flex;flex-direction:column}
+.ofm_mrow{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;border:1px solid transparent;transition:background .15s ease,border-color .15s ease}
+.ofm_mrow:hover{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 5%,transparent);border-color:var(--dsw-alias-border-l1)}
+.ofm_mrow.dim{opacity:.66}
+.ofm_mrow+.ofm_mrow{margin-top:2px}
+.ofm_mmain{display:flex;flex-direction:column;gap:1px;min-width:180px;flex:1 1 240px}
+.ofm_mtags{display:flex;gap:5px;align-items:center;flex-wrap:wrap;flex:2 1 240px}
+.ofm_macts{display:flex;align-items:center;gap:10px;flex:none;margin-left:auto}
+@media(max-width:720px){
+ .ofm_mrow{flex-wrap:wrap}
+ .ofm_macts{margin-left:0;width:100%;justify-content:flex-end}
+ .ofm_poolStrip .ofm_row{margin-left:0;width:100%}
+ .ofm_lane .ofm_tank{width:100%}
+}
+.ofm_extcard{gap:10px}
+.ofm_extdetail{width:min(560px,92vw)}
+.ofm_footsponsor{margin-top:4px;opacity:.9}
+.ofm_footsponsor .ofm_sponsor_banner{grid-template-columns:44px minmax(0,1fr) auto;padding:12px 14px}
+.ofm_footsponsor .ofm_sponsor_logo{width:44px;height:44px}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -3231,7 +3422,7 @@ window.__ModuleLoader__.load({
     }
 
     function isFreePoolModel(model) {
-      return !model.channel || model.channel === 'anonymous' || model.channel === 'kilo'
+      return !model.channel || model.channel === 'anonymous' || model.channel === 'kilo' || model.channel === 'extension'
     }
 
     function freePoolView(data) {
@@ -3250,8 +3441,344 @@ window.__ModuleLoader__.load({
             (model.route === 'our-free-model-region' && data.settings?.exposeRegionModels !== false))
       }).length
       return { rows, counts, total: rows.length, selectable,
-        anonymous: rows.filter(model => model.channel !== 'kilo').length,
-        kilo: rows.filter(model => model.channel === 'kilo').length }
+        anonymous: rows.filter(model => model.channel !== 'kilo' && model.channel !== 'extension').length,
+        kilo: rows.filter(model => model.channel === 'kilo').length,
+        ext: rows.filter(model => model.channel === 'extension').length }
+    }
+
+    // ── the free page, redesigned (2.9.0) ─────────────────────────────────────
+    // 车道总览 + 模型浏览器替换旧的「鱼缸 hero + 平铺卡片」：三张车道卡回答
+    // 「现在哪条车道能用」，浏览器回答「我该选哪个模型」。额度断路器把上游的
+    // Retry-After 变成一条倒计时横幅，而不是一串红色模型卡。
+
+    /** The free lane's quota breaker, rendered as a countdown banner. */
+    function QuotaBanner({ t, data, onClearRetry, clearBusy }) {
+      const lane = data.lane
+      if (lane === null || lane === undefined || lane.state === 'ok' || lane.state === undefined) return null
+      const quota = lane.state === 'quota'
+      const retryAt = Number(lane.retryAt)
+      const countdown = quota && Number.isFinite(retryAt) && retryAt > Date.now()
+        ? t('lane.quotaHint').replace('{time}', new Date(retryAt).toLocaleTimeString(t.locale))
+        : quota ? t('lane.quotaSoon') : t('lane.lockedHint')
+      return h('div', { className: `ofm_banner ${quota ? 'warn' : 'err'}`, role: 'status' },
+        h('span', { className: 'ofm_dot ' + (quota ? 'warn' : 'err') }),
+        h('div', { className: 'ofm_bannerbody' },
+          h('b', null, quota ? t('lane.quota') : t('lane.locked')),
+          h('p', null, countdown)),
+        h('div', { className: 'ofm_banneracts' },
+          h(Button, { disabled: clearBusy, onClick: onClearRetry }, t('lane.clearAndRetry'))))
+    }
+
+    /** One lane card: what it is, how many models answer, and its live state. */
+    function LaneCard(props) {
+      const { t, name, tone, meta, note, action, accent } = props
+      return h('article', { className: 'ofm_lane', 'data-tone': tone ?? 'idle', style: accent === undefined ? undefined : { '--lane-accent': accent } },
+        h('div', { className: 'ofm_lanehead' },
+          h('span', { className: 'ofm_lanename' }, name),
+          h('span', { className: 'ofm_poolbadge ' + (tone ?? 'idle') }, h('span', { className: 'ofm_pooldot' }), meta)),
+        note === undefined ? null : h('p', { className: 'ofm_note' }, note),
+        action === undefined ? null : h('div', { className: 'ofm_row' }, action))
+    }
+
+    /** The three-lane overview: OpenCode, Kilo, and the installed extensions. */
+    function LaneBoard(props) {
+      const { t, data, pool, onCheckOnce, onClearRetry, clearBusy, checkBusy, onOpenMarket } = props
+      const lane = data.lane
+      const quotaTone = lane === null || lane === undefined || lane.state === undefined || lane.state === 'ok'
+        ? (pool.selectable > 0 ? 'ok' : 'busy')
+        : lane.state === 'quota' ? 'over' : 'over'
+      const opencodeMeta = quotaTone === 'ok' ? t('lane.open') : quotaTone === 'busy' ? t('lane.busy') : t('lane.blocked')
+      const kiloRows = pool.kilo
+      const extRows = data.catalog.filter(m => m.channel === 'extension')
+      const extInstalled = data.extensions?.installed ?? []
+      const extEnabled = extInstalled.filter(row => row.enabled === true).length
+      const tank = pool.total > 0 && data.settings.enabled !== false
+        ? h(Tank, { pct: pool.total > 0 ? Math.round(100 * pool.selectable / pool.total) : 0, level: quotaTone === 'ok' ? 'ok' : quotaTone === 'busy' ? 'busy' : 'over', size: 'sm', label: t('free.tankLabel') })
+        : null
+      return h('div', { className: 'ofm_lanes' },
+        h(LaneCard, {
+          t, name: t('lane.opencode'), tone: quotaTone, meta: opencodeMeta,
+          note: t('lane.poolLine').replace('{ok}', String(pool.counts.available)).replace('{total}', String(pool.anonymous)) +
+            (data.freeLane?.proxyConfigured === true ? ' · ' + t('lane.proxyOn') : ''),
+          action: h(Fragment, null,
+            h(Button, { disabled: checkBusy || clearBusy, onClick: onCheckOnce }, checkBusy ? t('probing') : t('lane.checkOnce')),
+            (lane?.state === 'quota' || lane?.state === 'locked') ? h(Button, { disabled: clearBusy, onClick: onClearRetry }, t('lane.clearAndRetry')) : null,
+            tank),
+        }),
+        h(LaneCard, {
+          t, name: t('lane.kilo'), tone: kiloRows > 0 ? 'ok' : 'idle', meta: t('lane.models').replace('{n}', String(kiloRows)),
+          note: t('lane.kiloNote'),
+        }),
+        h(LaneCard, {
+          t, name: t('lane.extensions'), tone: extRows.length > 0 ? 'ok' : 'idle',
+          meta: t('lane.extMeta').replace('{enabled}', String(extEnabled)).replace('{installed}', String(extInstalled.length)),
+          note: extRows.length > 0 ? t('lane.extNote').replace('{n}', String(extRows.length)) : t('lane.extEmpty'),
+          action: h(Button, { onClick: onOpenMarket }, t('lane.openMarket')),
+        }))
+    }
+
+    /** The model browser: search + lane filter + list/cards, grouped by lane. */
+    function ModelExplorer(props) {
+      const { summary, t, onBench, benches = {}, onApply, busy } = props
+      const [query, setQuery] = useState('')
+      const [laneFilter, setLaneFilter] = useState('all')
+      const [view, setView] = useState('list')
+      const needle = query.trim().toLowerCase()
+      const rows = summary.catalog.filter(model => {
+        if (!isFreePoolModel(model)) return false
+        if (laneFilter === 'free' && (model.channel === 'kilo' || model.channel === 'extension')) return false
+        if (laneFilter === 'kilo' && model.channel !== 'kilo') return false
+        if (laneFilter === 'ext' && model.channel !== 'extension') return false
+        if (needle !== '' && !`${model.name} ${model.id}`.toLowerCase().includes(needle)) return false
+        return true
+      })
+      const lead = list => [...list].sort((a, b) => (b.pinned === true ? 1 : 0) - (a.pinned === true ? 1 : 0))
+      const groups = [
+        [t('explorer.groupFree'), lead(rows.filter(m => !m.channel || m.channel === 'anonymous'))],
+        [t('explorer.groupKilo'), lead(rows.filter(m => m.channel === 'kilo'))],
+        [t('explorer.groupExt'), lead(rows.filter(m => m.channel === 'extension'))],
+      ].filter(([, list]) => list.length > 0)
+      const toggleModel = onApply === undefined ? undefined : model => {
+        const ids = summary.settings.hiddenModelIds ?? []
+        return onApply({ hiddenModelIds: ids.includes(model.id) ? ids.filter(id => id !== model.id) : [...ids, model.id] })
+      }
+      const stateOf = model => model.availabilitySource === 'listing' ? t('state.listed') : t(`state.${model.availability}`)
+      const row = model => h('div', { className: 'ofm_mrow' + (model.availability === 'available' ? '' : ' dim') , key: model.id },
+        h('div', { className: 'ofm_mmain' },
+          h('div', { className: 'ofm_cardhead' },
+            model.channel === 'kilo' ? h('span', { className: 'ofm_chantag' }, 'Kilo') : null,
+            model.channel === 'extension' ? h('span', { className: 'ofm_chantag', title: model.extensionName ?? '' }, model.extensionName ?? 'ext') : null,
+            h('span', { className: 'ofm_cardname', title: model.name }, model.name),
+            model.isNew === true ? h('span', { className: 'ofm_newtag' }, t('tag.new')) : null,
+            model.hot === true ? h('span', { className: 'ofm_hottag' }, t('tag.hot')) : null),
+          h('span', { className: 'ofm_id', title: model.id }, model.label ?? model.id)),
+        h('div', { className: 'ofm_mtags' },
+          h('span', { className: 'ofm_tag' }, `${t('tag.context')} ${kilo(model.contextWindow)}`),
+          model.reasoning ? h('span', { className: 'ofm_tag' }, t('tag.thinking')) : null,
+          model.vision ? h('span', { className: 'ofm_tag' }, t('tag.vision')) : null,
+          h('span', { className: 'ofm_badge ' + (model.availabilitySource === 'listing' ? 'unknown' : model.availability) }, stateOf(model))),
+        h('div', { className: 'ofm_macts' },
+          onBench === undefined ? null : h(Button, { disabled: benches[model.id]?.running === true, onClick: () => onBench(model) },
+            benches[model.id]?.running === true ? t('bench.running') : t('bench.run')),
+          toggleModel === undefined ? null : h(Switch, { checked: model.hiddenByUser !== true, disabled: busy || model.hiddenByGroup === true, label: t('visibility.showModel'), onChange: () => toggleModel(model) })))
+      return h('div', { className: 'ofm_explorer' },
+        h('div', { className: 'ofm_toolrow' },
+          h('input', {
+            className: 'ofm_input ofm_search', type: 'search', placeholder: t('explorer.search'),
+            value: query, onChange: event => setQuery(event.target.value),
+          }),
+          h('div', { className: 'ofm_seg', role: 'group' },
+            [['all', t('explorer.all')], ['free', t('explorer.groupFree')], ['kilo', t('explorer.groupKilo')], ['ext', t('explorer.groupExt')]].map(([key, label]) =>
+              h('button', { key, type: 'button', 'aria-pressed': laneFilter === key ? 'true' : 'false', onClick: () => setLaneFilter(key) }, label))),
+          h('div', { className: 'ofm_seg', role: 'group' },
+            [['list', t('explorer.viewList')], ['cards', t('explorer.viewCards')]].map(([key, label]) =>
+              h('button', { key, type: 'button', 'aria-pressed': view === key ? 'true' : 'false', onClick: () => setView(key) }, label)))),
+        rows.length === 0
+          ? h('p', { className: 'ofm_note' }, summary.catalog.some(m => m.channel === 'extension') ? t('explorer.empty') : t('explorer.extEmpty'))
+          : view === 'cards'
+            ? groups.map(([title, list]) => h('div', { className: 'ofm_sec', key: title, style: { gap: 8 } },
+              h('div', { className: 'ofm_row' }, h('span', { className: 'ofm_sec_title', style: { fontSize: 12.5 } }, title),
+                h('span', { className: 'ofm_sec_hint' }, t('explorer.count').replace('{n}', String(list.length)))),
+              h('div', { className: 'ofm_grid' }, list.map(model => h(ModelCard, {
+                key: model.id, model, t, onBench, onVisibility: toggleModel, busy,
+                bench: { running: benches[model.id]?.running === true, ...benches[model.id]?.result === undefined ? {} : { result: benches[model.id].result } },
+              })))))
+            : groups.map(([title, list]) => h('div', { className: 'ofm_sec', key: title, style: { gap: 6 } },
+              h('div', { className: 'ofm_grouphd' }, h('span', { className: 'ofm_sec_title', style: { fontSize: 12.5 } }, title),
+                h('span', { className: 'ofm_sec_hint' }, t('explorer.count').replace('{n}', String(list.length)))),
+              h('div', { className: 'ofm_mlist' }, list.map(row)))),
+      )
+    }
+
+    /** The OpenCode lane's own proxy exit (issue #708's method, made a setting). */
+    function FreeProxyPanel(props) {
+      const { settings, t, onApply, busy } = props
+      const [draft, setDraft] = useState(settings.freeLane?.proxyUrl ?? '')
+      const [echo, setEcho] = useState(undefined)
+      const [echoBusy, setEchoBusy] = useState(false)
+      useEffect(() => { setDraft(settings.freeLane?.proxyUrl ?? '') }, [settings.freeLane?.proxyUrl])
+      const test = async () => {
+        setEchoBusy(true)
+        setEcho(undefined)
+        try {
+          const result = await post('/lane/echo', undefined, 15_000)
+          setEcho(t('freeproxy.echo').replace('{ip}', result.ip || '—').replace('{source}', result.proxied ? t('freeproxy.proxied') : t('freeproxy.direct')))
+        } catch (error) {
+          setEcho(String(error?.message ?? error))
+        } finally { setEchoBusy(false) }
+      }
+      return h('div', { className: 'ofm_sec' },
+        h('p', { className: 'ofm_note' }, t('freeproxy.hint')),
+        h('div', { className: 'ofm_row' },
+          h('input', {
+            className: 'ofm_input', style: { minWidth: 260 }, placeholder: t('freeproxy.placeholder'),
+            value: draft, onChange: event => setDraft(event.target.value), spellcheck: false,
+          }),
+          h(Button, { kind: 'primary', disabled: busy, onClick: () => onApply({ freeLane: { proxyUrl: draft.trim() } }) }, t('forward.apply')),
+          h(Button, { disabled: echoBusy, onClick: test }, echoBusy ? t('probing') : t('freeproxy.test'))),
+        echo === undefined ? null : h('p', { className: 'ofm_note ofm_mono' }, echo))
+    }
+
+    /** The extension marketplace: discover, installed, and the safety contract. */
+    function ExtensionsPage({ t }) {
+      const [state, setState] = useState({ status: 'loading' })
+      const [busyId, setBusyId] = useState('')
+      const [detail, setDetail] = useState(undefined)
+      const [tab, setTab] = useState('discover')
+      const [query, setQuery] = useState('')
+      const [typeFilter, setTypeFilter] = useState('all')
+      const load = useCallback(() => {
+        setState({ status: 'loading' })
+        api('/extensions', { timeout: 20_000 })
+          .then(payload => setState({ status: 'ready', ...payload }))
+          .catch(error => setState({ status: 'error', error: String(error?.message ?? error) }))
+      }, [])
+      useEffect(() => { load() }, [load])
+      const act = async (path, body, refresh = true) => {
+        setBusyId(body?.id ?? path)
+        try {
+          const payload = await post(path, body, 120_000)
+          if (refresh) setState(current => ({ ...current, ...payload, status: 'ready' }))
+          else load()
+          return payload
+        } catch (error) {
+          showToast({ title: t('ext.failed'), body: String(error?.message ?? error), tone: 'warn' })
+          throw error
+        } finally { setBusyId('') }
+      }
+      const installed = state.installed ?? []
+      const registry = state.registry
+      const needle = query.trim().toLowerCase()
+      const discover = (registry?.plugins ?? []).filter(plugin => {
+        if (typeFilter !== 'all' && plugin.type !== typeFilter) return false
+        if (needle !== '' && !`${plugin.name} ${plugin.id} ${plugin.summary ?? ''}`.toLowerCase().includes(needle)) return false
+        return true
+      })
+      const cardFor = plugin => {
+        const record = installed.find(row => row.id === plugin.id)
+        const busy = busyId === plugin.id
+        const head = h('div', { className: 'ofm_cardhead' },
+          h('span', { className: 'ofm_chantag' }, plugin.type === 'channel' ? t('ext.channel') : t('ext.enhancement')),
+          h('span', { className: 'ofm_cardname', title: plugin.name }, plugin.name),
+          h('span', { className: 'ofm_badge ok', title: t('ext.verifiedTitle') }, t('ext.verified')),
+          record?.updateAvailable === true ? h('span', { className: 'ofm_hottag' }, t('ext.updateAvailable')) : null)
+        const idline = h('div', { className: 'ofm_id' }, `${plugin.id} · v${plugin.version} · ${plugin.author || '—'}`)
+        const blurb = h('p', { className: 'ofm_note', style: { minHeight: 32 } }, plugin.summary || plugin.description || '')
+        const action = record === undefined
+          ? h(Button, { kind: 'primary', disabled: busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.install'))
+          : plugin.updateAvailable === true
+            ? h(Button, { kind: 'primary', disabled: busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.update'))
+            : h('span', { className: 'ofm_badge ok' }, t('ext.installed'))
+        const actions = h('div', { className: 'ofm_row' },
+          h(Button, { onClick: () => setDetail(plugin) }, t('ext.detail')),
+          action)
+        if (record === undefined) {
+          return h('article', { className: 'ofm_card ofm_extcard', key: plugin.id }, head, idline, blurb, actions)
+        }
+        const fields = []
+        for (const field of record.config) {
+          if (field.type === 'toggle') {
+            fields.push(h('div', { className: 'ofm_row', key: field.key, style: { gap: 8 } },
+              h('span', { className: 'ofm_note', style: { minWidth: 90 } }, field.label),
+              h(Switch, {
+                checked: record.values?.[field.key] === true, label: field.label,
+                onChange: () => act('/extensions/config', { id: plugin.id, values: { [field.key]: !(record.values?.[field.key] === true) } }),
+              })))
+          } else {
+            fields.push(h('div', { className: 'ofm_row', key: field.key, style: { gap: 8 } },
+              h('span', { className: 'ofm_note', style: { minWidth: 90 } }, field.label),
+              h('input', {
+                className: 'ofm_input', type: field.type === 'password' ? 'password' : 'text', style: { minWidth: 140 },
+                defaultValue: record.values?.[field.key] ?? '', placeholder: field.type === 'password' ? t('ext.secretPlaceholder') : '',
+                onBlur: event => {
+                  if (event.target.value !== (record.values?.[field.key] ?? '')) {
+                    act('/extensions/config', { id: plugin.id, values: { [field.key]: event.target.value } })
+                  }
+                },
+              })))
+          }
+        }
+        for (const key of record.permissions.secrets) {
+          const hint = record.secrets.find(row => row.key === key)?.hint ?? ''
+          fields.push(h('div', { className: 'ofm_row', key, style: { gap: 8 } },
+            h('span', { className: 'ofm_note', style: { minWidth: 90 } }, key),
+            h('input', {
+              className: 'ofm_input', type: 'password', style: { minWidth: 140 }, placeholder: t('ext.secretPlaceholder'),
+              onBlur: event => {
+                if (event.target.value !== '') {
+                  act('/extensions/secret', { id: plugin.id, key, value: event.target.value })
+                  event.target.value = ''
+                }
+              },
+            }),
+            h('span', { className: 'ofm_note' }, hint)))
+        }
+        const controls = h('div', { className: 'ofm_row' },
+          h(Button, { disabled: busy, onClick: () => act('/extensions/toggle', { id: plugin.id, enabled: !(record.enabled === true) }) },
+            record.enabled === true ? t('ext.disable') : t('ext.enable')),
+          h(Button, {
+            danger: true, disabled: busy,
+            onClick: () => { if (window.confirm(t('ext.confirmRemove').replace('{name}', plugin.name))) act('/extensions/uninstall', { id: plugin.id }) },
+          }, t('ext.uninstall')),
+          record.state !== 'ready' && record.enabled === true
+            ? h('span', { className: 'ofm_badge throttled', title: record.error }, t('ext.notRunning'))
+            : null)
+        return h('article', { className: 'ofm_card ofm_extcard', key: plugin.id },
+          head, idline, blurb, actions,
+          fields.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } }, fields) : null,
+          controls)
+      }
+      return h('div', { className: 'ofm_page' },
+        h('header', { className: 'ofm_hero ofm_glass' },
+          h('div', { className: 'ofm_pagehead' },
+            h('div', { className: 'ofm_pagetitle' },
+              h('h2', null, t('ext.title')),
+              h('p', { className: 'ofm_pagesub' }, t('ext.sub'))),
+            h('div', { className: 'ofm_pills' },
+              h(Pill, { strong: true }, t('ext.count').replace('{n}', String(discover.length))),
+              h(Button, { onClick: () => act('/extensions/registry/refresh', undefined, false) }, t('ext.refresh')))),
+          h('div', { className: 'ofm_seg', role: 'group', style: { alignSelf: 'flex-start' } },
+            [['discover', t('ext.tabDiscover')], ['installed', t('ext.tabInstalled')], ['security', t('ext.tabSecurity')]].map(([key, label]) =>
+              h('button', { key, type: 'button', 'aria-pressed': tab === key ? 'true' : 'false', onClick: () => setTab(key) }, label)))),
+        state.status === 'error' ? h('div', { className: 'ofm_callout ofm_error' }, h('div', null, h('b', null, t('ext.empty')), h('div', null, state.error))) : null,
+        tab === 'discover' ? h(Fragment, null,
+          h('div', { className: 'ofm_toolrow' },
+            h('input', { className: 'ofm_input ofm_search', type: 'search', placeholder: t('explorer.search'), value: query, onChange: event => setQuery(event.target.value) }),
+            h('div', { className: 'ofm_seg', role: 'group' },
+              [['all', t('explorer.all')], ['channel', t('ext.channel')], ['enhancement', t('ext.enhancement')]].map(([key, label]) =>
+                h('button', { key, type: 'button', 'aria-pressed': typeFilter === key ? 'true' : 'false', onClick: () => setTypeFilter(key) }, label)))),
+          registry === null && state.status === 'ready' ? h('p', { className: 'ofm_note' }, t('ext.empty')) : null,
+          h('div', { className: 'ofm_grid' }, discover.map(cardFor)),
+          discover.length === 0 && registry !== null ? h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')) : null)
+        : tab === 'installed' ? h(Fragment, null,
+          installed.length === 0 ? h('p', { className: 'ofm_note' }, t('ext.installedEmpty'))
+            : h('div', { className: 'ofm_grid' }, installed.map(record => cardFor({
+              ...record, summary: record.description, tags: [], publishedAt: record.installedAt,
+              updateAvailable: false,
+            }))))
+        : h('div', { className: 'ofm_panel' },
+          h('div', { className: 'ofm_paneltitle' }, t('ext.security')),
+          h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody')),
+          h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody2')),
+          h('div', { className: 'ofm_row' },
+            h('a', { className: 'ofm_linkbtn', href: `https://github.com/${'Ebony-Vinyl'}/ofm-extensions`, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepo')))),
+        detail !== undefined ? h('div', { className: 'ofm_scrim', onClick: () => setDetail(undefined) },
+          h('div', { className: 'ofm_ann ofm_extdetail', onClick: event => event.stopPropagation() },
+            h('div', { className: 'ofm_annhead' },
+              h('h3', { className: 'ofm_anntitle' }, detail.name),
+              h('p', { className: 'ofm_annsub' }, `${detail.id} · v${detail.version} · ${detail.author || ''}`)),
+            h('div', { className: 'ofm_annbody' },
+              h('p', null, detail.summary || detail.description || ''),
+              h('div', { className: 'ofm_sec' },
+                h('b', { style: { fontSize: 12.5 } }, t('ext.permissions')),
+                h('p', { className: 'ofm_note' }, t('ext.permNetwork').replace('{n}', String(detail.permissions?.network?.length ?? 0)) + (detail.permissions?.network ?? []).map(origin => `\n· ${origin}`).join('')),
+                h('p', { className: 'ofm_note' }, t('ext.permSecrets').replace('{n}', String(detail.permissions?.secrets?.length ?? 0)))),
+              h('div', { className: 'ofm_row' },
+                detail.homepage ? h('a', { className: 'ofm_linkbtn', href: detail.homepage, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openHomepage')) : null)),
+            h('div', { className: 'ofm_annfoot' },
+              h('span', { className: 'spacer' }),
+              h(Button, { onClick: () => setDetail(undefined) }, t('ext.close')))))
+          : null)
     }
 
     function Roster(props) {
@@ -6872,7 +7399,7 @@ window.__ModuleLoader__.load({
     // upgrader triggers — comes back to the page the user was reading.
     const EFFECTS_KEY = 'ofm.visualEffects'
     const TAB_KEY = 'ofm.tab'
-    const TABS = ['free', 'eac', 'channels', 'aggregate', 'workspace', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks']
+    const TABS = ['free', 'eac', 'channels', 'aggregate', 'workspace', 'extensions', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks']
     const WORKSPACE_CSS = `
       .who{min-width:0}
       .who .name,.nm .n,.lib-path{white-space:normal!important;overflow-wrap:anywhere;overflow:visible!important;text-overflow:clip!important}
@@ -7169,6 +7696,7 @@ window.__ModuleLoader__.load({
         ['channels', t('nav.tab.channels'), CHANNEL_PROVIDERS.length],
         ['aggregate', t('nav.tab.aggregate'), data.catalog.filter(m => m.channel === 'aggregate').length],
         ['workspace', t('nav.tab.workspace'), data.catalog.filter(m => m.channel === 'subscription').length],
+        ['extensions', t('nav.tab.extensions'), (data.extensions?.installed ?? []).length],
         ['saver', t('nav.tab.saver'), null],
         ['routing', t('nav.tab.routing'), data.catalog.filter(m => m.channel === 'combo').length],
         ['ledger', t('nav.tab.ledger'), null],
@@ -7205,7 +7733,9 @@ window.__ModuleLoader__.load({
           h(StarButton, { t })))
 
       const page = tab === 'workspace'
-        ? h(WorkspacePage, { t, summary, section: workspaceSection, onSelect: setWorkspaceSection })        : tab === 'channels'
+        ? h(WorkspacePage, { t, summary, section: workspaceSection, onSelect: setWorkspaceSection })        : tab === 'extensions'
+          ? h(ExtensionsPage, { t })
+          : tab === 'channels'
         ? h(ChannelsPage, { t, ctx, summary })
         : tab === 'aggregate'
           ? h(AggregatePage, { t, summary })
@@ -7254,14 +7784,22 @@ window.__ModuleLoader__.load({
 
     function FreePage(props) {
       const { t, data, counts, summary, stats, eacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe } = props
-      const { total, selectable, anonymous, kilo: kiloCount } = freePoolView(data)
-      const ok = counts.available ?? 0
-      const pct = total > 0 ? Math.max(0, Math.min(100, Math.round(100 * selectable / total))) : null
-      const ratio = total > 0 ? selectable / total : 0
-      // 颜色跟随可选比例；实际探测结果仍由下方五格状态独立显示。
-      const level = ratio >= 0.6 ? 'ok' : ratio >= 0.3 ? 'busy' : 'over'
+      const pool = freePoolView(data)
+      const [clearBusy, setClearBusy] = useState(false)
+      const clearAndRetry = async () => {
+        setClearBusy(true)
+        try {
+          await post('/lane/clear', undefined, 15_000)
+          summary.reload()
+        } catch (error) {
+          showToast({ title: t('settings.failed'), body: String(error?.message ?? error), tone: 'warn' })
+        } finally { setClearBusy(false) }
+      }
+      const openMarket = () => {
+        try { window.localStorage?.setItem(TAB_KEY, 'extensions') } catch { /* storage unavailable */ }
+        window.location?.reload?.()
+      }
       return h('div', { className: 'ofm_page' },
-        h(SponsorBanner, { t }),
         h('header', { className: 'ofm_hero ofm_glass' },
           h('div', { className: 'ofm_pagehead' },
             h('div', { className: 'ofm_pagetitle' },
@@ -7271,39 +7809,33 @@ window.__ModuleLoader__.load({
               h(Pill, { strong: true, tone: data.settings.enabled !== false ? 'ok' : 'err' }, data.settings.enabled !== false ? t('pref.enabled') : 'off'),
               h(Pill, null, `${t('pref.egress')} ${data.egress?.country ?? data.egress?.ip ?? '—'}`),
               h(Pill, null, `${t('pref.probedAt')} ${ago(data.probedAt, t.locale)}`))),
-          h('div', { className: 'ofm_tankrow' },
-            h(Tank, { pct, level, size: 'xl', label: `${t('free.tankLabel')} ${pct ?? '—'}%` }),
-            h('div', { className: 'ofm_tankside' },
-              h('div', { className: 'ofm_pooltop' },
-                h('span', { className: `ofm_poolbadge ${level}` },
-                  h('span', { className: 'ofm_pooldot' }),
-                  `${t('free.tankLabel')} ${pct ?? '—'}%`),
-                h(StarButton, { t })),
-              h('div', { className: 'ofm_poolstats', title: t('free.statHint').replace('{total}', String(total)) },
-                h('div', { className: 'ofm_stat' }, h('b', null, String(ok)), h('span', null, t('state.available'))),
-                h('div', { className: `ofm_stat${(counts['region-blocked'] ?? 0) > 0 ? ' hot' : ''}` },
-                  h('b', null, String(counts['region-blocked'] ?? 0)), h('span', null, t('state.region-blocked'))),
-                h('div', { className: 'ofm_stat' }, h('b', null, String(counts.unavailable ?? 0)), h('span', null, t('state.unavailable'))),
-                h('div', { className: `ofm_stat${(counts.throttled ?? 0) > 0 ? ' hot' : ''}` },
-                  h('b', null, String(counts.throttled ?? 0)), h('span', null, t('state.throttled'))),
-                h('div', { className: 'ofm_stat' }, h('b', null, String(counts.unknown ?? 0)), h('span', null, t('state.unknown')))),
-              h('div', { className: 'ofm_poolmeta' },
-                h('span', { className: 'ofm_note' }, total > 0
-                  ? t('free.tankNote').replace('{selectable}', String(selectable)).replace('{total}', String(total))
-                  : t('free.tankEmpty')),
-                h('span', { className: 'ofm_note' }, t('free.sources').replace('{anonymous}', String(anonymous)).replace('{kilo}', String(kiloCount))),
-                h('span', { className: 'ofm_note' }, t('meta.description'))),
-              h('div', { className: 'ofm_row' },
-                h(Button, { disabled: busy || catalogBusy, onClick: refresh }, catalogBusy || summary.status === 'loading' ? t('probing') : t('refresh')),
-                h(Button, { disabled: busy || catalogBusy, onClick: reprobe }, t('reprobe')))))),
-        h(Section, { title: t('section.models'), hint: t('section.modelsHint') }, h(Roster, { summary: data, t, onBench: bench, benches, auth: eacAuth, eacLogin, only: 'free', onApply: apply, busy })),
+          h('div', { className: 'ofm_poolStrip' },
+            h('div', { className: 'ofm_poolstats', title: t('free.statHint').replace('{total}', String(pool.total)) },
+              h('div', { className: 'ofm_stat' }, h('b', null, String(counts.available ?? 0)), h('span', null, t('state.available'))),
+              h('div', { className: `ofm_stat${(counts['region-blocked'] ?? 0) > 0 ? ' hot' : ''}` },
+                h('b', null, String(counts['region-blocked'] ?? 0)), h('span', null, t('state.region-blocked'))),
+              h('div', { className: `ofm_stat${(counts.throttled ?? 0) > 0 ? ' hot' : ''}` },
+                h('b', null, String(counts.throttled ?? 0)), h('span', null, t('state.throttled'))),
+              h('div', { className: 'ofm_stat' }, h('b', null, String(counts.unavailable ?? 0)), h('span', null, t('state.unavailable'))),
+              h('div', { className: 'ofm_stat' }, h('b', null, String(counts.unknown ?? 0)), h('span', null, t('state.unknown')))),
+            h('span', { className: 'ofm_note' }, t('lane.passive')),
+            h('div', { className: 'ofm_row' },
+              h(Button, { disabled: busy || catalogBusy, onClick: refresh }, catalogBusy || summary.status === 'loading' ? t('probing') : t('refresh')),
+              h(Button, { disabled: busy || catalogBusy, onClick: reprobe }, t('reprobe')),
+              h(StarButton, { t })))),
+        h(QuotaBanner, { t, data, onClearRetry: clearAndRetry, clearBusy }),
+        h(LaneBoard, { t, data, pool, checkBusy: catalogBusy, clearBusy, onCheckOnce: reprobe, onClearRetry: clearAndRetry, onOpenMarket: openMarket }),
+        h(Section, { title: t('section.models'), hint: t('section.modelsHint') },
+          h(ModelExplorer, { summary: data, t, onBench: bench, benches, onApply: apply, busy })),
         h(Section, { title: t('section.dash'), hint: t('section.dashHint') },
           stats.status === 'ready' && stats.data !== undefined ? h(Dashboard, { stats: stats.data, summary: data, t })
             : h('p', { className: 'ofm_note' }, t('loading'))),
         h(Section, { title: t('section.forward'), hint: t('section.forwardHint') }, h(Forward, { settings: data.settings, t, onApply: apply, busy })),
         h(Section, { title: t('section.egress'), hint: t('section.egressHint') }, h(Egress, { settings: data.settings, t, onApply: apply, busy })),
+        h(Section, { title: t('freeproxy.title'), hint: t('freeproxy.hintTitle') }, h(FreeProxyPanel, { settings: data.settings, t, onApply: apply, busy })),
         h(Section, { title: t('section.prefs'), hint: t('section.prefsHint') }, h(Preferences, { summary: data, t, onApply: apply, busy })),
-        h(Section, { title: t('section.news'), hint: t('section.newsHint') }, h(NewsPanel, { t })))
+        h(Section, { title: t('section.news'), hint: t('section.newsHint') }, h(NewsPanel, { t })),
+        h('div', { className: 'ofm_footsponsor' }, h(SponsorBanner, { t })))
     }
 
     function EacPage(props) {

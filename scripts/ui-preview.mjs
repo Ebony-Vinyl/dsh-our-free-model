@@ -56,7 +56,7 @@ const BIG_DIFF = [
   '',
 ].join('\n')
 
-const TABS = ['free', 'eac', 'channels', 'aggregate', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks']
+const TABS = ['free', 'eac', 'channels', 'aggregate', 'workspace', 'extensions', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks']
 
 // ── module resolution ────────────────────────────────────────────────────────
 /**
@@ -525,7 +525,7 @@ async function shoot({ variant, width, height, scale, dark = false, locale = 'zh
       await page.waitForTimeout(900)
     } catch (error) {
       problems.push(`${variant}/${entry.file}: the shot could not be driven — ${String(error?.message ?? error).split('\n')[0]}`)
-      say(`[${variant}] ${entry.tab ?? entry.label} — could not be driven: ${String(error?.message ?? error).split('\n')[0]}`)
+      say(`[${variant}] ${entry.tab ?? entry.label} — could not be driven: ${String(error?.message ?? error).split('\n')[0]}; page errors: ${(pageErrors || []).join(' || ').slice(0, 500) || '(none)'}`)
       continue
     }
     const measured = await measure(page)
@@ -804,6 +804,13 @@ async function interactionPass() {
 }
 
 // ── wrap up ──────────────────────────────────────────────────────────────────
+if (process.env.OFM_PREVIEW_HOLD === '1') {
+  // Manual-inspection mode: keep the mounted shell serving and let a human (or
+  // a second browser) look at it — for the machines where the bundled
+  // playwright/chromium pair cannot drive a click at all.
+  say(`holding the preview open at ${origin} until interrupted (OFM_PREVIEW_HOLD=1)`)
+  await new Promise(() => {})
+}
 await browser.close()
 server.close()
 for (const dispose of ctx.__disposers ?? []) { try { dispose() } catch { /* teardown is best effort */ } }

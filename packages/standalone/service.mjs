@@ -12,6 +12,7 @@ import { createChannelRuntime } from './channels/runtime.mjs'
 import { createSubscriptions } from '../../src/subscriptions.js'
 import { createSubscriptionRuntime } from '../../src/subscription-completion.js'
 import { createMagpieEngine } from '../../src/magpie-engine.js'
+import { createExtensionRuntime } from '../../src/extensions.js'
 import { combineSubscriptionRuntimes, createMagpieModels } from '../../src/magpie-models.js'
 
 const PRODUCT = 'our-free-model-standalone'
@@ -139,6 +140,7 @@ export async function startStandalone({
   let channels
   let subscriptions
   let magpieEngine
+  let extensions
   let magpieModels
   let eac
   let timer
@@ -263,10 +265,17 @@ export async function startStandalone({
       onChanged: () => runtime?.syncAggregateCatalog?.(),
     })
     const combinedSubscriptionRuntime = combineSubscriptionRuntimes(magpieModels, subscriptionRuntime)
+    // The OFM extension platform, same as the plugin's: the marketplace client,
+    // the sandboxed channel host, and the lane they contribute.
+    extensions = createExtensionRuntime({
+      dataDir, logger, hostVersion: VERSION,
+      onCatalogChanged: () => { try { runtime?.syncExtensionCatalog?.() } catch { /* boot ordering */ } },
+    })
     runtime = createModelRuntime({
       ...stores, logger, attributionUserAgent: `${PRODUCT}/${VERSION}`,
       sealedCredential: eac.credential,
       subscriptionRuntime: combinedSubscriptionRuntime,
+      extensionRuntime: extensions,
     })
     channels = await createChannelRuntime({ dataDir, logger, stats: stores.stats })
     const core = runtime
@@ -285,7 +294,7 @@ export async function startStandalone({
       },
     }
     management = createManagement({
-      stores, runtime, channels, eac, subscriptions, workbenchOptions,
+      stores, runtime, channels, eac, subscriptions, workbenchOptions, extensions,
       magpieEngine, magpieModels,
       desktopPlatform, desktopArch,
       onEngineStarted: () => { settings.update({ magpieEnabled: true }); settings.flush() },
@@ -325,6 +334,10 @@ export async function startStandalone({
         logger.warn?.('our-free-model standalone: model workspace could not resume')
       })
     }
+    void extensions.init().catch(error => {
+      logger.warn?.(`our-free-model standalone: extension mount failed (${error?.message ?? error})`)
+    })
+    void extensions.refreshRegistry().catch(() => {})
     await reconcileRelay()
 
     function scheduleRefresh() {
@@ -364,6 +377,7 @@ export async function startStandalone({
         eac.dispose()
         magpieModels?.close()
         const engineClosing = magpieEngine?.close()
+        extensions?.dispose()
         runtime.dispose()
         closing = (async () => {
           try {
@@ -383,6 +397,7 @@ export async function startStandalone({
     eac?.dispose()
     magpieModels?.close()
     await magpieEngine?.close()
+    extensions?.dispose()
     runtime?.dispose()
     await relayChanges
     await closeRelay()

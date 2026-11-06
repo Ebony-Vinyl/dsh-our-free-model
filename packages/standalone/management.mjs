@@ -88,7 +88,7 @@ export function managementSettings(value) {
 }
 
 /** 管理读写要求鉴权；登录恢复仅允许同源页面触发固定本机动作。 */
-export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal, desktopPlatform = process.platform, desktopArch = process.arch }) {
+export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, extensions, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal, desktopPlatform = process.platform, desktopArch = process.arch }) {
   // `desktopPlatform`/`desktopArch` are threaded from the caller instead of read
   // from `process` so the Windows-only update flow stays exercisable on a test
   // runner that is neither (`desktop-update.mjs` already takes them this way).
@@ -173,6 +173,8 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       settings: managementSettings(stores.settings.get()),
       catalogSyncedAt: stores.settings.get().catalogSyncedAt ?? 0,
       probedAt: available.at ?? 0,
+      lane: available.lane ?? null,
+      extensions: extensions !== undefined ? { installed: extensions.listInstalled() } : null,
       catalog: state.catalog.map(entry => {
         const measured = modelAvailability(entry.id, available, Boolean(entry.channel))
         return ({
@@ -188,6 +190,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
   }
 
   async function route(req, res, pathname) {
+
     const method = req.method ?? 'GET'
     if (method === 'POST' && pathname === `${PREFIX}/login/terminal`) {
       // 此入口发生在登录前，必须有浏览器的同源 Origin，拒绝跨站和无来源调用。
@@ -233,6 +236,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       || pathname === `${PREFIX}/subscriptions` || pathname.startsWith(`${PREFIX}/subscriptions/`)
       || pathname === `${PREFIX}/routing` || pathname.startsWith(`${PREFIX}/routing/`)
       || pathname === `${PREFIX}/engine` || pathname.startsWith(`${PREFIX}/engine/`)
+      || pathname === `${PREFIX}/extensions` || pathname.startsWith(`${PREFIX}/extensions/`)
     // A sandboxed plugin page inside the workspace carries a per-run HMAC
     // capability in its own path; it has an opaque origin and cannot send this
     // console's session. The engine validates the capability and serves only
@@ -244,6 +248,64 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     if (privilegedManagementRoute && !sessionAuthenticated(req) && !enginePluginAsset) {
       throw fail(403, '此管理操作需要已登录的本地管理会话')
     }
+    // ── the extension marketplace (behind the same session fence) ────────────
+      if (method === 'GET' && pathname === `${PREFIX}/extensions`) {
+        let registry = null
+        try { registry = extensions.registryView() } catch { registry = null }
+        return reply(200, { installed: extensions.listInstalled(), registry })
+      }
+      if (method === 'POST' && pathname === `${PREFIX}/extensions/registry/refresh`) {
+        try {
+          await extensions.refreshRegistry({ force: true })
+          return reply(200, { ok: true, installed: extensions.listInstalled(), registry: extensions.registryView() })
+        } catch (error) {
+          return reply(502, { error: String(error?.message ?? error), installed: extensions.listInstalled() })
+        }
+      }
+      if (method === 'POST' && pathname === `${PREFIX}/extensions/install`) {
+        const body = await json()
+        try {
+          const record = await extensions.install(String(body?.id ?? ''), { version: typeof body?.version === 'string' ? body.version : undefined })
+          return reply(200, { ok: true, record, installed: extensions.listInstalled() })
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+      if (method === 'POST' && pathname === `${PREFIX}/extensions/uninstall`) {
+        const body = await json()
+        try {
+          await extensions.uninstall(String(body?.id ?? ''))
+          return reply(200, { ok: true, installed: extensions.listInstalled() })
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+      if (method === 'POST' && pathname === `${PREFIX}/extensions/toggle`) {
+        const body = await json()
+        try {
+          const record = await extensions.setEnabled(String(body?.id ?? ''), body?.enabled === true)
+          return reply(200, { ok: true, record, installed: extensions.listInstalled() })
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+      if (method === 'POST' && pathname === `${PREFIX}/extensions/config`) {
+        const body = await json()
+        try {
+          return reply(200, { ok: true, record: extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {}) })
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+      if (method === 'POST' && pathname === `${PREFIX}/extensions/secret`) {
+        const body = await json()
+        try {
+          return reply(200, { ok: true, record: extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value) })
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+
     if (method === 'POST' && pathname === `${PREFIX}/logout`) {
       await readBody(req)
       sessions.delete(cookie(req))

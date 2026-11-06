@@ -4,7 +4,7 @@ import { shared } from 'ofm-shared-client'
 import { ChannelBrowser } from './components/channel-browser'
 import 'ofm-shared-styles.css'
 
-const { EacAuth, useEacLogin, DICT, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage } = shared
+const { EacAuth, useEacLogin, DICT, Tank, usePool, poolReading, capacityText, CHANNEL_PROVIDERS, LedgerPage, LogsPage, ExtensionsPage } = shared
 const h = React.createElement
 const t = key => DICT.zh[key] ?? key
 t.locale = 'zh'
@@ -154,7 +154,7 @@ export function show(kind, summary) {
     requestLifetime = new AbortController()
     root = createRoot(document.getElementById('channel-root'))
   }
-  root.render(h(kind === 'eac' ? EacPage : ChannelConsole, { t, ctx, summary }))
+  root.render(h(kind === 'eac' ? EacPage : kind === 'extensions' ? ExtensionsPage : ChannelConsole, kind === 'extensions' ? { t } : { t, ctx, summary }))
 }
 export function hide() {
   requestLifetime.abort()

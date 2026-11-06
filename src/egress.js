@@ -157,6 +157,36 @@ export function egressActive() {
 }
 
 /**
+ * Which exit the OpenCode lane would use right now, and what that exit's
+ * public address is (`laneProxyEcho`) — the settings page's "测试出口" button.
+ * The echo service is third-party on purpose: nothing here dials the free
+ * lane's gateway, so a test never spends quota. When the effective exit is the
+ * environment's or a custom address, the echo request dials through it (the
+ * same `openTunnel` the relay uses); a direct exit answers without a proxy.
+ */
+export async function laneProxyEcho({ signal, timeoutMs = 8000 } = {}) {
+  const target = new URL('https://api.ipify.org/?format=json')
+  const proxy = freeLaneProxy ?? envProxyFor(target.hostname) ?? null
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  timer.unref?.()
+  signal?.addEventListener('abort', () => controller.abort(), { once: true })
+  try {
+    let response
+    if (proxy !== null) {
+      response = await laneProxiedFetch(target.href, { headers: { accept: 'application/json' }, signal: controller.signal }, proxy)
+    } else {
+      response = await fetch(target, { headers: { accept: 'application/json' }, signal: controller.signal, redirect: 'error' })
+    }
+    if (!response.ok) throw new Error(`the echo answered HTTP ${response.status}`)
+    const payload = await response.json()
+    return { ip: String(payload.ip ?? ''), proxied: proxy !== null, source: freeLaneProxy !== null ? 'custom' : proxy !== null ? 'env' : 'direct' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * `fetch`, through the outlet when one is running and straight out when not.
  *
  * The rewrite is deliberately boring: same method, same body, same signal, plus

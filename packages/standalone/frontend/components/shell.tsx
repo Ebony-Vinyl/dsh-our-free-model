@@ -1,4 +1,4 @@
-import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboard, LogOut, Moon, Network, Settings2, ShieldCheck, Sun, Monitor, PanelsTopLeft, LibraryBig, Route, RotateCw } from 'lucide-react'
+import { Coffee, Activity, Boxes, Cable, ChevronRight, Handshake, LayoutDashboard, LogOut, Moon, Network, Puzzle, Settings2, ShieldCheck, Sun, Monitor, PanelsTopLeft, LibraryBig, Route, RotateCw } from 'lucide-react'
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import brandMark from '../../../../icon.svg?inline'
@@ -19,6 +19,7 @@ const navigation = [
     { id: 'providers', name: '聚合渠道', icon: PanelsTopLeft },
     { id: 'routing', name: '路由组', icon: Route },
     { id: 'channels', name: 'EAC router', icon: Network },
+    { id: 'extensions', name: 'OFM 扩展', icon: Puzzle },
     { id: 'eac', name: 'EAC 协付渠道', icon: Handshake },
     { id: 'connection', name: 'API 接入', icon: Cable },
   ] },
@@ -87,7 +88,7 @@ export function ThemeToggle() {
 export const pageNames: Record<Page, string> = {
   overview: '概览', workspace: '模型工作台', models: '模型清单', usage: '用量统计', channels: 'EAC router',
   agents: '客户端与订阅', providers: '聚合渠道', library: '资源库', routing: '路由组',
-  eac: 'EAC 协付渠道', settings: '服务设置', updates: '应用更新', connection: 'API 接入', sponsor: '来自赞助商的广告',
+  eac: 'EAC 协付渠道', extensions: 'OFM 扩展', settings: '服务设置', updates: '应用更新', connection: 'API 接入', sponsor: '来自赞助商的广告',
 }
 
 export function Sidebar({ page, summary, host, onDisclaimer }: { page: Page; summary?: Summary; host: Host; onDisclaimer(): void }) {

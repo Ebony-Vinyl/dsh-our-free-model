@@ -36,7 +36,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError } from './src/http.js'
-import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive } from './src/egress.js'
+import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive, laneProxyEcho } from './src/egress.js'
 import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
@@ -2120,6 +2120,15 @@ export function createApiRoutes(deps) {
         // 清掉，让下一次手动检测/真实回合重新出发。一次调用只清一次。
         const cleared = deps.clearLaneBreaker()
         return send(200, { ok: true, cleared, ...buildSummary(deps) })
+      }
+      if (method === 'POST' && routePath === '/lane/echo') {
+        // 测试出口：打第三方回显服务，不打免费网关 —— 一次测试不花配额。
+        try {
+          const echo = await laneProxyEcho({ signal: req.signal ?? undefined })
+          return send(200, { ok: true, ...echo })
+        } catch (error) {
+          return send(502, { ok: false, error: String(error?.message ?? error).slice(0, 200) })
+        }
       }
 
       // ── the extension marketplace ───────────────────────────────────────────
