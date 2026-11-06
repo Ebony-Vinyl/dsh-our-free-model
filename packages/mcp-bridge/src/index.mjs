@@ -3,9 +3,12 @@
  * ofm-mcp-bridge — MCP stdio bridge for the Our Free Model standalone service.
  *
  * Tools:
- *   ofm_models  — list models available on the local gateway
- *   ofm_chat    — one prompt in, one reply out
- *   ofm_usage   — local usage statistics (no upstream request)
+ *   ofm_models    — list models available on the local gateway
+ *   ofm_chat      — one prompt in, one reply out
+ *   ofm_usage     — local usage statistics (no upstream request)
+ *   ofm_channels  — account-channel overview (accounts, credits, EAC pool)
+ *   ofm_checkin   — daily check-in / claim credits for logged-in channels
+ *   ofm_ledger    — token ledger snapshot + per-channel credit balances
  *
  * stdout carries JSON-RPC only. All diagnostics go to stderr.
  * Configuration is environment-only; nothing here reads or stores upstream
@@ -89,7 +92,7 @@ const NO_TOOLS_NOTE =
   "[note] The upstream model emitted tool calls (it behaves like a CLI agent). " +
   "This request is a plain API call with no tools; retried once with a strict text-only instruction.";
 
-const server = new McpServer({ name: "ofm-mcp-bridge", version: "0.1.0" });
+const server = new McpServer({ name: "ofm-mcp-bridge", version: "0.2.0" });
 
 server.tool(
   "ofm_models",
@@ -267,6 +270,122 @@ server.tool(
         "Account-channel credits are shown in the web console at " + cfg.url,
     };
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// --- Account channels (management RPC) -------------------------------------
+// These tools talk to the local service's management API on the same loopback
+// address, authenticated with the same local forwardKey. They only read or
+// drive the user's own logged-in channel accounts; no upstream credentials
+// ever pass through the bridge.
+
+const OFM_MANAGEMENT_PREFIX = "/api/management";
+const CHANNEL_PROVIDERS = [
+  "lobsterai", "qoder", "qodercn", "trae", "cline", "loomy",
+  "raccoon", "minimax", "zcode", "opencode", "gemini",
+];
+
+async function channelRpc(method, payload) {
+  const body = await ofmFetch(`${OFM_MANAGEMENT_PREFIX}/channels/rpc`, {
+    method: "POST",
+    body: JSON.stringify({ method, payload }),
+  });
+  if (body && body.ok === false) {
+    const msg = body?.error?.message || JSON.stringify(body).slice(0, 300);
+    throw new Error(`channel rpc ${method} failed: ${msg}`);
+  }
+  return body?.value !== undefined ? body.value : body;
+}
+
+server.tool(
+  "ofm_channels",
+  "Overview of account channels (trae/lobsterai/qoder/cline/loomy/raccoon/minimax/zcode/opencode/gemini) " +
+    "and the EAC pool: accounts logged in per channel, model counts, credit balances. Read-only.",
+  {},
+  async () => {
+    const status = await channelRpc("provider.status", { providers: CHANNEL_PROVIDERS });
+    const statuses = status?.statuses || {};
+    const out = { channels: {}, eac: undefined, note: "" };
+    let loggedIn = 0;
+    for (const [id, s] of Object.entries(statuses)) {
+      const entry = { models: s.models, accounts: s.accounts };
+      if (s.accounts?.total > 0) {
+        loggedIn++;
+        try {
+          const credits = await channelRpc("credits.status", { provider: id });
+          entry.credits = credits?.accounts ?? credits;
+        } catch (e) {
+          entry.credits = `unavailable: ${String(e.message || e).slice(0, 120)}`;
+        }
+      }
+      out.channels[id] = entry;
+    }
+    try {
+      out.eac = await ofmFetch(`${OFM_MANAGEMENT_PREFIX}/eac/pool`);
+    } catch {}
+    out.note =
+      loggedIn === 0
+        ? "No account channels are logged in yet. To add one, open the web console " +
+          `${cfg.url} -> 聚合渠道 -> connect an account (login flows need browser interaction). ` +
+          "The anonymous free lane works without any account."
+        : `${loggedIn} channel(s) have logged-in accounts.`;
+    return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] };
+  }
+);
+
+server.tool(
+  "ofm_checkin",
+  "Run daily check-in (claim credits) for all logged-in account channels, or a single one via `provider`. " +
+    "No-op for channels without logged-in accounts.",
+  {
+    provider: z
+      .string()
+      .optional()
+      .describe("Limit to one channel id (e.g. trae, lobsterai, qoder). Defaults to all logged-in channels."),
+  },
+  async ({ provider }) => {
+    const targets = provider ? [provider] : CHANNEL_PROVIDERS;
+    const status = await channelRpc("provider.status", { providers: targets });
+    const statuses = status?.statuses || {};
+    const results = {};
+    for (const id of targets) {
+      const s = statuses[id];
+      if (!s) { results[id] = "unsupported channel id"; continue; }
+      if (!s.accounts?.total) { results[id] = "skipped: no logged-in account"; continue; }
+      try {
+        results[id] = (await channelRpc("credits.claimAll", { provider: id })) ?? "done";
+      } catch (e) {
+        results[id] = `failed: ${String(e.message || e).slice(0, 160)}`;
+      }
+    }
+    return { content: [{ type: "text", text: JSON.stringify({ checkin: results }, null, 2) }] };
+  }
+);
+
+server.tool(
+  "ofm_ledger",
+  "Token ledger snapshot of the gateway plus credit balances for a channel (needs a logged-in account " +
+    "for balances; the ledger itself is always available).",
+  {
+    provider: z.string().optional().describe("Channel id for credit balances (e.g. lobsterai, trae)."),
+    limit: z.number().optional().describe("Max ledger entries (default 20)."),
+  },
+  async ({ provider, limit }) => {
+    const out = {};
+    try {
+      const ledger = await channelRpc("usage.tokenLedger", { limit: limit ?? 20 });
+      out.ledger = ledger?.snapshot ?? ledger;
+    } catch (e) {
+      out.ledger = `unavailable: ${String(e.message || e).slice(0, 120)}`;
+    }
+    if (provider) {
+      try {
+        out.balances = await channelRpc("credits.balances", { provider });
+      } catch (e) {
+        out.balances = `unavailable: ${String(e.message || e).slice(0, 120)}`;
+      }
+    }
+    return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] };
   }
 );
 
