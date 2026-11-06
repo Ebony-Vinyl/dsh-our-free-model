@@ -530,33 +530,73 @@ export async function postAggregateStreamed({ config, providerId, modelId, body,
   }
   const bodyText = typeof outbound === 'string' ? outbound
     : JSON.stringify({ ...outbound, ...(model === '' ? {} : { model }), stream: true })
+  return postCompatibleStreamed({
+    url: resolved.chatUrl,
+    headers: {
+      ...resolved.headers,
+      // The provider's gateway either ignores this or uses it to keep this
+      // conversation's state separate from concurrent ones on the same key —
+      // the free lane's session dimension, without its fingerprint family.
+      ...(text(session) === '' ? {} : { 'x-session-id': text(session) }),
+    },
+    body: bodyText,
+    model,
+    wire: resolved.wire,
+    signal,
+    onData,
+    timeoutMs,
+    secret: resolved.apiKey,
+    label: resolved.provider.name,
+  })
+}
+
+/**
+ * POST one streaming completion to a resolved endpoint and push raw SSE `data:`
+ * payloads to `onData`.
+ *
+ * The lane-neutral core `postAggregateStreamed` shares with the extension
+ * channels: the URL, headers, body and wire are already decided by the caller
+ * (the aggregate resolver, or an extension's `prepareChat`); this layer owns
+ * the transport discipline — body-shape sniffing, head replay, the idle
+ * deadline, the JSON-answer fold into the row's wire's frame sequence — and
+ * the credential scrubbing (`secret`) on every refusal message.
+ *
+ * @param {object} options
+ * @param {string} options.url - absolute endpoint
+ * @param {Record<string, string>} options.headers - complete header set
+ * @param {string} options.body - serialized request body (`stream: true` included)
+ * @param {string} [options.model] - the bare outbound model id, labelling synthesised frames
+ * @param {'chat'|'messages'|'responses'} [options.wire='chat']
+ * @param {AbortSignal} [options.signal]
+ * @param {(payload: string) => void} options.onData
+ * @param {number} [options.timeoutMs]
+ * @param {string} [options.secret] - the credential scrubbed from refusal text
+ * @param {string} [options.label] - the lane name in error messages
+ */
+export async function postCompatibleStreamed({ url, headers, body, model = '', wire = 'chat', signal, onData, timeoutMs = TURN_TIMEOUT_MS, secret = '', label = 'the provider' }) {
   let response
   try {
-    response = await egressFetch(resolved.chatUrl, {
+    response = await egressFetch(url, {
       method: 'POST',
       headers: {
-        ...resolved.headers,
+        ...headers,
         accept: 'text/event-stream',
-        // The provider's gateway either ignores this or uses it to keep this
-        // conversation's state separate from concurrent ones on the same key —
-        // the free lane's session dimension, without its fingerprint family.
-        ...(text(session) === '' ? {} : { 'x-session-id': text(session) }),
       },
-      body: bodyText,
+      body,
       redirect: 'error',
       signal,
     })
   } catch (error) {
     if (signal?.aborted === true || error?.name === 'AbortError') throw new UpstreamError('request aborted', CODE.aborted)
     throw new UpstreamError(
-      `model request to ${resolved.provider.name} failed: ${redact(error?.message ?? error, resolved.apiKey)}${transportCause(error)}`,
+      `model request to ${label} failed: ${redact(error?.message ?? error, secret)}${transportCause(error)}`,
       CODE.transport)
   }
 
   const setRetry = retryAfterMs(response)
   if (!response.ok) {
     const refusal = await response.text().catch(() => '')
-    throw classifyUpstream(response.status, refusal, setRetry, resolved.apiKey)
+    throw classifyUpstream(response.status, refusal, setRetry, secret)
   }
   if (response.body === null) throw new UpstreamError('model stream returned no body', CODE.empty)
 
@@ -588,7 +628,7 @@ export async function postAggregateStreamed({ config, providerId, modelId, body,
   rawText += head.decoder.decode()
   let payload
   try {
-    payload = JSON.parse(redact(rawText, resolved.apiKey))
+    payload = JSON.parse(redact(rawText, secret))
   } catch {
     // A 200 body that is not JSON is a hop speaking for the provider. Markup is
     // a front proxy (a WAF page, a CDN error), and replaying the identical body
@@ -598,12 +638,12 @@ export async function postAggregateStreamed({ config, providerId, modelId, body,
         `the provider's front proxy answered HTTP ${response.status} with an HTML error page`,
         CODE.client, { status: response.status })
     }
-    throw new UpstreamError(`unexpected non-stream response: ${redact(rawText, resolved.apiKey).slice(0, 200)}`, CODE.server, { status: response.status })
+    throw new UpstreamError(`unexpected non-stream response: ${redact(rawText, secret).slice(0, 200)}`, CODE.server, { status: response.status })
   }
   if (payload?.error !== undefined || payload?.type === 'error') {
-    throw classifyUpstream(response.status, rawText, setRetry, resolved.apiKey)
+    throw classifyUpstream(response.status, rawText, setRetry, secret)
   }
-  for (const frame of synthesisedFrames(resolved.wire, payload, model)) onData(frame)
+  for (const frame of synthesisedFrames(wire, payload, model)) onData(frame)
   return { status: response.status }
 }
 

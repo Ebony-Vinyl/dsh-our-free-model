@@ -74,6 +74,7 @@ export function createModelRuntime({
   onSealedUnavailable = () => {},
   onTopology = () => {},
   subscriptionRuntime,
+  extensionRuntime = null,
 }) {
   let catalog = materializeCatalog(catalogStore.get().entries ?? [])
   let sealedCatalog = sealedCredential() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? [])
@@ -84,6 +85,8 @@ export function createModelRuntime({
   let subscriptionEntries = []
   /** The virtual rows a combo contributes; rebuilt last, after every real lane. */
   let comboCatalog = []
+  /** The extension lane: rows served by installed, enabled channel extensions. */
+  let extensionCatalog = []
   /** The free lane's own roster: the base every other lane is merged onto. */
   let freeCatalog = catalog
   let egress = availability.get().egress ?? null
@@ -105,10 +108,15 @@ export function createModelRuntime({
    * instead of keeping a hopeful placeholder.
    */
   const rebuildCatalog = () => {
+    // An extension that `replaces` a built-in lane takes its ids over, so the
+    // lane it replaced must stand down or every model would appear twice.
+    const replacedLane = extensionRuntime?.replacesLane ?? null
+    const laneStandsDown = entry => replacedLane === 'kilo' && isKiloEntry(entry)
     const seen = new Set()
     const merged = []
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...subscriptionEntries]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...extensionCatalog, ...subscriptionEntries]) {
       if (entry === null || entry === undefined || seen.has(entry.id)) continue
+      if (laneStandsDown(entry)) continue
       seen.add(entry.id)
       merged.push(entry)
     }
@@ -125,6 +133,7 @@ export function createModelRuntime({
   const mergeCatalogs = () => {
     aggregateCatalog = buildAggregateCatalog(settings.get().aggregate ?? {})
     subscriptionEntries = subscriptionCatalog(subscriptionRuntime)
+    extensionCatalog = extensionRuntime === null ? [] : extensionRuntime.catalog ?? []
     rebuildCatalog()
   }
   mergeCatalogs()
@@ -224,6 +233,7 @@ export function createModelRuntime({
     resolveImage,
     subscriptionRuntime,
     sealedCredential,
+    extensionRuntime,
     recordUsage: record => {
       if (disposed) return
       recordUsage(stats, record)
@@ -533,6 +543,11 @@ export function createModelRuntime({
       mergeCatalogs()
       emitTopology()
       return catalog
+    },
+    // An extension install/enable/disable/uninstall lands here: the extension
+    // runtime has already rebuilt its own rows, so this is a merge + announce.
+    syncExtensionCatalog() {
+      return this.syncAggregateCatalog()
     },
     get catalog() { return catalog },
     get egress() { return egress },

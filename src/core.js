@@ -251,7 +251,8 @@ function createModelRuntime({
   },
   onTopology = () => {
   },
-  subscriptionRuntime
+  subscriptionRuntime,
+  extensionRuntime = null
 }) {
   let catalog = materializeCatalog(catalogStore.get().entries ?? []);
   let sealedCatalog = sealedCredential() === null ? [] : buildEacCatalog(catalogStore.get().sealIds ?? []);
@@ -259,6 +260,7 @@ function createModelRuntime({
   let aggregateCatalog = [];
   let subscriptionEntries = [];
   let comboCatalog = [];
+  let extensionCatalog = [];
   let freeCatalog = catalog;
   let egress = availability.get().egress ?? null;
   let gatewayLatency = { ms: 0, at: 0 };
@@ -266,10 +268,13 @@ function createModelRuntime({
   const lifetime = new AbortController();
   let egressGeneration = 0;
   const rebuildCatalog = () => {
+    const replacedLane = extensionRuntime?.replacesLane ?? null;
+    const laneStandsDown = (entry) => replacedLane === "kilo" && isKiloEntry(entry);
     const seen = /* @__PURE__ */ new Set();
     const merged = [];
-    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...subscriptionEntries]) {
+    for (const entry of [...freeCatalog, ...sealedCatalog, ...kiloCatalog, ...aggregateCatalog, ...extensionCatalog, ...subscriptionEntries]) {
       if (entry === null || entry === void 0 || seen.has(entry.id)) continue;
+      if (laneStandsDown(entry)) continue;
       seen.add(entry.id);
       merged.push(entry);
     }
@@ -286,6 +291,7 @@ function createModelRuntime({
   const mergeCatalogs = () => {
     aggregateCatalog = buildAggregateCatalog(settings.get().aggregate ?? {});
     subscriptionEntries = subscriptionCatalog(subscriptionRuntime);
+    extensionCatalog = extensionRuntime === null ? [] : extensionRuntime.catalog ?? [];
     rebuildCatalog();
   };
   mergeCatalogs();
@@ -367,6 +373,7 @@ function createModelRuntime({
     resolveImage,
     subscriptionRuntime,
     sealedCredential,
+    extensionRuntime,
     recordUsage: (record) => {
       if (disposed) return;
       recordUsage(stats, record);
@@ -388,7 +395,7 @@ function createModelRuntime({
   let catalogRefreshForced = false;
   let catalogRefreshProbed = false;
   async function refreshCatalog(opts) {
-    const { probe = false, force = false, report = false } = opts ?? {};
+    const { probe = false, force = false, report = false, throttleListing = false } = opts ?? {};
     const result = (value) => report ? value : value.catalog;
     if (disposed) return result({ catalog, sources: {} });
     while (catalogRefresh !== null) {
@@ -398,7 +405,7 @@ function createModelRuntime({
       const value = await shared;
       if (disposed || (!force || sharedForced) && (!probe || sharedProbed)) return result(value);
     }
-    const run = refreshCatalogOnce({ probe, force });
+    const run = refreshCatalogOnce({ probe, force, throttleListing });
     catalogRefresh = run;
     catalogRefreshForced = force;
     catalogRefreshProbed = probe;
@@ -414,10 +421,10 @@ function createModelRuntime({
   }
   const LISTING_MIN_INTERVAL_MS = 10 * 6e4;
   let lastListingAt = 0;
-  async function refreshCatalogOnce({ probe, force }) {
+  async function refreshCatalogOnce({ probe, force, throttleListing }) {
     const sources = {};
     let ids = [];
-    if (!force && Date.now() - lastListingAt < LISTING_MIN_INTERVAL_MS && freeCatalog.length > 0) {
+    if (throttleListing === true && !force && Date.now() - lastListingAt < LISTING_MIN_INTERVAL_MS && freeCatalog.length > 0) {
       ids = freeCatalog.map((entry) => entry.id);
       sources.free = { ok: true, count: freeCatalog.length, skipped: "recent" };
     } else {
@@ -657,6 +664,11 @@ function createModelRuntime({
       mergeCatalogs();
       emitTopology();
       return catalog;
+    },
+    // An extension install/enable/disable/uninstall lands here: the extension
+    // runtime has already rebuilt its own rows, so this is a merge + announce.
+    syncExtensionCatalog() {
+      return this.syncAggregateCatalog();
     },
     get catalog() {
       return catalog;

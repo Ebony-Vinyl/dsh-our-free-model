@@ -61,6 +61,7 @@ import { createSubscriptions } from './src/subscriptions.js'
 import { createSubscriptionRuntime } from './src/subscription-completion.js'
 import { isSubscriptionEntry } from './src/subscription-adapter.js'
 import { createMagpieEngine } from './src/magpie-engine.js'
+import { createExtensionRuntime } from './src/extensions.js'
 import { createMagpieModels, combineSubscriptionRuntimes } from './src/magpie-models.js'
 import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from './src/disclaimer.js'
 
@@ -429,10 +430,23 @@ export function apply(ctx, config) {
     logger.warn?.('our-free-model: private subscription storage is unavailable')
   }
   subscriptionRuntime = combineSubscriptionRuntimes(magpieModels, subscriptionRuntime)
+  // The OFM extension platform: the marketplace's client side. Created before
+  // the model runtime so the extension lane exists for the first merge; the
+  // async mount (worker starts, registry warm-up) lands through the callback.
+  const extensions = createExtensionRuntime({
+    dataDir,
+    logger,
+    hostVersion: packageVersion,
+    onCatalogChanged: () => {
+      if (disposed) return
+      try { modelRuntime.syncExtensionCatalog() } catch { /* the runtime may not exist yet during boot */ }
+    },
+  })
   const modelRuntime = createModelRuntime({
     ...stores,
     logger,
     subscriptionRuntime,
+    extensionRuntime: extensions,
     attributionUserAgent: 'deepseek-harness',
     resolveImage: imageResolver(ctx, logger),
     sealedCredential: sealedCredentialOf,
@@ -1104,6 +1118,7 @@ export function apply(ctx, config) {
   const api = createApiRoutes({
     settings, stats, availability, catalog: () => modelRuntime.catalog, state,
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress, clearLaneBreaker,
+    extensions,
     onVisibilityChanged: emitTopology,
     pool: fetchPoolSnapshot,
     eacAuth,
@@ -1457,6 +1472,7 @@ export function apply(ctx, config) {
 
   // ── boot + background loop ──────────────────────────────────────────────────
   ctx.effect(() => () => {
+    extensions.dispose()
     magpieModels.close()
     const closing = magpieEngine.close()
     modelRuntime.dispose()
@@ -1471,6 +1487,17 @@ export function apply(ctx, config) {
       })
     }
   }, 'our-free-model: model workspace')
+
+  ctx.effect(() => {
+    // The extension mount: start every installed, enabled extension (its
+    // catalog lands through onCatalogChanged → syncExtensionCatalog), then
+    // warm the marketplace cache in the background — a cold registry only
+    // means an empty Discover tab, never a blocked lane.
+    void extensions.init().catch(error => {
+      logger.warn?.(`our-free-model: extension mount failed (${error?.message ?? error})`)
+    })
+    void extensions.refreshRegistry().catch(() => {})
+  }, 'our-free-model: extensions')
 
   ctx.effect(() => () => {
     void forward?.close().catch(() => {})
@@ -2094,6 +2121,71 @@ export function createApiRoutes(deps) {
         const cleared = deps.clearLaneBreaker()
         return send(200, { ok: true, cleared, ...buildSummary(deps) })
       }
+
+      // ── the extension marketplace ───────────────────────────────────────────
+      if (routePath === '/extensions' || routePath.startsWith('/extensions/')) {
+        if (deps.extensions === undefined) return send(503, { error: 'the extension platform is unavailable' })
+        const extensions = deps.extensions
+        if (method === 'GET' && routePath === '/extensions') {
+          let registry = null
+          let registryError = ''
+          try { registry = extensions.registryView() } catch (error) { registryError = String(error?.message ?? error) }
+          return send(200, { installed: extensions.listInstalled(), registry, registryError })
+        }
+        if (method === 'POST' && routePath === '/extensions/registry/refresh') {
+          try {
+            await extensions.refreshRegistry({ force: true })
+            return send(200, { ok: true, installed: extensions.listInstalled(), registry: extensions.registryView() })
+          } catch (error) {
+            return send(502, { error: String(error?.message ?? error), installed: extensions.listInstalled() })
+          }
+        }
+        if (method === 'POST' && routePath === '/extensions/install') {
+          const body = await readJson(req)
+          try {
+            const record = await extensions.install(String(body?.id ?? ''), { version: typeof body?.version === 'string' ? body.version : undefined })
+            return send(200, { ok: true, record, installed: extensions.listInstalled() })
+          } catch (error) {
+            return send(400, { error: String(error?.message ?? error) })
+          }
+        }
+        if (method === 'POST' && routePath === '/extensions/uninstall') {
+          const body = await readJson(req)
+          try {
+            await extensions.uninstall(String(body?.id ?? ''))
+            return send(200, { ok: true, installed: extensions.listInstalled() })
+          } catch (error) {
+            return send(400, { error: String(error?.message ?? error) })
+          }
+        }
+        if (method === 'POST' && routePath === '/extensions/toggle') {
+          const body = await readJson(req)
+          try {
+            const record = await extensions.setEnabled(String(body?.id ?? ''), body?.enabled === true)
+            return send(200, { ok: true, record, installed: extensions.listInstalled() })
+          } catch (error) {
+            return send(400, { error: String(error?.message ?? error) })
+          }
+        }
+        if (method === 'POST' && routePath === '/extensions/config') {
+          const body = await readJson(req)
+          try {
+            const record = extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {})
+            return send(200, { ok: true, record })
+          } catch (error) {
+            return send(400, { error: String(error?.message ?? error) })
+          }
+        }
+        if (method === 'POST' && routePath === '/extensions/secret') {
+          const body = await readJson(req)
+          try {
+            const record = extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
+            return send(200, { ok: true, record })
+          } catch (error) {
+            return send(400, { error: String(error?.message ?? error) })
+          }
+        }
+      }
       if (method === 'GET' && routePath === '/forward/key') {
         return send(200, { key: deps.settings.get().forwardKey ?? '' })
       }
@@ -2533,6 +2625,7 @@ function buildSummary(deps) {
     // Whether the absorbed free-channel pack is live on this host, and its
     // failure reason when it is not (see the mount in `apply`).
     channels: deps.channels?.() ?? { state: 'unknown', error: '' },
+    extensions: deps.extensions !== undefined ? { installed: deps.extensions.listInstalled() } : null,
     update: { available: update.available, latest: update.latest, current: update.current, checkedAt: update.checkedAt, applying: update.applying, managed: update.managed === true },
   }
 }

@@ -22,12 +22,12 @@ import { toChatMessages, toClaudeMessages, toResponseInput, toToolDefs, repairTo
 import { CODE, UpstreamError, postStreamed } from './http.js'
 import { postSealedStreamed } from './eac.js'
 import { postKiloStreamed } from './kilo.js'
-import { postAggregateStreamed, isAggregateEntry } from './aggregate.js'
+import { postAggregateStreamed, postCompatibleStreamed, isAggregateEntry } from './aggregate.js'
 import { finishReason, readStream, sanitizeUsage, windowTokens } from './stream.js'
 import { DEFAULT_LEVEL, MIN_BUDGET, budgetFor, defaultEffortFor, effortPatchFor, effortsFor, hasDeclaredEffortMenu, resolveLevel } from './effort.js'
 import { createChannel } from './channel.js'
 import { recoveryPolicy, canRecover, canRecoverSilentStop, recoveryMessages, continuationMessages, checkpointFits, addUsage, createBlockTracker } from './recovery.js'
-import { isEacEntry, isKiloEntry } from './catalog.js'
+import { isEacEntry, isKiloEntry, isExtensionEntry } from './catalog.js'
 import { isComboEntry, comboChain } from './combos.js'
 import { applyTokenSavers, saverConfig } from './token-saver.js'
 import { classifyFailure, describeVerdict, shouldAdvance } from './route/classify.js'
@@ -375,10 +375,11 @@ export class FreeModelAdapter {
     const sealed = isEacEntry(entry)
     const kilo = isKiloEntry(entry)
     const aggregate = isAggregateEntry(entry)
+    const extension = isExtensionEntry(entry)
     // The keyless anonymous lane — the only one the quota breaker and the
     // passive availability learner describe. Every other lane carries its own
     // channel tag and its own accounting.
-    const freeLane = !sealed && !kilo && !aggregate && !isComboEntry(entry) && !isSubscriptionEntry(entry)
+    const freeLane = !sealed && !kilo && !aggregate && !extension && !isComboEntry(entry) && !isSubscriptionEntry(entry)
     if (freeLane) {
       // The quota breaker: a window the upstream opened on this egress is a
       // wall no model/session/UA choice moves (issue #767 measured exactly
@@ -513,13 +514,20 @@ export class FreeModelAdapter {
       const attemptStarted = Date.now()
       const recovering = attempt === 1
       const savingsSink = {}
-      const payload = payloadFor(attemptMessages, attemptBudget, recovering ? [] : warnings, savingsSink)
+      let payload = payloadFor(attemptMessages, attemptBudget, recovering ? [] : warnings, savingsSink)
       attemptSavings = savingsSink.report ?? null
+      // Enhancement extensions see the harness body after every lane's own
+      // shaping but before the free lane's fingerprint — they rewrite the
+      // caller's request, not the camouflage. Fail-open inside the runtime.
+      if (this.deps.extensionRuntime?.applyRequestHooks !== undefined) {
+        payload = await this.deps.extensionRuntime.applyRequestHooks(payload, { model: entry.id, wire, sessionId: session })
+      }
       // The absorbed channels have no tool-name gate; their models see the
       // caller's tools exactly as declared, so the fingerprint pass is free-lane
       // only. The aggregate lane is somebody else's gateway entirely — renaming
       // its tools to this lane's gate placeholders would break the caller's calls.
-      const renameMap = sealed || kilo || aggregate ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
+      // An extension channel shaped its own body in its sandbox.
+      const renameMap = sealed || kilo || aggregate || extension ? new Map() : applyFingerprint(payload, wire === 'messages' ? 'claude' : style === 'flat')
       const controller = new AbortController()
       const onAbort = () => controller.abort(options.signal?.reason)
       options.signal?.addEventListener('abort', onAbort, { once: true })
@@ -546,7 +554,14 @@ export class FreeModelAdapter {
               signal: controller.signal,
               onData: value => channel.push(value),
             })
-            : postStreamed({
+            : extension
+              ? this.deps.extensionRuntime.prepareChat(entry, payload, session)
+                .then(prepared => postCompatibleStreamed({
+                  ...prepared,
+                  signal: controller.signal,
+                  onData: value => channel.push(value),
+                }))
+              : postStreamed({
           path: endpointFor(entry.id), body: payload, session,
           attributionUserAgent: snapshot.attributionUserAgent,
           signal: controller.signal,
@@ -565,6 +580,10 @@ export class FreeModelAdapter {
         if (recorded) return
         recorded = true
         const usage = outcome?.sawUsage === true ? outcome.usage : undefined
+        this.deps.extensionRuntime?.noteUsage?.({
+          at: attemptStarted, model: entry.id, extensionId: entry.extensionId, ok,
+          input: usage?.inputTokens ?? 0, output: usage?.outputTokens ?? 0,
+        })
         this.deps.recordUsage({
           at: attemptStarted,
           model: entry.id,
@@ -945,6 +964,7 @@ function toFailure(error) {
 function wireOf(entry) {
   if (isSubscriptionEntry(entry)) return entry.wire ?? 'chat'
   if (isAggregateEntry(entry)) return entry.wire ?? 'chat'
+  if (isExtensionEntry(entry)) return entry.wire ?? 'chat'
   if (isEacEntry(entry) || isKiloEntry(entry)) return 'chat'
   return wireFor(entry.id)
 }

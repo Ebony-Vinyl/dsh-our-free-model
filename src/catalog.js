@@ -688,3 +688,98 @@ export function reviveKiloCatalog(stored) {
 export function isKiloEntry(entry) {
   return entry?.channel === KILO_CHANNEL
 }
+
+// ── the extension lane ─────────────────────────────────────────────────────────
+
+/** Catalog tag for models an installed extension serves. */
+export const EXTENSION_CHANNEL = 'extension'
+
+/** The built-in lanes an extension may take over (`replaces`). */
+const REPLACEABLE_LANES = new Set(['anonymous', 'kilo'])
+
+/** Wire spellings an extension channel may speak. */
+const EXTENSION_WIRES = new Set(['chat', 'responses', 'messages'])
+
+/**
+ * The catalog id one extension model answers to. Extension models are
+ * namespaced (`ext:<plugin>/<model>`) so a third-party roster can never shadow
+ * a built-in id by accident — unless the extension `replaces` that lane, in
+ * which case its models keep the lane's own ids and the built-in rows stand
+ * down (the kilo-free official extension demonstrates exactly this).
+ */
+export function extensionModelId(manifestId, modelId, replaces) {
+  const clean = String(modelId ?? '').trim()
+  if (replaces !== undefined && REPLACEABLE_LANES.has(replaces)) return clean
+  return `ext:${String(manifestId ?? '').trim()}/${clean}`
+}
+
+/** Is this catalog row served by an installed extension? */
+export function isExtensionEntry(entry) {
+  return entry?.channel === EXTENSION_CHANNEL
+}
+
+/** Normalize one `listModels`/manifest model row into a catalog entry, or null. */
+function extensionEntryOf(manifest, row) {
+  if (row === null || typeof row !== 'object' || Array.isArray(row)) return null
+  const modelId = typeof row.id === 'string' ? row.id.trim() : ''
+  if (modelId === '' || modelId.length > 128) return null
+  const wire = EXTENSION_WIRES.has(row.wire) ? row.wire : 'chat'
+  const contextWindow = number(row.contextWindow) ?? 131072
+  const entry = {
+    id: extensionModelId(manifest.id, modelId, manifest.replaces),
+    name: typeof row.name === 'string' && row.name.trim() !== '' ? row.name.trim() : displayModelName(modelId),
+    channel: EXTENSION_CHANNEL,
+    extensionId: manifest.id,
+    extensionName: typeof manifest.name === 'string' ? manifest.name : manifest.id,
+    modelId,
+    wire,
+    vision: row.vision === true,
+    reasoning: row.reasoning !== false,
+    contextWindow,
+    maxOutput: number(row.maxOutput) ?? Math.min(32768, contextWindow),
+    canDisableThinking: true,
+    regionSensitive: false,
+    source: 'manifest',
+  }
+  if (Array.isArray(row.efforts) && row.efforts.length > 0) {
+    const efforts = row.efforts.filter(level => typeof level === 'string' && level !== '').slice(0, 8)
+    if (efforts.length > 0) {
+      entry.efforts = efforts
+      entry.effortDefault = efforts.includes(row.effortDefault) ? row.effortDefault : efforts[efforts.length - 1]
+      // The declared level rides the wire as the model's own effort field — the
+      // extension names its own spelling via `effortKey` when it is not the
+      // common `reasoning_effort`/`reasoning.effort` shapes.
+      const key = typeof row.effortKey === 'string' && row.effortKey.trim() !== '' ? row.effortKey.trim() : null
+      entry.effortPatch = key !== null ? { [key]: '$effort' } : { reasoning_effort: '$effort' }
+      entry.canDisableThinking = efforts.includes('disabled') || efforts.includes('none')
+    }
+  }
+  return entry
+}
+
+/**
+ * Build the extension lane's catalog rows from one installed channel
+ * extension's model list. Rows that repeat an id are dropped.
+ */
+export function buildExtensionCatalog(manifest, rows) {
+  if (!manifest || typeof manifest !== 'object' || typeof manifest.id !== 'string') return []
+  const seen = new Set()
+  const entries = []
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const entry = extensionEntryOf(manifest, row)
+    if (entry === null || seen.has(entry.id)) continue
+    seen.add(entry.id)
+    entries.push(entry)
+  }
+  return entries
+}
+
+/**
+ * Which built-in lane an enabled extension takes over, or null. Only one
+ * extension may replace a lane; the first enabled claim wins and the rest are
+ * ignored until the conflict is resolved.
+ */
+export function extensionReplaces(manifest) {
+  const replaces = typeof manifest?.replaces === 'string' ? manifest.replaces : ''
+  return REPLACEABLE_LANES.has(replaces) ? replaces : null
+}

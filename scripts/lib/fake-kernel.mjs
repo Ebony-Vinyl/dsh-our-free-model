@@ -15,7 +15,9 @@ import http from 'node:http'
 // that boots the whole plugin but pins only one base would silently send the
 // other one live, so an unset variable defaults to a closed loopback port for
 // both. A suite that wants a stand-in sets its own value before importing
-// `../index.js` — the same contract the free lane has always had.
+// `../index.js` — the same contract the free lane has always had. The
+// extension registry gets the same treatment: without a pin, the marketplace
+// client would reach for GitHub on every boot.
 for (const name of ['OUR_FREE_MODEL_BASE', 'OUR_FREE_MODEL_KILO_BASE']) {
   if (process.env[name] === undefined) {
     const dead = http.createServer()
@@ -23,6 +25,12 @@ for (const name of ['OUR_FREE_MODEL_BASE', 'OUR_FREE_MODEL_KILO_BASE']) {
     process.env[name] = `http://127.0.0.1:${dead.address().port}`
     await new Promise(resolve => dead.close(resolve))
   }
+}
+if (process.env.OFM_EXTENSIONS_REGISTRY === undefined) {
+  const dead = http.createServer()
+  await new Promise(resolve => dead.listen(0, '127.0.0.1', resolve))
+  process.env.OFM_EXTENSIONS_REGISTRY = `http://127.0.0.1:${dead.address().port}/registry.json`
+  await new Promise(resolve => dead.close(resolve))
 }
 
 /**
