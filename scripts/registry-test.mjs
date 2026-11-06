@@ -51,7 +51,7 @@ const raw = fs.readFileSync(path.join(repo, 'src/providers/registry.json'), 'utf
 // row here (see README's aggregate section) — the free lane serves it instead.
 const EXPECTED_PROVIDERS = 76
 const EXPECTED_BY_CATEGORY = { apikey: 61, 'free-tier': 10, local: 3, oauth: 2 }
-const EXPECTED_MODELS = 502
+const EXPECTED_MODELS = 504
 const FLEETRELAY_MODELS = ['deepseek-v4.1-flash-free', 'gpt-6-astra']
 
 const byCategory = {}
