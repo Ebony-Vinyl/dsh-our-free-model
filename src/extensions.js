@@ -95,7 +95,7 @@ const REGISTRY_HOSTS = new Set(['raw.githubusercontent.com', 'cdn.jsdelivr.net',
  * `OFM_EXTENSIONS_PUBLIC_KEY` together with `OFM_EXTENSIONS_REGISTRY`.
  */
 export const PINNED_EXTENSIONS_PUBLIC_KEY = process.env.OFM_EXTENSIONS_PUBLIC_KEY
-  ?? 'MCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+  ?? 'MCowBQYDK2VwAyEA7jxuBMdejAlGd9EnkxEpqKpAnxT8vr3sdVBFHxssy/U='
 
 /**
  * Registry sources, first alive wins: raw, then the two jsDelivr edges, then
