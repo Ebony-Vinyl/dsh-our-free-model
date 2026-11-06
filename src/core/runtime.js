@@ -389,7 +389,7 @@ export function createModelRuntime({
   /**
    * One probe, one model — never a round.
    *
-   * Before 2.9.0 a manual reprobe pinged every free model (concurrency 2), and
+   * Before 2.8.1 a manual reprobe pinged every free model (concurrency 2), and
    * the upstream counts those the same as real turns: one button press spent
    * the lane's whole per-IP window (issue #708). Since then availability is
    * learned passively from real traffic, and the only probe left is this one:

@@ -590,6 +590,7 @@ function renameAndCompleteTools(payload, shape, { keep } = {}) {
     items = items.concat(convertLegacyFunctions(payload.functions, shape, renames, used));
     delete payload.functions;
   }
+  const declaredClientTools = items.filter((item) => renamableToolName(shape, item) !== null).length;
   const shaped = [];
   for (const item of items) {
     const name = renamableToolName(shape, item);
@@ -626,7 +627,7 @@ function renameAndCompleteTools(payload, shape, { keep } = {}) {
   rewriteToolReferences(payload, shape, renames);
   const known = new Set(officialUsed);
   for (const wire of renames.keys()) known.add(wire);
-  sanitizeToolHistory(payload, shape, known);
+  if (declaredClientTools > 0) sanitizeToolHistory(payload, shape, known);
   dropDanglingToolChoice(payload, shape, known);
   return { renames, injected, known };
 }

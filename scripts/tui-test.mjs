@@ -137,7 +137,7 @@ check('and lists the usable models with the real key', rows.data.map(row => row.
 const answered = await (await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/completions`, {
   method: 'POST',
   headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-  body: JSON.stringify({ model: 'space-bunny-free', messages: [{ role: 'user', content: 'hi' }] }),
+  body: JSON.stringify({ model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'hi' }] }),
 })).json()
 check('a non-streaming call answers', String(answered.choices?.[0]?.message?.content ?? ''), 'hello from the tui')
 check('usage comes back in the OpenAI spelling the caller reads', [answered.usage?.prompt_tokens, answered.usage?.completion_tokens], [11, 7])
@@ -158,7 +158,7 @@ await fetch(`http://127.0.0.1:${forwardPort}/v1/responses`, {
   method: 'POST',
   headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
   body: JSON.stringify({
-    model: 'space-bunny-free',
+    model: 'mimo-v2.6-flash-free',
     input: [
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'weather?' }] },
       { type: 'function_call', call_id: 'call_1', name: 'get_weather', arguments: '{"city":"Shanghai"}' },
@@ -203,7 +203,7 @@ check('the relay carries the API paths, not whatever else answers on loopback',
   (await fetch(`http://127.0.0.1:${lanPort}/health`, { headers: { authorization: `Bearer ${lanKey}` } })).status, 404)
 const lanAnswer = await fetch(`http://127.0.0.1:${lanPort}/v1/chat/completions`, {
   method: 'POST', headers: { authorization: `Bearer ${lanKey}`, 'content-type': 'application/json' },
-  body: JSON.stringify({ model: 'space-bunny-free', messages: [{ role: 'user', content: 'hi' }] }),
+  body: JSON.stringify({ model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'hi' }] }),
 })
 await lanAnswer.json()
 await until(() => requestTraces().some(event => event.hop === 'relay' && event.stage === 'finished'), { what: 'relay diagnostics to reach the host logger' })
@@ -218,7 +218,7 @@ stub.api.refuseAll = true
 const refused = await fetch(`http://127.0.0.1:${forwardPort}/v1/chat/completions`, {
   method: 'POST',
   headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-  body: JSON.stringify({ model: 'space-bunny-free', messages: [{ role: 'user', content: 'hi' }] }),
+  body: JSON.stringify({ model: 'mimo-v2.6-flash-free', messages: [{ role: 'user', content: 'hi' }] }),
 })
 const refusedBody = await refused.json()
 check('a refused forward call preserves the upstream request status', refused.status, 400)

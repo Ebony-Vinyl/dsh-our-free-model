@@ -210,7 +210,7 @@ let catalogChanged = 0
 const extensions = createExtensionRuntime({
   dataDir: runtimeDataDir,
   logger: { warn: (...a) => console.error('WARN', ...a), info: () => {} },
-  hostVersion: '2.9.0',
+  hostVersion: '2.8.1',
   onCatalogChanged: () => { catalogChanged += 1 },
 })
 const modelRuntime = createModelRuntime({

@@ -47,6 +47,8 @@ const sourceFiles = [
   // (src/o2a/SYNC.md), shipped as the release bundle built by
   // build-legacy-payload.mjs — the official assets are inlined into it.
   'src/o2a.js',
+  // The extension platform the standalone service mounts like the plugin does
+  'src/extensions.js',
   'src/providers/index.js',
   'src/providers/registry.json',
   'src/route/classify.js',

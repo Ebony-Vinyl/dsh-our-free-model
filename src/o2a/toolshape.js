@@ -65,6 +65,9 @@ export function renameAndCompleteTools(payload, shape, { keep } = {}) {
     items = items.concat(convertLegacyFunctions(payload.functions, shape, renames, used))
     delete payload.functions
   }
+  // The sanitizer's scope: tools the CALLER declared this request — officials
+  // we append do not make a body agent-shaped on their own.
+  const declaredClientTools = items.filter(item => renamableToolName(shape, item) !== null).length
   const shaped = []
   for (const item of items) {
     const name = renamableToolName(shape, item)
@@ -108,7 +111,7 @@ export function renameAndCompleteTools(payload, shape, { keep } = {}) {
   rewriteToolReferences(payload, shape, renames)
   const known = new Set(officialUsed)
   for (const wire of renames.keys()) known.add(wire)
-  sanitizeToolHistory(payload, shape, known)
+  if (declaredClientTools > 0) sanitizeToolHistory(payload, shape, known)
   dropDanglingToolChoice(payload, shape, known)
   return { renames, injected, known }
 }
@@ -125,6 +128,12 @@ export function renameAndCompleteTools(payload, shape, { keep } = {}) {
  * same refusals it saves for vocabulary leaks. The call goes, and the result
  * message paired to it goes with it, because an orphaned result is its own
  * shape violation.
+ *
+ * Only agent-shaped traffic is sanitized: the vocabulary gate inspects bodies
+ * that carry a tool list, so the pass runs exactly when this request declares
+ * tools. A toolless forwarding client replaying a conversation with tool
+ * history keeps that history verbatim — there is no gate to satisfy, and the
+ * model needs its context.
  *
  * Copy-on-write like every other edit here: the caller's message objects are
  * shared with the host harness, so touched rows are replaced, never mutated.

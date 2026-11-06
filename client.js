@@ -3488,6 +3488,9 @@ window.__ModuleLoader__.load({
         ? (pool.selectable > 0 ? 'ok' : 'busy')
         : lane.state === 'quota' ? 'over' : 'over'
       const opencodeMeta = quotaTone === 'ok' ? t('lane.open') : quotaTone === 'busy' ? t('lane.busy') : t('lane.blocked')
+      // The note speaks for the anonymous half only — the counts stay inside
+      // the lane they describe instead of borrowing Kilo's verdicts.
+      const anonOk = data.catalog.filter(model => (!model.channel || model.channel === 'anonymous') && model.availability === 'available').length
       const kiloRows = pool.kilo
       const extRows = data.catalog.filter(m => m.channel === 'extension')
       const extInstalled = data.extensions?.installed ?? []
@@ -3498,7 +3501,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'ofm_lanes' },
         h(LaneCard, {
           t, name: t('lane.opencode'), tone: quotaTone, meta: opencodeMeta,
-          note: t('lane.poolLine').replace('{ok}', String(pool.counts.available)).replace('{total}', String(pool.anonymous)) +
+          note: t('lane.poolLine').replace('{ok}', String(anonOk)).replace('{total}', String(pool.anonymous)) +
             (data.freeLane?.proxyConfigured === true ? ' · ' + t('lane.proxyOn') : ''),
           action: h(Fragment, null,
             h(Button, { disabled: checkBusy || clearBusy, onClick: onCheckOnce }, checkBusy ? t('probing') : t('lane.checkOnce')),

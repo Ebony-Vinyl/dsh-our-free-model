@@ -82,6 +82,7 @@
     "src/recovery.js",
     "src/reload.js",
     "src/store.js",
+    "src/extensions.js",
     "src/stream.js",
     "src/subscription-adapter.js",
     "src/subscription-completion.js",

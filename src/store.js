@@ -167,7 +167,7 @@ export const SETTINGS_INITIAL = {
   hideEacModels: false,
   /** Minutes between background catalog refreshes. Automatic availability
    *  probing is disabled by owner policy; only the manual reprobe button sends
-   *  probe requests. Since 2.9.0 this cadence also cannot re-fetch the listing
+   *  probe requests. Since 2.8.1 this cadence also cannot re-fetch the listing
    *  more often than once a listing window (see src/core/runtime.js). */
   probeIntervalMinutes: 15,
   /** The OpenCode lane's own proxy exit (issue #708's method): when set, this

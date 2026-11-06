@@ -202,7 +202,12 @@ class BlockSink {
   toolNameFragment(key, id, fragment) {
     const block = this.slot(key, 'tool-call')
     if (id) block.id = id
-    block.rawName = (block.rawName ?? '') + fragment
+    // Real servers repeat the *complete* name on every delta; a genuinely split
+    // name arrives as disjoint fragments. Extend when the fragment continues
+    // (or repeats) what we hold, concatenate only when it cannot be a repeat —
+    // that covers both shapes without ever doubling a repeated name.
+    const held = typeof block.rawName === 'string' ? block.rawName : ''
+    block.rawName = fragment.startsWith(held) ? fragment : held + fragment
   }
 
   /** Resolve a buffered raw wire name once, right before its first consumer needs it. */

@@ -1,6 +1,6 @@
 // Explicitly opt-in: this sends ONE real free-lane request and may consume quota.
 //
-// The lane's own verification shape, aligned with the 2.9.0 quota discipline:
+// The lane's own verification shape, aligned with the 2.8.1 quota discipline:
 // one model, one request, the production session mint (`sessionForConversation`,
 // the same slow-clock identity a real turn carries — the old script's raw
 // `mintSessionId()` tested an identity the lane never sends), and a classified

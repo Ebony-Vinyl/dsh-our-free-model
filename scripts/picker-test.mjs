@@ -91,18 +91,18 @@ await until(() => api() !== undefined, { what: 'the settings API route' })
 await callRoute(api(), 'POST', '/api/our-free-model/refresh')
 check('startup and a listing refresh spend no probe requests', stub.requests.length, 0)
 await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+check('a bare reprobe spends exactly one request - the roster head, never a round', stub.requests.length, 1)
 
 const ids = models => models.map(model => model.id)
 const advertised = async route => ids(await adapter.listModels(route))
 
-// Every probe in the round has to have landed before the verdicts mean anything.
-await until(() => {
-  const store = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'availability.json'), 'utf8'))
-  return Object.keys(store.results ?? {}).length >= LISTING.length && store.at > 0
-}, { what: 'a full probe round' }).catch(error => {
-  console.log(`FAIL ${error.message}\nlogs: ${ctx.__logs.join(' | ')}\nrequests seen by the stub: ${stub.requests.length}`)
-  process.exit(1)
-})
+// 2.8.1 semantics: a reprobe is one model, one request. The verdicts the checks
+// below read are driven the way a user drives them - one named model at a time
+// through the same manual endpoint.
+const probe = async id => callRoute(api(), 'POST', '/api/our-free-model/reprobe', { model: id })
+for (const id of LISTING.slice(1)) await probe(id)
+const probeStore = () => JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'availability.json'), 'utf8'))
+check('every named probe left its verdict', Object.keys(probeStore().results ?? {}).length, LISTING.length)
 
 check('a refused model leaves the picker', (await advertised(ROUTE_MAIN)).includes('deepseek-v4-flash-free'), false)
 check('and so does one the listing names but no route answers for', (await advertised(ROUTE_MAIN)).includes('jev-1.13-free'), false)
@@ -153,7 +153,7 @@ check('rather than a verdict it does not have', midRoundRow?.detail ?? '', '')
 gate.resolve()
 await round
 // Discovery refreshed the listing only; probe the new row explicitly.
-await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+await probe('union-alpha')
 check('once the round lands it carries a verdict',
   (await callRoute(api(), 'GET', '/api/our-free-model/summary')).json.catalog
     .find(row => row.id === 'union-alpha')?.availability, 'available')
@@ -209,10 +209,10 @@ await callRoute(api(), 'POST', '/api/our-free-model/settings', { exposeRegionMod
 
 // The round where the lane itself is down: every model reads as refused.
 stub.api.refuseAll = true
-await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+for (const id of LISTING) await probe(id)
 check('a lane-wide failure never empties the picker', (await advertised(ROUTE_MAIN)).length > 0, true)
 check('it keeps the refused models rather than dropping them', (await advertised(ROUTE_MAIN)).includes('deepseek-v4-flash-free'), true)
-check('and says so in the log', ctx.__logs.some(line => line.includes('refused all')), true)
+check('and the refusals are on record for the user to read', probeStore().results['deepseek-v4-flash-free']?.state, 'unavailable')
 const visibleId = 'space-bunny-free'
 const beforeVisibilityEvents = ctx.__captured.events.filter(event => event === 'emit:llm/adapters-updated').length
 const hiddenSave = await callRoute(api(), 'POST', '/api/our-free-model/settings', { hiddenModelIds: [visibleId, visibleId], hideEacModels: true })
@@ -233,7 +233,7 @@ check('whole free group remains hidden during lane-wide refusal', await advertis
 await callRoute(api(), 'POST', '/api/our-free-model/settings', { hiddenModelIds: [], hideFreeModels: false, hideEacModels: false })
 
 stub.api.refuseAll = false
-await callRoute(api(), 'POST', '/api/our-free-model/reprobe')
+for (const id of LISTING) await probe(id)
 check('the next honest round hides them again', (await advertised(ROUTE_MAIN)).includes('deepseek-v4-flash-free'), false)
 
 // ── the settings boundary ────────────────────────────────────────────────────
@@ -358,7 +358,7 @@ ctx.__services.connection.admit = () => undefined
 // catalogs were pinging the same lane at once, on a lane whose 429 carries a
 // growing `retry-after`, and the quota being spent belongs to the user.
 const probesOf = id => stub.requests.filter(row => row.body?.model === id).length
-holdProbe = { model: 'space-bunny-free', ...Promise.withResolvers() }
+holdProbe = { model: 'mimo-v2.6-flash-free', ...Promise.withResolvers() }
 const before = probesOf('mimo-v2.6-flash-free')
 const first = callRoute(api(), 'POST', '/api/our-free-model/reprobe')
 await until(() => probesOf('mimo-v2.6-flash-free') > before, { what: 'the first round to be in flight' })

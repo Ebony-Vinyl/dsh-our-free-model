@@ -44,9 +44,25 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { Worker } from 'node:worker_threads'
-import { stableStringify } from './updater.js'
 import { restrictPermissions } from './open-external.js'
 import { buildExtensionCatalog, extensionReplaces } from './catalog.js'
+
+/**
+ * Deterministic JSON for signature verification: sorted keys, no whitespace,
+ * `undefined` dropped (object fields) or nulled (array slots). Same rules as
+ * the release manifest's `stableStringify` in src/updater.js — inlined because
+ * the standalone package deliberately ships without the updater, and the
+ * registry signature must verify identically in every product that mounts the
+ * extension platform.
+ */
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(row => stableStringify(row ?? null)).join(',')}]`
+  if (value !== null && typeof value === 'object') {
+    const keys = Object.keys(value).filter(key => value[key] !== undefined).sort()
+    return `{${keys.map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value ?? null)
+}
 
 // ── constants ────────────────────────────────────────────────────────────────
 

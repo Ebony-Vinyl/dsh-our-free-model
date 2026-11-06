@@ -132,11 +132,11 @@ test('新出口的手动探测不合并到旧轮次，旧 HTTP 探测完成后�
   const started = gate(), release = gate()
   let running
   try {
-    // 两个旧 HTTP 请求都到达后再换出口，不依赖计时碰运气。
+    // 旧轮次的唯一请求（2.8.1 起单模型单请求）到达后再换出口，不依赖计时碰运气。
     let oldRequests = 0
     probeAnswer = () => {
       oldRequests++
-      if (oldRequests === 2) started.resolve()
+      if (oldRequests === 1) started.resolve()
       return { status: 400, body: JSON.stringify({ error: { message: 'Model is unavailable.' } }), wait: release.promise }
     }
     running = f.runtime.refreshAvailability(true)

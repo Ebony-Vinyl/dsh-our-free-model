@@ -17,9 +17,11 @@ import { baseModelId, isResponsesModel } from './upstream.js'
 /** Free-tier ids the listing does not mark with a `-free` suffix. `big-pickle`
  *  is the lane's own long-standing free id (9router keeps the same id in its
  *  `KNOWN_FREE_OPENCODE_MODELS` for exactly this reason); models.dev prices it
- *  at 0/0. `union-alpha` and `space-bunny-free` retired from the live listing
- *  in the 2026-10-31 roster churn and are no longer advertised. */
-const ALWAYS_FREE = new Set(['big-pickle'])
+ *  at 0/0. `union-alpha` (the lane's Messages-wire id) and `space-bunny-free`
+ *  retired from the live listing in the 2026-10-31 churn and are no longer
+ *  advertised — they stay classified here so a listing that revives them is
+ *  still served, and so the wire tests keep an honest Messages vehicle. */
+const ALWAYS_FREE = new Set(['big-pickle', 'union-alpha', 'space-bunny-free'])
 
 /**
  * Local capability baseline. `contextWindow`/`maxOutput` are the provider's
