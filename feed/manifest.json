@@ -1,7 +1,7 @@
 {
   "version": "2.8.1",
   "base": "../",
-  "publishedAt": "2026-11-06T19:08:28.016Z",
+  "publishedAt": "2026-11-06T20:37:34.892Z",
   "notes": "",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 603869,
-      "sha256": "c444be088bd0f1f57d67c68243a80539f7c9523756b7f89bad7557e30da1e522"
+      "size": 612212,
+      "sha256": "cbeae77510ece1a69f35aed3ab2235f5392c9e2d1373738cff13b50513f2bae3"
     },
     {
       "path": "cordis.patch.yml",
@@ -31,8 +31,8 @@
     },
     {
       "path": "index.js",
-      "size": 129592,
-      "sha256": "7ceae65802dcdaab32e1f4fc149a3724e80810af5ad4172afb20aebc3bc08277"
+      "size": 129898,
+      "sha256": "7d08b813786c92f6be379ed5c2c2ff73fc83229e7f6e5bd76dfbb0bf773f3506"
     },
     {
       "path": "LICENSE",
@@ -76,8 +76,8 @@
     },
     {
       "path": "src/catalog.js",
-      "size": 37403,
-      "sha256": "de88f889bc4b3ccf30adb01ed4cff2762cf6d3f1da3b010f1ffbb955014ca690"
+      "size": 37765,
+      "sha256": "2860d311d3b1c4e6529afd836f50a3ffded89238aced3b36fb33167299177c06"
     },
     {
       "path": "src/chan-relay.js",
@@ -131,8 +131,8 @@
     },
     {
       "path": "src/egress.js",
-      "size": 51152,
-      "sha256": "f370c628251d538ee8006b126ee6cd53a0722159edfa005fedce1bfd12a07ef8"
+      "size": 51730,
+      "sha256": "4f4f1aff10ea1860545fe90f806b3b0ada11d74d096cdd9e73046888d7d21318"
     },
     {
       "path": "src/engine-parts/win32-x64.000.part",
@@ -176,8 +176,8 @@
     },
     {
       "path": "src/extensions.js",
-      "size": 53446,
-      "sha256": "a27c82c00bab58755bdf62ca180aeac3117e62130269a64ad33be60967d469fd"
+      "size": 55662,
+      "sha256": "8e5feb1e214657c25f60768fc2f450cb7c6cbad1e81a80486a85c376d776f144"
     },
     {
       "path": "src/failure.js",
@@ -395,5 +395,5 @@
       "sha256": "579832a2d994b73f0431e062c93d9358550e00701acf7f58c6fa5d3293551a11"
     }
   ],
-  "signature": "Tczf90koR7h8Kl0s10+fgQLQrCDpRn76hzEVMMQBLR9I2LbHRLLEsftknrLneMizoQ56crx9gdCZDnj8bkHoDg=="
+  "signature": "QzDIIsJa8+KB9JcUYzwe/diRYEgUmRsXEzNuGCu8rbLi6juoCC6eFfOPfGjhk8M6Rdqn2mcittNYCXpboxmOBQ=="
 }
