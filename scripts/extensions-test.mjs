@@ -266,8 +266,8 @@ console.log('\n=== 2. a channel extension installs, starts and serves a turn ===
 
 console.log('\n=== 3. secrets and config reach the plugin; the API never sees them ===')
 {
-  extensions.saveSecret('fixture-channel', 'apiKey', 'sk-fixture-1234567890')
-  const record = extensions.saveConfig('fixture-channel', { region: 'eu', hacker: 'ignored' })
+  await extensions.saveSecret('fixture-channel', 'apiKey', 'sk-fixture-1234567890')
+  const record = await extensions.saveConfig('fixture-channel', { region: 'eu', hacker: 'ignored' })
   check('the unknown key is dropped', record.values.region, 'eu')
   check('the secret reads back masked', record.secrets, [{ key: 'apiKey', hasValue: true, hint: '…7890' }])
   // The next turn carries the secret upstream as a header, not in the body.
@@ -327,7 +327,7 @@ console.log('\n=== 6. the hostile shelf is refused, one reason at a time ===')
   await assert.rejects(() => extensions.install('fixture-sneaky'), /failed its pre-install scan/)
   await assert.rejects(() => extensions.install('fixture-banned'), /failed its pre-install scan/)
   await assert.rejects(() => extensions.install('missing-extension'), /does not carry/)
-  assert.throws(() => extensions.saveSecret('fixture-channel', 'undeclared', 'x'), /not declared/)
+  await assert.rejects(() => extensions.saveSecret('fixture-channel', 'undeclared', 'x'), /not declared/)
   await assert.rejects(() => extensions.setEnabled('ghost', true), /not installed/)
   check('no hostile file was written', fs.readdirSync(path.join(runtimeDataDir, 'extensions', 'packages')).sort(), dirBefore)
   check('the installed set is unchanged', extensions.listInstalled().length, before)

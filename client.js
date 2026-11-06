@@ -2832,6 +2832,8 @@ window.__ModuleLoader__.load({
 .ofm_lanename{font-size:13.5px;font-weight:660;letter-spacing:-.1px}
 .ofm_lane .ofm_poolbadge{padding:3px 10px;font-size:11.5px}
 .ofm_lane .ofm_row{margin-top:auto;align-items:center;gap:8px;flex-wrap:wrap}
+.ofm_tank.sm{width:120px;height:64px;border-radius:10px}
+.ofm_tank.sm .ofm_fish svg{width:14px;height:auto}
 .ofm_lane .ofm_tank{width:120px;height:64px;flex:none;margin-left:auto}
 .ofm_explorer{display:flex;flex-direction:column;gap:10px}
 .ofm_toolrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -2849,7 +2851,7 @@ window.__ModuleLoader__.load({
  .ofm_mrow{flex-wrap:wrap}
  .ofm_macts{margin-left:0;width:100%;justify-content:flex-end}
  .ofm_poolStrip .ofm_row{margin-left:0;width:100%}
- .ofm_lane .ofm_tank{width:100%}
+ .ofm_lane .ofm_tank{display:none}
 }
 .ofm_extcard{gap:10px}
 .ofm_extdetail{width:min(560px,92vw)}
@@ -3868,7 +3870,7 @@ window.__ModuleLoader__.load({
       const bubbles = ['b1', 'b2', 'b3', 'b4', 'b5'].map(name => h('i', { className: `ofm_bubble ${name}`, key: name }))
       if (pct === null || pct === undefined) return null
       return h('div', {
-        className: `ofm_tank ${level}${size === 'xl' ? ' xl' : ''}`,
+        className: `ofm_tank ${level}${size === 'xl' ? ' xl' : size === 'sm' ? ' sm' : ''}`,
         ref: tankRef,
         'data-ofm-motion': filled && visible ? 'on' : 'off',
         role: 'img',

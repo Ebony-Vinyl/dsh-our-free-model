@@ -292,7 +292,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       if (method === 'POST' && pathname === `${PREFIX}/extensions/config`) {
         const body = await json()
         try {
-          return reply(200, { ok: true, record: extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {}) })
+          return reply(200, { ok: true, record: await extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {}) })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
@@ -300,7 +300,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       if (method === 'POST' && pathname === `${PREFIX}/extensions/secret`) {
         const body = await json()
         try {
-          return reply(200, { ok: true, record: extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value) })
+          return reply(200, { ok: true, record: await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value) })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }

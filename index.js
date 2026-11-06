@@ -2179,7 +2179,7 @@ export function createApiRoutes(deps) {
         if (method === 'POST' && routePath === '/extensions/config') {
           const body = await readJson(req)
           try {
-            const record = extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {})
+            const record = await extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {})
             return send(200, { ok: true, record })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
@@ -2188,7 +2188,7 @@ export function createApiRoutes(deps) {
         if (method === 'POST' && routePath === '/extensions/secret') {
           const body = await readJson(req)
           try {
-            const record = extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
+            const record = await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
             return send(200, { ok: true, record })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })

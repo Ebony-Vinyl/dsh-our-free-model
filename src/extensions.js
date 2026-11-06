@@ -771,6 +771,29 @@ export function createExtensionRuntime({
     await Promise.resolve()
   }
 
+  /** Stop and start one extension so it re-reads config/secrets from disk. */
+  async function restartExtension(id) {
+    const lock = readLock()
+    const record = lock.extensions[id]
+    if (record === undefined || record.enabled !== true) return
+    try {
+      const { source } = verifyInstalled(id)
+      await stopExtension(id)
+      await startExtension(record, source)
+      if (record.manifest.type === 'channel') {
+        channelManifests.set(id, record.manifest)
+        const rows = await listChannelModels(processes.get(id), record.manifest)
+        channelRows = [
+          ...channelRows.filter(row => row.extensionId !== id),
+          ...buildExtensionCatalog(record.manifest, rows),
+        ]
+        onCatalogChanged()
+      }
+    } catch (error) {
+      logger?.warn?.(`our-free-model: extension "${id}" restart failed (${String(error?.message ?? error).slice(0, 200)})`)
+    }
+  }
+
   // ── install / uninstall ──────────────────────────────────────────────────
 
   async function install(id, { version } = {}) {
@@ -842,7 +865,7 @@ export function createExtensionRuntime({
     return publicRecord(record)
   }
 
-  function saveConfig(id, values) {
+  async function saveConfig(id, values) {
     const lock = readLock()
     const record = lock.extensions[id]
     if (record === undefined) throw new Error(`extension "${id}" is not installed`)
@@ -855,12 +878,14 @@ export function createExtensionRuntime({
     }
     store.values[id] = { ...previous, ...clean }
     writeJson(configPath, store)
-    const process_ = processes.get(id)
-    if (process_ !== undefined) process_.config = store.values[id]
+    // The worker captured its config at load; a running extension must restart
+    // to see new values (a hot patch would race the module's own reads). The
+    // caller awaits the restart, so the next turn already sees the new values.
+    await restartExtension(id)
     return publicRecord(record)
   }
 
-  function saveSecret(id, key, value) {
+  async function saveSecret(id, key, value) {
     const lock = readLock()
     const record = lock.extensions[id]
     if (record === undefined) throw new Error(`extension "${id}" is not installed`)
@@ -869,8 +894,8 @@ export function createExtensionRuntime({
     store.values[id] = { ...(store.values[id] ?? {}), [key]: String(value ?? '') }
     writeJson(secretsPath, store)
     audit('set-secret', id, { key })
-    const process_ = processes.get(id)
-    if (process_ !== undefined) process_.secrets = store.values[id]
+    // Same freshness rule as saveConfig: secrets are read at load.
+    await restartExtension(id)
     return publicRecord(record)
   }
 

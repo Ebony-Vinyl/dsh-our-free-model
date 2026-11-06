@@ -377,7 +377,7 @@ function bundleReact() {
     parts.push('\n};')
   }
   parts.push('function __r(id){if(__m[id]===undefined)throw new Error("the preview react bundle has no module \\""+id+"\\"");if(__c[id])return __c[id].exports;var m={exports:{}};__c[id]=m;__m[id].call(m.exports,m,m.exports,__r,{env:{NODE_ENV:"production"}},globalThis);return m.exports}')
-  parts.push('window.__previewReact=__r("react");window.__previewReactDOMClient=__r("react-dom/client");')
+  parts.push('window.__previewReact=__r("react");window.__previewReactDOMClient=__r("react-dom/client");window.__previewReactDOM=__r("react-dom");')
   parts.push('})();')
   return parts.join('\n')
 }
@@ -869,7 +869,7 @@ window.__ModuleLoader__ = {
     try {
       window.__plugin = record.factory(name => {
         if (name === 'react') return window.__previewReact
-        if (name === 'react-dom') return window.__previewReactDOMClient
+        if (name === 'react-dom') return window.__previewReactDOM
         if (name === 'react-dom/client') return window.__previewReactDOMClient
         throw new Error('the preview shell provides no module "' + name + '"')
       })
