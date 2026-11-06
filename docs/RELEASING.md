@@ -71,6 +71,35 @@ node scripts/live-audit.mjs          # 打印 OK 才算发出去；FAIL 就按�
 用户确认后下载、校验、备份、替换、热重载全部在应用内完成。清单会校验每个文件的
 SHA-256，并在安装前重新拉取一次，避免用陈旧清单校验新文件。
 
+## npm 渠道：scoped 产物必须由脚本改名（issue #725）
+
+仓库树是裸包（`dsh-our-free-model`，`private: true`）：应用内升级器下载的就是这份
+裸名字节，`client-lint` 与 `catalog` 套件也按裸名钉死，所以树本身不许改成 scoped。
+npm 渠道发布的是同一份已审树在 `@ebony-vinyl/` scope 下的**改名产物**。
+
+改名必须走 `node scripts/publish-scoped.mjs --out <目录>`，不要手工复制后改
+`package.json`：产物里有三处「包自称」的注册字面量必须跟着新名字走，漏掉任何一处
+都会让用户装到半改名的包——2.7.4 与 2.8.0 正是这么坏的（#725：桌面端启动报
+`1 entry did not activate` 与 `duplicate factory registration`）：
+
+| 文件 | 字面量 | 作用 |
+| --- | --- | --- |
+| `client.js` | `id: '<包名>',` | 浏览器半身的工厂注册 id |
+| `cordis.patch.yml` | `name: '<包名>'` | Host 半身的 loader 挂载行 |
+| `src/updater.js` | `const PACKAGE_NAME = '<包名>'` | pnpm 托管安装的所有权探测键 |
+
+第三处最隐蔽：scoped 安装被 pnpm 记在 scoped 键下，裸常量让
+`isPackageManagerOwned` 永远探测不到托管安装，应用内升级器就会在包管理器的头顶
+改写安装目录。脚本只改这三处注册字面量与 `package.json` 的 `name`/`private`/
+`publishConfig.access`；User-Agent 与 `data-plugin` 等其余裸名拼写是线上身份或
+装饰属性，**刻意不改**。`--check` 模式不落盘，只做一致性断言，已接进测试套件
+（`scoped-publish`）。发布 npm 渠道时：
+
+```bash
+node scripts/publish-scoped.mjs --out /临时目录/scoped
+npm publish /临时目录/scoped --access public   # 或把该目录打成 tarball 附进 Release
+```
+
 ## main 上的发布一致性是强制的（ruleset）
 
 **推送即发布**意味着「改了发布文件却没重签清单」不是普通的 CI 红灯，而是让所有旧
@@ -268,6 +297,42 @@ Installed plugins discover the new release automatically (every
 `updateCheckHours`, 6 by default) and notify the user; the upgrade itself runs
 in-app, and the manifest is re-fetched right before installing so a document
 fetched hours earlier cannot be used to vouch for bytes that changed since.
+
+## The npm channel: the scoped artifact must be renamed by the script (issue #725)
+
+The repository tree is the bare package (`dsh-our-free-model`, `private: true`):
+the in-app upgrader ships exactly these bare bytes, and `client-lint` and the
+catalog suite pin the bare name, so the tree itself must never be scoped. The
+npm channel publishes a **renamed artifact** of the same reviewed tree under the
+`@ebony-vinyl/` scope.
+
+Produce it with `node scripts/publish-scoped.mjs --out <dir>` — never by copying
+files and hand-editing `package.json`. Three "package names itself" registration
+literals must follow the new name, and a half-renamed artifact bricks every
+desktop install that takes it (that is exactly how 2.7.4 and 2.8.0 shipped
+broken — #725: boot died with `1 entry did not activate` and `duplicate factory
+registration`):
+
+| File | Literal | Role |
+| --- | --- | --- |
+| `client.js` | `id: '<pkg>',` | the browser half's factory registration id |
+| `cordis.patch.yml` | `name: '<pkg>'` | the host half's loader mount row |
+| `src/updater.js` | `const PACKAGE_NAME = '<pkg>'` | the pnpm-ownership probe key |
+
+The third is the subtle one: a scoped install is recorded under the scoped key,
+so the bare constant makes `isPackageManagerOwned` blind to package-manager-
+owned installs, and the in-app updater then rewrites the directory out from
+under the pack that owns it. The script renames exactly these three literals
+plus `package.json`'s `name`/`private`/`publishConfig.access`; every other bare
+spelling — the request User-Agent, the cosmetic `data-plugin` attribute — is
+wire identity or decoration and **deliberately untouched**. `--check` asserts
+the invariant without writing anything and runs in the test suite
+(`scoped-publish`). Publishing the npm channel:
+
+```bash
+node scripts/publish-scoped.mjs --out /tmp/scoped
+npm publish /tmp/scoped --access public   # or tarball that directory into the Release
+```
 
 ## Release consistency on main is enforced (ruleset)
 
