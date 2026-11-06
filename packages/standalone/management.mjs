@@ -38,24 +38,28 @@ function matches(actual, expected) {
   return left.length === right.length && crypto.timingSafeEqual(left, right)
 }
 
+function langOf(req) { return req?.headers?.['x-ofm-lang'] === 'en' ? 'en' : 'zh' }
+function msg(req, zh, en) { return langOf(req) === 'en' ? en : zh }
+
 async function readBody(req, limit = MAX_BODY_BYTES) {
   if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) {
-    throw fail(415, '请求必须使用 application/json')
+    throw fail(415, msg(req, '请求必须使用 application/json', 'Request must use application/json'))
   }
   let bytes = 0
   const chunks = []
   for await (const chunk of req) {
     bytes += chunk.length
-    if (bytes > limit) throw fail(413, '请求内容过大')
+    if (bytes > limit) throw fail(413, msg(req, '请求内容过大', 'Request body too large'))
     chunks.push(chunk)
   }
   let value
-  try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { throw fail(400, '请求不是有效 JSON') }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw fail(400, '请求必须是 JSON 对象')
+  try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { throw fail(400, msg(req, '请求不是有效 JSON', 'Request is not valid JSON')) }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw fail(400, msg(req, '请求必须是 JSON 对象', 'Request must be a JSON object'))
   return value
 }
 
-function validateSettings(patch) {
+function validateSettings(patch, lang = 'zh') {
+  const m = (zh, en) => lang === 'en' ? en : zh
   const visibility = validateModelVisibility(patch)
   const booleans = new Set(['enabled', 'exposeRegionModels', 'streamRecovery', 'standaloneProbe', 'standaloneLanEnabled'])
   const numbers = { probeIntervalMinutes: [1, 1440], defaultMaxTokens: [512, 131072], standaloneLanPort: [0, 65535] }
@@ -63,11 +67,11 @@ function validateSettings(patch) {
   for (const [key, value] of Object.entries(patch)) {
     if (Object.hasOwn(visibility, key)) { result[key] = visibility[key]; continue }
     if (booleans.has(key)) {
-      if (typeof value !== 'boolean') throw fail(400, `${key} 必须是布尔值`)
+      if (typeof value !== 'boolean') throw fail(400, `${key} ${m('必须是布尔值', 'must be a boolean')}`)
     } else if (Object.hasOwn(numbers, key)) {
       const [min, max] = numbers[key]
-      if (!Number.isInteger(value) || value < min || value > max) throw fail(400, `${key} 必须是 ${min} 到 ${max} 的整数`)
-    } else throw fail(400, `不支持的设置字段：${key}`)
+      if (!Number.isInteger(value) || value < min || value > max) throw fail(400, `${key} ${m(`必须是 ${min} 到 ${max} 的整数`, `must be an integer from ${min} to ${max}`)}`)
+    } else throw fail(400, m(`不支持的设置字段：${key}`, `Unsupported settings field: ${key}`))
     result[key] = value
   }
   return result
@@ -148,7 +152,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     if (stores.settings.writeFailed) {
       // 不向页面谎报保存成功；保留原运行配置并由后续写入重试落盘。
       stores.settings.value = previous
-      throw fail(500, '无法保存设置，请检查数据目录权限和磁盘空间')
+      throw Object.assign(fail(500, '无法保存设置，请检查数据目录权限和磁盘空间'), { en: 'Unable to save settings; check the data directory permissions and disk space' })
     }
   }
   const workbench = runtime && typeof info().dataDir === 'string' ? createWorkbench({
@@ -187,18 +191,20 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     }
   }
 
+  function langOf(req) { return req?.headers?.['x-ofm-lang'] === 'en' ? 'en' : 'zh' }
+  function msg(req, zh, en) { return langOf(req) === 'en' ? en : zh }
   async function route(req, res, pathname) {
     const method = req.method ?? 'GET'
     if (method === 'POST' && pathname === `${PREFIX}/login/terminal`) {
       // 此入口发生在登录前，必须有浏览器的同源 Origin，拒绝跨站和无来源调用。
       if (req.headers.origin !== new URL(`http://${req.headers.host}`).origin ||
           req.headers['sec-fetch-site'] !== 'same-origin') {
-        throw fail(403, '请从本机登录页面点击获取令牌')
+        throw fail(403, msg(req, '请从本机登录页面点击获取令牌', 'Open the login page on this machine to get a token'))
       }
       const body = await readBody(req)
-      if (Object.keys(body).length !== 0) throw fail(400, '获取令牌不接受路径或命令参数')
+      if (Object.keys(body).length !== 0) throw fail(400, msg(req, '获取令牌不接受路径或命令参数', 'Getting a token does not accept path or command arguments'))
       if (terminalOpening || (terminalOpenedAt !== null && Date.now() - terminalOpenedAt < 30_000)) {
-        throw fail(429, '已请求打开终端，请检查弹出的窗口，30 秒后可重试')
+        throw fail(429, msg(req, '已请求打开终端，请检查弹出的窗口，30 秒后可重试', 'Terminal already requested; check the opened window and retry in 30 seconds'))
       }
       terminalOpening = true
       try {
@@ -212,9 +218,9 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       const body = await readBody(req)
       const validBootstrap = bootstrap !== null && bootstrap.until > Date.now() && matches(body.bootstrapToken, bootstrap.token)
       const validManagementKey = matches(body.key, stores.settings.get().managementKey)
-      if (!validBootstrap && !validManagementKey && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, '登录链接已失效或登录令牌不正确')
+      if (!validBootstrap && !validManagementKey && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, msg(req, '登录链接已失效或登录令牌不正确', 'Login link expired or login token incorrect'))
       pruneSessions()
-      if (sessions.size >= 64) throw fail(429, '管理会话过多，请稍后重试')
+      if (sessions.size >= 64) throw fail(429, msg(req, '管理会话过多，请稍后重试', 'Too many management sessions; retry later'))
       if (validBootstrap) bootstrap = null
       const id = crypto.randomBytes(32).toString('base64url')
       sessions.set(id, Date.now() + SESSION_MS)
@@ -240,9 +246,9 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     // be decided before the session check for the same reason.
     const enginePluginAsset = ['GET', 'HEAD'].includes(req.method)
       && /^\/api\/management\/engine\/ui\/_magpie\/plugin\/[a-f0-9]{32}\/[^?]+$/.test(pathname)
-    if (!authenticated(req) && !enginePluginAsset) throw fail(401, '请先登录管理页面')
+    if (!authenticated(req) && !enginePluginAsset) throw fail(401, msg(req, '请先登录管理页面', 'Sign in to the management page first'))
     if (privilegedManagementRoute && !sessionAuthenticated(req) && !enginePluginAsset) {
-      throw fail(403, '此管理操作需要已登录的本地管理会话')
+      throw fail(403, msg(req, '此管理操作需要已登录的本地管理会话', 'This management operation requires a signed-in local management session'))
     }
     if (method === 'POST' && pathname === `${PREFIX}/logout`) {
       await readBody(req)
@@ -265,19 +271,19 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       json(res, 200, magpieEngine?.status() ?? { state: 'unavailable', available: false })
     } else if (method === 'POST' && pathname === `${PREFIX}/engine/start`) {
       await readBody(req)
-      if (!magpieEngine) throw fail(503, '模型工作台不可用')
+      if (!magpieEngine) throw fail(503, msg(req, '模型工作台不可用', 'The model workspace is unavailable'))
       await magpieEngine.start()
       await magpieModels?.refresh()
       onEngineStarted?.()
       json(res, 200, magpieEngine.status())
     } else if (method === 'POST' && pathname === `${PREFIX}/engine/refresh`) {
       await readBody(req)
-      if (!magpieEngine) throw fail(503, '模型工作台不可用')
+      if (!magpieEngine) throw fail(503, msg(req, '模型工作台不可用', 'The model workspace is unavailable'))
       await magpieModels?.refresh()
       json(res, 200, { ok: true })
     } else if (pathname === `${PREFIX}/engine/ui` || pathname.startsWith(`${PREFIX}/engine/ui/`)) {
-      if (!magpieEngine) throw fail(503, '模型工作台不可用')
-      if (magpieEngine.status().state !== 'ready') throw fail(503, '模型工作台尚未启动')
+      if (!magpieEngine) throw fail(503, msg(req, '模型工作台不可用', 'The model workspace is unavailable'))
+      if (magpieEngine.status().state !== 'ready') throw fail(503, msg(req, '模型工作台尚未启动', 'The model workspace has not started yet'))
       if (pathname === `${PREFIX}/engine/ui` && !req.url.endsWith('/')) {
         res.writeHead(302, { location: `${PREFIX}/engine/ui/` })
         return res.end()
@@ -304,14 +310,14 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       if (action === 'save') json(res, 200, workbench.save(body))
       else if (action === 'launch') json(res, 200, await workbench.launch(body))
       else if (action === 'stop') json(res, 200, await workbench.stop(body))
-      else throw fail(404, '客户端操作不存在')
+      else throw fail(404, msg(req, '客户端操作不存在', 'Client operation not found'))
     } else if (pathname === `${PREFIX}/library` && method === 'GET' && library) {
       json(res, 200, library.list())
     } else if (pathname === `${PREFIX}/routing` && method === 'GET' && routingManagement) {
       json(res, 200, routingManagement.list())
     } else if (pathname.startsWith(`${PREFIX}/routing/`) && method === 'POST' && routingManagement) {
       const action = pathname.slice(`${PREFIX}/routing/`.length)
-      if (!['save', 'remove', 'preview'].includes(action)) throw fail(404, '路由组操作不存在')
+      if (!['save', 'remove', 'preview'].includes(action)) throw fail(404, msg(req, '路由组操作不存在', 'Routing group operation not found'))
       json(res, 200, routingManagement[action](await readBody(req, 128 * 1024)))
     } else if (pathname.startsWith(`${PREFIX}/library/`) && method === 'POST' && library) {
       const action = pathname.slice(`${PREFIX}/library/`.length)
@@ -320,14 +326,14 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
         'resources/save': 'saveResource', 'resources/remove': 'removeResource',
       }
       const body = await readBody(req, 1024 * 1024 + 8192)
-      if (!Object.hasOwn(actions, action)) throw fail(404, '资源操作不存在')
+      if (!Object.hasOwn(actions, action)) throw fail(404, msg(req, '资源操作不存在', 'Library operation not found'))
       json(res, 200, library[actions[action]](body))
     } else if (pathname === `${PREFIX}/providers` && method === 'GET' && providerManagement) {
       json(res, 200, providerManagement.list())
     } else if (pathname.startsWith(`${PREFIX}/providers/`) && method === 'POST' && providerManagement) {
       const action = pathname.slice(`${PREFIX}/providers/`.length)
       const body = await readBody(req, 128 * 1024)
-      if (!['save', 'remove', 'test', 'discover'].includes(action)) throw fail(404, '供应商操作不存在')
+      if (!['save', 'remove', 'test', 'discover'].includes(action)) throw fail(404, msg(req, '供应商操作不存在', 'Provider operation not found'))
       const controller = new AbortController()
       const abort = () => controller.abort()
       res.once('close', abort)
@@ -355,7 +361,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
         res.once('close', abort)
         try { await subscriptions.refreshQuota({ ...body, signal: controller.signal }) }
         finally { res.removeListener('close', abort) }
-      } else throw fail(404, '订阅操作不存在')
+      } else throw fail(404, msg(req, '订阅操作不存在', 'Subscription operation not found'))
       runtime.syncAggregateCatalog()
       json(res, 200, { accounts: subscriptions.list() })
     } else if (method === 'POST' && pathname === `${PREFIX}/channels/rpc` && channels) {
@@ -363,7 +369,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       const body = await readBody(req, 8 * 1024 * 1024)
       if (body.method === 'gateway.getEnabled' || body.method === 'gateway.setEnabled') {
         if (body.method === 'gateway.setEnabled') {
-          if (typeof body.payload?.enabled !== 'boolean') throw fail(400, 'enabled 必须是布尔值')
+          if (typeof body.payload?.enabled !== 'boolean') throw fail(400, msg(req, 'enabled 必须是布尔值', 'enabled must be a boolean'))
           persist({ enabled: body.payload.enabled })
           await onSettingsChanged()
         }
@@ -394,9 +400,9 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
         else if (route === '/eac/login/cancel') result = eac.cancel(params.get('link') ?? '')
         else if (route === '/eac/logout') result = await eac.logout()
       }
-      if (result === undefined) throw fail(404, 'EAC 接口不存在')
+      if (result === undefined) throw fail(404, msg(req, 'EAC 接口不存在', 'EAC endpoint not found'))
       if (result.error) throw fail(502, result.error)
-      if (result.ok === false) throw fail(500, '无法移除本地授权')
+      if (result.ok === false) throw fail(500, msg(req, '无法移除本地授权', 'Unable to remove local authorization'))
       json(res, 200, result)
     } else if (method === 'GET' && pathname === `${PREFIX}/disclaimer`) {
       json(res, 200, { ...DISCLAIMER, acknowledged: disclaimerAcknowledged(stores.settings.get()) })
@@ -404,7 +410,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       persist({ disclaimerAck: DISCLAIMER_VERSION })
       json(res, 200, { ok: true, acknowledged: true })
     } else if (method === 'POST' && pathname === `${PREFIX}/settings`) {
-      const patch = validateSettings(await readBody(req))
+      const patch = validateSettings(await readBody(req), langOf(req))
       persist(patch)
       await onSettingsChanged()
       json(res, 200, { settings: managementSettings(stores.settings.get()), lan: info().lan })
@@ -419,7 +425,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       json(res, 200, { key: stores.settings.get().forwardKey })
     } else if (method === 'POST' && pathname === `${PREFIX}/key/rotate`) {
       const body = await readBody(req)
-      if (body.confirm !== true) throw fail(400, '请确认轮换 API Key')
+      if (body.confirm !== true) throw fail(400, msg(req, '请确认轮换 API Key', 'Confirm API key rotation'))
       const id = cookie(req)
       persist({ forwardKey: generateKey() })
       // 仅当前管理会话保留；旧密钥与其他会话立即失效。
@@ -433,13 +439,13 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       json(res, 200, { key: stores.settings.get().forwardKey })
     } else if (method === 'POST' && pathname === `${PREFIX}/models/refresh`) {
       const body = await readBody(req)
-      if (body.probe !== undefined && typeof body.probe !== 'boolean') throw fail(400, 'probe 必须是布尔值')
+      if (body.probe !== undefined && typeof body.probe !== 'boolean') throw fail(400, msg(req, 'probe 必须是布尔值', 'probe must be a boolean'))
       const { sources } = await runtime.refreshCatalog({ probe: body.probe === true, force: body.probe === true, report: true })
       json(res, 200, { ...summary(), sources })
     } else if (method === 'POST' && pathname === `${PREFIX}/models/test`) {
       const body = await readBody(req)
-      if (stores.settings.get().enabled === false) throw fail(503, '推理服务已暂停，请先在服务设置中启用')
-      if (typeof body.model !== 'string' || body.model.length > 300) throw fail(400, '请选择有效模型')
+      if (stores.settings.get().enabled === false) throw fail(503, msg(req, '推理服务已暂停，请先在服务设置中启用', 'Inference service paused; enable it in settings first'))
+      if (typeof body.model !== 'string' || body.model.length > 300) throw fail(400, msg(req, '请选择有效模型', 'Select a valid model'))
       const controller = new AbortController()
       const abort = () => controller.abort()
       res.once('close', abort)
@@ -447,11 +453,11 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
         const result = await runtime.testModel(body.model, undefined, { signal: controller.signal })
         if (!controller.signal.aborted) json(res, 200, result)
       } catch (error) {
-        if (!controller.signal.aborted) throw fail(error.status === 404 ? 404 : error.code === 'TIMEOUT' ? 504 : 502, String(error.message ?? '模型测试失败'))
+        if (!controller.signal.aborted) throw fail(error.status === 404 ? 404 : error.code === 'TIMEOUT' ? 504 : 502, String(error.message ?? msg(req, '模型测试失败', 'Model test failed')))
       } finally {
         res.removeListener('close', abort)
       }
-    } else throw fail(404, '管理接口不存在')
+    } else throw fail(404, msg(req, '管理接口不存在', 'Management endpoint not found'))
   }
 
   return {
@@ -468,10 +474,10 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       const malformedSource = [referer, origin].some(value => value !== undefined && (
         typeof value !== 'string' || !value.startsWith('http://')
       ))
-      if (closed || !cookieName) json(res, 503, { error: '服务正在停止或启动' })
-      else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: '管理接口仅允许本机同源访问' })
+      if (closed || !cookieName) json(res, 503, { error: msg(req, '服务正在停止或启动', 'Service is stopping or starting') })
+      else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: msg(req, '管理接口仅允许本机同源访问', 'Management API allows only same-origin local access') })
       else if (asset) {
-        if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: '资源仅支持 GET 或 HEAD' })
+        if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: msg(req, '资源仅支持 GET 或 HEAD', 'Resource supports only GET or HEAD') })
         else {
           res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': asset.type })
           res.end(req.method === 'HEAD' ? undefined : asset.body)
@@ -479,7 +485,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       } else {
         try { await route(req, res, pathname) } catch (error) {
           if (!res.destroyed && !res.headersSent) json(res, error.statusCode ?? 500, {
-            error: error.statusCode ? error.message : '管理操作失败，请查看服务日志',
+            error: error.statusCode ? (langOf(req) === 'en' ? error.en ?? error.message : error.message) : msg(req, '管理操作失败，请查看服务日志', 'Management operation failed; check service logs'),
           })
         }
       }

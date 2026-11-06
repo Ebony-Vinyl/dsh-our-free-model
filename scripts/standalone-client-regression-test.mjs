@@ -7,6 +7,7 @@ import { isModelHidden, publicModelVisibility, validateModelVisibility } from '.
 import { buildComboCatalog } from '../src/combos.js'
 import { filterModels } from '../packages/standalone/frontend/models-data.mjs'
 import { visibilityCopy } from '../packages/standalone/frontend/visibility-data.mjs'
+import { t as consoleT, numLocale, providerText } from '../packages/standalone/frontend/i18n.mjs'
 
 const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
   .replace('exports.__test = {', 'exports.__test = { Shell, FreePage, ChannelCard, DICT, Roster, ModelCard, Preferences, ModelPicker, ChainEditor, ChainCard, ChainCapacity,')
@@ -208,7 +209,7 @@ const standaloneSummary = { settings: { enabled: true, hiddenModelIds: [], hideF
   catalog: [{ id: 'free', name: 'Free', channel: 'anonymous', routable: true }, { id: 'account', name: 'Account', channel: 'lobsterai', routable: true }] }
 const savedPatches = []
 const context = {
-  ...react, h: react.createElement, Fragment: 'fragment', providers: [], filterModels, visibilityCopy,
+  ...react, h: react.createElement, Fragment: 'fragment', providers: [], filterModels, visibilityCopy, t: consoleT, numLocale, providerText,
   document: { documentElement: { lang: 'en' } },
   defaultRangeExtractor: () => [],
   useVirtualizer: ({ count }) => ({ getTotalSize: () => count * 112,

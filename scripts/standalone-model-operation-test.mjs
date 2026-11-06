@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
+import { t } from '../packages/standalone/frontend/i18n.mjs'
 import vm from 'node:vm'
 
 // 执行组件实际的异步操作函数，模拟 Host 返回和状态更新，不复制业务逻辑。
@@ -16,7 +17,7 @@ function operation(host) {
   const pending = { current: undefined }
   const activeRef = { current: true }
   const context = {
-    host, pending, activeRef, AbortController, Error,
+    host, pending, activeRef, AbortController, Error, t,
     setTest: value => { state.test = typeof value === 'function' ? value(state.test) : value },
     setOperation: value => { state.operation = value },
     setError: value => { state.error = value },

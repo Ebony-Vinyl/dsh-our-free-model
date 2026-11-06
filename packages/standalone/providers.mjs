@@ -2,7 +2,21 @@ import { listProviders, getProvider } from '../../src/providers/index.js'
 import { fetchProviderModels, testProvider } from '../../src/aggregate.js'
 import { isDeniedChannel } from '../../src/magpie-policy.js'
 
-const fail = message => Object.assign(new Error(message), { statusCode: 400 })
+const EN = {
+  '模型清单必须为不超过 300 项的模型名称数组': 'The model list must be an array of up to 300 model names',
+  '请选择供应商': 'Select a provider',
+  '此渠道不在本应用的提供范围内': 'This channel is not offered by this app',
+  '未知供应商': 'Unknown provider',
+  '此渠道请使用订阅账号导入': 'Import a subscription account for this channel instead',
+  '不支持的供应商设置字段': 'Unsupported provider setting field',
+  'enabled 必须为布尔值': 'enabled must be a boolean',
+  'API Key 格式无效': 'Invalid API key format',
+  'API 地址无效': 'Invalid API URL',
+  '请输入有效的 HTTP 或 HTTPS 地址': 'Enter a valid HTTP or HTTPS URL',
+  'API 地址不能包含凭据、查询参数或片段': 'The API URL cannot contain credentials, query parameters or fragments',
+  '供应商没有可用的模型列表接口': 'The provider has no model-listing endpoint',
+}
+const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode, en: EN[message] })
 const modelsOf = value => {
   if (!Array.isArray(value) || value.length > 300 || value.some(id => typeof id !== 'string' || !id.trim() || id.length > 300 || /[\0\r\n]/.test(id))) {
     throw fail('模型清单必须为不超过 300 项的模型名称数组')

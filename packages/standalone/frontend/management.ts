@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { t, getLocale } from './i18n.mjs'
 
 function redact(value: string, body: unknown): string {
   const secrets: string[] = []
@@ -11,8 +12,9 @@ function redact(value: string, body: unknown): string {
     collect(record.credentials)
     collect(record.apiKey)
   }
-  return secrets.reduce((text, secret) => text.split(secret).join('[已隐藏]'), value)
-    .replace(/\b(?:sk-|AIza|Bearer\s+)[\w.-]{8,}/gi, '[已隐藏]')
+  const marker = t('manage.redacted')
+  return secrets.reduce((text, secret) => text.split(secret).join(marker), value)
+    .replace(/\b(?:sk-|AIza|Bearer\s+)[\w.-]{8,}/gi, marker)
 }
 
 export async function management<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
@@ -20,22 +22,22 @@ export async function management<T>(path: string, body?: unknown, signal?: Abort
     method: body === undefined ? 'GET' : 'POST',
     credentials: 'same-origin',
     cache: 'no-store',
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: { 'x-ofm-lang': getLocale(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
   })
   if (response.status === 401) window.dispatchEvent(new CustomEvent('ofm:unauthorized'))
-  const value = await response.json().catch(() => { throw new Error(`服务返回了无效响应 (${response.status})`) })
+  const value = await response.json().catch(() => { throw new Error(t.format('manage.invalidResponse', { status: response.status })) })
   if (!response.ok || value?.ok === false) {
     const reason = value?.error?.message ?? value?.error ?? value?.message
-    throw new Error(redact(typeof reason === 'string' ? reason : `请求失败 (${response.status})`, body))
+    throw new Error(redact(typeof reason === 'string' ? reason : t.format('manage.requestFailed', { status: response.status }), body))
   }
   return value as T
 }
 
 export const failureMessage = (error: unknown) => error instanceof Error
-  ? error.name === 'TimeoutError' ? '请求超时，请重试。' : error.message
-  : '操作失败，请重试。'
+  ? error.name === 'TimeoutError' ? t('manage.timeout') : error.message
+  : t('manage.failed')
 
 export function useManagementResource<T>(path: string, active: boolean) {
   const [data, setData] = useState<T>()

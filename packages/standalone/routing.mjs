@@ -1,6 +1,22 @@
 import { buildComboCatalog, comboChain, comboId, COMBO_STRATEGIES, isComboEntry, normalizeCombos } from '../../src/combos.js'
 
-const fail = message => Object.assign(new Error(message), { statusCode: 400 })
+const EN = {
+  '路由组配置无效': 'Invalid routing group configuration',
+  '请输入有效的路由组名称': 'Enter a valid routing group name',
+  '路由组 ID 无效': 'Invalid routing group ID',
+  '路由组不存在': 'Routing group not found',
+  '已有同名路由组': 'A routing group with this name already exists',
+  '请选择 1 到 100 个不重复的模型或路由组': 'Choose 1 to 100 unique models or routing groups',
+  '路由组不能引用自身': 'A routing group cannot reference itself',
+  '请选择有效的路由策略': 'Choose a valid routing strategy',
+  '轮询粘滞轮数必须为 1 到 100': 'Sticky turns must be between 1 and 100',
+  'enabled 必须为布尔值': 'enabled must be a boolean',
+  '所选模型或路由组已不存在，请刷新模型清单': 'The selected model or routing group no longer exists; refresh the model catalog',
+  '嵌套路由组形成循环引用': 'Nested routing groups form a cycle',
+  '其他路由组仍在引用此组，请先修改引用': 'Other routing groups still reference this one; change those references first',
+  '预览参数无效': 'Invalid preview parameters',
+}
+const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode, en: EN[message] })
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const capacity = entry => entry ? {
   contextWindow: entry.contextWindow, maxOutput: entry.maxOutput,

@@ -30,9 +30,12 @@ const react = {
 }
 const settings = { enabled: true }
 const summary = { settings, catalog: [], networkMode: 'fixture' }
+import { t, getLocale as locale, switchLocale } from '../packages/standalone/frontend/i18n.mjs'
 const context = {
   ...react, h: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }), Fragment: 'fragment',
   Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Workspace: 'Workspace', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle', DisclaimerDialog: 'DisclaimerDialog',
+  Agents: 'Agents', Providers: 'Providers', Library: 'Library', Routing: 'Routing',
+  t, locale, switchLocale,
   // `App` navigates against the sidebar-derived list (`navigationPages`), so that
   // is the name this sandbox has to supply. The value only needs to cover the
   // pages this suite walks through — the sidebar/type agreement itself is

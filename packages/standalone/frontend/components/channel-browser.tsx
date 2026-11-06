@@ -3,11 +3,12 @@ import { ArrowLeft, ArrowRight, Check, CircleAlert, Network, Search, ShieldCheck
 import { providers } from 'ofm-provider-list'
 import { shared } from 'ofm-shared-client'
 import { Badge, Button, Card, Input } from './ui'
+import { t as consoleT, bindT, providerText, getLocale } from '../i18n.mjs'
 import type { Summary } from '../types'
 
 interface Status { closed?: boolean; accounts?: { total: number; enabled: number }; models?: { total: number; disabled: number } }
 type Rpc = (method: string, payload?: object) => Promise<any>
-const t = Object.assign((key: string) => shared.DICT.zh[key] ?? key, { locale: 'zh' })
+const t = bindT((key: string) => shared.DICT[getLocale()][key] ?? key)
 
 export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & { reload?(): void } }) {
   const [statuses, setStatuses] = useState<Record<string, Status>>()
@@ -58,7 +59,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
   const rows = providers.filter(provider => {
     const status = statuses?.[provider.id]
     const isConnected = (status?.accounts?.enabled ?? 0) > 0 && !status?.closed
-    return `${provider.name} ${provider.org}`.toLowerCase().includes(search.toLowerCase().trim())
+    return `${providerText(provider, 'name')} ${providerText(provider, 'org')}`.toLowerCase().includes(search.toLowerCase().trim())
       && (filter === 'all' || (filter === 'connected' ? isConnected : !isConnected))
   })
   // 分类标签展示全量数量；搜索后的匹配数量由结果栏单独展示。
@@ -73,13 +74,13 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
   return <>
     <div className="channel-summary-strip">
       <div className="ch-metric"><span className="ch-metric-icon"><Network size={16} /></span>
-        <div className="ch-metric-body"><span className="ch-metric-label">已接入渠道</span>
+        <div className="ch-metric-body"><span className="ch-metric-label">{t('cb.connectedChannels')}</span>
           <strong className="ch-metric-value">{statuses ? connected : <span className="ch-skeleton" />}<small> / {providers.length}</small></strong></div></div>
       <div className="ch-metric"><span className="ch-metric-icon"><ShieldCheck size={16} /></span>
-        <div className="ch-metric-body"><span className="ch-metric-label">本机账号</span>
+        <div className="ch-metric-body"><span className="ch-metric-label">{t('cb.localAccounts')}</span>
           <strong className="ch-metric-value">{statuses ? accounts : <span className="ch-skeleton" />}</strong></div></div>
-      <div className="checkin-control"><span className="status-dot" /><span>{auto?.running ? '签到进行中' : auto?.ranToday ? '今日签到已执行' : '每日自动签到'}</span>
-        <button type="button" role="switch" aria-label="每日自动签到" aria-checked={auto?.enabled === true}
+      <div className="checkin-control"><span className="status-dot" /><span>{auto?.running ? t('cb.checkinRunning') : auto?.ranToday ? t('cb.checkinDone') : t('cb.autoCheckin')}</span>
+        <button type="button" role="switch" aria-label={t('cb.autoCheckin')} aria-checked={auto?.enabled === true}
           className={`ui-switch ${auto?.enabled ? 'on' : ''}`} disabled={!auto || busy} onClick={() => {
             setBusy(true)
             void rpc('usage.autoCheckin', { enabled: !auto?.enabled }).then(value => { if (mounted.current) setAuto(value.autoCheckin) })
@@ -87,36 +88,36 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
           }}><span /></button>
       </div>
     </div>
-    {error && <div className="channel-error" role="alert"><CircleAlert size={16} /><span>{error}</span><Button variant="ghost" onClick={() => { void reload() }}>重试</Button></div>}
+    {error && <div className="channel-error" role="alert"><CircleAlert size={16} /><span>{error}</span><Button variant="ghost" onClick={() => { void reload() }}>{t('action.retry')}</Button></div>}
     {selectedProvider ? <div className="provider-detail" data-testid="provider-detail">
-      <div className="provider-detail-top"><Button variant="outline" onClick={() => select(undefined)}><ArrowLeft size={15} />返回全部渠道</Button>
-        <span>账号凭据保存在本机独立目录</span></div>
-      <div className="provider-detail-layout"><Card className="provider-detail-sidebar"><h2 tabIndex={-1} ref={detailHeading}>{selectedProvider.name}</h2><p>{selectedProvider.org}</p>
-        <div className="detail-label">切换渠道</div>{providers.map(provider => <button className={`detail-provider-link ${provider.id === selected ? 'active' : ''}`} key={provider.id}
-          onClick={() => select(provider.id)}><span>{provider.name}</span>{provider.id === selected && <Check size={14} />}</button>)}</Card>
-        <div className="provider-detail-main"><div className="provider-detail-description"><h2>账号与模型</h2><p>添加账号，管理免费额度与可用模型。</p></div>
+      <div className="provider-detail-top"><Button variant="outline" onClick={() => select(undefined)}><ArrowLeft size={15} />{t('cb.backToAll')}</Button>
+        <span>{t('cb.credentialNote')}</span></div>
+      <div className="provider-detail-layout"><Card className="provider-detail-sidebar"><h2 tabIndex={-1} ref={detailHeading}>{providerText(selectedProvider, 'name')}</h2><p>{providerText(selectedProvider, 'org')}</p>
+        <div className="detail-label">{t('cb.switchChannel')}</div>{providers.map(provider => <button className={`detail-provider-link ${provider.id === selected ? 'active' : ''}`} key={provider.id}
+          onClick={() => select(provider.id)}><span>{providerText(provider, 'name')}</span>{provider.id === selected && <Check size={14} />}</button>)}</Card>
+        <div className="provider-detail-main"><div className="provider-detail-description"><h2>{t('cb.accountsAndModels')}</h2><p>{t('cb.accountsAndModelsSub')}</p></div>
           <shared.ChannelCard key={selectedProvider.id} channel={selectedProvider} status={statuses?.[selectedProvider.id]} rpc={rpc} t={t} onChanged={onChanged} onError={onError} />
-          <div className="detail-security-note"><ShieldCheck size={16} />沿用原渠道的登录、续期与额度规则。账号备份和供应商设置位于「供应商与备份」。</div>
+          <div className="detail-security-note"><ShieldCheck size={16} />{t('cb.securityNote')}</div>
         </div></div>
     </div> : <>
-      <div className="channel-toolbar"><div className="channel-search"><Search size={17} /><Input aria-label="搜索渠道" placeholder="搜索渠道或供应商…" value={search} onChange={event => setSearch(event.target.value)} /></div>
-        <div className="channel-filters" aria-label="渠道状态筛选">{[['all', '全部渠道'], ['connected', '已接入'], ['pending', '未连接']].map(([id, label]) =>
+      <div className="channel-toolbar"><div className="channel-search"><Search size={17} /><Input aria-label={t('cb.searchChannels')} placeholder={t('cb.searchPlaceholder')} value={search} onChange={event => setSearch(event.target.value)} /></div>
+        <div className="channel-filters" aria-label={t('cb.statusFilter')}>{[['all', t('mdl.allChannels')], ['connected', t('cb.connected')], ['pending', t('cb.pending')]].map(([id, label]) =>
           <button key={id} aria-pressed={filter === id} disabled={id !== 'all' && !statuses} onClick={() => setFilter(id)}>{label}<span>{id === 'all' || statuses ? counts[id] : '—'}</span></button>)}</div>
       </div>
-      <div className="channel-results-meta"><span>{rows.length} 个渠道</span><span><SlidersHorizontal size={13} />按供应商管理独立账号与额度</span></div>
+      <div className="channel-results-meta"><span>{t.format('cb.resultCount', { n: rows.length })}</span><span><SlidersHorizontal size={13} />{t('cb.manageHint')}</span></div>
       <div className="provider-grid">{rows.map(provider => {
         const status = statuses?.[provider.id]
-        const state = status?.closed ? '已关闭' : (status?.accounts?.enabled ?? 0) > 0 ? '已接入' : '未连接'
+        const state = status?.closed ? t('cb.closed') : (status?.accounts?.enabled ?? 0) > 0 ? t('cb.connected') : t('cb.pending')
         return <Card className="provider-card channel-directory-row" key={provider.id}>
-          <span className="provider-logo" style={{ color: provider.accent, backgroundColor: `${provider.accent}0d` }}>{provider.name.slice(0, 2).toUpperCase()}</span>
-          <div className="channel-directory-name"><h2>{provider.name}</h2><div className="provider-org">{provider.org}</div><p className="provider-description">{provider.note}</p></div>
-          <div className="provider-counts"><span>账号 <strong>{status ? status.accounts?.total ?? 0 : '—'}</strong></span>
-            <span>模型 <strong>{status ? Math.max(0, (status.models?.total ?? 0) - (status.models?.disabled ?? 0)) : '—'}</strong></span></div>
-          <Badge tone={state === '已接入' ? 'success' : 'neutral'}>{state === '已接入' && <span className="status-dot" />}{state}</Badge>
-          <Button variant="outline" className="provider-manage" onClick={() => select(provider.id)}>{state === '已接入' ? '管理' : '连接'}<ArrowRight size={14} /></Button>
+          <span className="provider-logo" style={{ color: provider.accent, backgroundColor: `${provider.accent}0d` }}>{providerText(provider, 'name').slice(0, 2).toUpperCase()}</span>
+          <div className="channel-directory-name"><h2>{providerText(provider, 'name')}</h2><div className="provider-org">{providerText(provider, 'org')}</div><p className="provider-description">{providerText(provider, 'note')}</p></div>
+          <div className="provider-counts"><span>{t('cb.accounts')} <strong>{status ? status.accounts?.total ?? 0 : '—'}</strong></span>
+            <span>{t('cb.models')} <strong>{status ? Math.max(0, (status.models?.total ?? 0) - (status.models?.disabled ?? 0)) : '—'}</strong></span></div>
+          <Badge tone={state === t('cb.connected') ? 'success' : 'neutral'}>{state === t('cb.connected') && <span className="status-dot" />}{state}</Badge>
+          <Button variant="outline" className="provider-manage" onClick={() => select(provider.id)}>{state === t('cb.connected') ? t('cb.manage') : t('cb.connect')}<ArrowRight size={14} /></Button>
         </Card>
       })}</div>
-      {rows.length === 0 && <Card className="channel-empty"><Search size={24} /><h2>没有匹配的渠道</h2><p>试试其他名称，或切换筛选条件。</p><Button variant="outline" onClick={() => { setSearch(''); setFilter('all') }}>重置筛选</Button></Card>}
+      {rows.length === 0 && <Card className="channel-empty"><Search size={24} /><h2>{t('cb.noMatch')}</h2><p>{t('cb.noMatchHint')}</p><Button variant="outline" onClick={() => { setSearch(''); setFilter('all') }}>{t('cb.resetFilters')}</Button></Card>}
     </>}
   </>
 }
