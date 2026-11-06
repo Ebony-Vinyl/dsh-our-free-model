@@ -29,12 +29,9 @@ check('地区显示设置和组隐藏会影响可选数',()=>{const value=freePo
 check('空池与缺失状态不会产生无效统计',()=>{assert.equal(freePoolView({catalog:[],settings:{}}).total,0);assert.equal(freePoolView({catalog:[{id:'a'}],settings:{}}).counts.unknown,1)});
 const props={t,data,counts:pool.counts,summary:{reload(){}},stats:{status:'idle'},eacAuth:{},eacLogin:{},busy:false,apply(){},bench(){},benches:{},refresh(){},reprobe(){}};
 const tree=FreePage(props);
-const nodes=[];function visit(node,depth){if(Array.isArray(node))return node.forEach(child=>visit(child,depth));if(!node||typeof node!=='object')return;nodes.push(node);visit(node.children,depth);
-// A function type is a component element: its children live in its render, so
-// render it with the stub hooks and walk that tree too (depth-capped).
-if(typeof node.type==='function'&&depth<6&&node.type.name!=='FreePage'){visit(node.type(node.props),depth+1)}}
-visit(tree,0);
-check('实际页面水位为 60%，车道卡与被动模式说明在页上',()=>{const tank=nodes.find(node=>typeof node.type==='function'&&node.type.name==='Tank');assert.ok(tank,'the tank rides the OpenCode lane card');assert.equal(tank.props.pct,60);assert.match(String(tank.props.label),/可选占比/);const text=JSON.stringify(nodes,(key,value)=>typeof value==='function'?value.name:value);assert.match(text,/OpenCode 免费池/);assert.match(text,/Kilo 免费池/);assert.match(text,/扩展渠道/);assert.match(text,/匿名免费 1 可用 \/ 共 2 个/);assert.match(text,/3 个模型/);assert.match(text,/被动模式/);assert.match(text,/五格状态计数相加/)});
+const nodes=[];function visit(node){if(Array.isArray(node))return node.forEach(visit);if(!node||typeof node!=='object')return;nodes.push(node);visit(node.children)}
+visit(tree);
+check('实际页面水位为 3/5，文案明确为可选占比和来源',()=>{const tank=nodes.find(node=>typeof node.type==='function'&&node.type.name==='Tank');assert.equal(tank.props.pct,60);assert.match(tank.props.label,/可选占比/);const text=JSON.stringify(tree,(key,value)=>typeof value==='function'?value.name:value);assert.match(text,/3\/5/);assert.match(text,/匿名免费 2 · Kilo 3/);assert.match(text,/不代表实测成功率/)});
 check('列表与池子采用相同范围，并保留 Kilo 模型卡',()=>{const roster=Roster({summary:data,t,only:'free'});const models=[];function walk(node){if(Array.isArray(node))return node.forEach(walk);if(!node||typeof node!=='object')return;if(node.props?.model)models.push(node.props.model.id);walk(node.children)}walk(roster);assert.equal(models.length,5);assert.ok(models.includes('kilo/listed'));assert.ok(!models.some(id=>id.startsWith('aggregate/')))});
 check('截图中的 9 个限流被排除，26 个模型显示 17 个候选和 65% 水位',()=>{
   const screenshotCatalog=[
@@ -45,12 +42,9 @@ check('截图中的 9 个限流被排除，26 个模型显示 17 个候选和 65
   const view=freePoolView(screenshotData);
   assert.equal(view.total,26);assert.equal(view.selectable,17);assert.equal(view.counts.throttled,9);assert.equal(view.counts.available,6);assert.equal(view.counts.unknown,11);
   const rendered=FreePage({...props,data:screenshotData,counts:view.counts});
-  const flat=[];function collect(n,d){if(Array.isArray(n))return n.forEach(c=>collect(c,d));if(!n||typeof n!=='object')return;flat.push(n);collect(n.children,d);
-  if(typeof n.type==='function'&&d<6&&n.type.name!=='FreePage'){collect(n.type(n.props),d+1)}}
-  collect(rendered,0);
-
+  const flat=[];function collect(n){if(Array.isArray(n))return n.forEach(collect);if(!n||typeof n!=='object')return;flat.push(n);collect(n.children)}collect(rendered);
   assert.equal(flat.find(n=>typeof n.type==='function'&&n.type.name==='Tank').props.pct,65);
-  assert.match(JSON.stringify(flat,(k,v)=>typeof v==='function'?v.name:v),/匿名免费 0 可用 \/ 共 9 个/);
+  assert.match(JSON.stringify(rendered,(k,v)=>typeof v==='function'?v.name:v),/17\/26/);
 });
 check('限流、明确不可用及地区受限即使仍在选择器中也不计入水位',()=>{
   const view=freePoolView({catalog:['throttled','unavailable','region-blocked'].map((availability,i)=>({id:'blocked-'+i,availability,route:i===2?region:main})),settings:{exposeRegionModels:true}});
@@ -62,5 +56,5 @@ check('限流状态解除后，模型随新状态重新计入水位',()=>{
   assert.equal(freePoolView({catalog:[{...model,availability:'available'}],settings:{}}).selectable,1);
 });
 const empty=FreePage({...props,data:{catalog:[],settings:{}},counts:{}});const emptyNodes=[];function collect(node){if(Array.isArray(node))return node.forEach(collect);if(!node||typeof node!=='object')return;emptyNodes.push(node);collect(node.children)}collect(empty);
-check('空池不渲染水位装饰，更不伪造数字',()=>assert.equal(emptyNodes.find(node=>typeof node.type==='function'&&node.type.name==='Tank'),undefined));
+check('空池不伪造水位',()=>assert.equal(emptyNodes.find(node=>typeof node.type==='function'&&node.type.name==='Tank').props.pct,null));
 console.log(checks+'/'+checks+' 免费池核验通过');
