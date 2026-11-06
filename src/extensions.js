@@ -365,20 +365,38 @@ function stripStringsAndComments(source) {
       continue
     }
     if (char === '"' || char === "'" || char === '`') {
-      const quote = char
-      index += 1
-      while (index < source.length && source[index] !== quote) {
-        if (source[index] === '\\') index += 1
-        index += 1
+      const end = stringEnd(source, index, char)
+      if (end !== -1) {
+        out += char + char
+        index = end + 1
+        continue
       }
-      index += 1
-      out += quote + quote
-      continue
     }
     out += char
     index += 1
   }
   return out
+}
+
+/**
+ * The index of the quote closing the string opened at `start`, or -1 when this
+ * quote does not open one. A single- or double-quoted literal cannot span a raw
+ * newline, so a lone quote is a character inside something else — a regular
+ * expression such as `/['"]/`, for one. Repairing to end-of-file from there
+ * would blank everything after it and retire every tripwire below, silently and
+ * depending only on the author's punctuation. Template literals may span lines,
+ * so they keep scanning for their backtick.
+ */
+function stringEnd(source, start, quote) {
+  let index = start + 1
+  while (index < source.length) {
+    const char = source[index]
+    if (char === '\\') { index += 2; continue }
+    if (char === quote) return index
+    if (char === '\n' && quote !== '`') return -1
+    index += 1
+  }
+  return -1
 }
 
 // ── the sandbox worker ───────────────────────────────────────────────────────
@@ -752,6 +770,15 @@ export function createExtensionRuntime({
     const config = readConfigStore().values[manifest.id] ?? {}
     const secrets = readSecrets().values[manifest.id] ?? {}
     const paths = { storage: path.join(rootDir, 'storage', `${manifest.id}.json`) }
+    // Retire whatever process already holds this id before taking its slot.
+    // The map keeps exactly one worker per extension, so an entry overwritten
+    // in place would leave its thread running with no handle left to stop it —
+    // unreachable, unbounded, and re-running the module's `load` side effects.
+    const retired = processes.get(manifest.id)
+    if (retired !== undefined) {
+      processes.delete(manifest.id)
+      await retired.kill()
+    }
     const process_ = new ExtensionProcess({ manifest, source, config, secrets, hostVersion, logger })
     process_.paths = paths
     processes.set(manifest.id, process_)
@@ -836,6 +863,10 @@ export function createExtensionRuntime({
     }
     writeLock(lock)
     audit('install', id, { version: entry.manifest.version, sha256: entry.sha256, previous: previous?.manifest.version })
+    // The bytes may differ even when the version matches (a republished
+    // package). Retire the running worker first so remount's reuse path cannot
+    // keep serving the source that was on disk a moment ago.
+    await stopExtension(id)
     await remount()
     onCatalogChanged()
     return publicRecord(lock.extensions[id])
@@ -956,12 +987,18 @@ export function createExtensionRuntime({
   async function remount() {
     if (disposed) return
     const lock = readLock()
+    // Retire only the processes nobody wants any more: one whose extension was
+    // removed or disabled, one whose version changed, and one that already
+    // failed. Everything else keeps its worker — a reconcile that rebuilt the
+    // healthy ones would re-run their `load` on every marketplace action, and
+    // the replaced worker would leak.
     for (const [id, process_] of [...processes]) {
       const record = lock.extensions[id]
-      if (record === undefined || record.enabled !== true || record.manifest.version !== process_.manifest.version) {
-        process_.kill()
-        processes.delete(id)
-      }
+      const wanted = record !== undefined && record.enabled === true
+        && record.manifest.version === process_.manifest.version
+      if (wanted && process_.state !== 'failed') continue
+      processes.delete(id)
+      process_.kill()
     }
     channelRows = []
     channelManifests = new Map()
@@ -969,13 +1006,21 @@ export function createExtensionRuntime({
       if (record.enabled !== true) continue
       try {
         const { source } = verifyInstalled(id)
-        const process_ = await startExtension(record, source)
+        const existing = processes.get(id)
+        const process_ = existing !== undefined ? existing : await startExtension(record, source)
         if (record.manifest.type === 'channel') {
           channelManifests.set(id, record.manifest)
           const rows = await listChannelModels(process_, record.manifest)
           channelRows = channelRows.concat(buildExtensionCatalog(record.manifest, rows))
         }
       } catch (error) {
+        // A row whose bytes no longer hash to the signed digest is not served:
+        // stop it, and let the warning say why.
+        const stale = processes.get(id)
+        if (stale !== undefined) {
+          processes.delete(id)
+          stale.kill()
+        }
         logger?.warn?.(`our-free-model: extension "${id}" did not start (${String(error?.message ?? error).slice(0, 200)})`)
       }
     }

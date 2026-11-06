@@ -249,6 +249,10 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       throw fail(403, '此管理操作需要已登录的本地管理会话')
     }
     // ── the extension marketplace (behind the same session fence) ────────────
+    if (pathname === `${PREFIX}/extensions` || pathname.startsWith(`${PREFIX}/extensions/`)) {
+      // Same contract as the plugin's route: a composition that mounted no
+      // extension runtime answers "unavailable", never a TypeError.
+      if (extensions === undefined) return reply(503, { error: 'the extension platform is unavailable' })
       if (method === 'GET' && pathname === `${PREFIX}/extensions`) {
         let registry = null
         try { registry = extensions.registryView() } catch { registry = null }
@@ -292,7 +296,10 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       if (method === 'POST' && pathname === `${PREFIX}/extensions/config`) {
         const body = await json()
         try {
-          return reply(200, { ok: true, record: await extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {}) })
+          const record = await extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {})
+          // `installed` rides along so a saved config field is reflected by the
+          // card that rendered it (same rule as the plugin's route).
+          return reply(200, { ok: true, record, installed: extensions.listInstalled() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
@@ -300,11 +307,13 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       if (method === 'POST' && pathname === `${PREFIX}/extensions/secret`) {
         const body = await json()
         try {
-          return reply(200, { ok: true, record: await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value) })
+          const record = await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
+          return reply(200, { ok: true, record, installed: extensions.listInstalled() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
       }
+    }
 
     if (method === 'POST' && pathname === `${PREFIX}/logout`) {
       await readBody(req)

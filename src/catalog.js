@@ -696,8 +696,13 @@ export function isKiloEntry(entry) {
 /** Catalog tag for models an installed extension serves. */
 export const EXTENSION_CHANNEL = 'extension'
 
-/** The built-in lanes an extension may take over (`replaces`). */
-const REPLACEABLE_LANES = new Set(['anonymous', 'kilo'])
+/** The built-in lanes an extension may take over (`replaces`). Kept in step
+ *  with the marketplace's policy and with the runtime's takeover: only `kilo`
+ *  is actually stood down (`laneStandsDown` in src/core/runtime.js), and the
+ *  marketplace validator refuses any other claim — listing a lane here that
+ *  nothing implements would hand an extension the built-in ids and then lose
+ *  its rows to the built-in they collide with. */
+const REPLACEABLE_LANES = new Set(['kilo'])
 
 /** Wire spellings an extension channel may speak. */
 const EXTENSION_WIRES = new Set(['chat', 'responses', 'messages'])

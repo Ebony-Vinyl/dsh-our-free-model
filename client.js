@@ -469,6 +469,16 @@ window.__ModuleLoader__.load({
         'ext.openHomepage': '打开主页',
         'ext.secretPlaceholder': '输入后保存，仅显示尾 4 位',
         'ext.close': '关闭',
+        'ext.loading': '正在读取扩展索引…',
+        'ext.loadingHint': '首次读取要拉取签名索引并校验签名。',
+        'ext.indexFailed': '索引未能读取',
+        'ext.okInstalled': '已安装 {name}',
+        'ext.okUpdated': '已更新 {name}',
+        'ext.okRemoved': '已卸载 {name}',
+        'ext.okEnabled': '已启用 {name}',
+        'ext.okDisabled': '已停用 {name}',
+        'ext.saved': '已保存',
+        'ext.needsConfig': '这个渠道还需要填写配置才能使用。',
         'sponsor.bannerTag': '中转站',
         'sponsor.bannerTitle': '北辰 API 中转站',
         'sponsor.bannerDescription': 'OFM 官方合作中转站，为用户提供稳定、开放、高性价比的大模型 API 接入服务。支持 Claude、ChatGPT、Grok、Gemini、智谱 GLM、Kimi、DeepSeek 等主流模型，适合在 Codex、Gemini CLI、Claude Code 及其他开发工具中统一配置使用。邀请可获百分之十的返现。',
@@ -1320,6 +1330,16 @@ window.__ModuleLoader__.load({
         'ext.openHomepage': 'Open homepage',
         'ext.secretPlaceholder': 'Type to save; only the last 4 are shown',
         'ext.close': 'Close',
+        'ext.loading': 'Reading the extension index…',
+        'ext.loadingHint': 'The first read fetches the signed index and checks its signature.',
+        'ext.indexFailed': 'The index could not be read',
+        'ext.okInstalled': '{name} installed',
+        'ext.okUpdated': '{name} updated',
+        'ext.okRemoved': '{name} uninstalled',
+        'ext.okEnabled': '{name} enabled',
+        'ext.okDisabled': '{name} disabled',
+        'ext.saved': 'Saved',
+        'ext.needsConfig': 'This channel needs its configuration filled in before it can be used.',
         'sponsor.bannerTag': 'Relay',
         'sponsor.bannerTitle': 'Beichen API relay',
         'sponsor.bannerDescription': 'OFM’s official relay partner provides stable, open and cost-effective model API access. Claude, ChatGPT, Grok, Gemini, GLM, Kimi and DeepSeek are supported for one consistent setup in Codex, Gemini CLI, Claude Code and other developer tools. Invite others to receive 10% cashback.',
@@ -2854,6 +2874,30 @@ window.__ModuleLoader__.load({
  .ofm_lane .ofm_tank{display:none}
 }
 .ofm_extcard{gap:10px}
+/* 类型色带：渠道=业务蓝（它贡献模型），增强=成功绿（它只改请求）。用 ::before
+   的 3px 竖条而不是左侧 border，卡片自身的 1px bezel 与圆角都不动。 */
+.ofm_extcard::before{content:"";position:absolute;left:0;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--dsw-alias-state-business-primary);opacity:.55;transition:opacity .22s var(--ease-instrument)}
+.ofm_extcard.enhancement::before{background:var(--dsw-alias-state-success-primary)}
+.ofm_extcard:hover::before{opacity:.95}
+/* 卡头：名字让位给标签与徽章，窄屏换行而不是把名字挤成省略号。 */
+.ofm_extcard .ofm_cardhead{flex-wrap:wrap;gap:7px}
+.ofm_extcard .ofm_id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofm_extgrid{grid-template-columns:repeat(auto-fill,minmax(276px,1fr));gap:12px}
+/* 入场错峰：与 .ofm_directory 同一套节奏，只覆盖前 6 张，多的不再等。 */
+.ofm_extgrid>*:nth-child(2){animation-delay:.035s}
+.ofm_extgrid>*:nth-child(3){animation-delay:.07s}
+.ofm_extgrid>*:nth-child(4){animation-delay:.105s}
+.ofm_extgrid>*:nth-child(5){animation-delay:.14s}
+.ofm_extgrid>*:nth-child(6){animation-delay:.175s}
+.ofm_extgrid>*:nth-child(n+7){animation-delay:.21s}
+/* 首读骨架：高度贴着真卡片的节奏，换成真卡片时几乎不跳。 */
+.ofm_extskel{min-height:172px;animation-delay:calc(var(--i,0)*.08s)}
+.ofm_hint{color:var(--dsw-alias-label-tertiary);font-size:11.5px}
+/* “这个渠道还差点配置”的提醒：比一般 note 更靠近前景，但不抢成错误色。 */
+.ofm_extwarn{margin:0;padding:6px 9px;border-radius:8px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 34%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 7%,transparent)}
+.ofm_extsect{display:block;font-size:12.5px;margin-bottom:2px}
+.ofm_extperms{display:flex;flex-wrap:wrap;gap:5px}
+.ofm_extperm{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;padding:2px 7px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
 .ofm_extdetail{width:min(560px,92vw)}
 .ofm_footsponsor{margin-top:4px;opacity:.9}
 .ofm_footsponsor .ofm_sponsor_banner{grid-template-columns:44px minmax(0,1fr) auto;padding:12px 14px}
@@ -3256,6 +3300,11 @@ window.__ModuleLoader__.load({
       onClick: props.onClick,
       title: props.title,
       'aria-label': props['aria-label'],
+      // `.ofm_btn[aria-busy="true"]` draws the inline spinner (CSS above) and
+      // the direct h('button') call sites already pass it; without this line
+      // the component that most call sites use could never reach it.
+      'aria-busy': props.busy === true ? 'true' : props['aria-busy'],
+      'data-busy': props.busy === true ? 'true' : undefined,
     }, props.children)
 
     function Section(props) {
@@ -3624,6 +3673,9 @@ window.__ModuleLoader__.load({
         echo === undefined ? null : h('p', { className: 'ofm_note ofm_mono' }, echo))
     }
 
+    /** The marketplace repository the safety tab links to. */
+    const EXTENSIONS_REPO_URL = 'https://github.com/Ebony-Vinyl/ofm-extensions'
+
     /** The extension marketplace: discover, installed, and the safety contract. */
     function ExtensionsPage({ t, onChanged } = {}) {
       const [state, setState] = useState({ status: 'loading' })
@@ -3633,7 +3685,10 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const [typeFilter, setTypeFilter] = useState('all')
       const load = useCallback(() => {
-        setState({ status: 'loading' })
+        // Keep what is already on screen across a reload: refreshing the index
+        // must not blank the cards the user is reading. The Refresh button
+        // carries its own spinner to say the round is in flight.
+        setState(current => ({ ...current, status: 'loading' }))
         api('/extensions', { timeout: 20_000 })
           .then(payload => setState({ status: 'ready', ...payload }))
           .catch(error => setState({ status: 'error', error: String(error?.message ?? error) }))
@@ -3654,6 +3709,16 @@ window.__ModuleLoader__.load({
           throw error
         } finally { setBusyId('') }
       }
+      // `act` plus the acknowledgement. Every card action reports that it
+      // landed: the button's spinner says "in flight", and a silent card after
+      // a two-second install reads as nothing having happened. `done` is the
+      // resolved line, so the locale keys stay literal at the call sites.
+      const run = async (path, body, done) => {
+        try {
+          await act(path, body)
+          showToast({ title: done })
+        } catch { /* act has already toasted the reason */ }
+      }
       const installed = state.installed ?? []
       const registry = state.registry
       const needle = query.trim().toLowerCase()
@@ -3673,15 +3738,24 @@ window.__ModuleLoader__.load({
         const idline = h('div', { className: 'ofm_id' }, `${plugin.id} · v${plugin.version} · ${plugin.author || '—'}`)
         const blurb = h('p', { className: 'ofm_note', style: { minHeight: 32 } }, plugin.summary || plugin.description || '')
         const action = record === undefined
-          ? h(Button, { kind: 'primary', disabled: busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.install'))
+          ? h(Button, {
+            kind: 'primary', disabled: busy, busy,
+            onClick: () => run('/extensions/install', { id: plugin.id }, t('ext.okInstalled').replace('{name}', plugin.name)),
+          }, busy ? t('ext.installing') : t('ext.install'))
           : plugin.updateAvailable === true
-            ? h(Button, { kind: 'primary', disabled: busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.update'))
+            ? h(Button, {
+              kind: 'primary', disabled: busy, busy,
+              onClick: () => run('/extensions/install', { id: plugin.id }, t('ext.okUpdated').replace('{name}', plugin.name)),
+            }, busy ? t('ext.installing') : t('ext.update'))
             : h('span', { className: 'ofm_badge ok' }, t('ext.installed'))
         const actions = h('div', { className: 'ofm_row' },
           h(Button, { onClick: () => setDetail(plugin) }, t('ext.detail')),
           action)
+        // `rise` carries the entrance, and the type rides the class so the
+        // stylesheet can tint a channel card apart from an enhancement.
+        const articleClass = `ofm_card ofm_extcard ofm_rise ${plugin.type === 'channel' ? 'channel' : 'enhancement'}`
         if (record === undefined) {
-          return h('article', { className: 'ofm_card ofm_extcard', key: plugin.id }, head, idline, blurb, actions)
+          return h('article', { className: articleClass, key: plugin.id }, head, idline, blurb, actions)
         }
         const fields = []
         for (const field of record.config) {
@@ -3714,28 +3788,54 @@ window.__ModuleLoader__.load({
               className: 'ofm_input', type: 'password', style: { minWidth: 140 }, placeholder: t('ext.secretPlaceholder'),
               onBlur: event => {
                 if (event.target.value !== '') {
-                  act('/extensions/secret', { id: plugin.id, key, value: event.target.value })
+                  const value = event.target.value
                   event.target.value = ''
+                  // A write-only field clears itself on save, so the only proof
+                  // it landed is the acknowledgement (and the masked hint).
+                  void run('/extensions/secret', { id: plugin.id, key, value }, t('ext.saved'))
                 }
               },
             }),
             h('span', { className: 'ofm_note' }, hint)))
         }
+        const unsetSecrets = record.permissions.secrets.filter(key => record.secrets.find(row => row.key === key)?.hasValue !== true)
         const controls = h('div', { className: 'ofm_row' },
-          h(Button, { disabled: busy, onClick: () => act('/extensions/toggle', { id: plugin.id, enabled: !(record.enabled === true) }) },
-            record.enabled === true ? t('ext.disable') : t('ext.enable')),
           h(Button, {
-            danger: true, disabled: busy,
-            onClick: () => { if (window.confirm(t('ext.confirmRemove').replace('{name}', plugin.name))) act('/extensions/uninstall', { id: plugin.id }) },
+            disabled: busy, busy,
+            onClick: () => run('/extensions/toggle', { id: plugin.id, enabled: !(record.enabled === true) },
+              (record.enabled === true ? t('ext.okDisabled') : t('ext.okEnabled')).replace('{name}', plugin.name)),
+          }, record.enabled === true ? t('ext.disable') : t('ext.enable')),
+          h(Button, {
+            danger: true, disabled: busy, busy,
+            onClick: () => {
+              if (window.confirm(t('ext.confirmRemove').replace('{name}', plugin.name))) {
+                void run('/extensions/uninstall', { id: plugin.id }, t('ext.okRemoved').replace('{name}', plugin.name))
+              }
+            },
           }, t('ext.uninstall')),
           record.state !== 'ready' && record.enabled === true
             ? h('span', { className: 'ofm_badge throttled', title: record.error }, t('ext.notRunning'))
             : null)
-        return h('article', { className: 'ofm_card ofm_extcard', key: plugin.id },
+        return h('article', { className: articleClass, key: plugin.id },
           head, idline, blurb, actions,
           fields.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } }, fields) : null,
+          // A channel the user just installed is enabled with its key still
+          // empty: its models are in the picker and every turn through them
+          // would fail. Say so here rather than at the first request.
+          record.enabled === true && unsetSecrets.length > 0
+            ? h('p', { className: 'ofm_note ofm_extwarn' }, t('ext.needsConfig'))
+            : null,
           controls)
       }
+      const refreshing = busyId === '/extensions/registry/refresh'
+      // The skeleton is for the first read only; a reload keeps the cards.
+      const firstLoad = state.status === 'loading' && state.installed === undefined && registry === undefined
+      const skeletonGrid = h('div', { className: 'ofm_grid ofm_extgrid' },
+        [0, 1, 2, 3].map(index => h('div', { className: 'ofm_skel ofm_extskel', key: `skel-${index}`, style: { '--i': String(index) } })))
+      // The server distinguishes "cannot reach the index" from "the index
+      // failed its signature check"; the page used to show the first message
+      // for both, which sends the reader after the wrong problem.
+      const indexError = registry === null && state.registryError ? state.registryError : ''
       return h('div', { className: 'ofm_page' },
         h('header', { className: 'ofm_hero ofm_glass' },
           h('div', { className: 'ofm_pagehead' },
@@ -3744,7 +3844,10 @@ window.__ModuleLoader__.load({
               h('p', { className: 'ofm_pagesub' }, t('ext.sub'))),
             h('div', { className: 'ofm_pills' },
               h(Pill, { strong: true }, t('ext.count').replace('{n}', String(discover.length))),
-              h(Button, { onClick: () => act('/extensions/registry/refresh', undefined, false) }, t('ext.refresh')))),
+              h(Button, {
+                busy: refreshing, disabled: refreshing,
+                onClick: () => act('/extensions/registry/refresh', undefined, false),
+              }, t('ext.refresh')))),
           h('div', { className: 'ofm_seg', role: 'group', style: { alignSelf: 'flex-start' } },
             [['discover', t('ext.tabDiscover')], ['installed', t('ext.tabInstalled')], ['security', t('ext.tabSecurity')]].map(([key, label]) =>
               h('button', { key, type: 'button', 'aria-pressed': tab === key ? 'true' : 'false', onClick: () => setTab(key) }, label)))),
@@ -3755,21 +3858,34 @@ window.__ModuleLoader__.load({
             h('div', { className: 'ofm_seg', role: 'group' },
               [['all', t('explorer.all')], ['channel', t('ext.channel')], ['enhancement', t('ext.enhancement')]].map(([key, label]) =>
                 h('button', { key, type: 'button', 'aria-pressed': typeFilter === key ? 'true' : 'false', onClick: () => setTypeFilter(key) }, label)))),
-          registry === null && state.status === 'ready' ? h('p', { className: 'ofm_note' }, t('ext.empty')) : null,
-          h('div', { className: 'ofm_grid' }, discover.map(cardFor)),
-          discover.length === 0 && registry !== null ? h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')) : null)
+          firstLoad
+            ? h(Fragment, null,
+              h('p', { className: 'ofm_note' }, t('ext.loading'), ' ', h('span', { className: 'ofm_hint' }, t('ext.loadingHint'))),
+              skeletonGrid)
+            : null,
+          !firstLoad && registry === null
+            ? h('div', { className: 'ofm_callout' }, h('div', null,
+              h('b', null, t('ext.indexFailed')),
+              indexError ? h('div', { className: 'ofm_mono' }, indexError) : null))
+            : null,
+          !firstLoad && discover.length > 0 ? h('div', { className: 'ofm_grid ofm_extgrid' }, discover.map(cardFor)) : null,
+          !firstLoad && discover.length === 0 && registry !== null ? h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')) : null)
         : tab === 'installed' ? h(Fragment, null,
           installed.length === 0 ? h('p', { className: 'ofm_note' }, t('ext.installedEmpty'))
-            : h('div', { className: 'ofm_grid' }, installed.map(record => cardFor({
+            : h('div', { className: 'ofm_grid ofm_extgrid' }, installed.map(record => cardFor({
               ...record, summary: record.description, tags: [], publishedAt: record.installedAt,
-              updateAvailable: false,
+              // The index knows whether a newer one exists; the installed row
+              // only knows itself. Ask the index for the same plugin rather
+              // than blanket-clearing the flag, which hid every update here.
+              updateAvailable: (registry?.plugins ?? []).find(entry => entry.id === record.id)?.version !== undefined
+                && (registry?.plugins ?? []).find(entry => entry.id === record.id).version !== record.version,
             }))))
         : h('div', { className: 'ofm_panel' },
           h('div', { className: 'ofm_paneltitle' }, t('ext.security')),
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody')),
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody2')),
           h('div', { className: 'ofm_row' },
-            h('a', { className: 'ofm_linkbtn', href: `https://github.com/${'Ebony-Vinyl'}/ofm-extensions`, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepo')))),
+            h('a', { className: 'ofm_linkbtn', href: EXTENSIONS_REPO_URL, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepo')))),
         detail !== undefined ? h('div', { className: 'ofm_scrim', onClick: () => setDetail(undefined) },
           h('div', { className: 'ofm_ann ofm_extdetail', onClick: event => event.stopPropagation() },
             h('div', { className: 'ofm_annhead' },
@@ -3778,9 +3894,13 @@ window.__ModuleLoader__.load({
             h('div', { className: 'ofm_annbody' },
               h('p', null, detail.summary || detail.description || ''),
               h('div', { className: 'ofm_sec' },
-                h('b', { style: { fontSize: 12.5 } }, t('ext.permissions')),
-                h('p', { className: 'ofm_note' }, t('ext.permNetwork').replace('{n}', String(detail.permissions?.network?.length ?? 0)) + (detail.permissions?.network ?? []).map(origin => `\n· ${origin}`).join('')),
-                h('p', { className: 'ofm_note' }, t('ext.permSecrets').replace('{n}', String(detail.permissions?.secrets?.length ?? 0)))),
+                h('b', { className: 'ofm_extsect' }, t('ext.permissions')),
+                h('p', { className: 'ofm_note' }, t('ext.permNetwork').replace('{n}', String(detail.permissions?.network?.length ?? 0))),
+                (detail.permissions?.network ?? []).length > 0
+                  ? h('div', { className: 'ofm_extperms' }, (detail.permissions.network).map(origin => h('code', { className: 'ofm_extperm', key: origin }, origin)))
+                  : null,
+                h('p', { className: 'ofm_note' }, t('ext.permSecrets').replace('{n}', String(detail.permissions?.secrets?.length ?? 0))
+                  + ((detail.permissions?.secrets ?? []).length > 0 ? ` · ${(detail.permissions.secrets).join(', ')}` : ''))),
               h('div', { className: 'ofm_row' },
                 detail.homepage ? h('a', { className: 'ofm_linkbtn', href: detail.homepage, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openHomepage')) : null)),
             h('div', { className: 'ofm_annfoot' },

@@ -2180,7 +2180,10 @@ export function createApiRoutes(deps) {
           const body = await readJson(req)
           try {
             const record = await extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {})
-            return send(200, { ok: true, record })
+            // `installed` travels with every mutation: the page renders its cards
+            // from it, so a config write has to hand the new values back or the
+            // control snaps to the state it was rendered with.
+            return send(200, { ok: true, record, installed: extensions.listInstalled() })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }
@@ -2189,7 +2192,7 @@ export function createApiRoutes(deps) {
           const body = await readJson(req)
           try {
             const record = await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
-            return send(200, { ok: true, record })
+            return send(200, { ok: true, record, installed: extensions.listInstalled() })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }

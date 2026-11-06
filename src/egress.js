@@ -221,7 +221,15 @@ export async function egressFetch(url, init) {
     // a machine without Bun must still be able to learn the roster (a missing
     // Bun used to blind the whole catalog). Only the POST inference keeps the
     // Bun requirement — the upstream fingerprints its client there.
+    //
+    // The read still leaves through the lane's own exit. An address chosen to
+    // move this lane is not un-chosen by the request being a GET: borrowing the
+    // real one for the roster would advertise a different client than the turns
+    // use. The global relay already carries it (its HTTP path, below); a custom
+    // or environment address needs the tunnel here.
     if (!isPost) {
+      if (laneProxy !== null && freeLaneProxy !== null) return laneProxiedFetch(url, init, laneProxy)
+      if (laneProxy !== null && relay === null) return laneProxiedFetch(url, init, laneProxy)
       if (relay !== null) return relayFetch(url, init, relay)
       return fetch(url, init)
     }
