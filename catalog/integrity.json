@@ -29,8 +29,8 @@
     },
     {
       "path": "index.js",
-      "size": 129898,
-      "sha256": "7d08b813786c92f6be379ed5c2c2ff73fc83229e7f6e5bd76dfbb0bf773f3506"
+      "size": 130010,
+      "sha256": "2a34eb160d4afaff125ca97f032f56df076b996ed63eb9d36ecaa92b6c89b174"
     },
     {
       "path": "LICENSE",
@@ -174,8 +174,8 @@
     },
     {
       "path": "src/extensions.js",
-      "size": 55662,
-      "sha256": "8e5feb1e214657c25f60768fc2f450cb7c6cbad1e81a80486a85c376d776f144"
+      "size": 57267,
+      "sha256": "df863fc3774ff0351749e5959ba9886867f3e71c24e9be640b0dd7ff109e0d28"
     },
     {
       "path": "src/failure.js",
