@@ -167,8 +167,15 @@ export const SETTINGS_INITIAL = {
   hideEacModels: false,
   /** Minutes between background catalog refreshes. Automatic availability
    *  probing is disabled by owner policy; only the manual reprobe button sends
-   *  probe requests. */
+   *  probe requests. Since 2.9.0 this cadence also cannot re-fetch the listing
+   *  more often than once a listing window (see src/core/runtime.js). */
   probeIntervalMinutes: 15,
+  /** The OpenCode lane's own proxy exit (issue #708's method): when set, this
+   *  lane's requests dial through it instead of the process's global egress,
+   *  which is how a burned per-IP quota window is left behind. Empty means the
+   *  global outlet when one runs, then the HTTP(S)_PROXY environment, then
+   *  direct. Never auto-rotated — the address is the user's own. */
+  freeLane: { proxyUrl: '' },
   /** Serve the OpenAI-compatible forward listener for other local harnesses. */
   forward: {
     enabled: false,

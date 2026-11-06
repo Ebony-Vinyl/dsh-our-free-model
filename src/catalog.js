@@ -17,8 +17,9 @@ import { baseModelId, isResponsesModel } from './upstream.js'
 /** Free-tier ids the listing does not mark with a `-free` suffix. `big-pickle`
  *  is the lane's own long-standing free id (9router keeps the same id in its
  *  `KNOWN_FREE_OPENCODE_MODELS` for exactly this reason); models.dev prices it
- *  at 0/0. */
-const ALWAYS_FREE = new Set(['union-alpha', 'space-bunny-free', 'big-pickle'])
+ *  at 0/0. `union-alpha` and `space-bunny-free` retired from the live listing
+ *  in the 2026-10-31 roster churn and are no longer advertised. */
+const ALWAYS_FREE = new Set(['big-pickle'])
 
 /**
  * Local capability baseline. `contextWindow`/`maxOutput` are the provider's
@@ -126,11 +127,35 @@ const FREE_ID_OVERRIDES = {
     effortPatch: { reasoning_effort: '$effort' },
     effortOffPatch: { reasoning_effort: 'none' },
   },
-  // models.dev: effort low|medium|high|xhigh|max; 1M window, 524288 output.
-  'space-bunny-free': {
-    vision: true, contextWindow: 1048576, maxOutput: 524288,
+  // models.dev (2026-11-06 roster): the live free set as the Oct-31 churn left
+  // it. Numbers are models.dev's published limits; region-gated ids (beam,
+  // crouton, pulse) are marked in REGION_SENSITIVE, not here.
+  'beam-free': {
+    vision: false, contextWindow: 1048576, maxOutput: 131072,
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
     effortPatch: { reasoning_effort: '$effort' },
+  },
+  'flint-40b-free': {
+    vision: false, contextWindow: 262144, maxOutput: 65536,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  'pulse-alpha-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 131072,
+    efforts: ['low', 'high', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: 1M window, 270000 output, effort minimal..max (no `none` —
+  // thinking does not switch off in practice, so the menu starts at minimal).
+  'crouton-alpha-free': {
+    vision: true, contextWindow: 1048576, maxOutput: 262144,
+    efforts: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'], effortDefault: 'high',
+    effortPatch: { reasoning_effort: '$effort' },
+  },
+  // models.dev: 262144/262144, reasoning_options empty → no level menu, so the
+  // free lane's token ladder applies.
+  'nemotron-3.5-lightning-free': {
+    vision: false, contextWindow: 262144, maxOutput: 262144,
   },
   // models.dev: 1M window, 131072 output, reasoning_options `toggle` only →
   // no level menu, so the free lane's token ladder applies.
@@ -145,22 +170,19 @@ const FREE_ID_OVERRIDES = {
 /** Human-facing display names, so a raw upstream id never reaches the picker. */
 const DISPLAY_NAMES = {
   'mimo-v2.6-flash-free': 'MiMo V2.6 Flash',
-  'mimo-v2.5-free': 'MiMo V2.5',
-  'muse-spark-1.3-contributor-free': 'Muse Spark 1.3',
-  'muse-spark-1.2-contributor-free': 'Muse Spark 1.2',
-  'nemotron-3-ultra-free': 'Nemotron 3 Ultra',
+  'beam-free': 'Beam Free',
+  'flint-40b-free': 'Flint 40B Free',
+  'pulse-alpha-free': 'Pulse Alpha Free',
+  'crouton-alpha-free': 'Crouton Alpha Free',
   'nemotron-3.5-lightning-free': 'Nemotron 3.5 Lightning',
-  'ling-3.0-flash-fin-free': 'Ling 3.0 Flash Fin',
-  'space-bunny-free': 'Space Bunny',
-  'union-alpha': 'Union Alpha',
-  'deepseek-v4-flash-free': 'DeepSeek V4 Flash',
   'deepseek-v4.1-flash-free': 'DeepSeek V4.1 Flash',
   'glm-5.3-flash-free': 'GLM 5.3 Flash',
-  'jev-1.13-free': 'Jev 1.13',
 }
 
-/** Ids whose regional availability is known to be egress-dependent. */
-const REGION_SENSITIVE = [/^muse.?spark/]
+/** Ids whose regional availability is known to be egress-dependent. The 2.2
+ * docs name Beam Free, Crouton Alpha Free and Pulse Alpha Free as region-gated;
+ * `muse-spark` kept its marker from the era it served. */
+const REGION_SENSITIVE = [/^muse.?spark/, /^beam/, /crouton/, /pulse-alpha/]
 
 /**
  * Is this id on the免密 lane? The gateway's listing mixes paid and free ids;

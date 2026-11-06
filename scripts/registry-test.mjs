@@ -51,7 +51,7 @@ const raw = fs.readFileSync(path.join(repo, 'src/providers/registry.json'), 'utf
 // row here (see README's aggregate section) — the free lane serves it instead.
 const EXPECTED_PROVIDERS = 76
 const EXPECTED_BY_CATEGORY = { apikey: 61, 'free-tier': 10, local: 3, oauth: 2 }
-const EXPECTED_MODELS = 502
+const EXPECTED_MODELS = 507
 const FLEETRELAY_MODELS = ['deepseek-v4.1-flash-free', 'gpt-6-astra']
 
 const byCategory = {}
@@ -342,7 +342,8 @@ check('listProviders filters by category, format and auth kind', () => {
 
 check('listProviders searches id, name, model id and notes, case-insensitively', () => {
   assert.deepEqual(listProviders({ search: 'NVIDIA NIM' }).map(provider => provider.id), ['nvidia_nim'])
-  assert.deepEqual(listProviders({ search: 'nemotron-3-super' }).map(provider => provider.id).sort(), ['bazaarlink', 'kilo', 'nvidia_nim'])
+  assert.deepEqual(listProviders({ search: 'nemotron-3.5-super' }).map(provider => provider.id).sort(), ['kilo'])
+  assert.deepEqual(listProviders({ search: 'nemotron-3' }).map(provider => provider.id).sort(), ['bazaarlink', 'kilo', 'kimchi', 'nvidia_nim', 'opencode_zen'])
   assert.ok(listProviders({ search: 'free tier' }).length > 0)
   assert.deepEqual(listProviders({ search: 'NO-SUCH-PROVIDER-ANYWHERE' }), [])
   assert.equal(listProviders({ search: '  ' }).length, EXPECTED_PROVIDERS)

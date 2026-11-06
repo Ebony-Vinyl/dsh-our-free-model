@@ -70,6 +70,66 @@ export function clientToolWireName(name, used) {
 }
 
 /**
+ * The official tool each common client tool binds to (`BindOfficial`,
+ * opencode2api v1.4.7).
+ *
+ * Before 1.4.7 every client tool was renamed into opaque `clint_` wire names
+ * and the full official set appended beside them. That keeps the vocabulary
+ * clean, but it also means the model can only call the *official* spellings —
+ * a `Bash` the caller declared comes back as a call to `shell`, and the model
+ * routinely prefers the official tool that sits right next to the renamed one.
+ * The upstream fix binds a client tool whose folded name matches one of the
+ * known client spellings to that official name directly: the caller's own
+ * definition rides the wire under the official name, the official definition
+ * is not appended a second time, and the response side maps the official name
+ * back to the caller's spelling through the same rename map as before.
+ *
+ * Keys are official names; values are the client spellings that bind, compared
+ * after {@link foldToolName} (case and separators ignored). Only spellings the
+ * reference actually binds are listed — `execute` has no client candidate in
+ * the captured CLI, and `todowrite` is not one of this lane's 13 captured
+ * definitions, so neither appears here.
+ */
+export const OFFICIAL_TOOL_ALIASES = Object.freeze({
+  edit: ['edit'],
+  glob: ['glob'],
+  grep: ['grep'],
+  question: ['question', 'askuserquestion'],
+  read: ['read', 'view'],
+  shell: ['shell', 'bash'],
+  skill: ['skill'],
+  subagent: ['subagent', 'agent', 'task'],
+  webfetch: ['webfetch', 'fetch'],
+  websearch: ['websearch'],
+  write: ['write'],
+  patch: ['patch', 'applypatch'],
+})
+
+/** Folded client spelling → official name, first spelling wins. */
+const FOLDED_OFFICIAL_ALIASES = (() => {
+  const index = new Map()
+  for (const [official, spellings] of Object.entries(OFFICIAL_TOOL_ALIASES)) {
+    for (const spelling of spellings) {
+      const folded = foldToolName(spelling)
+      if (!index.has(folded)) index.set(folded, official)
+    }
+  }
+  return index
+})()
+
+/**
+ * The official name one declared client tool binds to, or null (`Bind`).
+ * Matching is folded, so `WebFetch`, `webfetch` and `web_fetch` all bind to
+ * `webfetch`; a name two officials could claim keeps its first declaration
+ * order win because each official is bound at most once per request (the
+ * caller checks that).
+ */
+export function officialForClientName(name) {
+  if (typeof name !== 'string' || name === '') return null
+  return FOLDED_OFFICIAL_ALIASES.get(foldToolName(name)) ?? null
+}
+
+/**
  * The rename set of one shaped request (`ToolRenames`), as a `Map` from wire
  * name back to client name so existing consumers keep working — the plugin's
  * stream decoder has always received exactly such a map. The extra methods are

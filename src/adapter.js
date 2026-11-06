@@ -375,6 +375,24 @@ export class FreeModelAdapter {
     const sealed = isEacEntry(entry)
     const kilo = isKiloEntry(entry)
     const aggregate = isAggregateEntry(entry)
+    // The keyless anonymous lane — the only one the quota breaker and the
+    // passive availability learner describe. Every other lane carries its own
+    // channel tag and its own accounting.
+    const freeLane = !sealed && !kilo && !aggregate && !isComboEntry(entry) && !isSubscriptionEntry(entry)
+    if (freeLane) {
+      // The quota breaker: a window the upstream opened on this egress is a
+      // wall no model/session/UA choice moves (issue #767 measured exactly
+      // that), so the lane refuses locally instead of feeding the wall another
+      // request. `重试` here means changing the exit or waiting for `retryAt`.
+      const gate = this.deps.freeLaneGate?.()
+      if (gate?.ok === false) {
+        const when = Number.isFinite(gate.retryAt) ? new Date(gate.retryAt).toISOString() : 'until the exit changes'
+        throw new UpstreamError(
+          `the OpenCode free quota window is open on this egress${gate.message ? `: ${gate.message}` : ''} — retry after ${when}, or switch the lane's exit proxy; Kilo and extension channels are unaffected`,
+          CODE.quota,
+          { ...(Number.isFinite(gate.retryAt) ? { providerRetryAfterMs: Math.max(1000, gate.retryAt - Date.now()) } : {}), laneQuota: true, laneState: gate.state })
+      }
+    }
     // The absorbed channels speak the Chat wire regardless of what their ids
     // resemble; only the free lane splits endpoints per model, and an aggregate
     // row carries the wire its provider actually serves.
@@ -692,6 +710,7 @@ export class FreeModelAdapter {
           return { ok: false, ...advanceVerdict(CODE.empty, 'empty response') }
         }
         record(true, outcome, recovering ? { recovered: reason.kind === 'stop' } : {})
+        if (freeLane) this.deps.onFreeLaneOutcome?.({ entry, ok: true })
         finishTurn(true, recovering && reason.kind === 'stop', attempt + 1)
         yield { type: 'usage', usage: totalUsage }
         // Keep the provider token when the harness fallback maps an abnormal
@@ -701,6 +720,12 @@ export class FreeModelAdapter {
         return { advance: false, verdict: null, ok: true, recovered: recovering && reason.kind === 'stop' }
       } catch (error) {
         if (error?.code === CODE.region) this.deps.onRegionBlocked?.(entry.id)
+        // Passive availability: a real turn's verdict is the only probe this
+        // lane still spends. A 429 opens the quota breaker; a client-gate 403
+        // locks the lane; a region refusal marks just the model.
+        if (freeLane && options.signal?.aborted !== true && error?.code !== CODE.aborted) {
+          this.deps.onFreeLaneOutcome?.({ entry, ok: false, error })
+        }
         const aborted = options.signal?.aborted === true
         let failure = toFailure(error)
         if (sealed && failure.code === CODE.server) failure = { ...failure, code: 'EAC_UPSTREAM_FAILED' }

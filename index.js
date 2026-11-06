@@ -36,7 +36,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError } from './src/http.js'
-import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay } from './src/egress.js'
+import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive } from './src/egress.js'
 import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
@@ -439,7 +439,7 @@ export function apply(ctx, config) {
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
   })
-  const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog } = modelRuntime
+  const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog, clearLaneBreaker } = modelRuntime
   const runForwarded = modelRuntime.complete
 
   // ── registration ────────────────────────────────────────────────────────────
@@ -857,6 +857,23 @@ export function apply(ctx, config) {
     outletSyncInFlight = run
     try { await run } finally { if (outletSyncInFlight === run) outletSyncInFlight = null }
   }
+  /**
+   * Apply the settings file's lane proxy to the egress layer.
+   *
+   * Boot-time sync; the settings route re-applies on every `freeLane` patch
+   * through `sanitizeSettings` (which is where a bad address fails the write).
+   * A stored value that no longer parses is dropped with one log line — the
+   * lane falls back to the global outlet rather than failing every turn.
+   */
+  function syncFreeLaneProxy() {
+    try {
+      setFreeLaneProxy(String(settings.get().freeLane?.proxyUrl ?? ''))
+    } catch (error) {
+      logger.warn?.(`our-free-model: the OpenCode lane proxy address is invalid (${error?.message ?? error}); the lane keeps its current exit`)
+      setFreeLaneProxy('')
+    }
+  }
+  syncFreeLaneProxy()
   async function syncEgressOnce() {
     const desired = settings.get().egress ?? {}
     const wanted = desired.enabled === true
@@ -1086,7 +1103,7 @@ export function apply(ctx, config) {
   }
   const api = createApiRoutes({
     settings, stats, availability, catalog: () => modelRuntime.catalog, state,
-    refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress,
+    refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress, clearLaneBreaker,
     onVisibilityChanged: emitTopology,
     pool: fetchPoolSnapshot,
     eacAuth,
@@ -1566,7 +1583,9 @@ export function apply(ctx, config) {
   every(() => {
     void (async () => {
       await watchEgress()
-      await refreshCatalog({ probe: false })
+      // throttleListing: the periodic round may keep the cached roster when it
+      // just refreshed — the upstream listing is read at most once per window.
+      await refreshCatalog({ probe: false, throttleListing: true })
     })().catch(error => logger.warn?.(`our-free-model: periodic refresh failed (${error?.message ?? error})`))
   }, () => positiveOr(settings.get().probeIntervalMinutes, 15, 1) * 60_000)
   // A failing egress watch means the network is down, which is worth one line —
@@ -1662,6 +1681,16 @@ function sanitizeSettings(patch, current) {
     // Zero is a real answer here: it means "stop checking for updates".
     const hours = Number(next.updateCheckHours)
     next.updateCheckHours = Number.isFinite(hours) && hours >= 0 ? Math.trunc(hours) : (Number(current.updateCheckHours) || 6)
+  }
+  if (next.freeLane !== undefined) {
+    // The lane proxy is a URL the egress layer validates on save: a typo must
+    // fail the write, not the first turn. Everything else about the object is
+    // carried verbatim.
+    const incoming = next.freeLane
+    const merged = { ...(current.freeLane ?? {}), ...(incoming && typeof incoming === 'object' ? incoming : {}) }
+    const proxyUrl = String(merged.proxyUrl ?? '').trim()
+    setFreeLaneProxy(proxyUrl)
+    next.freeLane = { ...merged, proxyUrl }
   }
   return next
 }
@@ -1987,7 +2016,7 @@ export function createApiRoutes(deps) {
         const patch = await readJson(req)
         const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch']), ...visibility }, current)
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch', 'freeLane']), ...visibility }, current)
         if (next.autoReloadWatch === true && deps.update.status().hotReloadAvailable === false) next.autoReloadWatch = false
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
@@ -2053,8 +2082,17 @@ export function createApiRoutes(deps) {
         return send(200, { ok: true, ...buildSummary(deps) })
       }
       if (method === 'POST' && routePath === '/reprobe') {
-        await deps.refreshAvailability(true)
-        return send(200, { ok: true, ...buildSummary(deps) })
+        // One probe, one model: the caller's pick, or the roster head. The
+        // quota breaker refuses while a window is open (the response names it).
+        const body = await readJson(req).catch(() => ({}))
+        const outcome = await deps.refreshAvailability(true, { model: typeof body?.model === 'string' ? body.model : undefined })
+        return send(200, { ok: true, probe: outcome, ...buildSummary(deps) })
+      }
+      if (method === 'POST' && routePath === '/lane/clear') {
+        // 换出口后重试一次：出口已变（或用户自备了新出口代理），把额度断路器
+        // 清掉，让下一次手动检测/真实回合重新出发。一次调用只清一次。
+        const cleared = deps.clearLaneBreaker()
+        return send(200, { ok: true, cleared, ...buildSummary(deps) })
       }
       if (method === 'GET' && routePath === '/forward/key') {
         return send(200, { key: deps.settings.get().forwardKey ?? '' })
@@ -2469,6 +2507,15 @@ function buildSummary(deps) {
     settings: publicSettings(deps.settings.get(), forwardInfo, deps.egressInfo()),
     egress: forwardInfo.egress ?? snapshot.egress ?? null,
     outlet: deps.egressInfo(),
+    // The free lane's quota breaker and its exit: what the page's lane card
+    // renders as the countdown / lock banner, and the proxy seam issue #708's
+    // bypass reduces to. `lane` is null until a real verdict exists.
+    lane: snapshot.lane ?? null,
+    freeLane: {
+      proxyActive: freeLaneProxyActive(),
+      proxyConfigured: String(deps.settings.get().freeLane?.proxyUrl ?? '').trim() !== '',
+      transport: process.env.OUR_FREE_MODEL_FREE_TRANSPORT ?? 'auto',
+    },
     probedAt: snapshot.at ?? 0,
     announcementVersion: ANNOUNCEMENT_VERSION,
     disclaimerVersion: DISCLAIMER_VERSION,

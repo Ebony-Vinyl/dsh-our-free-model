@@ -423,6 +423,45 @@ export function ensureFreeLaneEnvironment(body, style, environment = {}) {
 }
 
 /**
+ * The request shapes the free tier reads as a conversation-title generator
+ * (`title.IsTitleRequest`, opencode2api v1.4.7): no tools declared, one to
+ * three turns, no assistant/tool/function turn, and a title marker in the
+ * system or leading text.
+ *
+ * The reference stopped shaping these bodies in v1.4.7 with a measured reason:
+ * the free tier answers an agent-shaped tool list on a toolless title call
+ * with 403/429. This lane injects the full official prompt and 13-tool set on
+ * every body, so the harness's title round-trips used to ship exactly that
+ * shape whenever the local title answer was switched off. A title request now
+ * ships as the caller wrote it — no prompt injection, no tool append, no
+ * renames.
+ */
+const TITLE_MARKERS = /generate a title|write a title|create a title|come up with a title|title (?:for|of) (?:this|the) (?:conversation|chat|session|exchange|request)|conversation title|summarize (?:this|the) conversation/i
+
+export function isTitleRequest(body, style) {
+  if (!body || typeof body !== 'object') return false
+  if ((Array.isArray(body.tools) && body.tools.length > 0) || (Array.isArray(body.functions) && body.functions.length > 0)) return false
+  if (body.tool_choice !== undefined) return false
+  const shape = shapeOf(style)
+  const textOf = value => typeof value === 'string' ? value
+    : Array.isArray(value) ? value.map(part => part?.text ?? '').join('\n') : ''
+  let turns
+  let leading = ''
+  if (shape === 'flat') {
+    turns = (Array.isArray(body.input) ? body.input : []).filter(item => item !== null && typeof item === 'object' && typeof item.role === 'string')
+    leading = textOf(body.instructions)
+  } else {
+    turns = (Array.isArray(body.messages) ? body.messages : []).filter(message => message !== null && typeof message === 'object')
+    leading = shape === 'claude' ? textOf(body.system) : ''
+  }
+  if (turns.length === 0 || turns.length > 3) return false
+  for (const turn of turns) {
+    if (!['user', 'system', 'developer'].includes(String(turn.role ?? ''))) return false
+  }
+  return TITLE_MARKERS.test(`${leading}\n${turns.map(turn => textOf(turn.content)).join('\n')}`)
+}
+
+/**
  * Satisfy the v2 free-tier fingerprint on `body`, shaped as the reference
  * gateway shapes it (opencode2api v1.4.6, see the module header):
  *
@@ -451,6 +490,10 @@ export function ensureFreeLaneEnvironment(body, style, environment = {}) {
 export function applyFingerprint(body, style) {
   const shape = shapeOf(style)
   if (!body || typeof body !== 'object') return new ToolRenameMap()
+
+  // 0. Title requests ship unshaped: an agent-shaped tool list on a toolless
+  // title call is a 403/429 the reference measured (see isTitleRequest).
+  if (isTitleRequest(body, style)) return new ToolRenameMap()
 
   // 1. Official system prompt (the reference injects before shaping tools).
   injectOfficialPrompt(body, shape)

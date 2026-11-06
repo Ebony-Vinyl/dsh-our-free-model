@@ -3827,63 +3827,105 @@
       "env": "KILO_API_KEY",
       "url": "https://app.kilo.ai"
     },
-    "baseUrl": "https://api.kilo.ai/api/gateway",
+    "baseUrl": "https://ai-gateway.kilo.ai/api/v1",
     "format": "openai-chat",
     "models": [
       {
         "id": "kilo-auto/free",
-        "name": "Kilo Auto Free",
+        "name": "Auto Free",
         "contextWindow": 256000,
-        "vision": null,
-        "reasoning": null
+        "vision": false,
+        "reasoning": true
       },
       {
-        "id": "nvidia/nemotron-3-super-120b-a12b:free",
-        "name": "Nemotron 3 Super 120B (Free)",
-        "contextWindow": 262144,
-        "vision": null,
-        "reasoning": null
+        "id": "nvidia/nemotron-3.5-super-vl:free",
+        "name": "NVIDIA: Nemotron 3.5 Super VL",
+        "contextWindow": 1000000,
+        "vision": true,
+        "reasoning": true
+      },
+      {
+        "id": "reflection/beam-free",
+        "name": "Reflection: Beam 1.0",
+        "contextWindow": 1048576,
+        "vision": false,
+        "reasoning": true
+      },
+      {
+        "id": "stealth/glyph-cluster",
+        "name": "Stealth: Glyph Cluster",
+        "contextWindow": 256000,
+        "vision": false,
+        "reasoning": true
+      },
+      {
+        "id": "stealth/crouton-alpha",
+        "name": "Crouton Alpha",
+        "contextWindow": 1048576,
+        "vision": true,
+        "reasoning": true
+      },
+      {
+        "id": "dots-studio/dots-3-note-preview:free",
+        "name": "Dots Studio: Dots3-Note Preview",
+        "contextWindow": 512000,
+        "vision": true,
+        "reasoning": true
+      },
+      {
+        "id": "nvidia/nemotron-3.5-lightning:free",
+        "name": "NVIDIA: Nemotron 3.5 Lightning",
+        "contextWindow": 1000000,
+        "vision": false,
+        "reasoning": true
+      },
+      {
+        "id": "cohere/north-mini-code:free",
+        "name": "Cohere: North Mini Code",
+        "contextWindow": 256000,
+        "vision": false,
+        "reasoning": true
       },
       {
         "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "name": "Nemotron 3 Ultra 550B (Free)",
+        "name": "NVIDIA: Nemotron 3 Ultra",
         "contextWindow": 1000000,
-        "vision": null,
-        "reasoning": null
+        "vision": false,
+        "reasoning": true
       },
       {
-        "id": "kwaipilot/kat-coder-pro-v2.5:free",
-        "name": "Kat Coder Pro v2.5 (Free)",
+        "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "name": "NVIDIA: Nemotron 3 Nano Omni",
         "contextWindow": 256000,
-        "vision": null,
-        "reasoning": null
+        "vision": true,
+        "reasoning": true
       },
       {
-        "id": "kilo-auto/frontier",
-        "name": "Kilo Auto Frontier",
-        "contextWindow": 1000000,
-        "vision": null,
-        "reasoning": null
-      },
-      {
-        "id": "kilo-auto/balanced",
-        "name": "Kilo Auto Balanced",
-        "contextWindow": 1000000,
-        "vision": null,
-        "reasoning": null
+        "id": "openrouter/free",
+        "name": "OpenRouter Free Models Router",
+        "contextWindow": 200000,
+        "vision": true,
+        "reasoning": true
       }
     ],
-    "notes": "Kilo gateway free pool; the plugin’s own Kilo channel reads the same host.",
+    "notes": "Kilo gateway free pool, snapshot 2026-11-07; the plugin’s own Kilo channel serves it keyless from the live listing — this row is the aggregate-lane fallback for a pasted key.",
     "website": "https://kilo.ai/",
     "local": false,
     "source": "fcc",
     "freeModelsHint": [
       "kilo-auto/free",
-      "nvidia/nemotron-3-super-120b-a12b:free",
+      "nvidia/nemotron-3.5-super-vl:free",
+      "reflection/beam-free",
+      "stealth/glyph-cluster",
+      "stealth/crouton-alpha",
+      "dots-studio/dots-3-note-preview:free",
+      "nvidia/nemotron-3.5-lightning:free",
+      "cohere/north-mini-code:free",
       "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "kwaipilot/kat-coder-pro-v2.5:free"
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "openrouter/free"
     ],
-    "modelsUrl": "https://api.kilo.ai/api/gateway/models"
+    "modelsUrl": "https://ai-gateway.kilo.ai/api/v1/models"
   },
   {
     "id": "kimchi",

@@ -1,8 +1,8 @@
 // src/o2a/version.js
-var O2A_VERSION = "1.4.6";
-var O2A_COMMIT = "58f56676ba1438adb30604b889bf36db2a1542a1";
+var O2A_VERSION = "1.4.7";
+var O2A_COMMIT = "b296a61d0e3ef93b4df58e298be2c4e34e397322";
 var O2A_REFERENCE = "https://github.com/jasonxu114514/opencode2api";
-var V2_CLIENT_VERSION = "2.1.1";
+var V2_CLIENT_VERSION = "2.2.3";
 var CLIENT_UA = `opencode/latest/${V2_CLIENT_VERSION}/cli`;
 var V2_COMPLETION_LIMIT = 32e3;
 var ANONYMOUS_CREDENTIAL = "public";
@@ -97,6 +97,34 @@ function clientToolWireName(name, used) {
       return candidate;
     }
   }
+}
+var OFFICIAL_TOOL_ALIASES = Object.freeze({
+  edit: ["edit"],
+  glob: ["glob"],
+  grep: ["grep"],
+  question: ["question", "askuserquestion"],
+  read: ["read", "view"],
+  shell: ["shell", "bash"],
+  skill: ["skill"],
+  subagent: ["subagent", "agent", "task"],
+  webfetch: ["webfetch", "fetch"],
+  websearch: ["websearch"],
+  write: ["write"],
+  patch: ["patch", "applypatch"]
+});
+var FOLDED_OFFICIAL_ALIASES = (() => {
+  const index = /* @__PURE__ */ new Map();
+  for (const [official, spellings] of Object.entries(OFFICIAL_TOOL_ALIASES)) {
+    for (const spelling of spellings) {
+      const folded = foldToolName(spelling);
+      if (!index.has(folded)) index.set(folded, official);
+    }
+  }
+  return index;
+})();
+function officialForClientName(name) {
+  if (typeof name !== "string" || name === "") return null;
+  return FOLDED_OFFICIAL_ALIASES.get(foldToolName(name)) ?? null;
 }
 var ToolRenameMap = class extends Map {
   constructor() {
@@ -518,6 +546,18 @@ function projectID(project) {
   const sum = crypto3.createHash("sha256").update(`opencode-project\0${project}`).digest();
   return sum.subarray(0, 20).toString("hex");
 }
+function stableProjectID(session) {
+  return projectID(String(session ?? ""));
+}
+function traceHeaders() {
+  const traceId = crypto3.randomBytes(16).toString("hex");
+  const spanId = crypto3.randomBytes(8).toString("hex");
+  const parentId = crypto3.randomBytes(8).toString("hex");
+  return {
+    "traceparent": `00-${traceId}-${spanId}-01`,
+    "b3": `${traceId}-${spanId}-1-${parentId}`
+  };
+}
 function gatewayHeaders({ session, childSession, project, stream, accept, anthropic, userAgent } = {}) {
   const headers = {
     "content-type": "application/json",
@@ -528,9 +568,10 @@ function gatewayHeaders({ session, childSession, project, stream, accept, anthro
     "x-session-id": session,
     "x-opencode-session": session,
     "x-opencode-session-id": childSession ?? session,
-    "x-opencode-project": projectID(project ?? randomProjectID())
+    "x-opencode-project": projectID(project ?? stableProjectID(session)),
+    ...traceHeaders()
   };
-  if (accept) headers["accept"] = accept;
+  if (accept !== null) headers["accept"] = accept ?? "*/*";
   if (anthropic) headers["anthropic-beta"] = "interleaved-thinking-2025-05-14";
   return headers;
 }
@@ -538,11 +579,12 @@ function gatewayHeaders({ session, childSession, project, stream, accept, anthro
 // src/o2a/toolshape.js
 function renameAndCompleteTools(payload, shape, { keep } = {}) {
   if (shape !== "chat" && shape !== "flat" && shape !== "claude") {
-    return { renames: new ToolRenameMap(), injected: [] };
+    return { renames: new ToolRenameMap(), injected: [], known: /* @__PURE__ */ new Set() };
   }
   const renames = new ToolRenameMap();
   const used = /* @__PURE__ */ new Set();
   const keepNames = keep instanceof Set ? keep : /* @__PURE__ */ new Set();
+  const officialUsed = new Set(keepNames);
   let items = Array.isArray(payload.tools) ? [...payload.tools] : [];
   if ((shape === "chat" || shape === "flat") && Array.isArray(payload.functions)) {
     items = items.concat(convertLegacyFunctions(payload.functions, shape, renames, used));
@@ -559,6 +601,13 @@ function renameAndCompleteTools(payload, shape, { keep } = {}) {
       shaped.push(item);
       continue;
     }
+    const official = officialForClientName(name);
+    if (official !== null && officialUsed.has(official) === false && officialToolDefinition(official) !== void 0) {
+      officialUsed.add(official);
+      renames.add(name, official);
+      shaped.push(withToolName(shape, item, official));
+      continue;
+    }
     let wireName = renames.wireOf(name);
     if (wireName === void 0) {
       wireName = clientToolWireName(name, used);
@@ -568,13 +617,158 @@ function renameAndCompleteTools(payload, shape, { keep } = {}) {
   }
   const injected = [];
   for (const name of V2_OFFICIAL_TOOL_ORDER) {
-    if (keepNames.has(name)) continue;
+    if (officialUsed.has(name)) continue;
     shaped.push(officialTool(shape, name));
     injected.push(name);
+    officialUsed.add(name);
   }
   payload.tools = shaped;
   rewriteToolReferences(payload, shape, renames);
-  return { renames, injected };
+  const known = new Set(officialUsed);
+  for (const wire of renames.keys()) known.add(wire);
+  sanitizeToolHistory(payload, shape, known);
+  dropDanglingToolChoice(payload, shape, known);
+  return { renames, injected, known };
+}
+function sanitizeToolHistory(payload, shape, known) {
+  const fateOf = (name) => {
+    if (typeof name !== "string" || name === "") return { verdict: "drop" };
+    if (known.has(name)) return { verdict: "keep" };
+    const official = officialForClientName(name);
+    if (official !== null && known.has(official)) return { verdict: "rename", official };
+    return { verdict: "drop" };
+  };
+  if (shape === "chat") {
+    const messages2 = Array.isArray(payload.messages) ? payload.messages : null;
+    if (messages2 === null) return;
+    const droppedCalls2 = /* @__PURE__ */ new Set();
+    const droppedFunctions = /* @__PURE__ */ new Set();
+    let changed2 = false;
+    for (let i = 0; i < messages2.length; i += 1) {
+      const message = messages2[i];
+      if (!message || typeof message !== "object") continue;
+      if (Array.isArray(message.tool_calls)) {
+        const kept = [];
+        let touched = false;
+        for (const call of message.tool_calls) {
+          const fate = fateOf(call?.function?.name);
+          if (fate.verdict === "keep") {
+            kept.push(call);
+            continue;
+          }
+          if (fate.verdict === "rename") {
+            const fn = call.function ?? {};
+            kept.push({ ...call, function: { ...fn, name: fate.official } });
+            touched = true;
+            continue;
+          }
+          if (typeof call?.id === "string" && call.id !== "") droppedCalls2.add(call.id);
+          touched = true;
+        }
+        if (touched) {
+          messages2[i] = { ...message, tool_calls: kept };
+          changed2 = true;
+        }
+      }
+      if (message.function_call && typeof message.function_call === "object") {
+        const fate = fateOf(message.function_call.name);
+        if (fate.verdict === "rename") {
+          messages2[i] = { ...message, function_call: { ...message.function_call, name: fate.official } };
+          changed2 = true;
+        } else if (fate.verdict === "drop") {
+          if (typeof message.function_call.name === "string") droppedFunctions.add(message.function_call.name);
+          const { function_call: _dropped, ...rest } = messages2[i];
+          messages2[i] = rest;
+          changed2 = true;
+        }
+      }
+      if (message.role === "tool" && typeof message.tool_call_id === "string" && droppedCalls2.has(message.tool_call_id)) {
+        messages2.splice(i, 1);
+        i -= 1;
+        changed2 = true;
+      }
+      if (message.role === "function" && typeof message.name === "string" && droppedFunctions.has(message.name)) {
+        messages2.splice(i, 1);
+        i -= 1;
+        changed2 = true;
+      }
+    }
+    if (changed2 && messages2.length === 0) payload.messages = [];
+    return;
+  }
+  if (shape === "flat") {
+    const input = Array.isArray(payload.input) ? payload.input : null;
+    if (input === null) return;
+    const droppedCalls2 = /* @__PURE__ */ new Set();
+    let changed2 = false;
+    for (let i = 0; i < input.length; i += 1) {
+      const item = input[i];
+      const type = typeof item?.type === "string" ? item.type : "";
+      if (type === "function_call") {
+        const fate = fateOf(item.name);
+        if (fate.verdict === "rename") {
+          input[i] = { ...item, name: fate.official };
+          changed2 = true;
+        } else if (fate.verdict === "drop") {
+          if (typeof item.call_id === "string" && item.call_id !== "") droppedCalls2.add(item.call_id);
+          input.splice(i, 1);
+          i -= 1;
+          changed2 = true;
+        }
+        continue;
+      }
+      if (type === "function_call_output" && typeof item.call_id === "string" && droppedCalls2.has(item.call_id)) {
+        input.splice(i, 1);
+        i -= 1;
+        changed2 = true;
+      }
+    }
+    if (changed2 && input.length === 0) payload.input = [];
+    return;
+  }
+  const messages = Array.isArray(payload.messages) ? payload.messages : null;
+  if (messages === null) return;
+  const droppedCalls = /* @__PURE__ */ new Set();
+  let changed = false;
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (!message || typeof message !== "object" || !Array.isArray(message.content)) continue;
+    const kept = [];
+    let touched = false;
+    for (const block of message.content) {
+      if (block?.type === "tool_use") {
+        const fate = fateOf(block.name);
+        if (fate.verdict === "keep") {
+          kept.push(block);
+          continue;
+        }
+        if (fate.verdict === "rename") {
+          kept.push({ ...block, name: fate.official });
+          touched = true;
+          continue;
+        }
+        if (typeof block.id === "string" && block.id !== "") droppedCalls.add(block.id);
+        touched = true;
+        continue;
+      }
+      if (block?.type === "tool_result" && typeof block.tool_use_id === "string" && droppedCalls.has(block.tool_use_id)) {
+        touched = true;
+        continue;
+      }
+      kept.push(block);
+    }
+    if (touched) {
+      messages[i] = kept.length === 0 ? null : { ...message, content: kept };
+      changed = true;
+    }
+  }
+  if (changed) payload.messages = messages.filter((message) => message !== null);
+}
+function dropDanglingToolChoice(payload, shape, known) {
+  const choice = payload?.tool_choice;
+  if (choice === null || typeof choice !== "object") return;
+  const name = shape === "chat" && choice.function && typeof choice.function === "object" ? choice.function.name : choice.name;
+  if (typeof name === "string" && name !== "" && !known.has(name)) delete payload.tool_choice;
 }
 function withToolName(shape, entry, name) {
   if (shape === "chat") {
@@ -720,6 +914,7 @@ export {
   O2A_VERSION,
   OFFICIAL_PROMPT_MARKER,
   OFFICIAL_SKILLS,
+  OFFICIAL_TOOL_ALIASES,
   SESSION_PHASE_MS,
   SESSION_TIMESTAMP_WINDOW_MS,
   TOOL_WIRE_NAME_LIMIT,
@@ -740,6 +935,7 @@ export {
   injectOfficialPrompt,
   isOfficialSessionID,
   officialEnvironment,
+  officialForClientName,
   officialPrompt,
   officialSystemPrompt,
   officialTool,
@@ -752,6 +948,8 @@ export {
   renamableToolName,
   renameAndCompleteTools,
   sessionPhaseMs,
+  stableProjectID,
   textFragments,
+  traceHeaders,
   v2ShellDescription
 };

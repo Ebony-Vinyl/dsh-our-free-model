@@ -113,6 +113,7 @@ const suites = [
   ['opencode-parity', 'opencode-parity-test.mjs', []],
   ['free-lane-wire', 'free-lane-wire-test.mjs', []],
   ['freetier-gate', 'freetier-gate-test.mjs', []],
+  ['free-lane-quota', 'free-lane-quota-test.mjs', []],
   ['sniff', 'sniff-test.mjs', []],
   ['stream-failure', 'stream-failure-test.mjs', []],
   ['truncation', 'truncation-test.mjs', []],

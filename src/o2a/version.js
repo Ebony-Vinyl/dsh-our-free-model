@@ -12,10 +12,10 @@
  */
 
 /** The opencode2api release this port mirrors. */
-export const O2A_VERSION = '1.4.6'
+export const O2A_VERSION = '1.4.7'
 
 /** The exact upstream commit the port was checked against. */
-export const O2A_COMMIT = '58f56676ba1438adb30604b889bf36db2a1542a1'
+export const O2A_COMMIT = 'b296a61d0e3ef93b4df58e298be2c4e34e397322'
 
 /** Where the reference lives. */
 export const O2A_REFERENCE = 'https://github.com/jasonxu114514/opencode2api'
@@ -24,8 +24,13 @@ export const O2A_REFERENCE = 'https://github.com/jasonxu114514/opencode2api'
  * The OpenCode 2.x CLI version the reference impersonates (`httpx.v2ClientVersion`).
  * The v2 gate fingerprints `opencode/latest/<version>/cli`; the upstream project
  * keeps this current with the official client.
+ *
+ * 2.2.3 was captured live from the official client on 2026-10-30 (issue #708's
+ * HTTP-Toolkit trace): the 2.1.1 spelling this port pinned before then is an
+ * older client than the one the gate now sees most often, and the same trace
+ * shows the client carrying `traceparent`/`b3` — see `headers.js`.
  */
-export const V2_CLIENT_VERSION = '2.1.1'
+export const V2_CLIENT_VERSION = '2.2.3'
 
 /** The v2 User-Agent (`httpx.V2UserAgent`). Must be sent alone, unmodified. */
 export const CLIENT_UA = `opencode/latest/${V2_CLIENT_VERSION}/cli`

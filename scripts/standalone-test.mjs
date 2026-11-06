@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { CLIENT_UA } from '../src/o2a/version.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-standalone-'))
@@ -263,7 +264,7 @@ try {
     assert.ok(anonymousRequests.some(req => req.method === 'GET'))
     assert.ok(anonymousRequests.filter(req => req.method === 'POST').length >= 4)
     for (const req of anonymousRequests) {
-      assert.equal(req.headers['user-agent'], 'opencode/latest/2.1.1/cli')
+      assert.equal(req.headers['user-agent'], CLIENT_UA)
     }
   })
   await check('unknown models are refused before spending an upstream call', async () => {

@@ -1,15 +1,19 @@
 /**
  * The free lane's fingerprint as the reference gateway shapes it — the port of
- * opencode2api v1.4.6 (`src/o2a/`), tracked 2026-10-31.
+ * opencode2api v1.4.7 (`src/o2a/`), tracked 2026-11-07.
  *
  * The 2026-10-16 v2 gate contract (read + shell verbatim, `tool_choice: 'none'`
- * refused) still holds, and on top of it the reference adds the two facts its
- * releases verified: **no client tool name may reach the wire** (another
+ * refused) still holds, and on top of it the reference adds the facts its
+ * releases verified: **no foreign client tool name may reach the wire** (another
  * client's vocabulary — Claude Code's `ReportFindings` + `ScheduleWakeup` — is
- * refused, so every named client tool is renamed to an opaque `clint_<digest>`)
- * and the **full 13-tool official CLI set** is appended from the captured
- * `opencode_tools.json`. Each case below is one of the behaviors the shaping
- * must keep.
+ * refused), so every named client tool either **binds to an official name**
+ * (v1.4.7 `BindOfficial`: a folded-name match rides the wire under the
+ * official spelling with the caller's own definition) or is renamed to an
+ * opaque `clint_<digest>`; the **full 13-tool official CLI set** is appended
+ * from the captured `opencode_tools.json` minus whatever is already served;
+ * and **ghost call history is dropped** (calls naming tools this request no
+ * longer serves, with their paired results). Each case below is one of the
+ * behaviors the shaping must keep.
  *
  * Run: node scripts/fingerprint-test.mjs
  */
@@ -44,33 +48,42 @@ const official = (style, name) => {
 /** The opaque wire name the shaper gives a client tool. */
 const wireNameOf = name => clientToolWireName(name)
 
-console.log('=== 1. every client tool is renamed; the official set is appended ===')
+console.log('=== 1. client tools bind or rename; the official set completes the wire ===')
 {
   const body = { tools: [chatTool('pwsh'), chatTool('Read'), chatTool('write')] }
   const map = applyFingerprint(body, false)
   check('read and shell are declared', FINGERPRINT_TOOLS.filter(name => declared(body).includes(name)), ['read', 'shell'])
   check('no client name survives the wire', declared(body).some(name => !name.startsWith(CLIENT_TOOL_PREFIX) && !V2_OFFICIAL_TOOL_ORDER.includes(name)), false)
-  check('case variants are renamed with everything else', declared(body).includes(wireNameOf('Read')), true)
-  check('every rename maps back', [wireNameOf('pwsh'), wireNameOf('Read'), wireNameOf('write')].every(wire => restoreToolName(wire, map) === wire.slice(CLIENT_TOOL_PREFIX.length) ? false : true), true)
-  check('three client tools were renamed', map.size, 3)
+  // v1.4.7 BindOfficial: `Read` and `write` fold onto the official spellings
+  // and ride the wire under them with the caller's own definitions; `pwsh`
+  // has no official and takes the opaque rename.
+  check('case variants bind instead of renaming', declared(body).includes(wireNameOf('Read')), false)
+  check('Read rides the official read name', declared(body).includes('read'), true)
+  check('write binds to itself', declared(body).filter(name => name === 'write').length, 1)
+  check('every bound call maps back to the caller spelling', restoreToolName('read', map), 'Read')
+  check('the opaque rename still maps back', restoreToolName(wireNameOf('pwsh'), map), 'pwsh')
+  check('one binding and one rename were recorded', map.size, 2)
   check('the full official set follows', V2_OFFICIAL_TOOL_ORDER.every(name => declared(body).includes(name)), true)
   const read = body.tools.find(tool => tool.function.name === 'read')
-  check('the read schema is the official one', read.function.parameters.required, ['path'])
-  check('…and is closed to extra properties', read.function.parameters.additionalProperties, false)
-  check('official chat tools carry the client strict flag', body.tools.filter(tool => V2_OFFICIAL_TOOL_ORDER.includes(tool.function?.name)).every(tool => tool.function.strict === false), true)
+  check('the bound read keeps the caller schema', read.function.parameters.properties.x, { type: 'string' })
+  const appendedRead = body.tools.filter(tool => tool.function.name === 'read')
+  check('the official read is not appended a second time', appendedRead.length, 1)
+  check('official chat tools carry the client strict flag', body.tools.filter(tool => V2_OFFICIAL_TOOL_ORDER.includes(tool.function?.name) && tool.function.strict !== undefined).every(tool => tool.function.strict === false), true)
   check('renamed caller tools keep the caller’s shape', body.tools.find(tool => tool.function.name === wireNameOf('pwsh')).function.strict, undefined)
   check('the model is told the injected tools are placeholders', /placeholders in this session/.test(noteOf(body)), true)
   check('…and no tool_choice is claimed', body.tool_choice, undefined)
 }
 
-console.log('\n=== 2. a caller tool reusing a gate name is renamed like any other ===')
+console.log('\n=== 2. a caller tool reusing a gate name binds to it, not an opaque ===')
 {
   const body = { tools: [chatTool('read'), chatTool('read_client'), chatTool('Edit')] }
   const map = applyFingerprint(body, false)
-  check('all three are renamed, no official duplicated', body.tools.filter(tool => tool.function.name === 'read').length, 1)
-  check('the caller read maps back', restoreToolName(wireNameOf('read'), map), 'read')
+  check('the bound read is singular', body.tools.filter(tool => tool.function.name === 'read').length, 1)
+  check('the caller read maps back as itself', restoreToolName('read', map), 'read')
+  check('Edit binds to the official edit', declared(body).includes('edit'), true)
   check('the official read is the only read', declared(body).filter(name => name === 'read').length, 1)
-  check('nothing was left unrenamed', declared(body).slice(0, 3).every(name => name.startsWith(CLIENT_TOOL_PREFIX)), true)
+  check('the unmatched spelling still renames opaquely', declared(body).includes(wireNameOf('read_client')), true)
+  check('no caller name survives unbound', declared(body).slice(0, 3).every(name => name.startsWith(CLIENT_TOOL_PREFIX) || V2_OFFICIAL_TOOL_ORDER.includes(name)), true)
 }
 
 console.log('\n=== 3. a caller tool that already carries the official definition is the official declaration ===')
@@ -83,12 +96,12 @@ console.log('\n=== 3. a caller tool that already carries the official definition
   check('environment context is still supplied', /<env>/.test(noteOf(body)), true)
 }
 
-console.log('\n=== 4. duplicate declarations of one client name share one wire name ===')
+console.log('\n=== 4. duplicate declarations: the first binds, the second renames opaquely ===')
 {
   const body = { tools: [chatTool('shell'), chatTool('shell')] }
   applyFingerprint(body, false)
   const shellWires = declared(body).filter(name => name.startsWith(CLIENT_TOOL_PREFIX))
-  check('both copies land on the same opaque name', new Set(shellWires).size, 1)
+  check('the second copy lands on one opaque name', new Set(shellWires).size, 1)
   check('the official shell is still singular', declared(body).filter(name => name === 'shell').length, 1)
 }
 
@@ -104,26 +117,51 @@ console.log('\n=== 5. tool_choice: never none, retargeted to the wire name, auto
 
   const named = { tools: [chatTool('read')], tool_choice: { type: 'function', function: { name: 'read' } } }
   applyFingerprint(named, false)
-  check('a choice naming a renamed tool follows the wire name', named.tool_choice.function.name, wireNameOf('read'))
+  check('a choice naming a bound tool keeps the official name', named.tool_choice.function.name, 'read')
+
+  const dangling = { tools: [chatTool('pwsh')], tool_choice: { type: 'function', function: { name: 'ghost_tool' } } }
+  applyFingerprint(dangling, false)
+  check('a choice naming an unserved tool is dropped (v1.4.7)', dangling.tool_choice, undefined)
 
   const flat = { tools: [flatTool('write')] }
   applyFingerprint(flat, true)
   check('Responses defaults to auto', flat.tool_choice, 'auto')
 }
 
-console.log('\n=== 6. history calls to a renamed tool are renamed with it ===')
+console.log('\n=== 6. history calls follow the wire name; ghosts are dropped ===')
+{
+  const body = {
+    tools: [chatTool('pwsh')],
+    messages: [
+      { role: 'user', content: 'go' },
+      { role: 'assistant', tool_calls: [{ id: 'c1', function: { name: 'pwsh', arguments: '{}' } }, { id: 'c2', function: { name: 'vanished_tool', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'c1', content: 'ok' },
+      { role: 'tool', tool_call_id: 'c2', content: 'orphan' },
+    ],
+  }
+  applyFingerprint(body, false)
+  const assistant = body.messages.find(message => Array.isArray(message.tool_calls))
+  check('the prior call follows the wire name', assistant.tool_calls[0].function.name, wireNameOf('pwsh'))
+  check('the ghost call is dropped (v1.4.7)', assistant.tool_calls.length, 1)
+  const results = body.messages.filter(message => message.role === 'tool')
+  check('the orphaned result is dropped with it', results.length, 1)
+  check('the kept result keeps its call', results[0].tool_call_id, 'c1')
+  check('the caller message object is not mutated in place', assistant.tool_calls.length === 2, false)
+}
+
+console.log('\n=== 6b. a bound tool keeps its history under the official name ===')
 {
   const body = {
     tools: [chatTool('read')],
     messages: [
       { role: 'assistant', tool_calls: [{ id: 'c1', function: { name: 'read', arguments: '{}' } }] },
-      { role: 'tool', content: 'ok' },
+      { role: 'tool', tool_call_id: 'c1', content: 'ok' },
     ],
   }
   applyFingerprint(body, false)
   const assistant = body.messages.find(message => Array.isArray(message.tool_calls))
-  check('the prior call follows the wire name', assistant.tool_calls[0].function.name, wireNameOf('read'))
-  check('the caller message object is not mutated in place', assistant.tool_calls[0].function.name === 'read', false)
+  check('the bound history call already speaks the wire name', assistant.tool_calls[0].function.name, 'read')
+  check('its result survives', body.messages.filter(message => message.role === 'tool').length, 1)
 }
 
 console.log('\n=== 7. the Messages (Claude) shape carries input_schema, not parameters ===')
@@ -137,8 +175,9 @@ console.log('\n=== 7. the Messages (Claude) shape carries input_schema, not para
 
   const caller = { tools: [claudeTool('read')] }
   applyFingerprint(caller, 'claude')
-  check('a conflicting caller read is renamed here too', declared(caller).includes(wireNameOf('read')), true)
+  check('a conflicting caller read binds here too', declared(caller).includes('read'), true)
   check('the official read is not duplicated', declared(caller).filter(name => name === 'read').length, 1)
+  check('the bound declaration keeps the caller schema', caller.tools.find(tool => tool.name === 'read').description, 'the read tool')
 }
 
 console.log('\n=== 8. the Responses (flat) shape carries a flat declaration ===')
@@ -152,7 +191,8 @@ console.log('\n=== 8. the Responses (flat) shape carries a flat declaration ==='
 
   const caller = { tools: [flatTool('shell')] }
   applyFingerprint(caller, true)
-  check('a conflicting caller shell is renamed here too', declared(caller).includes(wireNameOf('shell')), true)
+  check('a conflicting caller shell binds here too', declared(caller).filter(name => name === 'shell').length, 1)
+  check('the second spelling is the caller schema, not the capture', caller.tools.find(tool => tool.name === 'shell').description, 'the shell tool')
 }
 
 console.log('\n=== 9. the injected definitions are byte-for-byte the official ones ===')
@@ -190,6 +230,38 @@ console.log('\n=== 10. shaping twice is a no-op (idempotence) ===')
   // pass legitimately renames nothing — the payload that ships always decodes
   // with the map from the pass that built it.
   check('the second pass renames nothing', secondMap.size, 0)
+
+  const bound = { tools: [chatTool('Bash'), chatTool('pwsh')] }
+  applyFingerprint(bound, false)
+  const boundOnce = JSON.stringify(bound)
+  applyFingerprint(bound, false)
+  check('a bound body reshapes identically', JSON.stringify(bound), boundOnce)
+}
+
+console.log('\n=== 10b. title requests ship unshaped (v1.4.7) ===')
+{
+  const title = {
+    messages: [
+      { role: 'system', content: 'You generate conversation titles.' },
+      { role: 'user', content: 'Generate a title for this conversation: help me fix a build' },
+    ],
+  }
+  const marker = applyFingerprint(title, false)
+  check('a title request is left untouched', JSON.stringify(title), JSON.stringify({
+    messages: [
+      { role: 'system', content: 'You generate conversation titles.' },
+      { role: 'user', content: 'Generate a title for this conversation: help me fix a build' },
+    ],
+  }))
+  check('…and renames nothing', marker.size, 0)
+
+  const chat = { messages: [{ role: 'user', content: 'Generate a title for this conversation: hello' }], tools: [chatTool('read')] }
+  applyFingerprint(chat, false)
+  check('a title-shaped body with tools is still shaped', /opencode, an interactive CLI tool|You are opencode/.test(noteOf(chat)), true)
+
+  const plain = { messages: [{ role: 'user', content: 'hello' }] }
+  applyFingerprint(plain, false)
+  check('a plain toolless turn is still shaped', /You are opencode/.test(noteOf(plain)), true)
 }
 
 console.log('\n=== 11. the port names the release it mirrors ===')

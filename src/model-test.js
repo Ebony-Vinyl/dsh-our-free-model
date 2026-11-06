@@ -84,7 +84,9 @@ export function modelAvailability(id, snapshot, listed = false) {
   // Older saved snapshots have only `at`, which retains their previous order.
   const measured = manual && (!probe || manual.at >= (probe.startedAt ?? probe.at)) ? manual : probe
   return {
-    availabilitySource: measured === manual && manual ? 'manual' : listed ? 'listing' : 'probe',
+    availabilitySource: measured === manual && manual ? 'manual'
+      : measured?.source === 'passive' ? 'passive'
+        : listed ? 'listing' : 'probe',
     availability: measured?.state ?? 'unknown',
     detail: measured?.detail ?? '', probedAt: measured?.at ?? 0,
     ttftMs: measured?.ttftMs, latencyMs: measured?.latencyMs,

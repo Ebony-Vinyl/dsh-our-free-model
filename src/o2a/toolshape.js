@@ -33,8 +33,8 @@
  * @module src/o2a/toolshape.js
  */
 
-import { ToolRenameMap, CLIENT_TOOL_PREFIX, clientToolWireName } from './tool-renames.js'
-import { V2_OFFICIAL_TOOL_ORDER, officialTool, renamableToolName } from './official-tools.js'
+import { ToolRenameMap, CLIENT_TOOL_PREFIX, clientToolWireName, officialForClientName } from './tool-renames.js'
+import { V2_OFFICIAL_TOOL_ORDER, officialTool, officialToolDefinition, renamableToolName } from './official-tools.js'
 
 /**
  * Shape the tool list of `payload` in place (`renameAndCompleteTools`).
@@ -44,16 +44,22 @@ import { V2_OFFICIAL_TOOL_ORDER, officialTool, renamableToolName } from './offic
  * @param {object} [options]
  * @param {Set<string>} [options.keep] - official tool names already declared
  *   verbatim; left untouched and not appended again
- * @returns {{ renames: ToolRenameMap, injected: string[] }} the rename set and
- *   the official names this pass appended
+ * @returns {{ renames: ToolRenameMap, injected: string[], known: Set<string> }}
+ *   the rename set, the official names this pass appended, and every wire tool
+ *   name the shaped body considers valid (bound and appended officials plus
+ *   the `clint_` renames) — the history sanitizer's whitelist
  */
 export function renameAndCompleteTools(payload, shape, { keep } = {}) {
   if (shape !== 'chat' && shape !== 'flat' && shape !== 'claude') {
-    return { renames: new ToolRenameMap(), injected: [] }
+    return { renames: new ToolRenameMap(), injected: [], known: new Set() }
   }
   const renames = new ToolRenameMap()
   const used = new Set()
   const keepNames = keep instanceof Set ? keep : new Set()
+  /** Officials spoken on the wire this pass: verbatim declarations, alias
+   * bindings and the appended set. Everything else in the call history is a
+   * ghost the sanitizer drops. */
+  const officialUsed = new Set(keepNames)
   let items = Array.isArray(payload.tools) ? [...payload.tools] : []
   if ((shape === 'chat' || shape === 'flat') && Array.isArray(payload.functions)) {
     items = items.concat(convertLegacyFunctions(payload.functions, shape, renames, used))
@@ -71,6 +77,19 @@ export function renameAndCompleteTools(payload, shape, { keep } = {}) {
       shaped.push(item)
       continue
     }
+    // v1.4.7 `BindOfficial`: a client tool whose folded name is one of an
+    // official's known client spellings rides the wire under the official
+    // name — the caller's own definition, not a `clint_` opaque, and the
+    // official definition is not appended a second time. Each official binds
+    // once; the response side restores the caller's spelling through the same
+    // rename map as every other rename.
+    const official = officialForClientName(name)
+    if (official !== null && officialUsed.has(official) === false && officialToolDefinition(official) !== undefined) {
+      officialUsed.add(official)
+      renames.add(name, official)
+      shaped.push(withToolName(shape, item, official))
+      continue
+    }
     let wireName = renames.wireOf(name)
     if (wireName === undefined) {
       wireName = clientToolWireName(name, used)
@@ -80,13 +99,170 @@ export function renameAndCompleteTools(payload, shape, { keep } = {}) {
   }
   const injected = []
   for (const name of V2_OFFICIAL_TOOL_ORDER) {
-    if (keepNames.has(name)) continue
+    if (officialUsed.has(name)) continue
     shaped.push(officialTool(shape, name))
     injected.push(name)
+    officialUsed.add(name)
   }
   payload.tools = shaped
   rewriteToolReferences(payload, shape, renames)
-  return { renames, injected }
+  const known = new Set(officialUsed)
+  for (const wire of renames.keys()) known.add(wire)
+  sanitizeToolHistory(payload, shape, known)
+  dropDanglingToolChoice(payload, shape, known)
+  return { renames, injected, known }
+}
+
+/**
+ * Drop ghost tool calls and their paired results (`sanitizeToolHistory`,
+ * opencode2api v1.4.7).
+ *
+ * A shaped body's call history is valid only when every call names a tool the
+ * wire actually serves this pass: a bound or appended official, or one of this
+ * request's `clint_` renames. Everything else is a ghost — a client tool the
+ * caller dropped from its declarations, a foreign name from a mid-conversation
+ * plugin change — and the free tier answers a body that carries one with the
+ * same refusals it saves for vocabulary leaks. The call goes, and the result
+ * message paired to it goes with it, because an orphaned result is its own
+ * shape violation.
+ *
+ * Copy-on-write like every other edit here: the caller's message objects are
+ * shared with the host harness, so touched rows are replaced, never mutated.
+ */
+function sanitizeToolHistory(payload, shape, known) {
+  /** A history call's fate: kept, rewritten to a served official alias, or dropped. */
+  const fateOf = name => {
+    if (typeof name !== 'string' || name === '') return { verdict: 'drop' }
+    if (known.has(name)) return { verdict: 'keep' }
+    const official = officialForClientName(name)
+    if (official !== null && known.has(official)) return { verdict: 'rename', official }
+    return { verdict: 'drop' }
+  }
+  if (shape === 'chat') {
+    const messages = Array.isArray(payload.messages) ? payload.messages : null
+    if (messages === null) return
+    const droppedCalls = new Set()
+    const droppedFunctions = new Set()
+    let changed = false
+    for (let i = 0; i < messages.length; i += 1) {
+      const message = messages[i]
+      if (!message || typeof message !== 'object') continue
+      if (Array.isArray(message.tool_calls)) {
+        const kept = []
+        let touched = false
+        for (const call of message.tool_calls) {
+          const fate = fateOf(call?.function?.name)
+          if (fate.verdict === 'keep') { kept.push(call); continue }
+          if (fate.verdict === 'rename') {
+            const fn = call.function ?? {}
+            kept.push({ ...call, function: { ...fn, name: fate.official } })
+            touched = true
+            continue
+          }
+          if (typeof call?.id === 'string' && call.id !== '') droppedCalls.add(call.id)
+          touched = true
+        }
+        if (touched) {
+          messages[i] = { ...message, tool_calls: kept }
+          changed = true
+        }
+      }
+      if (message.function_call && typeof message.function_call === 'object') {
+        const fate = fateOf(message.function_call.name)
+        if (fate.verdict === 'rename') {
+          messages[i] = { ...message, function_call: { ...message.function_call, name: fate.official } }
+          changed = true
+        } else if (fate.verdict === 'drop') {
+          if (typeof message.function_call.name === 'string') droppedFunctions.add(message.function_call.name)
+          const { function_call: _dropped, ...rest } = messages[i]
+          messages[i] = rest
+          changed = true
+        }
+      }
+      if (message.role === 'tool' && typeof message.tool_call_id === 'string' && droppedCalls.has(message.tool_call_id)) {
+        messages.splice(i, 1)
+        i -= 1
+        changed = true
+      }
+      if (message.role === 'function' && typeof message.name === 'string' && droppedFunctions.has(message.name)) {
+        messages.splice(i, 1)
+        i -= 1
+        changed = true
+      }
+    }
+    if (changed && messages.length === 0) payload.messages = []
+    return
+  }
+  if (shape === 'flat') {
+    const input = Array.isArray(payload.input) ? payload.input : null
+    if (input === null) return
+    const droppedCalls = new Set()
+    let changed = false
+    for (let i = 0; i < input.length; i += 1) {
+      const item = input[i]
+      const type = typeof item?.type === 'string' ? item.type : ''
+      if (type === 'function_call') {
+        const fate = fateOf(item.name)
+        if (fate.verdict === 'rename') {
+          input[i] = { ...item, name: fate.official }
+          changed = true
+        } else if (fate.verdict === 'drop') {
+          if (typeof item.call_id === 'string' && item.call_id !== '') droppedCalls.add(item.call_id)
+          input.splice(i, 1)
+          i -= 1
+          changed = true
+        }
+        continue
+      }
+      if (type === 'function_call_output' && typeof item.call_id === 'string' && droppedCalls.has(item.call_id)) {
+        input.splice(i, 1)
+        i -= 1
+        changed = true
+      }
+    }
+    if (changed && input.length === 0) payload.input = []
+    return
+  }
+  const messages = Array.isArray(payload.messages) ? payload.messages : null
+  if (messages === null) return
+  const droppedCalls = new Set()
+  let changed = false
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i]
+    if (!message || typeof message !== 'object' || !Array.isArray(message.content)) continue
+    const kept = []
+    let touched = false
+    for (const block of message.content) {
+      if (block?.type === 'tool_use') {
+        const fate = fateOf(block.name)
+        if (fate.verdict === 'keep') { kept.push(block); continue }
+        if (fate.verdict === 'rename') { kept.push({ ...block, name: fate.official }); touched = true; continue }
+        if (typeof block.id === 'string' && block.id !== '') droppedCalls.add(block.id)
+        touched = true
+        continue
+      }
+      if (block?.type === 'tool_result' && typeof block.tool_use_id === 'string' && droppedCalls.has(block.tool_use_id)) {
+        touched = true
+        continue
+      }
+      kept.push(block)
+    }
+    if (touched) {
+      messages[i] = kept.length === 0 ? null : { ...message, content: kept }
+      changed = true
+    }
+  }
+  if (changed) payload.messages = messages.filter(message => message !== null)
+}
+
+/** Remove a named `tool_choice` that names a tool the shaped body no longer serves. */
+function dropDanglingToolChoice(payload, shape, known) {
+  const choice = payload?.tool_choice
+  if (choice === null || typeof choice !== 'object') return
+  const name = shape === 'chat' && choice.function && typeof choice.function === 'object'
+    ? choice.function.name
+    : choice.name
+  if (typeof name === 'string' && name !== '' && !known.has(name)) delete payload.tool_choice
 }
 
 /** Replace a renamed entry with a shallow copy carrying the wire name (`setToolName`, cloning variant). */

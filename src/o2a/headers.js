@@ -19,14 +19,14 @@
  *
  * The plugin adds the lane's own transport fields around the port: the pooled
  * keyless credential `Authorization: Bearer public` (`upstreamRequest`), the
- * JSON content type, and the `accept` value the caller's streaming needs.
+ * JSON content type, the W3C trace pair the official 2.2.3 client emits
+ * (`traceHeaders`), and the `accept` value the caller's streaming needs.
  *
  * @module src/o2a/headers.js
  */
 
 import crypto from 'node:crypto'
 import { ANONYMOUS_CREDENTIAL, CLIENT_UA } from './version.js'
-import { randomProjectID } from './identity.js'
 
 /** The 40-hex shape of a git root commit, which `projectID` keeps verbatim. */
 const GIT_COMMIT_RE = /^[0-9a-f]{40}$/
@@ -44,20 +44,73 @@ export function projectID(project) {
 }
 
 /**
+ * The stable project id for one conversation (`stableProjectID`).
+ *
+ * The reference mints a fresh project per request — a quota spread that makes
+ * sense behind its rotating proxy pool, and the opposite of what a single-IP
+ * client wants: every retry, continuation and catalog refresh then lands in a
+ * fresh bucket, so one conversation's usage is scattered across identities the
+ * upstream cannot correlate (our PR #757). Deriving the project from the
+ * session id instead keeps one conversation on one bucket — the shape stays
+ * the 40-hex id the gate checks, the value stays stable for the conversation's
+ * life, and a caller-named project still wins (passed through `projectID`).
+ *
+ * @param {string} session - the canonical conversation-affinity session
+ * @returns {string} a 40-character lowercase hex project id
+ */
+export function stableProjectID(session) {
+  return projectID(String(session ?? ''))
+}
+
+/**
+ * One W3C Trace Context pair for one request (`traceHeaders`).
+ *
+ * The official 2.2.3 client carries `traceparent` and `b3` on every inference
+ * request (captured live, issue #708's HTTP-Toolkit trace) — the distributed
+ * trace propagation every OTel-instrumented client emits. The trace was named
+ * in #708 as the header most likely to distinguish a genuine client; whatever
+ * the gate does with it, a third-party client that omits both looks less like
+ * the real thing, so the lane sends a well-formed pair: one trace id, one span
+ * id, both sampled, the `b3` single-header form carrying the same ids plus the
+ * parent span the zipkin shape expects.
+ *
+ * Fresh ids per request on purpose: a span is one request's work, and reusing
+ * a trace across requests is the fingerprint of a broken instrumented client.
+ *
+ * @returns {{ 'traceparent': string, 'b3': string }}
+ */
+export function traceHeaders() {
+  const traceId = crypto.randomBytes(16).toString('hex')
+  const spanId = crypto.randomBytes(8).toString('hex')
+  const parentId = crypto.randomBytes(8).toString('hex')
+  return {
+    'traceparent': `00-${traceId}-${spanId}-01`,
+    'b3': `${traceId}-${spanId}-1-${parentId}`,
+  }
+}
+
+/**
  * The v2 header set for one request (`setV2Headers`).
+ *
+ * Aligned with the official 2.2.3 client's outbound bytes (issue #708's
+ * HTTP-Toolkit trace, 2026-10-30): the trace pair rides every request, and the
+ * client's fetch stack emits an `accept: asterisk-slash-asterisk` wildcard —
+ * the earlier reference capture that omitted `accept` described the
+ * *reference's* Go client, not the official one.
  *
  * @param {object} options
  * @param {string} options.session - the canonical conversation-affinity session
  * @param {string} [options.childSession] - the client's own child session for
  *   `x-opencode-session-id`; defaults to `session`
  * @param {string} [options.project] - caller project signal; defaults to a
- *   fresh 40-hex id per request, the quota-spread the reference mints when the
- *   client names no project
- * @param {boolean} [options.stream] - unused for the header set (the reference
- *   sends no `accept` at all on the v2 lane — captured 2026-10-31 from its
- *   outbound bytes); kept for signature compatibility
- * @param {string} [options.accept] - explicit `accept` override; emitted only
- *   when the caller names one (GET document fetches)
+ *   stable id derived from the session ({@link stableProjectID}), so one
+ *   conversation's retries/continuations/refreshes share one quota bucket
+ *   instead of scattering across per-request identities
+ * @param {boolean} [options.stream] - unused for the header set (the accept
+ *   value no longer depends on it); kept for signature compatibility
+ * @param {string} [options.accept] - explicit `accept` override; the wildcard
+ *   the wildcard by default (the official client's fetch default), `null` to
+ *   omit the header entirely
  * @param {boolean} [options.anthropic] - add the Messages-lane beta header
  * @param {string} [options.userAgent] - UA override; the lane pins
  *   {@link CLIENT_UA} (the attribution hook in src/http.js resolves to it)
@@ -73,9 +126,10 @@ export function gatewayHeaders({ session, childSession, project, stream, accept,
     'x-session-id': session,
     'x-opencode-session': session,
     'x-opencode-session-id': childSession ?? session,
-    'x-opencode-project': projectID(project ?? randomProjectID()),
+    'x-opencode-project': projectID(project ?? stableProjectID(session)),
+    ...traceHeaders(),
   }
-  if (accept) headers['accept'] = accept
+  if (accept !== null) headers['accept'] = accept ?? '*/*'
   if (anthropic) headers['anthropic-beta'] = 'interleaved-thinking-2025-05-14'
   return headers
 }

@@ -84,15 +84,26 @@ console.log('\n=== 2. the four v2 session headers, and no v1-only request header
   // v1 sent `x-opencode-request`; v2 answers that header with 403 FreeTierError.
   check('no x-opencode-request', 'x-opencode-request' in headers, false)
   check('the User-Agent is the canonical v2 token', headers['user-agent'], up.CLIENT_UA)
-  // The reference sends no accept header at all on the v2 lane (captured from
-  // its outbound bytes, 2026-10-31); the body's stream flag drives SSE.
-  check('no accept header on the v2 lane', 'accept' in headers, false)
+  // The official 2.2.3 client answers with its fetch stack's wildcard accept
+  // (issue #708's HTTP-Toolkit trace); the reference's Go client omitting the
+  // header described the reference, not the official client.
+  check('the v2 lane answers with the official wildcard accept', headers.accept, '*/*')
   check('an explicit accept override still ships', up.gatewayHeaders({ session, accept: 'application/json' }).accept, 'application/json')
-  // v1.4.6: the project id is a bare 40-hex id, fresh per request when the
-  // caller names no project — the shared `global` bucket arrived pre-burned.
+  check('accept can be omitted explicitly', 'accept' in up.gatewayHeaders({ session, accept: null }), false)
+  // The official client carries a W3C trace pair on every request; the pair is
+  // fresh per request, and both spellings share one trace/span id pair.
+  const trace = headers.traceparent
+  check('traceparent rides every request', /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/.test(trace), true)
+  check('b3 carries the same ids', headers.b3, `${trace.slice(3, 35)}-${trace.slice(36, 52)}-1-${headers.b3.split('-')[3]}`)
+  check('the next request mints a fresh trace', up.gatewayHeaders({ session, stream: true }).traceparent !== trace, true)
+  // v1.4.6: the project id is a bare 40-hex id. Since our PR #757 port, the
+  // default derives from the session — one conversation, one quota bucket —
+  // instead of the reference's per-request mint (a proxy-pool spread that
+  // scatters a single-IP client's usage across uncorrelated identities).
   const project = headers['x-opencode-project']
   check('the project id is a bare 40-hex id', /^[0-9a-f]{40}$/.test(project), true)
-  check('a second request mints a fresh project id', up.gatewayHeaders({ session, stream: true })['x-opencode-project'] !== project, true)
+  check('a second request keeps the conversation project stable', up.gatewayHeaders({ session, stream: true })['x-opencode-project'] === project, true)
+  check('a different session derives a different project', up.gatewayHeaders({ session: `${session}x` })['x-opencode-project'] !== project, true)
   check('a caller project of `global` passes through', up.gatewayHeaders({ session, project: 'global' })['x-opencode-project'], 'global')
 }
 
@@ -137,15 +148,15 @@ console.log('\n=== 4. the v2 tool gate: read + shell, official definitions, no t
   up.applyFingerprint(claude, 'claude')
   check('Messages shape uses input_schema', declared(claude, 'read').input_schema.required, ['path'])
 
-  // A caller tool that reuses a gate name with another definition moves aside,
-  // and the response side still restores the caller's own spelling.
+  // A caller tool that reuses a gate name with another definition binds to the
+  // official spelling (v1.4.7 BindOfficial) — the caller's own definition rides
+  // the wire under `read`, and the response side restores the caller's spelling.
   const caller = { tools: [{ type: 'function', function: { name: 'read', description: 'the caller read', parameters: { type: 'object', properties: {} } } }] }
   const map = up.applyFingerprint(caller, false)
   check('only one declaration carries the gate name', caller.tools.filter(tool => tool.function.name === 'read').length, 1)
-  check('…and it is the official definition', declared(caller, 'read').function.parameters.required, ['path'])
-  const callerWire = clientToolWireName('read')
-  check('the caller declaration survived under its opaque wire name', caller.tools.find(tool => tool.function.name === callerWire).function.description, 'the caller read')
-  check('…and the wire name restores the caller name', up.restoreToolName(callerWire, map), 'read')
+  check('…and it carries the caller definition under the official name', declared(caller, 'read').function.description, 'the caller read')
+  check('the official read is not appended beside it', caller.tools.filter(tool => tool.function.name === 'read').length, 1)
+  check('…and the wire name restores the caller name', up.restoreToolName('read', map), 'read')
 }
 
 console.log('\n=== 5. the User-Agent is the canonical v2 token, whatever the host attributes ===')

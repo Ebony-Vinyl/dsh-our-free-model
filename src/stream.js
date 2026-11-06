@@ -88,11 +88,13 @@ function argumentsCutMidway(raw) {
 }
 
 class BlockSink {
-  constructor(yieldChunk, startIndex, checkpointLimit, onProgress) {
+  constructor(yieldChunk, startIndex, checkpointLimit, onProgress, renameMap) {
     this.emit = yieldChunk
     this.next = startIndex
     this.onProgress = typeof onProgress === 'function' ? onProgress : () => {}
-    /** @type {Map<string, {index:number, kind:string, text:string, id?:string, name?:string, args?:string}>} */
+    /** The rename map the raw Chat tool names resolve through. */
+    this.renameMap = renameMap
+    /** @type {Map<string, {index:number, kind:string, text:string, id?:string, name?:string, rawName?:string, args?:string}>} */
     this.open = new Map()
     this.usage = undefined
     this.sawReasoning = false
@@ -186,10 +188,35 @@ class BlockSink {
       && (block.name !== priorName || block.id !== priorId)) this.onProgress()
   }
 
+  /**
+   * Buffer one fragment of a Chat tool call's wire name (`toolNameFragment`).
+   *
+   * Some gateways split `tool_calls[].function.name` across delta frames — and
+   * resolving every fragment on arrival used to fold a half name into a wrong
+   * or unknown tool, surfacing ghost calls (opencode2api v1.4.7 buffers the
+   * same way). The raw name accumulates here and resolves through
+   * {@link resolveRawName} once the call's arguments start or the block closes;
+   * until then the emitted deltas simply carry no name, which downstream
+   * consumers already tolerate (arguments can legitimately precede a name).
+   */
+  toolNameFragment(key, id, fragment) {
+    const block = this.slot(key, 'tool-call')
+    if (id) block.id = id
+    block.rawName = (block.rawName ?? '') + fragment
+  }
+
+  /** Resolve a buffered raw wire name once, right before its first consumer needs it. */
+  #resolveRawName(block) {
+    if (block.name || typeof block.rawName !== 'string' || block.rawName === '') return
+    block.name = restoreToolName(block.rawName, this.renameMap)
+    this.onProgress()
+  }
+
   toolArgs(key, delta) {
     this.sawToolCall = true
     if (!delta) return
     const block = this.slot(key, 'tool-call')
+    this.#resolveRawName(block)
     block.args += delta
     // Arguments can arrive before the wire has named the call (a Claude-relay
     // stream does exactly this). The harness re-reads every chunk through a
@@ -211,6 +238,7 @@ class BlockSink {
       if (block.kind === 'text' && block.text !== '') this.emit({ type: 'block-end', index: block.index, block: { type: 'text', text: block.text } })
       else if (block.kind === 'reasoning' && block.text !== '') this.emit({ type: 'block-end', index: block.index, block: { type: 'reasoning', text: block.text } })
       else if (block.kind === 'tool-call') {
+        this.#resolveRawName(block)
         // Arguments that never parse are an unexecutable call. The gateway
         // reports finish "tool_calls" even when the output ceiling cut the JSON
         // mid-string (verified live 2026-09-25), so the finish token alone
@@ -359,7 +387,9 @@ function feedChat(sink, payload, renameMap, onFinish) {
       sink.sawToolCall = true
       const key = sink.toolKey(call)
       const name = call.function?.name
-      if (typeof name === 'string' && name !== '') sink.toolStart(key, call.id ?? '', restoreToolName(name, renameMap))
+      // The name is buffered, not resolved per fragment: split frames used to
+      // fold a half name into a ghost tool (see BlockSink.toolNameFragment).
+      if (typeof name === 'string' && name !== '') sink.toolNameFragment(key, call.id ?? '', name)
       else if (call.id) sink.toolStart(key, call.id, '')
       if (call.function?.arguments) sink.toolArgs(key, call.function.arguments)
     }
@@ -506,7 +536,7 @@ export async function * readStream(lines, wire, renameMap, now = () => Date.now(
   const outbox = []
   const startIndex = Number.isSafeInteger(options?.startIndex) && options.startIndex >= 0 ? options.startIndex : 0
   const checkpointLimit = Number.isSafeInteger(options?.checkpointLimit) && options.checkpointLimit >= 0 ? options.checkpointLimit : 131072
-  const sink = new BlockSink(chunk => outbox.push(chunk), startIndex, checkpointLimit, options?.onProgress)
+  const sink = new BlockSink(chunk => outbox.push(chunk), startIndex, checkpointLimit, options?.onProgress, renameMap)
   const state = { usage: undefined, finish: undefined, sawFinish: false, sawUsage: false, sawToolCall: false, firstDeltaAt: undefined, sawReasoning: false, sawText: false, brokenToolCall: false }
   const snapshot = () => ({
     ...state,
