@@ -254,9 +254,10 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       // extension runtime answers "unavailable", never a TypeError.
       if (extensions === undefined) return reply(503, { error: 'the extension platform is unavailable' })
       if (method === 'GET' && pathname === `${PREFIX}/extensions`) {
-        let registry = null
-        try { registry = extensions.registryView() } catch { registry = null }
-        return reply(200, { installed: extensions.listInstalled(), registry })
+        // Same contract as the plugin's route: wait briefly for the boot
+        // warm-up and report why a read failed.
+        const status = await extensions.registryStatusSoon()
+        return reply(200, { installed: extensions.listInstalled(), registry: status.registry, registryError: status.error })
       }
       if (method === 'POST' && pathname === `${PREFIX}/extensions/registry/refresh`) {
         try {

@@ -2136,10 +2136,11 @@ export function createApiRoutes(deps) {
         if (deps.extensions === undefined) return send(503, { error: 'the extension platform is unavailable' })
         const extensions = deps.extensions
         if (method === 'GET' && routePath === '/extensions') {
-          let registry = null
-          let registryError = ''
-          try { registry = extensions.registryView() } catch (error) { registryError = String(error?.message ?? error) }
-          return send(200, { installed: extensions.listInstalled(), registry, registryError })
+          // A first paint waits briefly for the boot warm-up and hears why a
+          // read failed; `registryError` used to be structurally empty because
+          // `registryView()` never throws.
+          const status = await extensions.registryStatusSoon()
+          return send(200, { installed: extensions.listInstalled(), registry: status.registry, registryError: status.error })
         }
         if (method === 'POST' && routePath === '/extensions/registry/refresh') {
           try {

@@ -508,6 +508,25 @@ async function shoot({ variant, width, height, scale, dark = false, locale = 'zh
   const labels = await page.$$eval('.ofm_tabs .ofm_tab', nodes => nodes.map(node => node.textContent.replace(/\s+/g, ' ').trim()))
   if (labels.length !== TABS.length) problems.push(`${variant}: the tab strip has ${labels.length} tabs, expected ${TABS.length} (${labels.join(' | ')})`)
 
+  // The first visit opens the disclaimer dialog over the whole page, so every
+  // click below lands on the scrim and times out — the harness then reports
+  // "could not be driven" for all thirteen tabs while the page is perfectly
+  // fine. Photograph a returning user: acknowledge once (the ack persists in
+  // the plugin's settings, so the later variants see no dialog at all) and wait
+  // for the scrim to leave the DOM before clicking anything.
+  const dialog = page.locator('.ofm_disclaimer')
+  try {
+    await dialog.first().waitFor({ state: 'visible', timeout: 5000 })
+  } catch { /* no dialog: a previous variant already acknowledged it */ }
+  if (await dialog.count() > 0) {
+    try {
+      await page.locator('.ofm_disclaimer .ofm_btn.primary').first().click({ timeout: 15000 })
+      await dialog.first().waitFor({ state: 'detached', timeout: 15000 })
+    } catch (error) {
+      problems.push(`${variant}: the first-visit disclaimer could not be dismissed — ${String(error?.message ?? error).split('\n')[0]}`)
+    }
+  }
+
   for (const entry of shots) {
     // One shot failing (a control that never appeared, a selector that matches
     // nothing) must not cost the rest of the run its screenshots.

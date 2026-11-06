@@ -20,8 +20,24 @@ import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { Worker } from 'node:worker_threads'
 
 process.env.OUR_FREE_MODEL_FREE_TRANSPORT = 'node'
+
+// Instrumented before the runtime is imported, so section 8 can see the whole
+// run: which workers loaded, and which were asked to terminate.
+const workersLoaded = new Set()
+const workersStopped = new Set()
+const workerPostMessage = Worker.prototype.postMessage
+Worker.prototype.postMessage = function (message, ...rest) {
+  if (message !== null && typeof message === 'object' && message.action === 'load') workersLoaded.add(this)
+  return workerPostMessage.call(this, message, ...rest)
+}
+const workerTerminate = Worker.prototype.terminate
+Worker.prototype.terminate = function (...args) {
+  workersStopped.add(this)
+  return workerTerminate.apply(this, args)
+}
 
 let failures = 0
 const check = (name, actual, expected) => {
@@ -359,7 +375,33 @@ console.log('\n=== 7. disable and uninstall tear the lane down cleanly ===')
   check('the seeded kilo lane is back', modelRuntime.catalog.filter(row => row.channel === 'kilo').length, 1)
 }
 
-extensions.dispose()
+console.log('\n=== 8. reconciling the market never orphans a worker ===')
+{
+  // Every install/enable/disable/uninstall reconciles the running set. A
+  // process dropped from the runtime's map without being terminated keeps its
+  // own thread — no handle, no listener, unreachable — so the workers that
+  // loaded and the workers told to stop must end up equal. This is the
+  // regression the section exists for: reconciling once spawned fifteen
+  // workers for two extensions and left nine of them running after dispose.
+  await extensions.install('fixture-channel')
+  await extensions.install('fixture-enhancement')
+  const before = workersLoaded.size
+  // The channel is already enabled and running. Re-enabling it reconciles the
+  // set; a reconcile that rebuilds what it already has re-runs the module's
+  // `load` and abandons the worker that was serving.
+  await extensions.setEnabled('fixture-channel', true)
+  check('re-enabling a running extension keeps its worker', workersLoaded.size - before, 0)
+  await extensions.setEnabled('fixture-enhancement', true)
+  await extensions.setEnabled('fixture-enhancement', false)
+  await extensions.setEnabled('fixture-enhancement', true)
+  check('the toggles still started the extension they toggled', workersLoaded.size - before, 2)
+  await extensions.dispose()
+  await new Promise(resolve => setTimeout(resolve, 250))
+  const orphaned = [...workersLoaded].filter(worker => !workersStopped.has(worker))
+  check('every worker that ever loaded was terminated', orphaned.length, 0)
+  check('the run spawned workers, so the check above is not vacuous', workersLoaded.size > 0, true)
+}
+
 server.close()
 upstream.close()
 stores.dispose()

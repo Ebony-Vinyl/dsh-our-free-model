@@ -941,12 +941,33 @@ export function createExtensionRuntime({
 
   // ── registry ─────────────────────────────────────────────────────────────
 
+  /** The in-flight registry read: the boot warm-up, a page's first look and a
+   *  manual refresh all want the same document, and racing them would fetch the
+   *  index three times. */
+  let refreshing = null
+  /** Why the last read failed, or '' when it succeeded. The page needs the
+   *  sentence, not just the fact: "unreachable" and "failed its signature
+   *  check" send the reader after different problems. */
+  let registryFailure = ''
+
   async function refreshRegistry({ force = false } = {}) {
     const cached = readJson(registryCachePath, null)
     if (cached !== null && !force && Date.now() - (cached.fetchedAt ?? 0) < REGISTRY_TTL_MS && Array.isArray(cached.registry?.plugins)) {
       registryCache = cached
       return cached.view
     }
+    if (refreshing !== null) return refreshing
+    const run = readRegistry(cached)
+    refreshing = run
+    try {
+      return await run
+    } finally {
+      if (refreshing === run) refreshing = null
+    }
+  }
+
+  /** One pass over the mirror list, first alive wins. */
+  async function readRegistry(cached) {
     const errors = []
     for (const source of registrySources()) {
       try {
@@ -968,17 +989,36 @@ export function createExtensionRuntime({
         if (view.plugins.length === 0) throw new Error('the registry carries no readable entries')
         registryCache = { fetchedAt: Date.now(), source, registry: payload, signature, view }
         writeJson(registryCachePath, registryCache)
+        registryFailure = ''
         return view
       } catch (error) {
         errors.push(`${new URL(source).hostname}: ${String(error?.message ?? error).slice(0, 120)}`)
       }
     }
+    registryFailure = errors.join('; ')
     if (cached !== null && Array.isArray(cached.registry?.plugins)) {
       logger?.warn?.(`our-free-model: the extension registry could not be refreshed (${errors.join('; ')}); serving the cache from ${new Date(cached.fetchedAt).toISOString()}`)
       registryCache = cached
       return cached.view
     }
     throw new Error(`the extension registry is unreachable (${errors.join('; ')})`)
+  }
+
+  /**
+   * The registry for a first paint, with a bounded wait for a read already in
+   * flight. Without this the page a user opens during the boot warm-up is told
+   * the index is unreadable — for a document that lands a few hundred
+   * milliseconds later — and never asks again.
+   */
+  async function registryStatusSoon(waitMs = 3000) {
+    if (registryCache === null && refreshing !== null) {
+      // The warm-up owns the failure; this caller only wants to stop waiting.
+      await Promise.race([
+        refreshing.catch(() => {}),
+        new Promise(resolve => { const timer = setTimeout(resolve, waitMs); timer.unref?.() }),
+      ])
+    }
+    return { registry: registryView(), error: registryCache === null ? registryFailure : '' }
   }
 
   // ── lifecycle ────────────────────────────────────────────────────────────
@@ -1206,7 +1246,7 @@ export function createExtensionRuntime({
       return Promise.allSettled(terminations)
     },
     install, uninstall, setEnabled, saveConfig, saveSecret,
-    refreshRegistry,
+    refreshRegistry, registryStatusSoon,
     listInstalled, registryView, installedVersions,
     // The lane surface.
     get catalog() { return channelRows },
