@@ -34,7 +34,17 @@ export function createForwardCompletion({ adapter, state, signal }) {
   return async (request, onChunk) => {
     if (signal?.aborted) throw Object.assign(new Error('model runtime is stopped'), { statusCode: 503 })
     const snapshot = state()
-    const entry = snapshot.catalog.find(candidate => candidate.id === request.model)
+    let entry = snapshot.catalog.find(candidate => candidate.id === request.model)
+    if (entry === undefined) {
+      // Bare-name alias: `agnes-3.0-flash` -> `agnes/agnes-3.0-flash`.
+      // Only accepted when the suffix matches exactly one catalog entry, so a
+      // bare name can never shadow two different provider models at once.
+      const matches = snapshot.catalog.filter(candidate => {
+        const idx = candidate.id.lastIndexOf('/')
+        return idx > 0 && candidate.id.slice(idx + 1) === request.model
+      })
+      if (matches.length === 1) entry = matches[0]
+    }
     if (entry === undefined || !routableModelIds(snapshot).has(entry.id)) {
       throw Object.assign(new Error(`model "${request.model}" not found`), { statusCode: 404 })
     }
