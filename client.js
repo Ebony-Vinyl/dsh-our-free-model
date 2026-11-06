@@ -3625,7 +3625,7 @@ window.__ModuleLoader__.load({
     }
 
     /** The extension marketplace: discover, installed, and the safety contract. */
-    function ExtensionsPage({ t }) {
+    function ExtensionsPage({ t, onChanged } = {}) {
       const [state, setState] = useState({ status: 'loading' })
       const [busyId, setBusyId] = useState('')
       const [detail, setDetail] = useState(undefined)
@@ -3645,6 +3645,9 @@ window.__ModuleLoader__.load({
           const payload = await post(path, body, 120_000)
           if (refresh) setState(current => ({ ...current, ...payload, status: 'ready' }))
           else load()
+          // Install/toggle/uninstall change the model roster: the shell's
+          // summary (tab counts, lane cards) must follow.
+          onChanged?.()
           return payload
         } catch (error) {
           showToast({ title: t('ext.failed'), body: String(error?.message ?? error), tone: 'warn' })
@@ -7739,7 +7742,7 @@ window.__ModuleLoader__.load({
 
       const page = tab === 'workspace'
         ? h(WorkspacePage, { t, summary, section: workspaceSection, onSelect: setWorkspaceSection })        : tab === 'extensions'
-          ? h(ExtensionsPage, { t })
+          ? h(ExtensionsPage, { t, onChanged: summary.reload })
           : tab === 'channels'
         ? h(ChannelsPage, { t, ctx, summary })
         : tab === 'aggregate'
