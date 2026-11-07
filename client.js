@@ -414,6 +414,7 @@ window.__ModuleLoader__.load({
         'ext.verifiedTitle': '该扩展来自 Ed25519 签名的官方索引',
         'ext.refresh': '刷新索引',
         'ext.empty': '扩展索引不可达',
+        'ext.indexHint': '索引可能仍在预热或被网络拦截；点右上角「刷新索引」重试。',
         'ext.failed': '操作失败',
         'ext.security': '安全模型',
         'ext.securityBody': '扩展是可执行代码——只安装这份签名索引里的扩展。安装时会校验 Ed25519 签名与 SHA-256 摘要，做静态扫描（拒绝 node:*、process、eval、动态 import 与压缩产物）；运行在独立 Worker 的 VM 沙箱里，唯一的 import 是受控的 ofm:sdk；网络只能访问 manifest 里声明过的域名，密钥只进不出，每个 hook 都有超时熔断。',
@@ -1230,6 +1231,7 @@ window.__ModuleLoader__.load({
         'ext.verifiedTitle': 'This extension comes from the Ed25519-signed index',
         'ext.refresh': 'Refresh index',
         'ext.empty': 'The extension registry is unreachable',
+        'ext.indexHint': 'The index may still be warming up or blocked by the network; use “Refresh index” to retry.',
         'ext.failed': 'The action failed',
         'ext.security': 'The safety model',
         'ext.securityBody': 'Extensions are executable code — install only what this signed index carries. An install verifies the Ed25519 signature and the SHA-256 digest and runs a static scan (node:*, process, eval, dynamic import and minified bundles are refused); the code runs inside a Worker VM sandbox whose only import is the controlled ofm:sdk; the network is limited to the domains the manifest declares, secrets go in and never come out, and every hook has a timeout breaker.',
@@ -2744,8 +2746,17 @@ window.__ModuleLoader__.load({
  .ofm_shell .ofm_navtools .ofm_starbtn{font-size:0;padding:6px;gap:0}
 }
 /* ── 扩展市场卡片与详情抽屉（2.8.1 新增页签，其余样式全部复用既有令牌） ── */
-.ofm_extcard{gap:10px}
+.ofm_extcard{gap:10px;padding-left:17px}
+.ofm_extcard::before{content:"";position:absolute;left:6px;top:13px;bottom:13px;width:3px;border-radius:999px;background:var(--dsw-alias-state-business-primary);opacity:.75;transition:opacity .2s var(--ease-instrument)}
+.ofm_extcard.channel::before{background:linear-gradient(180deg,var(--dsw-alias-state-business-primary),color-mix(in srgb,var(--dsw-alias-state-business-primary) 30%,transparent))}
+.ofm_extcard.enhancement::before{background:linear-gradient(180deg,var(--dsw-alias-state-success-primary),color-mix(in srgb,var(--dsw-alias-state-success-primary) 30%,transparent))}
+.ofm_extcard:hover::before{opacity:1}
+.ofm_extgrid>.ofm_extcard{animation:ofmrisein .4s var(--ease-instrument) backwards;animation-delay:calc(var(--i,0)*45ms)}
+.ofm_extskel{position:relative;overflow:hidden;border-radius:13px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-3) 80%,transparent);min-height:150px;padding:13px;display:flex;flex-direction:column;gap:9px;justify-content:center;animation:ofmrisein .4s var(--ease-instrument) backwards;animation-delay:calc(var(--i,0)*45ms)}
+.ofm_extskel::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,var(--dsw-alias-bg-layer-1) 55%,transparent) 50%,transparent 70%);transform:translateX(-100%);animation:ofm-skel-shine 1.8s ease-in-out infinite}
+.ofm_extskel i{display:block;height:11px;border-radius:6px;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);animation:ofmpulse 1.8s ease-in-out infinite}
 .ofm_extdetail{width:min(560px,92vw)}
+.ofm_extdetail:focus{outline:none}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -3144,6 +3155,7 @@ window.__ModuleLoader__.load({
       onClick: props.onClick,
       title: props.title,
       'aria-label': props['aria-label'],
+      'aria-busy': props.busy === true ? 'true' : props['aria-busy'],
     }, props.children)
 
     function Section(props) {
@@ -7399,10 +7411,12 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const [typeFilter, setTypeFilter] = useState('all')
       const load = useCallback(() => {
-        setState({ status: 'loading' })
+        /* Re-reads keep the previous payload so a refresh (or the read after an
+           install) does not blank the page out mid-flight. */
+        setState(current => ({ ...current, status: 'loading' }))
         api('/extensions', { timeout: 20_000 })
           .then(payload => setState({ status: 'ready', ...payload }))
-          .catch(error => setState({ status: 'error', error: String(error?.message ?? error) }))
+          .catch(error => setState(current => ({ ...current, status: 'error', error: String(error?.message ?? error) })))
       }, [])
       useEffect(() => { load() }, [load])
       const act = async (path, body, refresh = true) => {
@@ -7422,32 +7436,36 @@ window.__ModuleLoader__.load({
       }
       const installed = state.installed ?? []
       const registry = state.registry
+      const registryById = new Map((registry?.plugins ?? []).map(plugin => [plugin.id, plugin]))
       const needle = query.trim().toLowerCase()
       const discover = (registry?.plugins ?? []).filter(plugin => {
         if (typeFilter !== 'all' && plugin.type !== typeFilter) return false
         if (needle !== '' && !`${plugin.name} ${plugin.id} ${plugin.summary ?? ''}`.toLowerCase().includes(needle)) return false
         return true
       })
-      const cardFor = plugin => {
+      const cardFor = (plugin, index = 0) => {
         const record = installed.find(row => row.id === plugin.id)
         const busy = busyId === plugin.id
         const head = h('div', { className: 'ofm_cardhead' },
           h('span', { className: 'ofm_chantag' }, plugin.type === 'channel' ? t('ext.channel') : t('ext.enhancement')),
           h('span', { className: 'ofm_cardname', title: plugin.name }, plugin.name),
           h('span', { className: 'ofm_badge ok', title: t('ext.verifiedTitle') }, t('ext.verified')),
-          record?.updateAvailable === true ? h('span', { className: 'ofm_hottag' }, t('ext.updateAvailable')) : null)
+          plugin.updateAvailable === true ? h('span', { className: 'ofm_hottag' }, t('ext.updateAvailable')) : null)
         const idline = h('div', { className: 'ofm_id' }, `${plugin.id} · v${plugin.version} · ${plugin.author || '—'}`)
         const blurb = h('p', { className: 'ofm_note', style: { minHeight: 32 } }, plugin.summary || plugin.description || '')
         const action = record === undefined
-          ? h(Button, { kind: 'primary', disabled: busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.install'))
+          ? h(Button, { kind: 'primary', disabled: busy, busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.install'))
           : plugin.updateAvailable === true
-            ? h(Button, { kind: 'primary', disabled: busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.update'))
+            ? h(Button, { kind: 'primary', disabled: busy, busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.update'))
             : h('span', { className: 'ofm_badge ok' }, t('ext.installed'))
         const actions = h('div', { className: 'ofm_row' },
           h(Button, { onClick: () => setDetail(plugin) }, t('ext.detail')),
           action)
         if (record === undefined) {
-          return h('article', { className: 'ofm_card ofm_extcard', key: plugin.id }, head, idline, blurb, actions)
+          return h('article', {
+            className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}`,
+            key: plugin.id, style: { '--i': String(index) },
+          }, head, idline, blurb, actions)
         }
         const fields = []
         for (const field of record.config) {
@@ -7488,16 +7506,19 @@ window.__ModuleLoader__.load({
             h('span', { className: 'ofm_note' }, hint)))
         }
         const controls = h('div', { className: 'ofm_row' },
-          h(Button, { disabled: busy, onClick: () => act('/extensions/toggle', { id: plugin.id, enabled: !(record.enabled === true) }) },
+          h(Button, { disabled: busy, busy, onClick: () => act('/extensions/toggle', { id: plugin.id, enabled: !(record.enabled === true) }) },
             record.enabled === true ? t('ext.disable') : t('ext.enable')),
           h(Button, {
-            danger: true, disabled: busy,
+            danger: true, disabled: busy, busy,
             onClick: () => { if (window.confirm(t('ext.confirmRemove').replace('{name}', plugin.name))) act('/extensions/uninstall', { id: plugin.id }) },
           }, t('ext.uninstall')),
           record.state !== 'ready' && record.enabled === true
             ? h('span', { className: 'ofm_badge throttled', title: record.error }, t('ext.notRunning'))
             : null)
-        return h('article', { className: 'ofm_card ofm_extcard', key: plugin.id },
+        return h('article', {
+          className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}`,
+          key: plugin.id, style: { '--i': String(index) },
+        },
           head, idline, blurb, actions,
           fields.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } }, fields) : null,
           controls)
@@ -7510,7 +7531,10 @@ window.__ModuleLoader__.load({
               h('p', { className: 'ofm_pagesub' }, t('ext.sub'))),
             h('div', { className: 'ofm_pills' },
               h(Pill, { strong: true }, t('ext.count').replace('{n}', String(discover.length))),
-              h(Button, { onClick: () => act('/extensions/registry/refresh', undefined, false) }, t('ext.refresh')))),
+              h(Button, {
+                disabled: busyId === '/extensions/registry/refresh', busy: busyId === '/extensions/registry/refresh',
+                onClick: () => act('/extensions/registry/refresh', undefined, false),
+              }, t('ext.refresh')))),
           h('div', { className: 'ofm_seg', role: 'group', style: { alignSelf: 'flex-start' } },
             [['discover', t('ext.tabDiscover')], ['installed', t('ext.tabInstalled')], ['security', t('ext.tabSecurity')]].map(([key, label]) =>
               h('button', { key, type: 'button', 'aria-pressed': tab === key ? 'true' : 'false', onClick: () => setTab(key) }, label)))),
@@ -7521,15 +7545,24 @@ window.__ModuleLoader__.load({
             h('div', { className: 'ofm_seg', role: 'group' },
               [['all', t('ext.all')], ['channel', t('ext.channel')], ['enhancement', t('ext.enhancement')]].map(([key, label]) =>
                 h('button', { key, type: 'button', 'aria-pressed': typeFilter === key ? 'true' : 'false', onClick: () => setTypeFilter(key) }, label)))),
-          registry === null && state.status === 'ready' ? h('p', { className: 'ofm_note' }, t('ext.empty')) : null,
-          h('div', { className: 'ofm_grid' }, discover.map(cardFor)),
+          !registry && state.status === 'ready' ? h('div', { className: 'ofm_callout' },
+            h('div', null,
+              h('b', null, t('ext.empty')),
+              h('div', null, state.registryError !== undefined && state.registryError !== '' ? state.registryError : t('ext.indexHint')))) : null,
+          !registry && state.status === 'loading'
+            ? h('div', { className: 'ofm_grid ofm_extgrid' },
+              [0, 1, 2, 3, 4, 5].map(index => h('div', {
+                className: 'ofm_extskel', key: String(index), 'aria-hidden': 'true', style: { '--i': String(index) },
+              }, h('i', { style: { width: '42%' } }), h('i', { style: { width: '68%' } }),
+                h('i', { style: { width: '86%' } }), h('i', { style: { width: '55%' } }))))
+            : h('div', { className: 'ofm_grid ofm_extgrid' }, discover.map((plugin, index) => cardFor(plugin, index))),
           discover.length === 0 && registry !== null ? h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')) : null)
         : tab === 'installed' ? h(Fragment, null,
           installed.length === 0 ? h('p', { className: 'ofm_note' }, t('ext.installedEmpty'))
-            : h('div', { className: 'ofm_grid' }, installed.map(record => cardFor({
+            : h('div', { className: 'ofm_grid ofm_extgrid' }, installed.map((record, index) => cardFor({
               ...record, summary: record.description, tags: [], publishedAt: record.installedAt,
-              updateAvailable: false,
-            }))))
+              updateAvailable: registryById.get(record.id)?.updateAvailable === true,
+            }, index))))
         : h('div', { className: 'ofm_panel' },
           h('div', { className: 'ofm_paneltitle' }, t('ext.security')),
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody')),
@@ -7551,8 +7584,18 @@ window.__ModuleLoader__.load({
         return node
       }, [])
       useEffect(() => () => { if (host.parentNode !== null) host.parentNode.removeChild(host) }, [host])
+      const dialogRef = useRef(null)
+      useEffect(() => {
+        dialogRef.current?.focus()
+        const onKey = event => { if (event.key === 'Escape') onClose() }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [onClose])
       return ReactDOM.createPortal(h('div', { className: 'ofm_scrim', onClick: onClose },
-        h('div', { className: 'ofm_ann ofm_extdetail', role: 'dialog', 'aria-modal': 'true', onClick: event => event.stopPropagation() },
+        h('div', {
+          className: 'ofm_ann ofm_extdetail', role: 'dialog', 'aria-modal': 'true', 'aria-label': detail.name,
+          tabIndex: -1, ref: dialogRef, onClick: event => event.stopPropagation(),
+        },
           h('div', { className: 'ofm_annhead' },
             h('h3', { className: 'ofm_anntitle' }, detail.name),
             h('p', { className: 'ofm_annsub' }, `${detail.id} · v${detail.version} · ${detail.author || ''}`)),
