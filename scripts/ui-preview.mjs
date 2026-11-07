@@ -324,11 +324,31 @@ if (fs.existsSync(extensionRegistryPath)) {
       size: Buffer.byteLength(source),
       sha256: crypto.createHash('sha256').update(source).digest('hex'),
     }
+    // Covers ride the same rewrite: the registry's signed digest is checked
+    // against the local file, and the URL moves to this server.
+    if (entry.cover !== null && typeof entry.cover === 'object') {
+      const coverName = entry.cover.url.split('/').pop().split('?')[0]
+      const coverPath = path.join(extensionRepo, 'packages', entry.id, coverName)
+      if (fs.existsSync(coverPath)) {
+        const bytes = fs.readFileSync(coverPath)
+        extensionPackages.set(`${entry.id}/${coverName}`, bytes)
+        entry.cover = {
+          url: '', // patched below
+          size: bytes.length,
+          sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+        }
+        entry.coverName = coverName
+      } else delete entry.cover
+    }
   }
   if (fixtureUsable) {
     const extensionBase = `http://127.0.0.1:${await freePort()}`
     for (const entry of registryPayload.plugins) {
       entry.main.url = `${extensionBase}/packages/${entry.id}/main.mjs`
+      if (entry.cover !== undefined) {
+        entry.cover.url = `${extensionBase}/packages/${entry.id}/${entry.coverName}`
+      }
+      delete entry.coverName
     }
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519')
     const extensionSignature = crypto.sign(null, Buffer.from(stableStringify(registryPayload)), privateKey)
@@ -349,6 +369,13 @@ if (fs.existsSync(extensionRegistryPath)) {
       if (match !== null && extensionPackages.has(match[1])) {
         res.writeHead(200, { 'content-type': 'text/javascript' })
         res.end(extensionPackages.get(match[1]))
+        return
+      }
+      const coverMatch = /\/packages\/([\w-]+)\/([\w.-]+)$/.exec(url.pathname)
+      if (coverMatch !== null && extensionPackages.has(`${coverMatch[1]}/${coverMatch[2]}`)) {
+        const bytes = extensionPackages.get(`${coverMatch[1]}/${coverMatch[2]}`)
+        res.writeHead(200, { 'content-type': coverMatch[2].endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream' })
+        res.end(bytes)
         return
       }
       res.writeHead(404).end()

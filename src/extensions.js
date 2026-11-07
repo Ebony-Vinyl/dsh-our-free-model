@@ -69,6 +69,10 @@ function stableStringify(value) {
 const REGISTRY_TTL_MS = 6 * 60 * 60 * 1000
 const REGISTRY_MAX_BYTES = 512 * 1024
 const EXTENSION_SOURCE_MAX_BYTES = 256 * 1024
+/** The cover is display-only; a bigger file would outweigh every source. */
+const COVER_MAX_BYTES = 192 * 1024
+const COVER_NAME_RE = /^[\w.-]+\.(?:png|jpe?g|webp|svg)$/i
+const COVER_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', svg: 'image/svg+xml' }
 const MAX_INSTALLED = 32
 const AUDIT_MAX_LINES = 2000
 
@@ -146,6 +150,9 @@ export function parseExtensionManifest(raw) {
   const name = typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.trim().slice(0, 64) : id
   const main = typeof raw.main === 'string' && raw.main.trim() !== '' ? raw.main.trim() : 'main.mjs'
   if (!/^[\w.-]+\.mjs$/.test(main) || main.includes('..')) throw new Error('manifest main must be a relative .mjs file name')
+  // Optional, display-only: a relative image file name inside the package.
+  // The signed registry carries its digest; the host never executes it.
+  const cover = typeof raw.cover === 'string' && COVER_NAME_RE.test(raw.cover) && !raw.cover.includes('..') ? raw.cover : undefined
   const permissions = normalizePermissions(raw.permissions)
   const minHost = typeof raw.minHost === 'string' && SEMVER_RE.test(raw.minHost.trim()) ? raw.minHost.trim() : '0.0.0'
   const manifest = {
@@ -160,6 +167,7 @@ export function parseExtensionManifest(raw) {
     minHost,
     permissions,
     replaces: typeof raw.replaces === 'string' ? raw.replaces : undefined,
+    ...(cover !== undefined ? { cover } : {}),
     ...(raw.type === 'enhancement' ? { hooks: normalizeHooks(raw.hooks) } : {}),
     ...(raw.type === 'channel' && Array.isArray(raw.models) ? { models: raw.models.slice(0, 256) } : {}),
     config: normalizeConfig(raw.config),
@@ -260,11 +268,23 @@ export function parseRegistry(payload) {
       if (!Number.isInteger(main.size) || main.size <= 0 || main.size > EXTENSION_SOURCE_MAX_BYTES) throw new Error('entry main.size is out of range')
       if (typeof main.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(main.sha256)) throw new Error('entry main.sha256 is malformed')
       if (!hostAllowed(url)) throw new Error(`entry main.url host is not an accepted mirror: ${url}`)
+      // The cover is cosmetic — a malformed one costs the image, never the
+      // entry: a broken picture must not take a channel down with it.
+      let cover
+      const rawCover = row.cover !== null && typeof row.cover === 'object' && !Array.isArray(row.cover) ? row.cover : {}
+      const coverUrl = safeTransportUrl(rawCover.url)
+      if (coverUrl !== '' && hostAllowed(coverUrl)
+        && Number.isInteger(rawCover.size) && rawCover.size > 0 && rawCover.size <= COVER_MAX_BYTES
+        && typeof rawCover.sha256 === 'string' && /^[0-9a-f]{64}$/.test(rawCover.sha256)) {
+        const extension = coverUrl.split('.').pop().split('?')[0].toLowerCase()
+        if (COVER_TYPES[extension] !== undefined) cover = { url: coverUrl, size: rawCover.size, sha256: rawCover.sha256, contentType: COVER_TYPES[extension] }
+      }
       plugins.push({
         manifest,
         url,
         size: main.size,
         sha256: main.sha256,
+        cover,
         summary: typeof row.summary === 'string' ? row.summary.slice(0, 300) : '',
         tags: Array.isArray(row.tags) ? row.tags.slice(0, 8).map(String) : [],
         publishedAt: typeof row.publishedAt === 'string' ? row.publishedAt : '',
@@ -1015,6 +1035,50 @@ export function createExtensionRuntime({
     return { registry: registryView(), error: registryCache === null ? registryFailure : '' }
   }
 
+  // ── covers ───────────────────────────────────────────────────────────────
+
+  let coverFetchSeq = 0
+
+  /**
+   * One entry's cover image, verified and cached: the marketplace card's
+   * banner. The bytes are display-only, so the failure mode is deliberately
+   * soft — `null` means "render without a cover", never an error to the page.
+   * Digest-checked against the signed registry before the first write, then
+   * served from the data dir by digest (immutable per sha256).
+   */
+  async function coverImage(id) {
+    const entry = registryCache?.view?.plugins?.find(plugin => plugin.manifest.id === id)
+    const cover = entry?.cover
+    if (cover === undefined) return null
+    const extension = cover.url.split('.').pop().split('?')[0].toLowerCase()
+    const cachePath = path.join(rootDir, 'covers', `${cover.sha256}.${extension}`)
+    try {
+      const cached = fs.readFileSync(cachePath)
+      if (crypto.createHash('sha256').update(cached).digest('hex') === cover.sha256) {
+        return { bytes: cached, contentType: cover.contentType }
+      }
+    } catch { /* not cached yet — fetch below */ }
+    try {
+      const response = await fetch(cover.url, { redirect: 'error', signal: AbortSignal.timeout(15_000) })
+      if (!response.ok) return null
+      const bytes = Buffer.from(await response.arrayBuffer())
+      if (bytes.length !== cover.size) return null
+      if (crypto.createHash('sha256').update(bytes).digest('hex') !== cover.sha256) return null
+      // A unique staged name: two parallel requests for the same cover must
+      // not interleave into one truncated file — each renames its own complete
+      // buffer, and the loser's rename is a no-op overwrite of equal bytes.
+      const staged = `${cachePath}.${Date.now()}-${coverFetchSeq += 1}.tmp`
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      fs.writeFileSync(staged, bytes, { mode: 0o644 })
+      fs.renameSync(staged, cachePath)
+      return { bytes, contentType: cover.contentType }
+    } catch {
+      // A mirror hiccup costs the banner for this request only; the next one
+      // (or the browser's own retry) tries again.
+      return null
+    }
+  }
+
   // ── lifecycle ────────────────────────────────────────────────────────────
 
   /** (Re)start every enabled extension and rebuild the channel lane's rows. */
@@ -1218,6 +1282,7 @@ export function createExtensionRuntime({
           summary: entry.summary,
           tags: entry.tags,
           publishedAt: entry.publishedAt,
+          cover: entry.cover,
           installed: installed !== undefined,
           installedVersion: installed?.manifest.version,
           enabled: installed?.enabled === true,
@@ -1240,7 +1305,7 @@ export function createExtensionRuntime({
       return Promise.allSettled(terminations)
     },
     install, uninstall, setEnabled, saveConfig, saveSecret,
-    refreshRegistry, registryStatusSoon,
+    refreshRegistry, registryStatusSoon, coverImage,
     listInstalled, registryView, installedVersions,
     // The lane surface.
     get catalog() { return channelRows },

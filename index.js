@@ -2135,6 +2135,23 @@ export function createApiRoutes(deps) {
       if (routePath === '/extensions' || routePath.startsWith('/extensions/')) {
         if (deps.extensions === undefined) return send(503, { error: 'the extension platform is unavailable' })
         const extensions = deps.extensions
+        if (method === 'GET' && routePath === '/extensions/cover') {
+          // The marketplace card's banner. An <img> cannot attach headers, so
+          // the image rides the same admission fence as every fetch from the
+          // settings page — same origin, same cookies, same gate. Failure is
+          // a 404 the card renders without; a missing banner never breaks it.
+          const image = await extensions.coverImage(url.searchParams.get('id') ?? '')
+          if (image === null) return send(404, { error: 'no cover for this extension' })
+          res.writeHead(200, {
+            'content-type': image.contentType,
+            'content-length': image.bytes.length,
+            // Cosmetics only: a stale banner for a few minutes is invisible.
+            'cache-control': 'private, max-age=600',
+            'x-content-type-options': 'nosniff',
+          })
+          res.end(image.bytes)
+          return
+        }
         if (method === 'GET' && routePath === '/extensions') {
           // A first paint waits briefly for the boot warm-up and hears why a
           // read failed; `registryError` used to be structurally empty because

@@ -114,6 +114,7 @@ const bannedSource = `export default {
 
 /** A registry whose entry digests match the bytes it serves. */
 const packageSources = {}
+const coverBytes = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 240"><rect width="640" height="240" fill="#134e4a"/></svg>'
 function makeRegistry() {
   const entry = (manifest, source, extra = {}) => {
     packageSources[manifest.id] = source
@@ -130,6 +131,11 @@ function makeRegistry() {
     ...extra,
   })
   }
+  const coverFor = (id, bytes = coverBytes) => ({
+    url: `http://127.0.0.1:${registryPort}/packages/${id}/cover.svg`,
+    size: Buffer.byteLength(bytes),
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  })
   const channelManifest = {
     schemaVersion: 1, id: 'fixture-channel', version: '1.0.0', type: 'channel',
     name: 'Fixture Channel', description: 'a loopback channel', author: 'test', license: 'MIT',
@@ -156,17 +162,20 @@ function makeRegistry() {
   return {
     generatedAt: '2026-11-07T00:00:00.000Z',
     plugins: [
-      entry(channelManifest, channelSource),
+      entry({ ...channelManifest, cover: 'cover.svg' }, channelSource, { cover: coverFor('fixture-channel') }),
       entry(kiloManifest, channelSource
         .replace("'demo-model', name: 'Demo Model', contextWindow: 8192, maxOutput: 1024, vision: false, reasoning: false", "'kilo-auto/free', name: 'Kilo Auto Free', contextWindow: 256000, maxOutput: 32768")
         .replace("{ id: 'second-model', name: 'Second Model', contextWindow: 4096, maxOutput: 512 },", '')),
       entry(enhancementManifest, enhancementSource),
       entry(brokenManifest, brokenLoadSource),
       entry({ schemaVersion: 1, id: 'fixture-sneaky', version: '1.0.0', type: 'channel', name: 'Sneaky', permissions: { network: [], secrets: [], storage: false } }, sneakySource),
-      entry({ schemaVersion: 1, id: 'fixture-banned', version: '1.0.0', type: 'channel', name: 'Banned', permissions: { network: [], secrets: [], storage: false } }, bannedSource),
-      // Digest mismatch: the manifest promises bytes the server does not serve.
-      { schemaVersion: 1, id: 'fixture-digest', version: '1.0.0', type: 'channel', name: 'Digest', permissions: { network: [], secrets: [], storage: false },
-        main: { url: `http://127.0.0.1:${registryPort}/packages/fixture-digest/main.mjs`, size: 12, sha256: '0'.repeat(64) } },
+      // A cover whose signed digest is well-formed but lies about the bytes:
+      // the entry survives, the image does not.
+      entry({ schemaVersion: 1, id: 'fixture-banned', version: '1.0.0', type: 'channel', name: 'Banned', permissions: { network: [], secrets: [], storage: false } }, bannedSource, { cover: { ...coverFor('fixture-banned'), sha256: '0'.repeat(64) } }),
+      // A malformed cover (sha256 not hex) is dropped; the entry stays.
+      entry({ schemaVersion: 1, id: 'fixture-digest', version: '1.0.0', type: 'channel', name: 'Digest', permissions: { network: [], secrets: [], storage: false } },
+        'export default { async prepareChat() { return null } }',
+        { main: { url: `http://127.0.0.1:${registryPort}/packages/fixture-digest/main.mjs`, size: 12, sha256: '0'.repeat(64) }, cover: { ...coverFor('fixture-digest'), sha256: 'zz' } }),
     ],
   }
 }
@@ -193,6 +202,12 @@ const server = http.createServer((req, res) => {
     const body = id === 'fixture-digest' ? 'tampered bytes' : packageSources[id]
     res.writeHead(200, { 'content-type': 'text/javascript' })
     res.end(body)
+    return
+  }
+  const coverMatch = /\/packages\/([\w-]+)\/cover\.svg/.exec(url.pathname)
+  if (coverMatch !== null) {
+    res.writeHead(200, { 'content-type': 'image/svg+xml' })
+    res.end(coverBytes)
     return
   }
   res.writeHead(404).end()
@@ -252,6 +267,17 @@ console.log('=== 1. the signed registry is fetched, verified and parsed ===')
   check('a node: import fails the scan', scan.ok, false)
   const bannedScan = scanExtensionSource(bannedSource)
   check('a forbidden API fails the scan', bannedScan.ok, false)
+  // Covers: carried through when well-formed, dropped when malformed, and the
+  // bytes are digest-verified before the first serve.
+  const rowWithCover = view.plugins.find(plugin => plugin.manifest.id === 'fixture-channel')
+  check('a well-formed cover rides the entry', rowWithCover?.cover === undefined ? false : [rowWithCover.cover.contentType, rowWithCover.cover.size], ['image/svg+xml', Buffer.byteLength(coverBytes)])
+  check('a malformed cover costs the image, never the entry', view.plugins.find(plugin => plugin.manifest.id === 'fixture-digest') === undefined
+    ? false
+    : view.plugins.find(plugin => plugin.manifest.id === 'fixture-digest').cover, undefined)
+  const image = await extensions.coverImage('fixture-channel')
+  check('coverImage verifies and serves the signed bytes', image === null ? false : [image.contentType, image.bytes.length], ['image/svg+xml', Buffer.byteLength(coverBytes)])
+  check('coverImage answers null without a cover', await extensions.coverImage('fixture-kilo'), null)
+  check('coverImage refuses bytes that miss the signed digest', await extensions.coverImage('fixture-banned'), null)
 }
 
 console.log('\n=== 2. a channel extension installs, starts and serves a turn ===')

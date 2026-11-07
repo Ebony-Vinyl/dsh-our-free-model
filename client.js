@@ -2824,6 +2824,12 @@ window.__ModuleLoader__.load({
 .ofm_extdetail .ofm_anntitle{font-size:16.5px}
 .ofm_extdetail .ofm_annsub{overflow-wrap:anywhere}
 .ofm_extdetail .ofm_annfoot .ofm_badge{margin-left:0}
+/* 封面横幅：负 margin 出血到卡片内缘（padding 上 12/右 13/左 17），加载失败由
+   组件整块退场；详情弹层第一子元素自然贴顶，仅配内圆角 */
+.ofm_extcover{position:relative;height:96px;flex:none;margin:-12px -13px 0 -17px;border-radius:12px 12px 0 0;overflow:hidden;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 55%,transparent);border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 82%,transparent)}
+.ofm_extcover img{display:block;width:100%;height:100%;object-fit:cover}
+.ofm_extdetail .ofm_extcover{height:150px;margin:0;border-radius:17px 17px 0 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
+.ofm_extdetail .ofm_annhead{position:relative}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -7578,6 +7584,7 @@ window.__ModuleLoader__.load({
         const record = installed.find(row => row.id === plugin.id)
         const busy = busyId === plugin.id
         const modelCount = plugin.models?.length ?? plugin.modelCount
+        const hasCover = plugin.cover !== null && plugin.cover !== undefined
         const head = h('div', { className: 'ofm_exthead' },
           extensionAvatar(plugin),
           h('div', { className: 'ofm_exttitle' },
@@ -7601,9 +7608,9 @@ window.__ModuleLoader__.load({
           action)
         if (record === undefined) {
           return h('article', {
-            className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}`,
+            className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}${hasCover ? ' hascover' : ''}`,
             key: plugin.id, style: { '--i': String(index) },
-          }, head, blurb, tagRow, actions)
+          }, h(ExtensionCover, { plugin }), head, blurb, tagRow, actions)
         }
         const fields = []
         for (const field of record.config) {
@@ -7654,10 +7661,10 @@ window.__ModuleLoader__.load({
             ? h('span', { className: 'ofm_badge throttled', title: record.error }, t('ext.notRunning'))
             : null)
         return h('article', {
-          className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}`,
+          className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}${hasCover ? ' hascover' : ''}`,
           key: plugin.id, style: { '--i': String(index) },
         },
-          head, blurb, tagRow, actions,
+          h(ExtensionCover, { plugin }), head, blurb, tagRow, actions,
           fields.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } }, fields) : null,
           controls)
       }
@@ -7717,6 +7724,7 @@ window.__ModuleLoader__.load({
               ...record, summary: record.description, tags: [],
               publishedAt: registryById.get(record.id)?.publishedAt ?? record.installedAt,
               updateAvailable: registryById.get(record.id)?.updateAvailable === true,
+              cover: registryById.get(record.id)?.cover,
               installed: true,
             }, index))))
         : h('div', { className: 'ofm_panel' },
@@ -7736,6 +7744,21 @@ window.__ModuleLoader__.load({
         className: `ofm_extavatar ${plugin?.type === 'channel' ? 'channel' : 'enhancement'}`,
         'aria-hidden': 'true',
       }, initial === '' ? '·' : initial)
+    }
+
+    /* The card's cover banner. The bytes ride the host's own /extensions/cover
+       route (digest-verified server-side, cached on disk); when the author
+       shipped none — or the fetch fails — the card simply renders without one.
+       The fallback state is per-card so one bad image never blanks the grid. */
+    function ExtensionCover({ plugin }) {
+      const [failed, setFailed] = useState(false)
+      if (plugin?.cover === null || plugin?.cover === undefined || failed) return null
+      return h('div', { className: 'ofm_extcover' },
+        h('img', {
+          src: `${API}/extensions/cover?id=${encodeURIComponent(plugin.id)}`,
+          alt: '', loading: 'lazy', decoding: 'async',
+          onError: () => setFailed(true),
+        }))
     }
 
     /* The detail drawer portals to BODY, exactly like the disclaimer and
@@ -7775,6 +7798,7 @@ window.__ModuleLoader__.load({
           className: 'ofm_ann ofm_extdetail', role: 'dialog', 'aria-modal': 'true', 'aria-label': detail.name,
           tabIndex: -1, ref: dialogRef, onClick: event => event.stopPropagation(),
         },
+          h(ExtensionCover, { plugin: detail }),
           h('div', { className: 'ofm_annhead ofm_exthead' },
             extensionAvatar(detail),
             h('div', { className: 'ofm_exttitle' },
