@@ -392,10 +392,10 @@ window.__ModuleLoader__.load({
         'picks.design.tag4': '真实文件导出',
         'free.title': '免费模型',
         'free.sub': '匿名免费与 Kilo 模型统一展示：水位表示可选比例，实测状态单独显示。',
-        'nav.tab.extensions': '扩展',
+        'nav.tab.extensions': 'OFM 渠道扩展',
         'ext.search': '搜索扩展',
         'ext.all': '全部',
-        'ext.title': 'OFM 扩展',
+        'ext.title': 'OFM 渠道扩展',
         'ext.sub': '渠道与增强模块的市场：签名索引、沙箱运行、与本体解耦；装一个渠道，模型立即出现在免费页。',
         'ext.tabDiscover': '发现',
         'ext.tabInstalled': '已安装',
@@ -1208,10 +1208,10 @@ window.__ModuleLoader__.load({
         'picks.design.tag4': 'Real file export',
         'free.title': 'Free models',
         'free.sub': 'Anonymous free and Kilo models share this pool. Water shows the selectable share; measured availability is shown separately.',
-        'nav.tab.extensions': 'Extensions',
+        'nav.tab.extensions': 'OFM channel extensions',
         'ext.search': 'Search extensions',
         'ext.all': 'All',
-        'ext.title': 'OFM Extensions',
+        'ext.title': 'OFM channel extensions',
         'ext.sub': 'A marketplace for channel and enhancement modules: signed index, sandboxed runs, decoupled from the core — install a channel and its models appear on the free page.',
         'ext.tabDiscover': 'Discover',
         'ext.tabInstalled': 'Installed',
@@ -7391,7 +7391,7 @@ window.__ModuleLoader__.load({
     }
 
     /** The extension marketplace: discover, installed, and the safety contract. */
-    function ExtensionsPage({ t }) {
+    function ExtensionsPage({ t, onChanged }) {
       const [state, setState] = useState({ status: 'loading' })
       const [busyId, setBusyId] = useState('')
       const [detail, setDetail] = useState(undefined)
@@ -7411,6 +7411,9 @@ window.__ModuleLoader__.load({
           const payload = await post(path, body, 120_000)
           if (refresh) setState(current => ({ ...current, ...payload, status: 'ready' }))
           else load()
+          /* The nav badge and the free-page roster read the summary — refresh it
+             so an install/uninstall is reflected everywhere, not just here. */
+          onChanged?.()
           return payload
         } catch (error) {
           showToast({ title: t('ext.failed'), body: String(error?.message ?? error), tone: 'warn' })
@@ -7533,23 +7536,37 @@ window.__ModuleLoader__.load({
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody2')),
           h('div', { className: 'ofm_row' },
             h('a', { className: 'ofm_linkbtn', href: `https://github.com/${'Ebony-Vinyl'}/ofm-extensions`, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepo')))),
-        detail !== undefined ? h('div', { className: 'ofm_scrim', onClick: () => setDetail(undefined) },
-          h('div', { className: 'ofm_ann ofm_extdetail', onClick: event => event.stopPropagation() },
-            h('div', { className: 'ofm_annhead' },
-              h('h3', { className: 'ofm_anntitle' }, detail.name),
-              h('p', { className: 'ofm_annsub' }, `${detail.id} · v${detail.version} · ${detail.author || ''}`)),
-            h('div', { className: 'ofm_annbody' },
-              h('p', null, detail.summary || detail.description || ''),
-              h('div', { className: 'ofm_sec' },
-                h('b', { style: { fontSize: 12.5 } }, t('ext.permissions')),
-                h('p', { className: 'ofm_note' }, t('ext.permNetwork').replace('{n}', String(detail.permissions?.network?.length ?? 0)) + (detail.permissions?.network ?? []).map(origin => `\n· ${origin}`).join('')),
-                h('p', { className: 'ofm_note' }, t('ext.permSecrets').replace('{n}', String(detail.permissions?.secrets?.length ?? 0)))),
-              h('div', { className: 'ofm_row' },
-                detail.homepage ? h('a', { className: 'ofm_linkbtn', href: detail.homepage, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openHomepage')) : null)),
-            h('div', { className: 'ofm_annfoot' },
-              h('span', { className: 'spacer' }),
-              h(Button, { onClick: () => setDetail(undefined) }, t('ext.close')))))
-          : null)
+        detail !== undefined ? h(ExtensionDetail, { t, detail, onClose: () => setDetail(undefined) }) : null)
+    }
+
+    /* The detail drawer portals to BODY, exactly like the disclaimer and
+       announcement modals: page containers are z-index:1 stacking contexts
+       while the nav card is z-index:30, so an inline fixed scrim would slide
+       under the nav card and get clipped in the desktop host. */
+    function ExtensionDetail({ t, detail, onClose }) {
+      const host = useMemo(() => {
+        const node = document.createElement('div')
+        node.setAttribute('data-ofm-extension-detail-root', 'true')
+        document.body.appendChild(node)
+        return node
+      }, [])
+      useEffect(() => () => { if (host.parentNode !== null) host.parentNode.removeChild(host) }, [host])
+      return ReactDOM.createPortal(h('div', { className: 'ofm_scrim', onClick: onClose },
+        h('div', { className: 'ofm_ann ofm_extdetail', role: 'dialog', 'aria-modal': 'true', onClick: event => event.stopPropagation() },
+          h('div', { className: 'ofm_annhead' },
+            h('h3', { className: 'ofm_anntitle' }, detail.name),
+            h('p', { className: 'ofm_annsub' }, `${detail.id} · v${detail.version} · ${detail.author || ''}`)),
+          h('div', { className: 'ofm_annbody' },
+            h('p', null, detail.summary || detail.description || ''),
+            h('div', { className: 'ofm_sec' },
+              h('b', { style: { fontSize: 12.5 } }, t('ext.permissions')),
+              h('p', { className: 'ofm_note' }, t('ext.permNetwork').replace('{n}', String(detail.permissions?.network?.length ?? 0)) + (detail.permissions?.network ?? []).map(origin => `\n· ${origin}`).join('')),
+              h('p', { className: 'ofm_note' }, t('ext.permSecrets').replace('{n}', String(detail.permissions?.secrets?.length ?? 0)))),
+            h('div', { className: 'ofm_row' },
+              detail.homepage ? h('a', { className: 'ofm_linkbtn', href: detail.homepage, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openHomepage')) : null)),
+          h('div', { className: 'ofm_annfoot' },
+            h('span', { className: 'spacer' }),
+            h(Button, { onClick: onClose }, t('ext.close'))))), host)
     }
 
     function EacPage(props) {
