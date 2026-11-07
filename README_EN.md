@@ -3,7 +3,7 @@
 
 # dsh-our-free-model
 
-[简体中文](README.md) | **English**
+[简体中文](README.md) | **English** | [日本語](README_JA.md)
 
   <img alt="license" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square">
   <img alt="zero dependencies" src="https://img.shields.io/badge/dependencies-zero-4b6fff?style=flat-square">
