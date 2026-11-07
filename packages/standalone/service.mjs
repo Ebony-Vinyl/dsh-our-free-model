@@ -11,8 +11,9 @@ import { createStandaloneEac } from './eac.mjs'
 import { createChannelRuntime } from './channels/runtime.mjs'
 import { createSubscriptions } from '../../src/subscriptions.js'
 import { createSubscriptionRuntime } from '../../src/subscription-completion.js'
-import { createMagpieEngine } from '../../src/magpie-engine.js'
+import { createMagpieEngine, findAgentCli } from '../../src/magpie-engine.js'
 import { createExtensionRuntime } from '../../src/extensions.js'
+import { builtinDescriptors } from '../../src/plugins.js'
 import { combineSubscriptionRuntimes, createMagpieModels } from '../../src/magpie-models.js'
 
 const PRODUCT = 'our-free-model-standalone'
@@ -260,9 +261,13 @@ export async function startStandalone({
     // The model workspace: the same embedded engine the plugin's settings page
     // uses, so both products answer "which providers, which models" the same way.
     magpieEngine = createMagpieEngine({ dataDir, logger })
+    // The extension runtime is created just below; the lazy reference gives the
+    // magpie lane the enhancement-hook seam without reordering boot.
+    let extensionHookRuntime = null
     magpieModels = createMagpieModels({
       engine: magpieEngine, stats: stores.stats, logger,
       onChanged: () => runtime?.syncAggregateCatalog?.(),
+      extensionRuntime: () => extensionHookRuntime,
     })
     const combinedSubscriptionRuntime = combineSubscriptionRuntimes(magpieModels, subscriptionRuntime)
     // The OFM extension platform, same as the plugin's: the marketplace client,
@@ -271,6 +276,9 @@ export async function startStandalone({
       dataDir, logger, hostVersion: VERSION,
       onCatalogChanged: () => { try { runtime?.syncExtensionCatalog?.() } catch { /* boot ordering */ } },
     })
+    extensionHookRuntime = extensions
+    // Built-ins register through the same kernel a third-party plugin uses.
+    for (const descriptor of builtinDescriptors()) extensions.registerBuiltin(descriptor)
     runtime = createModelRuntime({
       ...stores, logger, attributionUserAgent: `${PRODUCT}/${VERSION}`,
       sealedCredential: eac.credential,
@@ -333,11 +341,22 @@ export async function startStandalone({
       void magpieEngine.start().then(() => magpieModels.refresh()).catch(() => {
         logger.warn?.('our-free-model standalone: model workspace could not resume')
       })
+      // Same readiness warning as the plugin: the engine connects Claude through
+      // the locally installed Claude Code CLI.
+      if (findAgentCli('claude') === undefined) {
+        logger.warn?.('our-free-model standalone: 未检测到 Claude Code CLI —— 在模型工作台连接 Claude 前请先安装（npm i -g @anthropic-ai/claude-code）。(Claude Code CLI not found; install it before connecting Claude)')
+      }
     }
     void extensions.init().catch(error => {
       logger.warn?.(`our-free-model standalone: extension mount failed (${error?.message ?? error})`)
     })
+    if (!process.env.OFM_TEST_UPSTREAM) extensions.startWatching({ intervalMs: 2000 })
     void extensions.refreshRegistry().catch(() => {})
+    // The marketplace index refreshes on its own cadence too: an update that
+    // lands upstream should reach the Installed tab without the user opening
+    // the market first. The TTL cache keeps ticks cheap; failures are silent.
+    const registryTimer = setInterval(() => { void extensions.refreshRegistry().catch(() => {}) }, 6 * 60 * 60 * 1000)
+    registryTimer.unref?.()
     await reconcileRelay()
 
     function scheduleRefresh() {
@@ -373,6 +392,7 @@ export async function startStandalone({
         if (closing !== undefined) return closing
         stopped = true
         clearTimeout(timer)
+        clearInterval(registryTimer)
         const managementClosing = management.dispose()
         eac.dispose()
         magpieModels?.close()

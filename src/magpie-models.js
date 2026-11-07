@@ -4,14 +4,42 @@ import { deniedModel } from './magpie-policy.js'
 
 const PREFIX = 'subscription:magpie/'
 
+/**
+ * Engine inference rides the host's replaceable `globalThis.fetch` — the same
+ * transport the imported sidecar subscriptions already use — so local proxy
+ * plugins that swap `globalThis.fetch` to re-serialize outgoing bodies can see
+ * engine turns again, as they could before the 2026-10-24 private-transport
+ * quarantine. Startup, health, management and catalog reads keep the private
+ * loopback transport: a broken fetch replacement must never keep the workspace
+ * from becoming ready. An explicit `fetchImpl` (tests, embedded hosts) still
+ * governs both paths, and OFM_ENGINE_PRIVATE_FETCH=1 forces inference back
+ * onto the private transport.
+ */
+function defaultInferenceTransport() {
+  return process.env.OFM_ENGINE_PRIVATE_FETCH === '1' ? loopbackFetch : globalThis.fetch
+}
+
 /** Expose the engine's live catalog through the existing DSH stream adapter. */
-export function createMagpieModels({ engine, stats, logger, onChanged = () => {}, fetchImpl = loopbackFetch }) {
+export function createMagpieModels({ engine, stats, logger, onChanged = () => {}, fetchImpl = loopbackFetch, inferenceFetch, extensionRuntime } = {}) {
   let models = []
   let pending
   let closed = false
   let owner
+  // An explicit fetchImpl governs inference and catalog alike (the historical
+  // contract); otherwise inference is the replaceable transport and only the
+  // catalog read stays private.
+  const catalogFetch = fetchImpl
+  const inferenceTransport = inferenceFetch ?? (fetchImpl !== loopbackFetch ? fetchImpl : defaultInferenceTransport())
   const runtime = createSubscriptionRuntime({
-    stats, logger, fetchImpl,
+    stats, logger,
+    fetchImpl: inferenceTransport,
+    // Enhancement extensions get the same fail-open body seam the harness lane
+    // gives them: one plain-object pass, microseconds, no gateway hop.
+    onPayload: async (payload, meta) => {
+      const source = typeof extensionRuntime === 'function' ? extensionRuntime() : extensionRuntime
+      if (source?.applyRequestHooks === undefined) return payload
+      return source.applyRequestHooks(payload, { ...meta, lane: 'magpie' })
+    },
     subscriptions: {
       list: () => [{
         id: 'magpie', provider: 'magpie', enabled: engine.status().state === 'ready',
@@ -65,7 +93,7 @@ export function createMagpieModels({ engine, stats, logger, onChanged = () => {}
       if (pending) return pending
       pending = (async () => {
         const gateway = engine.gateway()
-        const response = await fetchImpl(`${gateway.url.replace(/\/$/, '')}/v1/models`, {
+        const response = await catalogFetch(`${gateway.url.replace(/\/$/, '')}/v1/models`, {
           headers: { authorization: `Bearer ${gateway.key}` },
           signal: AbortSignal.timeout(15000), redirect: 'error',
         })

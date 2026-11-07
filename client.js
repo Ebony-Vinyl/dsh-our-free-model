@@ -396,6 +396,11 @@ window.__ModuleLoader__.load({
         'ext.search': '搜索扩展',
         'ext.all': '全部',
         'ext.title': 'OFM 渠道扩展',
+        'ext.bunMissing': 'Bun 未安装',
+        'ext.changelog': '更新内容',
+        'ext.viewSource': '查看源码',
+        'ext.indexFresh': '签名索引生成于 {at}',
+        'ext.bunHint': 'OpenCode 免费车道推理需要本机 Bun：安装 Bun（bun.sh 或 npm i -g bun）后重启，或把可执行文件路径写入 OUR_FREE_MODEL_BUN。',
         'ext.sub': '渠道与增强模块的市场：签名索引、沙箱运行、与本体解耦；装一个渠道，模型立即出现在免费页。',
         'ext.tabDiscover': '发现',
         'ext.tabInstalled': '已安装',
@@ -1242,6 +1247,11 @@ window.__ModuleLoader__.load({
         'ext.search': 'Search extensions',
         'ext.all': 'All',
         'ext.title': 'OFM channel extensions',
+        'ext.bunMissing': 'Bun not installed',
+        'ext.changelog': "What's new",
+        'ext.viewSource': 'View source',
+        'ext.indexFresh': 'Signed index generated {at}',
+        'ext.bunHint': 'OpenCode free-lane inference needs a local Bun. Install Bun (bun.sh or npm i -g bun) and restart, or point OUR_FREE_MODEL_BUN at its executable.',
         'ext.sub': 'A marketplace for channel and enhancement modules: signed index, sandboxed runs, decoupled from the core — install a channel and its models appear on the free page.',
         'ext.tabDiscover': 'Discover',
         'ext.tabInstalled': 'Installed',
@@ -2838,6 +2848,10 @@ window.__ModuleLoader__.load({
 .ofm_extdetail .ofm_anntitle{font-size:16.5px}
 .ofm_extdetail .ofm_annsub{overflow-wrap:anywhere}
 .ofm_extdetail .ofm_annfoot .ofm_badge{margin-left:0}
+/* 更新内容：详情弹层里的 newest-first 发布说明列表 */
+.ofm_changelog{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.ofm_changelog li{font-size:12px;line-height:1.55;color:var(--dsw-alias-label-secondary);padding:6px 9px;border-radius:8px;border:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 78%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 55%,transparent);overflow-wrap:anywhere}
+.ofm_changelog li:first-child{color:var(--dsw-alias-label-primary)}
 /* 封面横幅：负 margin 出血到卡片内缘（padding 上 12/右 13/左 17），加载失败由
    组件整块退场；详情弹层第一子元素自然贴顶，仅配内圆角 */
 .ofm_extcover{position:relative;height:96px;flex:none;margin:-12px -13px 0 -17px;border-radius:12px 12px 0 0;overflow:hidden;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 55%,transparent);border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 82%,transparent)}
@@ -7458,6 +7472,10 @@ window.__ModuleLoader__.load({
               h('p', { className: 'ofm_pagesub' }, t('free.sub'))),
             h('div', { className: 'ofm_pills' },
               h(Pill, { strong: true, tone: data.settings.enabled !== false ? 'ok' : 'err' }, data.settings.enabled !== false ? t('pref.enabled') : 'off'),
+              /* Environment readiness: a missing Bun silently kills the official
+                 free lane's inference — surface it where the lane lives. */
+              data.bun === false ? h('span', { title: t('ext.bunHint') },
+                h(Pill, { strong: true, tone: 'err' }, t('ext.bunMissing'))) : null,
               h(Pill, null, `${t('pref.egress')} ${data.egress?.country ?? data.egress?.ip ?? '—'}`),
               h(Pill, null, `${t('pref.probedAt')} ${ago(data.probedAt, t.locale)}`))),
           h('div', { className: 'ofm_tankrow' },
@@ -7822,6 +7840,9 @@ window.__ModuleLoader__.load({
           h('div', { className: 'ofm_paneltitle' }, t('ext.security')),
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody')),
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody2')),
+          typeof state.registry?.generatedAt === 'string' && state.registry.generatedAt !== ''
+            ? h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.indexFresh').replace('{at}', new Date(state.registry.generatedAt).toLocaleString(t.locale)))
+            : null,
           h('div', { className: 'ofm_row' },
             h('a', { className: 'ofm_linkbtn', href: `https://github.com/${'Ebony-Vinyl'}/ofm-extensions`, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepo')))),
         detail !== undefined ? h(ExtensionDetail, { t, detail, busy: busyId === detail.id, onInstall: installFromDetail, onClose: () => setDetail(undefined) }) : null)
@@ -7906,6 +7927,10 @@ window.__ModuleLoader__.load({
               detail.hooks.map(hookName => h('code', { key: hookName }, hookName))) : null,
             h('div', { className: 'ofm_kv' }, meta.map(([label, value]) => h('div', { className: 'ofm_kvc', key: label },
               h('b', null, value), h('span', null, label)))),
+            (detail.changelog ?? []).length > 0 ? h('div', { className: 'ofm_sec' },
+              h('b', { style: { fontSize: 12.5 } }, t('ext.changelog')),
+              h('ul', { className: 'ofm_changelog' }, detail.changelog.map((row, index) =>
+                h('li', { key: index }, row)))) : null,
             h('div', { className: 'ofm_sec' },
               h('b', { style: { fontSize: 12.5 } }, t('ext.permissions')),
               h('p', { className: 'ofm_note' }, t('ext.permNetwork').replace('{n}', String(origins.length))),
@@ -7917,6 +7942,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'ofm_annfoot' },
             detail.installed === true && detail.updateAvailable !== true ? h('span', { className: 'ofm_badge available' }, t('ext.installed')) : null,
             h('span', { className: 'spacer' }),
+            typeof detail.sourceUrl === 'string' && detail.sourceUrl !== '' ? h('a', { className: 'ofm_linkbtn', href: detail.sourceUrl, target: '_blank', rel: 'noopener noreferrer' }, t('ext.viewSource')) : null,
             detail.homepage ? h('a', { className: 'ofm_linkbtn', href: detail.homepage, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openHomepage')) : null,
             detail.repository && detail.repository !== detail.homepage ? h('a', { className: 'ofm_linkbtn', href: detail.repository, target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepository')) : null,
             canAcquire ? h(Button, {

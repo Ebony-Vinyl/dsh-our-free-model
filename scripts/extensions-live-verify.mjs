@@ -88,7 +88,9 @@ section('3. an enhancement installs disabled, enables, and survives a config res
 {
   const install = read(await call('POST', '/extensions/install', { id: 'param-override' }))
   const record = install.record
-  check('the enhancement installs disabled by default', record === undefined ? false : [record.enabled, record.state], [false, 'stopped'])
+  // Disabled is its own state since the plugin kernel: a record the user never
+  // enabled reads "disabled", not the worker's "stopped".
+  check('the enhancement installs disabled by default', record === undefined ? false : [record.enabled, record.state], [false, 'disabled'])
 
   const enabled = read(await call('POST', '/extensions/toggle', { id: 'param-override', enabled: true }))
   check('the toggle enables and starts it', enabled.record === undefined ? false : [enabled.record.enabled, enabled.record.state], [true, 'ready'])

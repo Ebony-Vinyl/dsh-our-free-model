@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, createHash } from 'node:crypto'
-import { existsSync, readFileSync, createReadStream } from 'node:fs'
+import { existsSync, readFileSync, createReadStream, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile, rename, link, unlink, realpath } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
@@ -780,6 +780,15 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
       for (const dir of [agentHome, agentRoaming, agentLocal]) {
         await mkdir(dir, { recursive: true, mode: 0o700 })
       }
+      // Windows folds every ancestor of a session folder into a 260-character
+      // budget; this redirection adds ~40, and claude appends a slug of the
+      // whole project path on top. A long or non-ASCII data home is the class
+      // of failure behind "rename the folder to something short and it works"
+      // — say so up front, with the escape hatch, instead of leaving a bare
+      // mkdir error nobody can act on.
+      if (agentHome.length > 200 || /[^\x20-\x7E]/.test(agentHome)) {
+        logger?.warn?.(`our-free-model: 引擎数据目录较长或含非 ASCII 字符（${agentHome.length} 字符）——Claude 等客户端可能无法新建会话文件夹；如遇到，请把 DSH_HOME 指向一个短的纯英文路径后重启。(engine data home is long or contains non-ASCII characters; if agents cannot create session folders, point DSH_HOME at a short ASCII path and restart)`)
+      }
       Object.assign(env, {
         HOME: agentHome, USERPROFILE: agentHome,
         APPDATA: agentRoaming, LOCALAPPDATA: agentLocal,
@@ -944,7 +953,13 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
       if (failure.statusCode === 400) throw engineError('Invalid gateway key request', 400)
       if (failure.statusCode === 413) throw engineError('Gateway key request exceeds limit', 413)
       if (options.signal?.aborted) throw new DOMException('Engine request aborted', 'AbortError')
-      throw engineError('Engine request failed')
+      // The engine's own transport refusals carry the actionable fact (the
+      // refused path, the socket error); a bare "Engine request failed" turns a
+      // diagnosable boot into a support thread. Keep the detail, bounded, and
+      // never from response bodies — those can quote user content.
+      const detail = typeof failure?.message === 'string' && failure.message !== ''
+        ? `: ${failure.message.slice(0, 160)}` : ''
+      throw engineError(`Engine request failed${detail}`)
     }
   }
   const proxy = async (req, res, subpath = '/', options = {}) => {
@@ -1120,4 +1135,28 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
     return { url: gatewayURL, key: gatewayKey }
   }
   return { start, status, close, request, proxy, gateway }
+}
+
+/**
+ * A lightweight PATH probe for the agent CLIs the engine connects to (claude
+ * first among them). The engine manages agent installs itself, but its
+ * downloader cannot reach the release host from every network, so the practical
+ * requirement is a pre-installed CLI — warn at boot instead of at the user's
+ * first failed connect. Never resolves shell shims deeper than a PATH entry.
+ */
+export function findAgentCli(command) {
+  const name = String(command ?? '').trim()
+  if (name === '' || name.includes('/') || name.includes('\\')) return undefined
+  const spellings = process.platform === 'win32' ? ['.cmd', '.bat', '.exe', ''] : ['']
+  const dirs = [
+    ...(process.env.PATH ?? '').split(path.delimiter).filter(Boolean),
+    ...(process.platform === 'win32' && process.env.APPDATA ? [path.join(process.env.APPDATA, 'npm')] : []),
+  ]
+  for (const dir of dirs) {
+    for (const spelling of spellings) {
+      const candidate = path.join(dir, `${name}${spelling}`)
+      try { if (statSync(candidate).isFile()) return candidate } catch { /* try the next spelling */ }
+    }
+  }
+  return undefined
 }

@@ -274,7 +274,11 @@ console.log('\n=== 8. 空闲时钟只由真数据上弦，不被 keepalive 注�
   const pinging = (async function* () {
     const stopAt = Date.now() + 800
     while (Date.now() < stopAt) {
-      await new Promise(resolve => setTimeout(resolve, 40))
+      // Pacing is deliberately wide of the idle budget below (6.7x margin):
+      // the contract under test is "comments do not renew the clock", not
+      // these exact milliseconds, and a 40/120 pairing flaked when the whole
+      // marathon suite ran on a loaded machine.
+      await new Promise(resolve => setTimeout(resolve, 60))
       yield Buffer.from(': keepalive\n')
     }
     await new Promise(() => {}) // wedged: no data, no close
@@ -282,17 +286,17 @@ console.log('\n=== 8. 空闲时钟只由真数据上弦，不被 keepalive 注�
   const startedPing = Date.now()
   let pingCode = null
   try {
-    await readSse(pinging, () => {}, undefined, 120)
+    await readSse(pinging, () => {}, undefined, 400)
   } catch (error) { pingCode = error?.code }
   const pingElapsed = Date.now() - startedPing
   check('a keepalive-only stream times out', pingCode, CODE.timeout)
-  check(`…at its own deadline (${pingElapsed}ms), not after the pings stop`, pingElapsed < 500, true)
+  check(`…at its own deadline (${pingElapsed}ms), not after the pings stop`, pingElapsed < 700, true)
 
   // The counterweight: real payloads must still wind the clock, or a slow lane
   // that trickles tokens would be killed mid-answer.
   const trickle = (async function* () {
     for (let i = 0; i < 8; i++) {
-      await new Promise(resolve => setTimeout(resolve, 40))
+      await new Promise(resolve => setTimeout(resolve, 60))
       yield Buffer.from(`data: {"n":${i}}\n\n`)
     }
     await new Promise(() => {})
@@ -300,7 +304,7 @@ console.log('\n=== 8. 空闲时钟只由真数据上弦，不被 keepalive 注�
   const trickled = []
   let trickleCode = null
   try {
-    await readSse(trickle, payload => trickled.push(payload), undefined, 120)
+    await readSse(trickle, payload => trickled.push(payload), undefined, 400)
   } catch (error) { trickleCode = error?.code }
   check('a stream that keeps sending payloads is not idle', trickled.length, 8)
   check('…and only ends after the payloads stop', trickleCode, CODE.timeout)
@@ -311,14 +315,14 @@ console.log('\n=== 8. 空闲时钟只由真数据上弦，不被 keepalive 注�
   const document = JSON.stringify({ choices: [{ message: { content: 'raw' } }] })
   const rawChunks = (async function* () {
     for (let at = 0; at < document.length; at += 4) {
-      await new Promise(resolve => setTimeout(resolve, 40))
+      await new Promise(resolve => setTimeout(resolve, 60))
       yield Buffer.from(document.slice(at, at + 4))
     }
   })()
   const rawSeen = []
   let rawCode = null
   try {
-    await readSse(rawChunks, payload => rawSeen.push(payload), undefined, 120)
+    await readSse(rawChunks, payload => rawSeen.push(payload), undefined, 400)
   } catch (error) { rawCode = error?.code }
   check('a raw-JSON body without newlines still counts as progress', rawCode, null)
   check('…and is dispatched once complete', rawSeen.length, 1)

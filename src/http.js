@@ -434,6 +434,13 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
     // `TimeoutError`/user Error rather than `AbortError` — testing the name alone
     // reported a cancelled turn as `TRANSPORT`, which is retryable.
     if (signal?.aborted === true || error?.name === 'AbortError') throw new UpstreamError('request aborted', CODE.aborted)
+    // A lane-configuration refusal (a missing Bun, an unusable proxy) is not an
+    // "upstream request failed": the sentence the lane wrote is already the
+    // actionable answer, so it ships unwrapped, with its flag intact for the
+    // surfaces that distinguish "fix your environment" from "upstream broke".
+    if (error?.laneConfig === true) {
+      throw new UpstreamError(String(error?.message ?? error), CODE.transport, { laneConfig: true })
+    }
     throw new UpstreamError(`our-free-model: upstream request failed: ${error?.message ?? error}${transportCause(error)}`, CODE.transport)
   }
 

@@ -103,9 +103,12 @@ function addFile(rel) {
 }
 
 files.sort((a, b) => a.path.localeCompare(b.path))
-// 已安装旧版用户必须能读取发布清单，限制不能只在新版升级器里检查。
-if (files.length > 80 || files.some(file => file.size > 4 * 1024 * 1024)) {
-  throw new Error('发布内容超出旧版升级器预算：最多 80 个文件，每个最多 4 MiB；先构建兼容资源')
+// The current updater accepts 128 files. Older upgraders below 2.7.2 were
+// already unable to read the 93-file 2.7.1 manifest; 2.7.2 shipped the wider
+// reader, so this build keeps the shared 128-file budget instead of the
+// historical 80-file ceiling.
+if (files.length > 128 || files.some(file => file.size > 4 * 1024 * 1024)) {
+  throw new Error('发布内容超出升级器预算：最多 128 个文件，每个最多 4 MiB；先构建兼容资源')
 }
 
 let previous

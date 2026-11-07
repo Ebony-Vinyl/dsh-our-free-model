@@ -1,0 +1,9 @@
+.plugin-page { display: flex; flex-direction: column; gap: 16px; padding: 4px 2px 24px; }
+.plugin-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.plugin-page-header h1 { margin: 2px 0 4px; font-size: 26px; line-height: 1.2; color: var(--ink); }
+.plugin-page-header p { margin: 0; color: var(--muted); max-width: 720px; overflow-wrap: anywhere; }
+.plugin-page-frame { position: relative; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; min-height: 360px; }
+.plugin-page-frame iframe { display: block; width: 100%; border: 0; background: var(--surface); }
+.plugin-page-loading { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); background: var(--surface); }
+.plugin-page-fallback { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--danger-line); background: var(--danger-soft); color: var(--danger-ink); border-radius: 16px; padding: 18px; }
+.plugin-page-fallback p { margin: 4px 0 0; color: var(--ink-soft); font-size: 13px; }

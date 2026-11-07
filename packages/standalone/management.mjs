@@ -12,6 +12,7 @@ import { createWorkbenchLibrary } from './library.mjs'
 import { createRoutingManagement } from './routing.mjs'
 import { createDesktopUpdater } from './desktop-update.mjs'
 import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from '../../src/disclaimer.js'
+import { pageBridgeSource } from '../../src/plugins.js'
 
 const PREFIX = '/api/management'
 const BOOTSTRAP_MS = 10 * 60_000
@@ -57,7 +58,7 @@ async function readBody(req, limit = MAX_BODY_BYTES) {
 
 function validateSettings(patch) {
   const visibility = validateModelVisibility(patch)
-  const booleans = new Set(['enabled', 'exposeRegionModels', 'streamRecovery', 'standaloneProbe', 'standaloneLanEnabled'])
+  const booleans = new Set(['enabled', 'exposeRegionModels', 'streamRecovery', 'standaloneProbe', 'standaloneLanEnabled', 'developerPlugins'])
   const numbers = { probeIntervalMinutes: [1, 1440], defaultMaxTokens: [512, 131072], standaloneLanPort: [0, 65535] }
   const result = {}
   for (const [key, value] of Object.entries(patch)) {
@@ -84,6 +85,7 @@ export function managementSettings(value) {
     standaloneLanPort: value.standaloneLanPort ?? 0,
     probeIntervalMinutes: value.probeIntervalMinutes ?? 15,
     defaultMaxTokens: value.defaultMaxTokens ?? 32768,
+    developerPlugins: value.developerPlugins === true,
   }
 }
 
@@ -175,6 +177,12 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       probedAt: available.at ?? 0,
       lane: available.lane ?? null,
       extensions: extensions !== undefined ? { installed: extensions.listInstalled() } : null,
+      plugins: extensions !== undefined ? {
+        installedCount: extensions.listInstalled().filter(record => record.builtin !== true).length,
+        builtinCount: extensions.listInstalled().filter(record => record.builtin === true).length,
+        pages: extensions.pages(),
+        developerPlugins: stores.settings.get().developerPlugins === true,
+      } : null,
       catalog: state.catalog.map(entry => {
         const measured = modelAvailability(entry.id, available, Boolean(entry.channel))
         return ({
@@ -189,9 +197,64 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     }
   }
 
+  const PLUGIN_ASSET_RE = /^\/api\/management\/plugins\/assets\/([a-f0-9]{32})\/(.+)$/
+  const pluginAssetPath = pathname => PLUGIN_ASSET_RE.test(pathname)
+
+  /** The one host script a page plugin may load. It is static, has no secrets,
+   *  and only opens the postMessage channel back to this console. */
+  function injectPluginBridge(html, source) {
+    const tag = `<script src="${source}"></script>`
+    const text = String(html)
+    if (/<\/head\s*>/i.test(text)) return text.replace(/<\/head\s*>/i, `${tag}</head>`)
+    return `${tag}${text}`
+  }
+
+  /**
+   * Serve one page asset. The URL token is the capability: the iframe has an
+   * opaque origin and no session, so authorization is "this file was declared
+   * by the plugin this boot minted the token for". Everything else is 404.
+   */
+  function servePluginAsset(req, res, pathname) {
+    const match = PLUGIN_ASSET_RE.exec(pathname)
+    if (match === null) { res.writeHead(404); res.end(); return }
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return }
+    const token = match[1]
+    let relative
+    try { relative = decodeURIComponent(match[2]) } catch { res.writeHead(400); res.end(); return }
+    if (relative === '' || relative.includes('..') || relative.includes('\\') || relative.includes('\0')) {
+      res.writeHead(404); res.end(); return
+    }
+    const origin = (() => {
+      try { return new URL(info().baseUrl).origin } catch { return `http://${req.headers.host}` }
+    })()
+    const headers = {
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+      'cross-origin-resource-policy': 'cross-origin',
+      'access-control-allow-origin': '*',
+      'content-security-policy': `default-src 'none'; script-src ${origin}; style-src 'unsafe-inline' ${origin}; img-src data: blob: ${origin}; font-src ${origin}; connect-src 'none'; frame-ancestors ${origin}; base-uri 'none'; form-action 'none'`,
+    }
+    if (relative === '__bridge.js') {
+      const body = Buffer.from(pageBridgeSource())
+      res.writeHead(200, { ...headers, 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length })
+      res.end(req.method === 'HEAD' ? undefined : body)
+      return
+    }
+    const asset = extensions?.pageAsset(token, relative)
+    if (asset === undefined || asset === null) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return }
+    let body = asset.bytes
+    if (asset.type.startsWith('text/html')) {
+      body = Buffer.from(injectPluginBridge(body.toString('utf8'), `/api/management/plugins/assets/${token}/__bridge.js`))
+    }
+    res.writeHead(200, { ...headers, 'content-type': asset.type, 'content-length': body.length })
+    res.end(req.method === 'HEAD' ? undefined : body)
+  }
+
   async function route(req, res, pathname) {
 
     const method = req.method ?? 'GET'
+    const reply = (statusCode, payload, headers) => json(res, statusCode, payload, headers)
     if (method === 'POST' && pathname === `${PREFIX}/login/terminal`) {
       // 此入口发生在登录前，必须有浏览器的同源 Origin，拒绝跨站和无来源调用。
       if (req.headers.origin !== new URL(`http://${req.headers.host}`).origin ||
@@ -237,6 +300,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       || pathname === `${PREFIX}/routing` || pathname.startsWith(`${PREFIX}/routing/`)
       || pathname === `${PREFIX}/engine` || pathname.startsWith(`${PREFIX}/engine/`)
       || pathname === `${PREFIX}/extensions` || pathname.startsWith(`${PREFIX}/extensions/`)
+      || pathname === `${PREFIX}/plugins` || pathname.startsWith(`${PREFIX}/plugins/`)
     // A sandboxed plugin page inside the workspace carries a per-run HMAC
     // capability in its own path; it has an opaque origin and cannot send this
     // console's session. The engine validates the capability and serves only
@@ -244,23 +308,50 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
     // be decided before the session check for the same reason.
     const enginePluginAsset = ['GET', 'HEAD'].includes(req.method)
       && /^\/api\/management\/engine\/ui\/_magpie\/plugin\/[a-f0-9]{32}\/[^?]+$/.test(pathname)
-    if (!authenticated(req) && !enginePluginAsset) throw fail(401, '请先登录管理页面')
-    if (privilegedManagementRoute && !sessionAuthenticated(req) && !enginePluginAsset) {
+    const pluginPageAsset = ['GET', 'HEAD'].includes(req.method) && pluginAssetPath(pathname)
+    if (!authenticated(req) && !enginePluginAsset && !pluginPageAsset) throw fail(401, '请先登录管理页面')
+    if (privilegedManagementRoute && !sessionAuthenticated(req) && !enginePluginAsset && !pluginPageAsset) {
       throw fail(403, '此管理操作需要已登录的本地管理会话')
     }
-    // ── the extension marketplace (behind the same session fence) ────────────
-    if (pathname === `${PREFIX}/extensions` || pathname.startsWith(`${PREFIX}/extensions/`)) {
-      // Same contract as the plugin's route: a composition that mounted no
-      // extension runtime answers "unavailable", never a TypeError.
-      if (extensions === undefined) return reply(503, { error: 'the extension platform is unavailable' })
-      if (method === 'GET' && pathname === `${PREFIX}/extensions`) {
+    // ── the plugin center (behind the same session fence) ────────────────────
+    // `/plugins` is the current surface; `/extensions` stays as an alias so an
+    // older console and the DSH-side marketplace keep working unchanged.
+    const pluginBase = pathname === `${PREFIX}/plugins` || pathname.startsWith(`${PREFIX}/plugins/`)
+      ? `${PREFIX}/plugins`
+      : pathname === `${PREFIX}/extensions` || pathname.startsWith(`${PREFIX}/extensions/`)
+        ? `${PREFIX}/extensions`
+        : null
+    if (pluginBase !== null) {
+      // A composition that mounted no plugin runtime answers "unavailable",
+      // never a TypeError.
+      if (extensions === undefined) return reply(503, { error: 'the plugin platform is unavailable' })
+      const suffix = pathname.slice(pluginBase.length)
+      const readJsonBody = () => readBody(req)
+      if (method === 'GET' && suffix === '') {
         // A first paint waits briefly for the boot warm-up and hears why a read
         // failed, rather than being told the index is unreadable when it is
         // simply still downloading.
         const status = await extensions.registryStatusSoon()
-        return reply(200, { installed: extensions.listInstalled(), registry: status.registry, registryError: status.error })
+        return reply(200, {
+          installed: extensions.listInstalled(),
+          registry: status.registry,
+          registryError: status.error,
+          pages: extensions.pages(),
+          audit: extensions.auditTail(100),
+          settings: { developerPlugins: stores.settings.get().developerPlugins === true },
+        })
       }
-      if (method === 'POST' && pathname === `${PREFIX}/extensions/registry/refresh`) {
+      if (method === 'GET' && suffix === '/pages') return reply(200, { pages: extensions.pages() })
+      if (method === 'GET' && suffix === '/audit') return reply(200, { entries: extensions.auditTail(100) })
+      if (method === 'GET' && suffix === '/cover') {
+        const id = new URL(req.url ?? '/', 'http://localhost').searchParams.get('id') ?? ''
+        const image = await extensions.coverImage(id)
+        if (image === null) return reply(404, { error: 'cover not found' })
+        res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': image.contentType, 'content-length': image.bytes.length })
+        res.end(image.bytes)
+        return
+      }
+      if (method === 'POST' && suffix === '/registry/refresh') {
         try {
           await extensions.refreshRegistry({ force: true })
           return reply(200, { ok: true, installed: extensions.listInstalled(), registry: extensions.registryView() })
@@ -268,53 +359,86 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
           return reply(502, { error: String(error?.message ?? error), installed: extensions.listInstalled() })
         }
       }
-      if (method === 'POST' && pathname === `${PREFIX}/extensions/install`) {
-        const body = await json()
+      if (method === 'POST' && suffix === '/install') {
         try {
+          const body = await readJsonBody()
           const record = await extensions.install(String(body?.id ?? ''), { version: typeof body?.version === 'string' ? body.version : undefined })
-          return reply(200, { ok: true, record, installed: extensions.listInstalled() })
+          return reply(200, { ok: true, record, installed: extensions.listInstalled(), pages: extensions.pages() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
       }
-      if (method === 'POST' && pathname === `${PREFIX}/extensions/uninstall`) {
-        const body = await json()
+      if (method === 'POST' && suffix === '/install-local') {
         try {
+          if (stores.settings.get().developerPlugins !== true) throw fail(403, '请先在插件中心开启开发者模式')
+          const body = await readJsonBody()
+          const record = await extensions.installLocal({
+            path: String(body?.path ?? ''),
+            acknowledgeUnsigned: body?.acknowledgeUnsigned === true,
+          })
+          return reply(200, { ok: true, record, installed: extensions.listInstalled(), pages: extensions.pages() })
+        } catch (error) {
+          return reply(error.statusCode ?? 400, { error: String(error?.message ?? error) })
+        }
+      }
+      if (method === 'POST' && suffix === '/uninstall') {
+        try {
+          const body = await readJsonBody()
           await extensions.uninstall(String(body?.id ?? ''))
-          return reply(200, { ok: true, installed: extensions.listInstalled() })
+          return reply(200, { ok: true, installed: extensions.listInstalled(), pages: extensions.pages() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
       }
-      if (method === 'POST' && pathname === `${PREFIX}/extensions/toggle`) {
-        const body = await json()
+      if (method === 'POST' && suffix === '/toggle') {
         try {
+          const body = await readJsonBody()
           const record = await extensions.setEnabled(String(body?.id ?? ''), body?.enabled === true)
-          return reply(200, { ok: true, record, installed: extensions.listInstalled() })
+          return reply(200, { ok: true, record, installed: extensions.listInstalled(), pages: extensions.pages() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
       }
-      if (method === 'POST' && pathname === `${PREFIX}/extensions/config`) {
-        const body = await json()
+      if (method === 'POST' && suffix === '/config') {
         try {
+          const body = await readJsonBody()
           const record = await extensions.saveConfig(String(body?.id ?? ''), body?.values ?? {})
           // `installed` rides along so a saved config field is reflected by the
-          // card that rendered it (same rule as the plugin's route).
+          // card that rendered it.
           return reply(200, { ok: true, record, installed: extensions.listInstalled() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
       }
-      if (method === 'POST' && pathname === `${PREFIX}/extensions/secret`) {
-        const body = await json()
+      if (method === 'POST' && suffix === '/secret') {
         try {
+          const body = await readJsonBody()
           const record = await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
           return reply(200, { ok: true, record, installed: extensions.listInstalled() })
         } catch (error) {
           return reply(400, { error: String(error?.message ?? error) })
         }
       }
+      if (method === 'POST' && suffix === '/self-test') {
+        try {
+          const body = await readJsonBody()
+          return reply(200, await extensions.runSelfTest(String(body?.id ?? '')))
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+      if (method === 'POST' && suffix === '/page-rpc') {
+        try {
+          const body = await readBody(req, 96 * 1024)
+          const result = await extensions.pageRpc(
+            String(body?.pluginId ?? ''), String(body?.pageId ?? ''), String(body?.method ?? ''), body?.params ?? {},
+          )
+          return reply(200, { ok: true, result })
+        } catch (error) {
+          return reply(400, { error: String(error?.message ?? error) })
+        }
+      }
+      return reply(404, { error: '插件接口不存在' })
     }
 
     if (method === 'POST' && pathname === `${PREFIX}/logout`) {
@@ -534,6 +658,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
       const asset = assets.get(pathname)
       const isApi = pathname === PREFIX || pathname.startsWith(`${PREFIX}/`)
+      const pageAsset = ['GET', 'HEAD'].includes(req.method) && pluginAssetPath(pathname)
       if (!asset && !isApi) return false
       // 不接受插件专用 dsh-app Referer；独立管理只允许本页面的 HTTP 来源。
       const referer = req.headers.referer
@@ -542,6 +667,10 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
         typeof value !== 'string' || !value.startsWith('http://')
       ))
       if (closed || !cookieName) json(res, 503, { error: '服务正在停止或启动' })
+      // A page asset is a capability URL: the sandboxed iframe has an opaque
+      // origin and sends no session. It must be decided before both the
+      // same-site source fence and the session check.
+      else if (pageAsset) servePluginAsset(req, res, pathname)
       else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: '管理接口仅允许本机同源访问' })
       else if (asset) {
         if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: '资源仅支持 GET 或 HEAD' })

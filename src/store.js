@@ -159,6 +159,10 @@ export const SETTINGS_INITIAL = {
   version: 1,
   /** Master switch: when off the routes stay registered but serve nothing. */
   enabled: true,
+  /** Allow installing unsigned local plugin packages from disk. Off by
+   *  default: the signed marketplace is the trust root, and a local package is
+   *  an explicit developer action with its own warning and badge. */
+  developerPlugins: false,
   /** Show region-limited models in the picker as soon as they answer. */
   exposeRegionModels: true,
   /** Advertisement only: retain catalog entries and historical model resolution. */

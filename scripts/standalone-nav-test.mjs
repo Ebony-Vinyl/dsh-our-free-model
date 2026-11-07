@@ -1,15 +1,18 @@
 /**
- * The sidebar is the only list of pages — nothing may restate it.
+ * The sidebar is the only list of core pages — nothing may restate it.
  *
  * 「模型工作台」在 2.7.1 里是个死入口：侧边栏有这一项，`App` 的 `host.navigate`
  * 却拿另一份手写数组当白名单，`navigate('workspace')` 被 `includes` 直接短路，
  * 于是点击无反应、无报错、无 loading（#678）。
  *
- * 修法不是往白名单里补一个字符串，而是让它**从侧边栏推导**。这个脚本守住两件事：
+ * 现在页面集合由两部分组成：`CORE_NAVIGATION` 的侧边栏条目，以及 `/summary`
+ * 返回的插件页。`pageIdsFor` 把两者拼成唯一的白名单，`App` 只调用它，不再自己
+ * 写第二份数组。插件页是运行时数据，因此这里校验的是：
  *
- * 1. `Page` 联合类型与侧边栏条目是同一个集合 —— 类型允许的页面必须真的能点到，
- *    侧边栏也不能列出类型里没有的页面；
- * 2. `app.tsx` 不再自己写一份名单，而是用 `shell.tsx` 导出的 `navigationPages`。
+ * 1. 核心导航没有重复条目，每项都有 id；
+ * 2. `navigationPages` 从 `CORE_NAVIGATION` 推导；
+ * 3. `pageIdsFor` 同时包含核心页与插件页；
+ * 4. `app.tsx` 使用 `pageIdsFor` 而不是手写白名单。
  *
  * 纯静态检查：不需要浏览器，也不构建前端产物。
  *
@@ -31,46 +34,43 @@ const check = (name, run) => {
   console.log(`ok  ${name}`)
 }
 
-// ── the declared page set ───────────────────────────────────────────────────
-const types = read('types.ts')
-const pageUnion = /export type Page\s*=([\s\S]*?)\n/.exec(types)
-assert.ok(pageUnion, 'types.ts must declare `export type Page = ...`')
-const declared = new Set([...pageUnion[1].matchAll(/'([a-z-]+)'/g)].map(match => match[1]))
-assert.ok(declared.size > 0, 'the Page union must list at least one page')
-
-// ── the sidebar ─────────────────────────────────────────────────────────────
 const shell = read('components/shell.tsx')
-const navigationBlock = /const navigation = \[([\s\S]*?)\n\] as const/.exec(shell)
-assert.ok(navigationBlock, 'shell.tsx must declare `const navigation = [...] as const`')
-const listed = [...navigationBlock[1].matchAll(/\bid:\s*'([a-z-]+)'/g)].map(match => match[1])
-assert.ok(listed.length > 0, 'the sidebar must list at least one page')
-
-check('every page the Page type allows is reachable from the sidebar', () => {
-  const missing = [...declared].filter(page => !listed.includes(page))
-  assert.deepEqual(missing, [], `unreachable pages: ${missing.join(', ')}`)
-})
-
-check('and the sidebar lists no page outside the Page type', () => {
-  const extra = listed.filter(page => !declared.has(page))
-  assert.deepEqual(extra, [], `sidebar entries missing from the type: ${extra.join(', ')}`)
-})
-
-check('the sidebar has no duplicate entries', () => {
-  const duplicates = listed.filter((page, index) => listed.indexOf(page) !== index)
-  assert.deepEqual([...new Set(duplicates)], [], `duplicated: ${[...new Set(duplicates)].join(', ')}`)
-})
-
-// ── the whitelist must be derived, never restated ───────────────────────────
 const app = read('app.tsx')
 
-check('App navigates against the sidebar-derived list', () => {
-  assert.match(app, /from '\.\/components\/shell'/, 'app.tsx must import from the shell')
-  assert.match(app, /\bnavigationPages\b/, 'app.tsx must use `navigationPages`')
-  assert.doesNotMatch(app, /\bpageNames\b/, 'app.tsx must not keep its own page-name list')
+check('the core navigation is a single declared list', () => {
+  assert.match(shell, /const CORE_NAVIGATION: NavGroup\[\] = \[/)
+  assert.match(shell, /export const navigationPages: Page\[\] = CORE_NAVIGATION\.flatMap/)
 })
 
-check('and shell.tsx actually exports it', () => {
-  assert.match(shell, /export const navigationPages: Page\[\] = navigation\.flatMap\(/, 'shell.tsx must export `navigationPages` derived from `navigation`')
+check('the core navigation has no duplicate ids and every entry names one', () => {
+  const block = /const CORE_NAVIGATION: NavGroup\[\] = \[([\s\S]*?)\n\]/.exec(shell)
+  assert.ok(block, 'CORE_NAVIGATION must be a literal array')
+  const ids = [...block[1].matchAll(/\bid:\s*'([a-z-]+)'/g)].map(match => match[1])
+  assert.ok(ids.length > 0)
+  assert.equal(new Set(ids).size, ids.length, `duplicated: ${ids.filter((id, index) => ids.indexOf(id) !== index).join(', ')}`)
+  assert.ok(ids.includes('plugins'), 'the plugin center must be reachable from the core sidebar')
+})
+
+check('pageIdsFor appends plugin pages to the core whitelist', () => {
+  assert.match(shell, /export function pageIdsFor\(pluginPages: PluginPage\[\] = \[\]\): Page\[\]/)
+  assert.match(shell, /return \[\.\.\.navigationPages, \.\.\.pluginPages\.map\(page => page\.id\)\]/)
+})
+
+check('the sidebar renders plugin pages from the summary, not a hardcoded list', () => {
+  assert.match(shell, /pluginPages: PluginPage\[\] = \[\]/)
+  assert.match(shell, /label: '插件'/)
+  assert.match(shell, /items: pluginPages\.map\(entry => \(\{ id: entry\.id, name: entry\.title, icon: pageIcon\(entry\.icon\) \}\)\)/)
+})
+
+check('App navigates against the derived list', () => {
+  assert.match(app, /pageIdsFor/)
+  assert.match(app, /pageIds\.includes\(next\)/)
+  assert.doesNotMatch(app, /navigationPages\.includes/)
+})
+
+check('App resolves a plugin page to the sandbox host', () => {
+  assert.match(app, /pluginPage = pluginPages\.find\(entry => entry\.id === page\)/)
+  assert.match(app, /<PluginPage page=\{pluginPage\} onNotice=\{setNotice\} \/>/)
 })
 
 console.log(`\nok ${checks}/${checks} navigation invariants hold`)

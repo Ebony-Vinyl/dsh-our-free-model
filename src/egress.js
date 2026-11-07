@@ -235,7 +235,9 @@ export async function egressFetch(url, init) {
     }
     const executable = findBunExecutable()
     if (!executable) {
-      const error = new Error('OpenCode free inference requires a local Bun executable; install Bun or set OUR_FREE_MODEL_BUN to its executable path (OUR_FREE_MODEL_FREE_TRANSPORT=node restores the legacy transport)')
+      // This sentence is the user's only answer until they install Bun, so it
+      // carries the fix inline, bilingually, without an "upstream failed" wrap.
+      const error = new Error('OpenCode 免费车道推理需要本机 Bun：请安装 Bun（https://bun.sh 或 npm i -g bun）后重试，或把 Bun 可执行文件路径写入 OUR_FREE_MODEL_BUN 环境变量。/ Install Bun or set OUR_FREE_MODEL_BUN to its executable path (OUR_FREE_MODEL_FREE_TRANSPORT=node restores the legacy transport).')
       error.laneConfig = true
       throw error
     }

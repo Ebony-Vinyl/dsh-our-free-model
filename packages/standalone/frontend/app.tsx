@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
-import { Sidebar, Topbar, navigationPages } from './components/shell'
+import { Sidebar, Topbar, pageIdsFor } from './components/shell'
 import { Overview } from './components/overview'
 import { Connection } from './connection'
 import { Agents } from './agents'
@@ -10,11 +10,15 @@ import { Providers } from './providers'
 import { Library } from './library'
 import { Routing } from './routing'
 import { Workspace } from './workspace'
+import { Plugins } from './plugins'
+import { PluginPage } from './plugin-page'
 import { DisclaimerDialog } from './components/disclaimer-dialog'
-import type { Host, Page, ServiceSettings, Snapshot } from './types'
+import type { Host, Page, PluginPage as PluginPageRecord, ServiceSettings, Snapshot } from './types'
 import { DesktopUpdate } from './desktop-update'
 import './app.css'
 import './workbench.css'
+import './plugins.css'
+import './plugin-page.css'
 import { SponsorPage, SponsorNotice } from './sponsor'
 
 const API = '/api/management'
@@ -22,6 +26,7 @@ const platform = document.getElementById('root')?.dataset.loginPlatform ?? (/Win
 const terminalName = platform === 'windows' ? 'PowerShell' : '终端'
 type Request = <T = any>(path: string, body?: unknown, timeoutMs?: number, signal?: AbortSignal) => Promise<T>
 const messageOf = (error: unknown) => error instanceof Error ? error.name === 'TimeoutError' ? '请求超时，请检查服务是否仍在运行。' : error.message : '请求失败，请重试。'
+const NO_PLUGIN_PAGES: PluginPageRecord[] = []
 
 function LoginScreen({ request }: { request: Request }) {
   const [key, setKey] = useState(''), [error, setError] = useState(''), [status, setStatus] = useState(''), [busy, setBusy] = useState(false)
@@ -53,6 +58,9 @@ function LazyPage({ name, snapshot, host, active }: { name: 'models' | 'usage' |
 function App() {
   const [mode, setMode] = useState<'loading' | 'login' | 'ready'>('loading'), [snapshot, setSnapshot] = useState<Snapshot>(), [page, setPage] = useState<Page>('overview'), [notice, setNotice] = useState(''), [error, setError] = useState('')
   const [visited, setVisited] = useState<Page[]>([])
+  const pluginPages = snapshot?.summary.plugins?.pages ?? NO_PLUGIN_PAGES
+  const pageIds = useMemo(() => pageIdsFor(pluginPages), [pluginPages])
+  const pluginPage = pluginPages.find(entry => entry.id === page)
   // The disclaimer reads once on the first console visit and is reopenable from
   // the sidebar. It never gates the lanes: acknowledging only writes a setting.
   const [disclaimer, setDisclaimer] = useState<{ acknowledged?: boolean } | undefined>(undefined)
@@ -61,7 +69,7 @@ function App() {
   const enterLogin = (reason = '') => { generation.current++; loading.current = undefined; authenticated.current = false; setSnapshot(undefined); setVisited([]); setPage('overview'); setError(reason); setNotice(''); setMode('login') }
   const request: Request = async (path, body, timeoutMs = 10000, signal) => { const current = generation.current; const response = await fetch(API + path, { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', headers: body === undefined ? {} : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) }); const value = await response.json(); if (!response.ok) { const reason = Object.assign(new Error(value.error ?? `请求失败（${response.status}）`), { status: response.status }); if (current === generation.current && response.status === 401 && path !== '/session') enterLogin(reason.message); throw reason } if (current !== generation.current) throw new Error('管理会话已变化，请重新操作。'); return value }
   const loadData = async () => { if (loading.current) return loading.current; const current = generation.current, revision = settingsRevision.current; const pending = Promise.all([request('/summary'), request('/stats')]).then(([summary, stats]) => { if (current !== generation.current) return; setSnapshot(previous => ({ summary: revision !== settingsRevision.current && previous ? { ...summary, settings: previous.summary.settings } : summary, stats })); authenticated.current = true; setMode('ready'); setError('') }).finally(() => { if (loading.current === pending) loading.current = undefined }); loading.current = pending; return pending }
-  const host = useMemo<Host>(() => ({ navigate: next => { if (navigationPages.includes(next)) { setPage(next); setVisited(previous => previous.includes(next) ? previous : [...previous, next]); setError(''); setNotice('') } }, refresh: async () => { await loadData() }, copy: async value => { await navigator.clipboard.writeText(value); setNotice('已复制到剪贴板') }, getApiKey: async () => (await request<{ key: string }>('/key')).key, rotateKey: async () => (await request<{ key: string }>('/key/rotate', { confirm: true })).key, logout: async () => { await request('/logout', {}); enterLogin('已退出管理') }, error: reason => setError(messageOf(reason)), testModel: (model, signal) => request('/models/test', { model }, 330000, signal), refreshModels: async (probe, signal) => { await request('/models/refresh', { probe }, 300000, signal); if (!signal.aborted) await loadData() }, saveSettings: async (settings: Partial<ServiceSettings>) => { const value = await request<{ settings: ServiceSettings }>('/settings', settings); settingsRevision.current++; setSnapshot(previous => previous ? { ...previous, summary: { ...previous.summary, settings: value.settings } } : previous); return value.settings } }), [page])
+  const host = useMemo<Host>(() => ({ navigate: next => { if (pageIds.includes(next)) { setPage(next); setVisited(previous => previous.includes(next) ? previous : [...previous, next]); setError(''); setNotice('') } }, refresh: async () => { await loadData() }, copy: async value => { await navigator.clipboard.writeText(value); setNotice('已复制到剪贴板') }, getApiKey: async () => (await request<{ key: string }>('/key')).key, rotateKey: async () => (await request<{ key: string }>('/key/rotate', { confirm: true })).key, logout: async () => { await request('/logout', {}); enterLogin('已退出管理') }, error: reason => setError(messageOf(reason)), testModel: (model, signal) => request('/models/test', { model }, 330000, signal), refreshModels: async (probe, signal) => { await request('/models/refresh', { probe }, 300000, signal); if (!signal.aborted) await loadData() }, saveSettings: async (settings: Partial<ServiceSettings>) => { const value = await request<{ settings: ServiceSettings }>('/settings', settings); settingsRevision.current++; setSnapshot(previous => previous ? { ...previous, summary: { ...previous.summary, settings: value.settings } } : previous); return value.settings }, request: (path, body, timeoutMs) => request(path, body, timeoutMs) }), [pageIds])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [page])
   useEffect(() => { const onUnauthorized = () => enterLogin('管理会话已失效，请重新登录'); window.addEventListener('ofm:unauthorized', onUnauthorized); return () => window.removeEventListener('ofm:unauthorized', onUnauthorized) }, [])
   useEffect(() => { const token = new URLSearchParams(location.hash.slice(1)).get('login'); if (token) history.replaceState(null, '', location.pathname + location.search); void (async () => { try { if (token) await request('/session', { bootstrapToken: token }); await loadData() } catch (reason) { enterLogin((reason as any)?.status === 401 && !token ? '' : messageOf(reason)) } })() }, [])
@@ -74,9 +82,9 @@ function App() {
       .catch(() => { if (alive) setDisclaimer({ acknowledged: true }) })
     return () => { alive = false }
   }, [mode])
-  const content: ReactNode = snapshot && page === 'updates' ? <DesktopUpdate /> : snapshot && page === 'routing' ? <Routing active host={host} /> : snapshot && page === 'workspace' ? <Workspace active /> : snapshot && page === 'library' ? <Library active /> : snapshot && page === 'agents' ? <Agents summary={snapshot.summary} active host={host} /> : snapshot && page === 'providers' ? <Providers active host={host} /> : snapshot && page === 'sponsor' ? <SponsorPage /> : snapshot && page === 'overview' ? <Overview {...snapshot} host={host} /> : snapshot && page === 'connection' ? <Connection summary={snapshot.summary} host={host} active /> : snapshot && (page === 'channels' || page === 'eac') ? <ChannelMount key={page} kind={page} summary={{ ...snapshot.summary, reload: () => { void loadData() } }} /> : null
+  const content: ReactNode = snapshot && pluginPage ? <PluginPage page={pluginPage} onNotice={setNotice} /> : snapshot && page === 'plugins' ? <Plugins summary={snapshot.summary} host={host} active /> : snapshot && page === 'updates' ? <DesktopUpdate /> : snapshot && page === 'routing' ? <Routing active host={host} /> : snapshot && page === 'workspace' ? <Workspace active /> : snapshot && page === 'library' ? <Library active /> : snapshot && page === 'agents' ? <Agents summary={snapshot.summary} active host={host} /> : snapshot && page === 'providers' ? <Providers active host={host} /> : snapshot && page === 'sponsor' ? <SponsorPage /> : snapshot && page === 'overview' ? <Overview {...snapshot} host={host} /> : snapshot && page === 'connection' ? <Connection summary={snapshot.summary} host={host} active /> : snapshot && (page === 'channels' || page === 'eac') ? <ChannelMount key={page} kind={page} summary={{ ...snapshot.summary, reload: () => { void loadData() } }} /> : null
   if (mode === 'loading') return <LoadingScreen />
   if (mode === 'login') return <LoginScreen request={async (...args) => { const result = await request(...args); if (args[0] === '/session') await loadData(); return result }} />
-  return <div id="app" className="app-shell"><aside className="sidebar"><Sidebar page={page} summary={snapshot?.summary} host={host} onDisclaimer={() => setDisclaimerOpen(true)} /></aside><main><header className="topbar"><Topbar page={page} summary={snapshot?.summary} /></header>{snapshot?.summary.networkMode === 'fixture' && <div className="notice test-mode-notice notice-enter" role="alert">当前为本机替身测试模式：账号、模型回答与额度均为测试数据。</div>}{notice && <div className="notice notice-enter" role="status">{notice}<button className="text-button" onClick={() => setNotice('')}>关闭</button></div>}{error && <div className="notice error-notice notice-enter" role="alert"><AlertCircle size={16} /><span>{error}</span><button className="text-button" onClick={() => { setError(''); void loadData() }}>重试</button></div>}<section className="page">{content}{snapshot && (['models', 'usage', 'settings'] as const).filter(name => visited.includes(name)).map(name => <div key={name} hidden={page !== name}><LazyPage name={name} snapshot={snapshot} host={host} active={page === name} /></div>)}</section><footer>OUR FREE MODEL <span>·</span> 本地运行 · 由你掌控</footer></main><SponsorNotice targetId="ofm-sponsor-menu-desktop" placement="side" /><DisclaimerDialog open={disclaimerOpen} onClose={() => { setDisclaimerOpen(false); setDisclaimer(current => current ? { ...current, acknowledged: true } : current) }} /></div>
+  return <div id="app" className="app-shell"><aside className="sidebar"><Sidebar page={page} summary={snapshot?.summary} host={host} pluginPages={pluginPages} onDisclaimer={() => setDisclaimerOpen(true)} /></aside><main><header className="topbar"><Topbar page={page} summary={snapshot?.summary} pluginPages={pluginPages} /></header>{snapshot?.summary.networkMode === 'fixture' && <div className="notice test-mode-notice notice-enter" role="alert">当前为本机替身测试模式：账号、模型回答与额度均为测试数据。</div>}{notice && <div className="notice notice-enter" role="status">{notice}<button className="text-button" onClick={() => setNotice('')}>关闭</button></div>}{error && <div className="notice error-notice notice-enter" role="alert"><AlertCircle size={16} /><span>{error}</span><button className="text-button" onClick={() => { setError(''); void loadData() }}>重试</button></div>}<section className="page">{content}{snapshot && (['models', 'usage', 'settings'] as const).filter(name => visited.includes(name)).map(name => <div key={name} hidden={page !== name}><LazyPage name={name} snapshot={snapshot} host={host} active={page === name} /></div>)}</section><footer>OUR FREE MODEL <span>·</span> 本地运行 · 由你掌控</footer></main><SponsorNotice targetId="ofm-sponsor-menu-desktop" placement="side" /><DisclaimerDialog open={disclaimerOpen} onClose={() => { setDisclaimerOpen(false); setDisclaimer(current => current ? { ...current, acknowledged: true } : current) }} /></div>
 }
 createRoot(document.getElementById('root')!).render(<App />)

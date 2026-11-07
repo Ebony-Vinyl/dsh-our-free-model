@@ -25,6 +25,8 @@ node packages/standalone/cli.mjs
 
 使用终端输出的完整管理链接登录。默认尝试 18900，端口冲突时会选择其他可用端口；不要写死浏览器地址。DSH 插件请使用 README 的安装流程，不能只复制三个入口文件代替完整插件包。
 
+控制台的「插件中心」由同一服务提供：插件包数据写在数据目录的 `extensions/` 下，页面插件的静态资产由 `/api/management/plugins/assets/<token>/` 提供，token 每次启动随机生成。打包或搬家数据目录时要保留 `extensions/`；只复制前端 `web/` 不会带走已安装插件。插件内核位于 `src/plugins.js`（单文件，为守住发布清单的文件预算），桌面资源生成脚本会随 `src/**/*.js|json` 自动复制。
+
 ## Windows 桌面构建
 
 构建机需要：

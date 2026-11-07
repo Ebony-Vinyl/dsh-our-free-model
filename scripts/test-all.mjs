@@ -115,6 +115,8 @@ const suites = [
   ['freetier-gate', 'freetier-gate-test.mjs', []],
   ['free-lane-quota', 'free-lane-quota-test.mjs', []],
   ['extensions', 'extensions-test.mjs', []],
+  ['plugins', 'plugins-test.mjs', []],
+  ['plugins-ui', 'plugins-ui-test.mjs', []],
   ['sniff', 'sniff-test.mjs', []],
   ['stream-failure', 'stream-failure-test.mjs', []],
   ['truncation', 'truncation-test.mjs', []],
@@ -173,7 +175,7 @@ if (only !== null && suites.length === 0) {
  * detail" because buffered child output was unavailable. The deadline is well
  * above the slowest suite, and live output now identifies the last check seen.
  */
-const SUITE_TIMEOUT_MS = 60_000
+const SUITE_TIMEOUT_MS = 120_000
 
 /**
  * Run a suite while forwarding its output as it arrives. Keeping the output

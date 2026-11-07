@@ -1,4 +1,12 @@
-/** Private engine startup and inference survive a replaced host fetch. */
+/**
+ * Engine transport contract.
+ *
+ * Startup, health, management and catalog reads use the private loopback
+ * transport: a replaced host fetch must never keep the workspace from becoming
+ * ready. Engine *inference* rides the host's replaceable `globalThis.fetch` so
+ * local proxy plugins (billion-context et al.) keep seeing engine turns, and
+ * OFM_ENGINE_PRIVATE_FETCH=1 forces the private transport back.
+ */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -16,7 +24,6 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-engine-transport-'))
 const engine = createMagpieEngine({ dataDir: path.join(scratch, 'data') })
 const originalFetch = globalThis.fetch
 let intercepted = 0, cancelled = 0
-globalThis.fetch = async () => { intercepted++; throw new Error('Host fetch intercepted the request') }
 const server = http.createServer(async (req, res) => {
   if (req.url === '/v1/models') {
     res.setHeader('content-type', 'application/json')
@@ -55,8 +62,12 @@ let models
 try {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
+  // A replaced host fetch that watches but forwards: proxy plugins are exactly
+  // this shape, so the workspace must still become ready with it installed.
+  globalThis.fetch = async (...args) => { intercepted += 1; return originalFetch(...args) }
   assert.equal((await engine.start()).state, 'ready')
   assert.equal((await engine.request('GET', '/api/settings')).status, 200)
+  assert.equal(intercepted, 0, 'startup and management never touch the host fetch')
   console.log('ok real engine starts and authenticated management works with host fetch replaced')
 
   models = createMagpieModels({
@@ -64,13 +75,43 @@ try {
   })
   await models.refresh()
   assert.equal(models.catalog()[0].id, 'subscription:magpie/fixture/model')
+  assert.equal(intercepted, 0, 'the catalog read stays on the private transport')
+  console.log('ok catalog reads bypass the replaced host fetch')
+
   const emitted = []
   await models.complete({
     model: 'subscription:magpie/fixture/model',
     messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
   }, chunk => emitted.push(chunk))
   assert.ok(JSON.stringify(emitted).includes('direct loopback'))
-  console.log('ok catalog and streaming model inference bypass the replaced host fetch')
+  assert.ok(intercepted > 0, 'inference rides the replaceable host fetch')
+  console.log('ok streaming model inference is visible to a replaced host fetch')
+
+  // The escape hatch: a throwing replacement plus the env switch restores the
+  // fully private path, inference included.
+  const before = intercepted
+  process.env.OFM_ENGINE_PRIVATE_FETCH = '1'
+  let privateModels
+  try {
+    globalThis.fetch = async () => { intercepted += 1; throw new Error('Host fetch intercepted the request') }
+    privateModels = createMagpieModels({
+      engine: { status: () => ({ state: 'ready' }), gateway: () => ({ url: base, key: 'fixture-only-key' }) },
+    })
+    await privateModels.refresh()
+    assert.equal(privateModels.catalog()[0].id, 'subscription:magpie/fixture/model')
+    const privateEmitted = []
+    await privateModels.complete({
+      model: 'subscription:magpie/fixture/model',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+    }, chunk => privateEmitted.push(chunk))
+    assert.ok(JSON.stringify(privateEmitted).includes('direct loopback'))
+    assert.equal(intercepted, before, 'the private-transport switch routes nothing through the host fetch')
+    console.log('ok OFM_ENGINE_PRIVATE_FETCH=1 restores the fully private path')
+  } finally {
+    delete process.env.OFM_ENGINE_PRIVATE_FETCH
+    privateModels?.close()
+  }
+  globalThis.fetch = originalFetch
 
   const form = new FormData()
   form.set('file', new Blob(['fixture upload']), 'fixture.txt')
@@ -98,7 +139,6 @@ try {
   await new Promise(resolve => setTimeout(resolve, 40))
   bufferedController.abort()
   await assert.rejects(buffered.text(), error => error.name === 'AbortError')
-  assert.equal(intercepted, 0, 'no private engine requests reach the host fetch')
   console.log('ok multipart, empty responses, redirect rejection and streaming cancellation retain fetch behavior')
 } finally {
   globalThis.fetch = originalFetch

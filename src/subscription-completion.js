@@ -335,10 +335,11 @@ function credentialRedactor(secrets, deliver) {
  * complete() may override it with request.resolveImage for that call only.
  */
 export function createSubscriptionRuntime({
-  subscriptions, stats, logger, fetchImpl = globalThis.fetch, timeoutMs = 300000, resolveImage,
+  subscriptions, stats, logger, fetchImpl = globalThis.fetch, timeoutMs = 300000, resolveImage, onPayload,
 } = {}) {
   if (typeof subscriptions?.list !== 'function' || typeof subscriptions?.resolve !== 'function'
     || (resolveImage !== undefined && typeof resolveImage !== 'function')
+    || (onPayload !== undefined && typeof onPayload !== 'function')
     || typeof fetchImpl !== 'function' || !Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000) {
     throw failure('INVALID_INPUT', 'Invalid subscription runtime configuration', 400)
   }
@@ -388,6 +389,14 @@ export function createSubscriptionRuntime({
         onChunk(chunk)
         foldForwardOutcome(outcome, chunk)
       })
+      let body = payload
+      if (onPayload !== undefined) {
+        // The owner's body seam (enhancement extensions on the magpie lane):
+        // fail-open is the hook's own contract, but a broken seam itself must
+        // not take the turn down — ship the unmodified payload instead.
+        try { body = (await Promise.race([onPayload(payload, { provider: config.provider, model: config.model, wire: config.wire }), interrupted])) ?? payload }
+        catch (error) { if (controller.signal.aborted) throw error }
+      }
       try {
         response = await Promise.race([fetchImpl(config.endpoint, {
           method: 'POST', redirect: 'error', signal: controller.signal,
@@ -395,7 +404,7 @@ export function createSubscriptionRuntime({
             ...config.headers, 'content-type': 'application/json', accept: 'text/event-stream',
             ...(config.provider === 'gemini' ? { 'user-agent': `GeminiCLI/0.61.0/${config.model} (${process.platform}; ${process.arch}; terminal)` } : {}),
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(body),
         }), interrupted])
       } catch (error) {
         if (controller.signal.aborted) throw error

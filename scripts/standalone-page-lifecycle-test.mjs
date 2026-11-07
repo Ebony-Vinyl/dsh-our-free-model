@@ -29,15 +29,17 @@ const react = {
   useEffect(effect, deps) { const at = index++, previous = slots[at]; if (previous?.deps?.length === deps?.length && deps?.every((value, i) => value === previous.deps[i])) return; slots[at] = { deps }; effects.push(effect) },
 }
 const settings = { enabled: true }
-const summary = { settings, catalog: [], networkMode: 'fixture' }
+const summary = { settings, catalog: [], networkMode: 'fixture', plugins: { installedCount: 0, builtinCount: 0, pages: [], developerPlugins: false } }
 const context = {
   ...react, h: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }), Fragment: 'fragment',
   Sidebar: 'Sidebar', Topbar: 'Topbar', SponsorNotice: 'SponsorNotice', Overview: 'Overview', Workspace: 'Workspace', Connection: 'Connection', ChannelMount: 'ChannelMount', LazyPage: 'LazyPage', LoadingScreen: 'LoadingScreen', LoginScreen: 'LoginScreen', AlertCircle: 'AlertCircle', DisclaimerDialog: 'DisclaimerDialog',
-  // `App` navigates against the sidebar-derived list (`navigationPages`), so that
-  // is the name this sandbox has to supply. The value only needs to cover the
-  // pages this suite walks through — the sidebar/type agreement itself is
-  // pinned by `standalone-nav-test.mjs`.
-  navigationPages: ['overview', 'workspace', 'models', 'usage', 'channels', 'eac', 'settings', 'connection'], API: '/api/management',
+  Plugins: 'Plugins', PluginPage: 'PluginPage',
+  // `App` navigates against `pageIdsFor(pluginPages)`, the single whitelist that
+  // concatenates the core sidebar with the plugin pages from `/summary`. The
+  // sidebar/type agreement itself is pinned by `standalone-nav-test.mjs`.
+  pageIdsFor: pages => ['overview', 'workspace', 'plugins', 'models', 'usage', 'channels', 'eac', 'settings', 'connection', ...pages.map(page => page.id)],
+  NO_PLUGIN_PAGES: [],
+  API: '/api/management',
   messageOf: error => error.message, AbortSignal, URLSearchParams, location: { hash: '' }, history: {},
   window: { scrollTo() {}, addEventListener() {}, removeEventListener() {}, setInterval() { return 1 }, clearInterval() {} },
   document: { hidden: false }, navigator: { clipboard: { writeText: async () => {} } },

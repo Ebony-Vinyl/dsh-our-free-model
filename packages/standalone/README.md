@@ -116,7 +116,13 @@ EAC 在独立页面自行授权；不会使用 DSH 的 EAC token。原插件的�
 
 独立端已更新概览、渠道管理、模型清单、用量统计、服务设置和公共导航；
 API 接入和登录继续保留已有控制逻辑。资源全部由本机服务提供，
-渠道、模型、用量统计和服务设置按需加载，不依赖 CDN。视觉与体积记录见
+渠道、模型、用量统计和服务设置按需加载，不依赖 CDN。
+管理导航新增「插件中心」：渠道、增强与页面插件共用一套签名清单、权限与沙箱，
+侧边栏会动态出现插件贡献的页面（`sandbox="allow-scripts"` iframe + 受控消息桥）；
+内置的账号渠道包、聚合渠道目录、客户端启动器、资源库格式与模型工作台
+也以 built-in 插件登记在同一中心，不可卸载。开发者模式可安装本地未签名包，
+需要显式确认且带「未验证」徽标。详见 [`插件平台`](../../docs/plugin-platform.md)
+与 [`页面插件 API`](../../docs/plugin-page-api.md)。视觉与体积记录见
 [`第一阶段验收`](../../docs/verification/2026-10-09-standalone-ui-phase1.md)、
 [`模型清单验收`](../../docs/verification/2026-10-09-standalone-model-browser.md)和
 [`用量统计验收`](../../docs/verification/2026-10-09-standalone-usage-dashboard.md)和

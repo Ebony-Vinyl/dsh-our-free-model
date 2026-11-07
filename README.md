@@ -71,7 +71,7 @@
 - **接口具备鉴权围栏**——插件 HTTP 路由优先级高于内核 `/api`，因此内置与内核一致的信任检查（优先复用 composition 的 connection 服务，缺失时退回结构化围栏）。
 - **十个账号渠道，一体接入**——LobsterAI（有道）、Qoder / Qoder 中国版（阿里系）、TRAE（字节）、Cline、Loomy（讯飞）、Raccoon（商汤）、MiniMax Code、ZCode（智谱）、Gemini（Google Code Assist）十个账号渠道开箱即用，外加 Kilo 免费车道与原匿名免费通道；OpenCode 账号渠道在本插件中默认停用。各渠道的登录流程、账号池、每日积分领取、模型黑名单与其本地 OpenAI 网关（Chat Completions + Responses，默认 `127.0.0.1:8326`）原样挂载与运行；凭据只写入宿主凭据库，浏览器永远拿不到明文。
 - **视觉特效按需开启**——设置页顶部“视觉特效”开关默认关闭，鱼缸和业务功能始终保留；开启后恢复背景光晕、毛玻璃与装饰动画，选择仅保存在当前浏览器。
-- **OFM 扩展：插件化渠道市场**——新仓库 [Ebony-Vinyl/ofm-extensions](https://github.com/Ebony-Vinyl/ofm-extensions) 承载社区渠道与增强模块：Ed25519 签名索引、安装即校验 SHA-256 与静态扫描、运行在 Worker VM 沙箱（唯一 import 是受控的 `ofm:sdk`，网络只放行 manifest 声明的域名，密钥只进不出，每个 hook 带超时熔断）。渠道插件装上即出现在模型选择器（支持 `replaces` 接管内置车道），增强插件以 `onRequest`/`onModels`/`onUsage` 挂进请求链；发现、安装、更新、启停、配置、卸载全部在设置页「扩展」页完成。
+- **OFM 插件中心：渠道 / 增强 / 页面统一市场**——新仓库 [Ebony-Vinyl/ofm-extensions](https://github.com/Ebony-Vinyl/ofm-extensions) 承载社区插件：Ed25519 签名索引、安装即校验 SHA-256 与静态扫描、运行在 Worker VM 沙箱（唯一 import 是受控的 `ofm:sdk`，网络只放行 manifest 声明的域名，密钥只进不出，每个 hook 带超时熔断）。渠道插件装上即出现在模型选择器（支持 `replaces` 接管内置车道），增强插件以 `onRequest`/`onModels`/`onUsage` 挂进请求链；页面插件在侧边栏贡献一个沙箱 iframe 页面，只能通过受控消息桥读写自己的配置与存储。清单 v1 与 v2 双兼容；内置账号渠道包、聚合渠道目录、客户端启动器、资源库格式与模型工作台也以 built-in 描述符登记在同一插件中心，不可卸载但可查看贡献。发现、安装、更新、启停、配置、密钥、自检、卸载全部在控制台「插件中心」完成；开发者模式可安装本地未签名包（显式风险确认、未验证徽标、同一沙箱）。市场页另带封面横幅、类型色带与骨架屏，详情弹层含签名源码直达链接、发布说明（changelog）与权限清单；索引由宿主后台定时刷新，已装插件的清单可一键导出 / 导入（JSON，不含密钥）用于迁移。模型工作台（magpie）车道的推理请求也接入同一增强钩子链（onRequest），并默认经宿主可替换的 fetch 出站，本机代理类插件（如上下文扩展）重新可见；OFM_ENGINE_PRIVATE_FETCH=1 可回到私有直连。
 - **免费车道额度断路器与出口代理（issue #708/#767 的完整回答）**——上游按出口 IP 计免费配额，一次真实 429 即开窗（`Retry-After` 缺省 6 小时），窗口内本插件本地拒绝新回合、不再向墙上送请求；`FreeTierError` 单独锁道。手动测试全部保留（清单刷新/单模型检测/测速），自动探测依旧禁用——状态从真实回合被动学习。车道可配独立出口代理（http/https/socks5），也认 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` 环境变量；「换出口后重试一次」一键清窗，「测试出口」打第三方回显不花配额。请求形状对齐官方 2.2.3 客户端（`traceparent`/`b3`/通配 `accept`），并移植 opencode2api v1.4.7 的工具名绑定、幽灵调用清理与标题请求免整形。
 - **十三页毛玻璃界面**——设置页顶部导航扩为十一个页面：原有六页（**免费模型**（鱼缸水位 = 可用模型占比）、**EAC 模型**（鱼缸水位 = 协付池压力）、**白嫖模型接入**（十张渠道卡：登录、账号、模型开关、一键领取积分）、**数据看板**（今日/全部 Token 消耗、平均生成速度、缓存命中率、成功率，账号透视与模型性能表、最近请求总览）、**运行日志**（逐请求明细：结果、耗时、首字、速度、Token 细分，失败原因悬停可见）与**网关设置**（网关开关/端点/密钥；局域网转发中继：监听地址、端口与独立中继密钥）），新增**聚合渠道**（提供商注册表、Key、测试、发现模型、Base URL 与模型清单覆盖）、**省 Token**（压缩开关、两族提示词档位、五个本地应答与节省统计）、**路由**（降级链编辑器）、**插件升级**（版本检查、一键升级与热重载）与**推荐项目**（EAC-Desktop / EAC-Pack / EAC-design-world 三张卡片：简介、直达链接与 Star 按钮，Star / Fork / 最近提交数实时取自 GitHub，取不到就整块不显示）五页；网关设置页另增「接入客户端」分区。页面切换与卡片入场为 150–250 ms 短动效，`prefers-reduced-motion` 下整体关闭。每页都有直达 GitHub 仓库的 Star 按钮。
 - **局域网转发中继**——渠道网关本身只监听本机（上游的安全选择）；本插件提供自己的转发门：调用方用插件签发与轮换的中继密钥，转发跳由宿主换用网关凭据（凭据不出宿主进程），仅放行 `/v1/*` 模型接口并带环路保护。
@@ -110,7 +110,10 @@ npm run start:standalone
 
 独立服务默认使用 `~/.our-free-model` 和端口 `18900`，拥有自己的 API Key，
 不读取插件数据。支持匿名/Kilo、EAC 和十个账号渠道，提供
-Chat Completions、Responses API，以及独立网页管理（模型、统计、渠道、EAC、设置、API Key）。
+Chat Completions、Responses API，以及独立网页管理（概览、模型、用量、聚合渠道、路由、
+EAC、客户端与订阅、资源库、API 接入、设置与**插件中心**）。
+插件中心与桌面端共用一套签名市场：渠道、增强与页面插件在此安装、启停、配置与卸载，
+页面插件会直接出现在侧边栏的「插件」分组里。
 启动后打开终端打印的一次性管理链接即可使用；账号在独立页面登录，也可手动导入插件账号备份。
 启动、参数与验证见 [独立服务说明](packages/standalone/README.md)。
 独立服务的安装制品与 Release 尚未发布。
@@ -128,7 +131,7 @@ Chat Completions、Responses API，以及独立网页管理（模型、统计、
 > `dsh-our-free-model-<版本>.tgz` 同源、同版本。只想走 npm 时可以装它：
 >
 > ```
-> dsh plugin --profile web add @ebony-vinyl/dsh-our-free-model@2.8.1
+> dsh plugin --profile web add @ebony-vinyl/dsh-our-free-model@2.9.0
 > ```
 >
 > 注意它的包名带 scope，因此挂载条目是 `@ebony-vinyl/dsh-our-free-model`，与下文
@@ -160,12 +163,12 @@ PROFILE_UPGRADE_REQUIRED: offline dependency migration is not yet available
 以真实目录手工安装时，使用可信源码打出的本地 tarball：
 
 1. 创建 `<DSH_HOME>/profiles/<profile>/vendor/`，在审核过的本仓库目录运行 `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`，或将本仓库正式发布的同版本 tarball 放入该目录。本地打包不执行 npm 发布。
-2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.8.1.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
+2. 在 profile 的 `package.json` 的 dependencies 中加入 `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.9.0.tgz"`。文件名版本跟随仓库 `package.json`，不要改成同名 npm 注册表版本；再通过宿主的安装流程解析依赖。
 3. 在 dsh.profile.bundles 末尾追加 `"dsh-our-free-model"`。
 
 包管理器拥有这份安装的字节时，同时将 bundle config 或插件 `settings.json` 的 `distribution` 设为 `managed`，由包管理器统一更新；应用内升级、公告 feed 与热重载会停用，模型功能保留。以后更新时替换可信 tarball 并同步依赖路径，避免包管理器按旧锁文件恢复旧版本。
 
-若手工复制发布文件，必须复制完整包，包括 `adapter/`、`src/`、`locale/` 、`vendor/magpie/` 下的元数据与许可证，以及 `vendor/channel-pack/` 下的 `pack.js`、WASM、LICENSE、NOTICE；只复制入口脚本会导致渠道加载失败。
+若手工复制发布文件，必须复制完整包，包括 `adapter/`、`src/`、`locale/`、`vendor/` 下的引擎资源目录（`engine.json`、LICENSE、NOTICE 与对应二进制），以及 `vendor/channel-pack/` 下的 `pack.js`、WASM、LICENSE、NOTICE；只复制入口脚本会导致渠道加载失败。
 
 不要再向 cordis.patch.yml 添加条目。被 dsh.profile.bundles 引用的包，其自带的
 patch 层会自动生效；两处同时注册将报错 duplicate loader entry id: our-free-model。

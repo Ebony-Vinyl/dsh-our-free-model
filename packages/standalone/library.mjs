@@ -3,6 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { privateWrite } from './workbench.mjs'
+import { LIBRARY_FORMATS as FORMATS } from '../../src/plugins.js'
 
 const MAX_CONTENT = 1024 * 1024
 const MAX_STORE = 16 * MAX_CONTENT
@@ -11,12 +12,6 @@ const MAX_RESOURCES = 500
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/
 const SERVER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/
 const RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
-const FORMATS = {
-  codex: { context: 'AGENTS.md', skills: 'skills', codex: true },
-  'codex-desktop': { context: 'AGENTS.md', skills: 'skills', codex: true },
-  claude: { context: 'CLAUDE.md', skills: 'skills', agents: 'agents', config: '.claude.json' },
-  gemini: { context: '.gemini/GEMINI.md', skills: '.gemini/skills', agents: '.gemini/agents', config: '.gemini/settings.json' },
-}
 const MANIFEST = '.workbench-library.json'
 const FRAGMENT = 'ofm-mcp.toml'
 const error = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })

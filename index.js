@@ -29,6 +29,7 @@ import fs from 'node:fs'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { externalUrl, openExternal } from './src/open-external.js'
+import { findBunExecutable } from './src/bun-fetch.js'
 import { ROUTE_LABELS, ROUTE_MAIN, ROUTE_REGION } from './src/adapter.js'
 import { DATA_DIR_NAME, resolveDshHome, publicModelVisibility, validateModelVisibility, isModelHidden } from './src/store.js'
 import { isEacEntry, isKiloEntry } from './src/catalog.js'
@@ -60,8 +61,9 @@ import { createModelRuntime, createRuntimeStores } from './src/core.js'
 import { createSubscriptions } from './src/subscriptions.js'
 import { createSubscriptionRuntime } from './src/subscription-completion.js'
 import { isSubscriptionEntry } from './src/subscription-adapter.js'
-import { createMagpieEngine } from './src/magpie-engine.js'
+import { createMagpieEngine, findAgentCli } from './src/magpie-engine.js'
 import { createExtensionRuntime } from './src/extensions.js'
+import { builtinDescriptors } from './src/plugins.js'
 import { createMagpieModels, combineSubscriptionRuntimes } from './src/magpie-models.js'
 import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from './src/disclaimer.js'
 
@@ -145,6 +147,15 @@ export function apply(ctx, config) {
   const dataDir = path.resolve(home, DATA_DIR_NAME)
   fs.mkdirSync(dataDir, { recursive: true })
   const packageVersion = version
+
+  // Environment readiness: the official free lane's POST inference needs a
+  // local Bun, and a user who never learns that reads only a failed turn.
+  // Probe once at boot — the summary's `bun` bit and this log line are the two
+  // surfaces the answer lives on.
+  const bunAvailable = findBunExecutable() !== undefined
+  if (!bunAvailable) {
+    logger.warn?.('our-free-model: 未检测到本机 Bun —— OpenCode 免费车道无法推理。请安装 Bun（https://bun.sh 或 npm i -g bun）后重启，或把可执行文件路径写入 OUR_FREE_MODEL_BUN。(Bun not found: the OpenCode free lane cannot run inference)')
+  }
 
   // A hot reload re-enters apply with fresh stores; the generation counter lives
   // on globalThis so the new instance knows it replaced a predecessor, and does
@@ -415,9 +426,13 @@ export function apply(ctx, config) {
   }
 
   const magpieEngine = createMagpieEngine({ dataDir, logger })
+  // The extension runtime is created a few lines below; the lazy reference
+  // gives the magpie lane the enhancement-hook seam without reordering boot.
+  let extensionHookRuntime = null
   const magpieModels = createMagpieModels({
     engine: magpieEngine, stats, logger,
     onChanged: () => modelRuntime.syncAggregateCatalog(),
+    extensionRuntime: () => extensionHookRuntime,
   })
   let subscriptions
   let subscriptionRuntime
@@ -442,6 +457,11 @@ export function apply(ctx, config) {
       try { modelRuntime.syncExtensionCatalog() } catch { /* the runtime may not exist yet during boot */ }
     },
   })
+  // Built-ins register through the same kernel as installed plugins. The DSH
+  // client renders channel/enhancement contributions; page contributions are
+  // a desktop-console surface.
+  for (const descriptor of builtinDescriptors()) extensions.registerBuiltin(descriptor)
+  extensionHookRuntime = extensions
   const modelRuntime = createModelRuntime({
     ...stores,
     logger,
@@ -1119,6 +1139,7 @@ export function apply(ctx, config) {
     settings, stats, availability, catalog: () => modelRuntime.catalog, state,
     refreshCatalog, refreshAvailability, syncForward, syncRelay, syncEgress, clearLaneBreaker,
     extensions,
+    bunAvailable,
     onVisibilityChanged: emitTopology,
     pool: fetchPoolSnapshot,
     eacAuth,
@@ -1485,6 +1506,13 @@ export function apply(ctx, config) {
       void magpieEngine.start().then(() => magpieModels.refresh()).catch(() => {
         logger.warn?.('our-free-model: model workspace could not resume')
       })
+      // The engine connects Claude through the locally installed Claude Code
+      // CLI; its own downloader cannot reach the release host from every
+      // network, so a pre-installed CLI is the practical requirement. Warn at
+      // boot — the user's first failed connect is too late to learn it.
+      if (findAgentCli('claude') === undefined) {
+        logger.warn?.('our-free-model: 未检测到 Claude Code CLI —— 在模型工作台连接 Claude 前请先安装（npm i -g @anthropic-ai/claude-code）。(Claude Code CLI not found; install it before connecting Claude in the model workspace)')
+      }
     }
   }, 'our-free-model: model workspace')
 
@@ -1497,6 +1525,13 @@ export function apply(ctx, config) {
       logger.warn?.(`our-free-model: extension mount failed (${error?.message ?? error})`)
     })
     void extensions.refreshRegistry().catch(() => {})
+    // The marketplace index refreshes on its own cadence too: an update that
+    // lands upstream should reach the Installed tab without the user opening
+    // the market first. The TTL cache keeps ticks cheap; failures are silent —
+    // the next tick retries and the last good view keeps serving.
+    const registryTimer = setInterval(() => { void extensions.refreshRegistry().catch(() => {}) }, 6 * 60 * 60 * 1000)
+    registryTimer.unref?.()
+    return () => clearInterval(registryTimer)
   }, 'our-free-model: extensions')
 
   ctx.effect(() => () => {
@@ -2157,21 +2192,21 @@ export function createApiRoutes(deps) {
           // read failed; `registryError` used to be structurally empty because
           // `registryView()` never throws.
           const status = await extensions.registryStatusSoon()
-          return send(200, { installed: extensions.listInstalled(), registry: status.registry, registryError: status.error })
+          return send(200, { installed: extensions.listInstalled().filter(record => record.builtin !== true), registry: status.registry, registryError: status.error })
         }
         if (method === 'POST' && routePath === '/extensions/registry/refresh') {
           try {
             await extensions.refreshRegistry({ force: true })
-            return send(200, { ok: true, installed: extensions.listInstalled(), registry: extensions.registryView() })
+            return send(200, { ok: true, installed: extensions.listInstalled().filter(record => record.builtin !== true), registry: extensions.registryView() })
           } catch (error) {
-            return send(502, { error: String(error?.message ?? error), installed: extensions.listInstalled() })
+            return send(502, { error: String(error?.message ?? error), installed: extensions.listInstalled().filter(record => record.builtin !== true) })
           }
         }
         if (method === 'POST' && routePath === '/extensions/install') {
           const body = await readJson(req)
           try {
             const record = await extensions.install(String(body?.id ?? ''), { version: typeof body?.version === 'string' ? body.version : undefined })
-            return send(200, { ok: true, record, installed: extensions.listInstalled() })
+            return send(200, { ok: true, record, installed: extensions.listInstalled().filter(record => record.builtin !== true) })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }
@@ -2180,7 +2215,7 @@ export function createApiRoutes(deps) {
           const body = await readJson(req)
           try {
             await extensions.uninstall(String(body?.id ?? ''))
-            return send(200, { ok: true, installed: extensions.listInstalled() })
+            return send(200, { ok: true, installed: extensions.listInstalled().filter(record => record.builtin !== true) })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }
@@ -2189,7 +2224,7 @@ export function createApiRoutes(deps) {
           const body = await readJson(req)
           try {
             const record = await extensions.setEnabled(String(body?.id ?? ''), body?.enabled === true)
-            return send(200, { ok: true, record, installed: extensions.listInstalled() })
+            return send(200, { ok: true, record, installed: extensions.listInstalled().filter(record => record.builtin !== true) })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }
@@ -2201,7 +2236,7 @@ export function createApiRoutes(deps) {
             // `installed` travels with every mutation: the page renders its cards
             // from it, so a config write has to hand the new values back or the
             // control snaps to the state it was rendered with.
-            return send(200, { ok: true, record, installed: extensions.listInstalled() })
+            return send(200, { ok: true, record, installed: extensions.listInstalled().filter(record => record.builtin !== true) })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }
@@ -2210,7 +2245,7 @@ export function createApiRoutes(deps) {
           const body = await readJson(req)
           try {
             const record = await extensions.saveSecret(String(body?.id ?? ''), String(body?.key ?? ''), body?.value)
-            return send(200, { ok: true, record, installed: extensions.listInstalled() })
+            return send(200, { ok: true, record, installed: extensions.listInstalled().filter(record => record.builtin !== true) })
           } catch (error) {
             return send(400, { error: String(error?.message ?? error) })
           }
@@ -2649,6 +2684,10 @@ function buildSummary(deps) {
       proxyConfigured: String(deps.settings.get().freeLane?.proxyUrl ?? '').trim() !== '',
       transport: process.env.OUR_FREE_MODEL_FREE_TRANSPORT ?? 'auto',
     },
+    // Environment readiness for the free lane: the official POST inference
+    // needs a local Bun, and a user who never learns that reads only a failed
+    // turn. Probed once at boot (see the readiness effect below).
+    bun: deps.bunAvailable !== false,
     probedAt: snapshot.at ?? 0,
     announcementVersion: ANNOUNCEMENT_VERSION,
     disclaimerVersion: DISCLAIMER_VERSION,
@@ -2666,7 +2705,7 @@ function buildSummary(deps) {
     // Whether the absorbed free-channel pack is live on this host, and its
     // failure reason when it is not (see the mount in `apply`).
     channels: deps.channels?.() ?? { state: 'unknown', error: '' },
-    extensions: deps.extensions !== undefined ? { installed: deps.extensions.listInstalled() } : null,
+    extensions: deps.extensions !== undefined ? { installed: deps.extensions.listInstalled().filter(record => record.builtin !== true) } : null,
     update: { available: update.available, latest: update.latest, current: update.current, checkedAt: update.checkedAt, applying: update.applying, managed: update.managed === true },
   }
 }

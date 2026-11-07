@@ -6,15 +6,8 @@ import { execFile, execFileSync, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { launchClientTerminal } from './client-terminal.mjs'
 import { restrictPermissions } from '../../src/open-external.js'
+import { WORKBENCH_CLIENTS as CLIENTS } from '../../src/plugins.js'
 
-const CLIENTS = [
-  { id: 'codex', name: 'Codex CLI', kind: 'cli', command: 'codex' },
-  { id: 'claude', name: 'Claude Code', kind: 'cli', command: 'claude' },
-  { id: 'gemini', name: 'Gemini CLI', kind: 'cli', command: 'gemini' },
-  { id: 'codex-desktop', name: 'Codex Desktop', kind: 'desktop', command: 'Codex' },
-  { id: 'cc-switch', name: 'CC Switch', kind: 'desktop', command: 'cc-switch', nativeOnly: true },
-  { id: 'codex-plus-plus', name: 'Codex++', kind: 'desktop', command: 'codex-plus-plus', nativeOnly: true },
-]
 const error = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const regular = file => { try { return fs.statSync(file).isFile() } catch { return false } }
 const directory = file => { try { return fs.statSync(file).isDirectory() } catch { return false } }
