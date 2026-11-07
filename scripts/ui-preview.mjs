@@ -40,6 +40,18 @@ import { execSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { callRoute, chatFrames, fakeContext, freePort, stubUpstream, until } from './lib/fake-kernel.mjs'
 
+/* Closing a browser context can cut a keep-alive socket under an in-flight
+   loopback request (seen as a bare ECONNRESET "socket hang up" on a
+   ClientRequest with nobody left listening). Callers that do listen still hear
+   their own 'error'; the fallback only stops the stray one from killing the
+   whole run between batches. */
+const rawRequest = http.request.bind(http)
+http.request = (...args) => {
+  const request = rawRequest(...args)
+  request.once('error', () => {})
+  return request
+}
+
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const OUT_DIR = path.join(ROOT, '.verify', 'ui-preview')
 const say = (...parts) => console.log('ui-preview:', ...parts)
@@ -728,6 +740,7 @@ await shoot({
     { tab: 'saver', file: 'saver-narrow.png' },
     { tab: 'routing', file: 'routing-narrow.png' },
     { tab: 'gateway', file: 'gateway-narrow.png' },
+    { tab: 'extensions', file: 'extensions-narrow.png' },
   ],
 })
 
@@ -749,6 +762,10 @@ await shoot({
         await page.getByRole('button', { name: '编辑', exact: true }).first().click()
         await page.getByRole('button', { name: '添加成员', exact: true }).first().click()
       },
+    },
+    {
+      tab: 'extensions', label: 'extensions+detail', file: 'extensions-detail.png',
+      before: async page => { await page.getByRole('button', { name: '详情', exact: true }).first().click() },
     },
   ],
 })
@@ -774,6 +791,7 @@ await shoot({
     { tab: 'aggregate', file: 'aggregate-dark.png' },
     { tab: 'saver', file: 'saver-dark.png' },
     { tab: 'routing', file: 'routing-dark.png' },
+    { tab: 'extensions', file: 'extensions-dark.png' },
     { tab: 'picks', file: 'picks-dark.png' },
   ],
 })

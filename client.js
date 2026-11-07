@@ -2757,6 +2757,7 @@ window.__ModuleLoader__.load({
 .ofm_extskel i{display:block;height:11px;border-radius:6px;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);animation:ofmpulse 1.8s ease-in-out infinite}
 .ofm_extdetail{width:min(560px,92vw)}
 .ofm_extdetail:focus{outline:none}
+.ofm_extcard .ofm_id{white-space:normal;text-overflow:clip;line-height:1.5}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -7556,7 +7557,7 @@ window.__ModuleLoader__.load({
               }, h('i', { style: { width: '42%' } }), h('i', { style: { width: '68%' } }),
                 h('i', { style: { width: '86%' } }), h('i', { style: { width: '55%' } }))))
             : h('div', { className: 'ofm_grid ofm_extgrid' }, discover.map((plugin, index) => cardFor(plugin, index))),
-          discover.length === 0 && registry !== null ? h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')) : null)
+          discover.length === 0 && registry !== null && state.status === 'ready' ? h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')) : null)
         : tab === 'installed' ? h(Fragment, null,
           installed.length === 0 ? h('p', { className: 'ofm_note' }, t('ext.installedEmpty'))
             : h('div', { className: 'ofm_grid ofm_extgrid' }, installed.map((record, index) => cardFor({
