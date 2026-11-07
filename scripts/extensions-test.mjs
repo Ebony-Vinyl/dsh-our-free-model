@@ -11,6 +11,9 @@
  *      APIs, foreign imports, oversized sources, undeclared network origins
  *      and modules that fail to load — every one refused, none leaving files.
  *
+ * The manifest's optional selfTest(ctx) answers on demand from the runtime,
+ * and a minHost above this host is refused before anything is downloaded.
+ *
  * Everything is loopback; no live traffic.
  * Run: node scripts/extensions-test.mjs
  */
@@ -87,6 +90,9 @@ export default {
       wire: 'chat',
     }
   },
+  async selfTest(ctx) {
+    return { ok: true, message: 'fixture self-test' }
+  },
 }
 `
 
@@ -140,7 +146,11 @@ function makeRegistry() {
     schemaVersion: 1, id: 'fixture-channel', version: '1.0.0', type: 'channel',
     name: 'Fixture Channel', description: 'a loopback channel', author: 'test', license: 'MIT',
     permissions: { network: [upstreamOrigin], secrets: ['apiKey'], storage: true },
-    config: [{ key: 'region', type: 'text', label: 'Region', default: 'us' }],
+    config: [
+      { key: 'region', type: 'text', label: 'Region', default: 'us' },
+      { key: 'retries', type: 'number', label: 'Retries', default: 3 },
+      { key: 'wire', type: 'select', label: 'Wire', default: 'chat', options: ['chat', 'responses'] },
+    ],
   }
   const kiloManifest = {
     schemaVersion: 1, id: 'fixture-kilo', version: '2.0.0', type: 'channel',
@@ -176,6 +186,9 @@ function makeRegistry() {
       entry({ schemaVersion: 1, id: 'fixture-digest', version: '1.0.0', type: 'channel', name: 'Digest', permissions: { network: [], secrets: [], storage: false } },
         'export default { async prepareChat() { return null } }',
         { main: { url: `http://127.0.0.1:${registryPort}/packages/fixture-digest/main.mjs`, size: 12, sha256: '0'.repeat(64) }, cover: { ...coverFor('fixture-digest'), sha256: 'zz' } }),
+      // An entry whose floor is above this host: parses fine, installs never.
+      entry({ schemaVersion: 1, id: 'fixture-strict', version: '1.0.0', type: 'channel', name: 'Strict', minHost: '9.9.9', permissions: { network: [], secrets: [], storage: false } },
+        'export default { async prepareChat() { return null } }'),
     ],
   }
 }
@@ -258,7 +271,7 @@ console.log('=== 1. the signed registry is fetched, verified and parsed ===')
 {
   const view = await extensions.refreshRegistry({ force: true })
   check('the registry lists every readable entry', view.plugins.map(plugin => plugin.manifest.id),
-    ['fixture-channel', 'fixture-kilo', 'fixture-enhancement', 'fixture-broken', 'fixture-sneaky', 'fixture-banned', 'fixture-digest'])
+    ['fixture-channel', 'fixture-kilo', 'fixture-enhancement', 'fixture-broken', 'fixture-sneaky', 'fixture-banned', 'fixture-digest', 'fixture-strict'])
   check('a tampered signature is refused', verifyRegistrySignature(registryPayload, signature.slice(0, -2) + 'aa', publicKeySpki), false)
   check('a foreign key is refused', verifyRegistrySignature(registryPayload, signature, publicKeySpki.slice(0, -4) + 'AAAA'), false)
   const dropForeign = parseRegistry({ plugins: [{ id: 'evil', version: '1.0.0', type: 'channel', name: 'x', main: { url: 'https://evil.example/x.mjs', size: 3, sha256: '0'.repeat(64) } }] })
@@ -278,12 +291,17 @@ console.log('=== 1. the signed registry is fetched, verified and parsed ===')
   check('coverImage verifies and serves the signed bytes', image === null ? false : [image.contentType, image.bytes.length], ['image/svg+xml', Buffer.byteLength(coverBytes)])
   check('coverImage answers null without a cover', await extensions.coverImage('fixture-kilo'), null)
   check('coverImage refuses bytes that miss the signed digest', await extensions.coverImage('fixture-banned'), null)
+  check('an entry within the host floor is installable', extensions.registryView().plugins.find(plugin => plugin.id === 'fixture-channel')?.installable, true)
+  check('an entry above the host floor is not installable', extensions.registryView().plugins.find(plugin => plugin.id === 'fixture-strict')?.installable, false)
 }
 
 console.log('\n=== 2. a channel extension installs, starts and serves a turn ===')
 {
   const record = await extensions.install('fixture-channel')
   check('the install is recorded', [record.id, record.version, record.enabled, record.state], ['fixture-channel', '1.0.0', true, 'ready'])
+  // The minHost gate sits before the download: nothing is written for a refusal.
+  await assert.rejects(() => extensions.install('fixture-strict'), /requires host >= 9\.9\.9/)
+  check('the strict entry stayed uninstalled', extensions.listInstalled().some(row => row.id === 'fixture-strict'), false)
   modelRuntime.syncExtensionCatalog()
   const rows = modelRuntime.catalog.filter(row => row.channel === 'extension')
   check('the catalog carries the extension models', rows.map(row => row.id),
@@ -304,6 +322,9 @@ console.log('\n=== 2. a channel extension installs, starts and serves a turn ===
   check('usage options ride the chat wire', sent.stream_options?.include_usage, true)
   const finish = chunks.find(chunk => chunk.type === 'finish')
   check('the turn finished cleanly', finish?.reason?.kind, 'stop')
+  const live = extensions.listInstalled().find(row => row.id === 'fixture-channel')
+  check('a module that exports selfTest advertises it', live.selfTestAvailable, true)
+  check('the self-test returns the hook verdict', await extensions.runSelfTest('fixture-channel'), { ok: true, message: 'fixture self-test' })
 }
 
 console.log('\n=== 3. secrets and config reach the plugin; the API never sees them ===')
@@ -312,6 +333,11 @@ console.log('\n=== 3. secrets and config reach the plugin; the API never sees th
   const record = await extensions.saveConfig('fixture-channel', { region: 'eu', hacker: 'ignored' })
   check('the unknown key is dropped', record.values.region, 'eu')
   check('the secret reads back masked', record.secrets, [{ key: 'apiKey', hasValue: true, hint: '…7890' }])
+  const typed = await extensions.saveConfig('fixture-channel', { retries: '5', wire: 'grpc' })
+  check('a numeric config value coerces', typed.values.retries, 5)
+  check('an unlisted select option falls back to the signed default', typed.values.wire, 'chat')
+  const picked = await extensions.saveConfig('fixture-channel', { wire: 'responses' })
+  check('a listed select option saves', picked.values.wire, 'responses')
   // The next turn carries the secret upstream as a header, not in the body.
   const rows = sync().filter(row => row.channel === 'extension')
   const entry = rows.find(row => row.modelId === 'demo-model')
@@ -350,6 +376,9 @@ console.log('\n=== 5. an enhancement rewrites outgoing bodies, fail-open ===')
   const body = JSON.parse(upstreamRequests.at(-1).body)
   check('the enhancement marker reached the wire', body.ofm_fixture_marker, 'on')
   check('the upstream body stayed intact beside the marker', body.messages?.[0]?.content, 'marked')
+  const enhancer = extensions.listInstalled().find(row => row.id === 'fixture-enhancement')
+  check('a module without selfTest does not advertise it', enhancer.selfTestAvailable, false)
+  check('a self-test without the hook reports the miss', await extensions.runSelfTest('fixture-enhancement'), { ok: false, message: 'the extension does not implement selfTest' })
 
   // Fail-open: uninstall the enhancement and the same turn ships unmarked.
   await extensions.uninstall('fixture-enhancement')
@@ -387,6 +416,7 @@ console.log('\n=== 7. disable and uninstall tear the lane down cleanly ===')
   await extensions.setEnabled('fixture-channel', false)
   modelRuntime.syncExtensionCatalog()
   check('a disabled extension contributes no rows', modelRuntime.catalog.some(row => row.extensionId === 'fixture-channel'), false)
+  check('a disabled extension cannot self-test', await extensions.runSelfTest('fixture-channel'), { ok: false, message: 'the extension is disabled' })
   const record = await extensions.setEnabled('fixture-channel', true)
   check('re-enabling restores the rows', [record.enabled, extensions.isRunning('fixture-channel')], [true, true])
   modelRuntime.syncExtensionCatalog()

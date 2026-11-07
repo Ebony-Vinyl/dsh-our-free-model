@@ -440,9 +440,16 @@ window.__ModuleLoader__.load({
         'ext.searchHint': '按 / 聚焦',
         'ext.clearSearch': '清除筛选',
         'ext.updateAll': '全部更新',
-        'ext.updatingAll': '更新中…',
+        'ext.updateProgress': '更新中 {i}/{n}',
         'ext.updateCount': '{n} 个可更新',
         'ext.modelCount': '模型 {n}',
+        'ext.requiresHost': '需宿主 ≥ {v}',
+        'ext.selfTest': '自检',
+        'ext.selfTestOk': '自检通过',
+        'ext.selfTestFail': '自检失败',
+        'ext.replaces': '接管内置 {name} 渠道',
+        'ext.filterTag': '标签',
+        'ext.hooks': '钩子',
         'ext.type': '类型',
         'ext.license': '许可证',
         'ext.published': '发布于',
@@ -1279,9 +1286,16 @@ window.__ModuleLoader__.load({
         'ext.searchHint': 'Press / to search',
         'ext.clearSearch': 'Clear filters',
         'ext.updateAll': 'Update all',
-        'ext.updatingAll': 'Updating…',
+        'ext.updateProgress': 'Updating {i}/{n}',
         'ext.updateCount': '{n} update(s) ready',
         'ext.modelCount': '{n} models',
+        'ext.requiresHost': 'needs host ≥ {v}',
+        'ext.selfTest': 'Self-test',
+        'ext.selfTestOk': 'Self-test passed',
+        'ext.selfTestFail': 'Self-test failed',
+        'ext.replaces': 'takes over the built-in {name} lane',
+        'ext.filterTag': 'Tag',
+        'ext.hooks': 'Hooks',
         'ext.type': 'Type',
         'ext.license': 'License',
         'ext.published': 'Published',
@@ -2830,6 +2844,12 @@ window.__ModuleLoader__.load({
 .ofm_extcover img{display:block;width:100%;height:100%;object-fit:cover}
 .ofm_extdetail .ofm_extcover{height:150px;margin:0;border-radius:17px 17px 0 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .ofm_extdetail .ofm_annhead{position:relative}
+/* 标签点选浏览 / 接管内置渠道徽标 / 分段控件计数（magpie 市场的分类手势） */
+.ofm_tagbtn{cursor:pointer;font:inherit;transition:border-color .18s var(--ease-instrument),color .18s var(--ease-instrument),transform .18s var(--ease-instrument)}
+.ofm_tagbtn:hover{border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 62%,transparent);color:var(--dsw-alias-state-business-primary);transform:translateY(-1px)}
+.ofm_replacetag{flex:none;font-size:10px;font-weight:700;line-height:1;padding:2px 8px;border-radius:999px;white-space:nowrap;color:#7a4d00;background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 22%,transparent);border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 52%,transparent)}
+.ofm_segcount{margin-left:5px;font-size:9.5px;font-weight:650;color:var(--dsw-alias-label-tertiary);background:color-mix(in srgb,var(--dsw-alias-label-secondary) 10%,transparent);padding:1px 5px;border-radius:999px}
+.ofm_seg button[aria-pressed="true"] .ofm_segcount{color:var(--dsw-alias-label-secondary)}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -7485,6 +7505,12 @@ window.__ModuleLoader__.load({
       const [typeFilter, setTypeFilter] = useState('all')
       const [sortKey, setSortKey] = useState('curated')
       const [updatingAll, setUpdatingAll] = useState(false)
+      /* Tag browsing (magpie's category gesture): click a tag chip, the grid
+         narrows to it. `updateProgress` counts a running 全部更新; `selfTests`
+         keeps each card's latest selfTest verdict. */
+      const [tagFilter, setTagFilter] = useState('')
+      const [updateProgress, setUpdateProgress] = useState(null)
+      const [selfTests, setSelfTests] = useState({})
       const searchRef = useRef(null)
       const load = useCallback(() => {
         /* Re-reads keep the previous payload so a refresh (or the read after an
@@ -7556,6 +7582,7 @@ window.__ModuleLoader__.load({
         /* Tags ride the haystack: "kilo" should find the entry that is tagged kilo
            even when its name never says it. */
         if (needle !== '' && !`${plugin.name} ${plugin.id} ${plugin.summary ?? ''} ${(plugin.tags ?? []).join(' ')}`.toLowerCase().includes(needle)) return false
+        if (tagFilter !== '' && !(plugin.tags ?? []).includes(tagFilter)) return false
         return true
       })
       if (sortKey === 'newest') discover.sort((a, b) => String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? '')))
@@ -7574,13 +7601,28 @@ window.__ModuleLoader__.load({
       const updateAll = async () => {
         if (updatingAll === true || updates.length === 0) return
         setUpdatingAll(true)
+        setUpdateProgress({ done: 0, total: updates.length })
         try {
+          let done = 0
           for (const record of updates) {
             try { await act('/extensions/install', { id: record.id }) } catch { /* one refusal must not strand the rest */ }
+            done += 1
+            setUpdateProgress({ done, total: updates.length })
           }
-        } finally { setUpdatingAll(false) }
+        } finally { setUpdatingAll(false); setUpdateProgress(null) }
       }
-      const cardFor = (plugin, index = 0) => {
+      /* The manifest's optional selfTest(ctx), run from the card. The verdict is
+         data, not a toast: a failed hook paints ✗ + its reason on the card. */
+      const runSelfTest = async id => {
+        setSelfTests(current => ({ ...current, [id]: { busy: true } }))
+        try {
+          const verdict = await post('/extensions/self-test', { id }, 20_000)
+          setSelfTests(current => ({ ...current, [id]: { ok: verdict?.ok === true, message: verdict?.message ?? '' } }))
+        } catch (error) {
+          setSelfTests(current => ({ ...current, [id]: { ok: false, message: String(error?.message ?? error) } }))
+        }
+      }
+      const cardFor = (plugin, index = 0, filterable = false) => {
         const record = installed.find(row => row.id === plugin.id)
         const busy = busyId === plugin.id
         const modelCount = plugin.models?.length ?? plugin.modelCount
@@ -7594,14 +7636,28 @@ window.__ModuleLoader__.load({
               plugin.updateAvailable === true ? h('span', { className: 'ofm_hottag' }, t('ext.updateAvailable')) : null),
             h('div', { className: 'ofm_id' }, `${plugin.id} · v${plugin.version} · ${plugin.author || '—'}`)))
         const blurb = h('p', { className: 'ofm_note ofm_extblurb' }, plugin.summary || plugin.description || '')
+        const hostGate = plugin.installable === false
+        const hostHint = t('ext.requiresHost').replace('{v}', plugin.minHost ?? '')
         const tagRow = h('div', { className: 'ofm_tags' },
           h('span', { className: 'ofm_chantag' }, plugin.type === 'channel' ? t('ext.channel') : t('ext.enhancement')),
-          (plugin.tags ?? []).slice(0, 3).map(tag => h('span', { className: 'ofm_tag', key: tag }, tag)),
+          /* A silent lane takeover (kilo-free → the built-in Kilo) must be visible
+             where the user decides to install, not buried in the manifest. */
+          plugin.replaces ? h('span', { className: 'ofm_replacetag', title: t('ext.replaces').replace('{name}', plugin.replaces) }, t('ext.replaces').replace('{name}', plugin.replaces)) : null,
+          (plugin.tags ?? []).slice(0, 3).map(tag => filterable
+            ? h('button', { className: 'ofm_tag ofm_tagbtn', key: tag, type: 'button', title: t('ext.filterTag'), onClick: () => { setTab('discover'); setTagFilter(tag) } }, tag)
+            : h('span', { className: 'ofm_tag', key: tag }, tag)),
           typeof modelCount === 'number' && modelCount > 0 ? h('span', { className: 'ofm_badge' }, t('ext.modelCount').replace('{n}', String(modelCount))) : null)
+        const acquire = label => h(Button, {
+          kind: 'primary', disabled: busy || hostGate, busy,
+          title: hostGate ? hostHint : undefined,
+          onClick: () => act('/extensions/install', { id: plugin.id }),
+        }, busy ? t('ext.installing') : label)
         const action = record === undefined
-          ? h(Button, { kind: 'primary', disabled: busy, busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.install'))
+          ? hostGate
+            ? h('span', { className: 'ofm_badge throttled', title: hostHint }, hostHint)
+            : acquire(t('ext.install'))
           : plugin.updateAvailable === true
-            ? h(Button, { kind: 'primary', disabled: busy, busy, onClick: () => act('/extensions/install', { id: plugin.id }) }, busy ? t('ext.installing') : t('ext.update'))
+            ? acquire(t('ext.update'))
             : h('span', { className: 'ofm_badge ok' }, t('ext.installed'))
         const actions = h('div', { className: 'ofm_extfoot' },
           h(Button, { onClick: () => setDetail(plugin) }, t('ext.detail')),
@@ -7621,15 +7677,32 @@ window.__ModuleLoader__.load({
                 checked: record.values?.[field.key] === true, label: field.label,
                 onChange: () => act('/extensions/config', { id: plugin.id, values: { [field.key]: !(record.values?.[field.key] === true) } }),
               })))
+          } else if (field.type === 'select') {
+            // The manifest's option list is the whole truth: render it, save the
+            // pick the moment it changes.
+            const options = field.options ?? []
+            const current = String(record.values?.[field.key] ?? (options.includes(String(field.default)) ? field.default : options[0] ?? ''))
+            fields.push(h('div', { className: 'ofm_row', key: field.key, style: { gap: 8 } },
+              h('span', { className: 'ofm_note', style: { minWidth: 90 } }, field.label),
+              h('select', {
+                className: 'ofm_input', value: current, style: { minWidth: 140 },
+                onChange: event => {
+                  if (event.target.value !== current) act('/extensions/config', { id: plugin.id, values: { [field.key]: event.target.value } })
+                },
+              }, options.map(option => h('option', { key: option, value: option }, option)))))
           } else {
+            const numeric = field.type === 'number'
             fields.push(h('div', { className: 'ofm_row', key: field.key, style: { gap: 8 } },
               h('span', { className: 'ofm_note', style: { minWidth: 90 } }, field.label),
               h('input', {
-                className: 'ofm_input', type: field.type === 'password' ? 'password' : 'text', style: { minWidth: 140 },
+                className: 'ofm_input', type: field.type === 'password' ? 'password' : numeric ? 'number' : 'text', style: { minWidth: 140 },
                 defaultValue: record.values?.[field.key] ?? '', placeholder: field.type === 'password' ? t('ext.secretPlaceholder') : '',
                 onBlur: event => {
-                  if (event.target.value !== (record.values?.[field.key] ?? '')) {
-                    act('/extensions/config', { id: plugin.id, values: { [field.key]: event.target.value } })
+                  const raw = event.target.value
+                  if (numeric && raw === '') return // untouched, not a zero
+                  const next = numeric ? Number(raw) : raw
+                  if (next !== (record.values?.[field.key] ?? '')) {
+                    act('/extensions/config', { id: plugin.id, values: { [field.key]: next } })
                   }
                 },
               })))
@@ -7650,7 +7723,11 @@ window.__ModuleLoader__.load({
             }),
             h('span', { className: 'ofm_note' }, hint)))
         }
+        const selfTest = selfTests[plugin.id]
         const controls = h('div', { className: 'ofm_row' },
+          record.selfTestAvailable === true
+            ? h(Button, { disabled: busy || selfTest?.busy === true, busy: selfTest?.busy === true, onClick: () => runSelfTest(plugin.id) }, t('ext.selfTest'))
+            : null,
           h(Button, { disabled: busy, busy, onClick: () => act('/extensions/toggle', { id: plugin.id, enabled: !(record.enabled === true) }) },
             record.enabled === true ? t('ext.disable') : t('ext.enable')),
           h(Button, {
@@ -7659,6 +7736,11 @@ window.__ModuleLoader__.load({
           }, t('ext.uninstall')),
           record.state !== 'ready' && record.enabled === true
             ? h('span', { className: 'ofm_badge throttled', title: record.error }, t('ext.notRunning'))
+            : null,
+          selfTest !== undefined && selfTest.busy !== true
+            ? selfTest.ok === true
+              ? h('span', { className: 'ofm_badge ok', title: selfTest.message }, t('ext.selfTestOk'))
+              : h('span', { className: 'ofm_badge throttled', title: selfTest.message }, t('ext.selfTestFail'))
             : null)
         return h('article', {
           className: `ofm_card ofm_extcard ${plugin.type === 'channel' ? 'channel' : 'enhancement'}${hasCover ? ' hascover' : ''}`,
@@ -7694,11 +7776,16 @@ window.__ModuleLoader__.load({
               }),
               h('kbd', { className: 'ofm_kbd', title: t('ext.searchHint'), 'aria-hidden': 'true' }, '/')),
             h('div', { className: 'ofm_seg', role: 'group', 'aria-label': t('ext.type') },
-              [['all', t('ext.all')], ['channel', t('ext.channel')], ['enhancement', t('ext.enhancement')]].map(([key, label]) =>
-                h('button', { key, type: 'button', 'aria-pressed': typeFilter === key ? 'true' : 'false', onClick: () => setTypeFilter(key) }, label))),
+              [['all', t('ext.all'), indexRows.length], ['channel', t('ext.channel'), channelCount], ['enhancement', t('ext.enhancement'), indexRows.length - channelCount]].map(([key, label, count]) =>
+                h('button', { key, type: 'button', 'aria-pressed': typeFilter === key ? 'true' : 'false', onClick: () => setTypeFilter(key) },
+                  label, h('span', { className: 'ofm_segcount' }, String(count))))),
             h('div', { className: 'ofm_seg', role: 'group', 'aria-label': t('ext.sort') },
               [['curated', t('ext.sortCurated')], ['newest', t('ext.sortNewest')], ['name', t('ext.sortName')]].map(([key, label]) =>
                 h('button', { key, type: 'button', 'aria-pressed': sortKey === key ? 'true' : 'false', onClick: () => setSortKey(key) }, label)))),
+          tagFilter !== '' ? h('div', { className: 'ofm_row ofm_exttoolbar' },
+            h('span', { className: 'ofm_note' }, `${t('ext.filterTag')}:`),
+            h('span', { className: 'ofm_tag' }, tagFilter),
+            h(Button, { onClick: () => setTagFilter('') }, t('ext.clearSearch'))) : null,
           !registry && state.status === 'ready' ? h('div', { className: 'ofm_callout' },
             h('div', null,
               h('b', null, t('ext.empty')),
@@ -7709,19 +7796,23 @@ window.__ModuleLoader__.load({
                 className: 'ofm_extskel', key: String(index), 'aria-hidden': 'true', style: { '--i': String(index) },
               }, h('i', { style: { width: '42%' } }), h('i', { style: { width: '68%' } }),
                 h('i', { style: { width: '86%' } }), h('i', { style: { width: '55%' } }))))
-            : h('div', { className: 'ofm_grid ofm_extgrid' }, discover.map((plugin, index) => cardFor(plugin, index))),
+            : h('div', { className: 'ofm_grid ofm_extgrid' }, discover.map((plugin, index) => cardFor(plugin, index, true))),
           discover.length === 0 && registry !== null && state.status === 'ready' ? h('div', { className: 'ofm_extempty' },
             h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')),
-            (query.trim() !== '' || typeFilter !== 'all')
-              ? h(Button, { onClick: () => { setQuery(''); setTypeFilter('all'); searchRef.current?.focus?.() } }, t('ext.clearSearch'))
+            (query.trim() !== '' || typeFilter !== 'all' || tagFilter !== '')
+              ? h(Button, { onClick: () => { setQuery(''); setTypeFilter('all'); setTagFilter(''); searchRef.current?.focus?.() } }, t('ext.clearSearch'))
               : null) : null)
         : tab === 'installed' ? h(Fragment, null,
           updates.length > 0 ? h('div', { className: 'ofm_row' },
             h('span', { className: 'ofm_badge region-blocked' }, t('ext.updateCount').replace('{n}', String(updates.length))),
-            h(Button, { kind: 'primary', disabled: updatingAll, busy: updatingAll, onClick: updateAll }, updatingAll ? t('ext.updatingAll') : t('ext.updateAll'))) : null,
+            h(Button, { kind: 'primary', disabled: updatingAll, busy: updatingAll, onClick: updateAll },
+              updatingAll && updateProgress !== null
+                ? t('ext.updateProgress').replace('{i}', String(updateProgress.done)).replace('{n}', String(updateProgress.total))
+                : t('ext.updateAll'))) : null,
           installed.length === 0 ? h('p', { className: 'ofm_note' }, t('ext.installedEmpty'))
             : h('div', { className: 'ofm_grid ofm_extgrid' }, installedSorted.map((record, index) => cardFor({
-              ...record, summary: record.description, tags: [],
+              ...record, summary: record.description,
+              tags: registryById.get(record.id)?.tags ?? [],
               publishedAt: registryById.get(record.id)?.publishedAt ?? record.installedAt,
               updateAvailable: registryById.get(record.id)?.updateAvailable === true,
               cover: registryById.get(record.id)?.cover,
@@ -7792,7 +7883,7 @@ window.__ModuleLoader__.load({
         [t('ext.models'), typeof modelCount === 'number' && modelCount > 0 ? String(modelCount) : '—'],
         ...(repositoryHost !== '' ? [[t('ext.repository'), repositoryHost]] : []),
       ]
-      const canAcquire = detail.installed !== true || detail.updateAvailable === true
+      const canAcquire = (detail.installed !== true || detail.updateAvailable === true) && detail.installable !== false
       return ReactDOM.createPortal(h('div', { className: 'ofm_scrim', onClick: onClose },
         h('div', {
           className: 'ofm_ann ofm_extdetail', role: 'dialog', 'aria-modal': 'true', 'aria-label': detail.name,
@@ -7807,7 +7898,12 @@ window.__ModuleLoader__.load({
           h('div', { className: 'ofm_annbody' },
             h('p', null, detail.summary || detail.description || ''),
             (detail.tags ?? []).length > 0 ? h('div', { className: 'ofm_tags' }, detail.tags.map(tag => h('span', { className: 'ofm_tag', key: tag }, tag))) : null,
+            detail.replaces ? h('div', { className: 'ofm_tags' }, h('span', { className: 'ofm_replacetag' }, t('ext.replaces').replace('{name}', detail.replaces))) : null,
             detail.installed !== true ? h('p', { className: 'ofm_note' }, t('ext.notInstalledHint')) : null,
+            detail.installable === false ? h('p', { className: 'ofm_note' }, t('ext.requiresHost').replace('{v}', detail.minHost ?? '')) : null,
+            (detail.hooks ?? []).length > 0 ? h('div', { className: 'ofm_row', style: { gap: 6, alignItems: 'center' } },
+              h('span', { className: 'ofm_note' }, t('ext.hooks')),
+              detail.hooks.map(hookName => h('code', { key: hookName }, hookName))) : null,
             h('div', { className: 'ofm_kv' }, meta.map(([label, value]) => h('div', { className: 'ofm_kvc', key: label },
               h('b', null, value), h('span', null, label)))),
             h('div', { className: 'ofm_sec' },

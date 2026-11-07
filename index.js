@@ -2215,6 +2215,17 @@ export function createApiRoutes(deps) {
             return send(400, { error: String(error?.message ?? error) })
           }
         }
+        if (method === 'POST' && routePath === '/extensions/self-test') {
+          // The manifest's optional selfTest(ctx) on demand; the verdict rides
+          // back as data (a failed hook is a result, not an HTTP error), so the
+          // card renders ✗ + reason instead of the page falling into the toast.
+          const body = await readJson(req)
+          try {
+            return send(200, await extensions.runSelfTest(String(body?.id ?? '')))
+          } catch (error) {
+            return send(400, { error: String(error?.message ?? error) })
+          }
+        }
       }
       if (method === 'GET' && routePath === '/forward/key') {
         return send(200, { key: deps.settings.get().forwardKey ?? '' })

@@ -652,6 +652,11 @@ async function shoot({ variant, width, height, scale, dark = false, locale = 'zh
     const measured = await measure(page)
     if (entry.selector === undefined) await page.screenshot({ path: path.join(OUT_DIR, entry.file), fullPage: true })
     else await page.locator(entry.selector).first().screenshot({ path: path.join(OUT_DIR, entry.file) })
+    // A shot that opened an overlay leaves it open; the next shot's tab click
+    // would otherwise land on the scrim and time out.
+    try { if (entry.after !== undefined) await entry.after(page) } catch (error) {
+      problems.push(`${variant}/${entry.file}: the after-hook failed — ${String(error?.message ?? error).split('\n')[0]}`)
+    }
     const line = {
       variant, file: entry.file, tab: entry.tab ?? entry.label ?? '—',
       crashed: measured.crashed, pageChars: measured.pageChars, rootChars: measured.rootChars,
@@ -856,6 +861,29 @@ await shoot({
     {
       tab: 'extensions', label: 'extensions+detail', file: 'extensions-detail.png',
       before: async page => { await page.getByRole('button', { name: '详情', exact: true }).first().click() },
+      after: async page => { await page.keyboard.press('Escape') },
+    },
+    {
+      // The enhancement detail: the declared hooks render as chips.
+      tab: 'extensions', label: 'extensions+detail+hooks', file: 'extensions-detail-hooks.png',
+      before: async page => {
+        await page.locator('.ofm_extcard').filter({ hasText: 'model-filter' }).getByRole('button', { name: '详情', exact: true }).click()
+      },
+      after: async page => { await page.keyboard.press('Escape') },
+    },
+    {
+      // The lane-takeover badge, in the drawer that decides the install.
+      tab: 'extensions', label: 'extensions+detail+replaces', file: 'extensions-detail-kilo.png',
+      before: async page => {
+        await page.locator('.ofm_extcard').filter({ hasText: 'kilo-free' }).getByRole('button', { name: '详情', exact: true }).click()
+      },
+      after: async page => { await page.keyboard.press('Escape') },
+    },
+    {
+      // Tag browsing last: it filters the grid, and the state would linger into
+      // any shot that follows it on this tab.
+      tab: 'extensions', label: 'extensions+tagfilter', file: 'extensions-tagfilter.png',
+      before: async page => { await page.locator('.ofm_tagbtn').first().click() },
     },
   ],
 })

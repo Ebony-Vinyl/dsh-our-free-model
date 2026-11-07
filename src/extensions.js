@@ -46,6 +46,7 @@ import crypto from 'node:crypto'
 import { Worker } from 'node:worker_threads'
 import { restrictPermissions } from './open-external.js'
 import { buildExtensionCatalog, extensionReplaces } from './catalog.js'
+import { compareVersions } from './semver.js'
 
 /**
  * Deterministic JSON for signature verification: sorted keys, no whitespace,
@@ -533,7 +534,7 @@ async function handle(message) {
       if (typeof hooks[hook] !== 'function') throw new Error(\`the module does not implement the \${hook} hook its manifest declares\`)
     }
     state = { manifest, hooks, config: message.config ?? {}, sdk }
-    return { ok: true }
+    return { ok: true, hooks: Object.keys(hooks) }
   }
   if (message.action === 'call') {
     if (state === null) throw new Error('the extension is not loaded')
@@ -568,6 +569,7 @@ class ExtensionProcess {
     this.starting = null
     this.state = 'stopped' // stopped | starting | ready | failed
     this.error = ''
+    this.hooks = [] // what the module actually implements, reported by load
   }
 
   async start() {
@@ -585,7 +587,8 @@ class ExtensionProcess {
         this.worker.on('message', message => this.onMessage(message))
         this.worker.on('error', error => this.onDeath(String(error?.message ?? error)))
         this.worker.on('exit', code => this.onDeath(code === 0 ? 'the extension stopped' : `the extension exited with code ${code}`))
-        await this.request({ action: 'load', manifest: this.manifest, source: this.source, config: this.config, hostVersion: this.hostVersion }, HOOK_TIMEOUT_MS.load)
+        const loaded = await this.request({ action: 'load', manifest: this.manifest, source: this.source, config: this.config, hostVersion: this.hostVersion }, HOOK_TIMEOUT_MS.load)
+        this.hooks = Array.isArray(loaded?.hooks) ? loaded.hooks : []
         this.state = 'ready'
         this.error = ''
       } catch (error) {
@@ -843,6 +846,9 @@ export function createExtensionRuntime({
     const entry = registry.plugins.find(plugin => plugin.manifest.id === id)
     if (entry === undefined) throw new Error(`the registry does not carry "${id}"`)
     if (version !== undefined && entry.manifest.version !== version) throw new Error(`the registry carries "${id}" at ${entry.manifest.version}, not ${version}`)
+    if (compareVersions(hostVersion, entry.manifest.minHost) < 0) {
+      throw new Error(`the extension requires host >= ${entry.manifest.minHost}, this host is ${hostVersion}`)
+    }
     const lock = readLock()
     if (Object.keys(lock.extensions).length >= MAX_INSTALLED && lock.extensions[id] === undefined) {
       throw new Error(`at most ${MAX_INSTALLED} extensions may be installed at once`)
@@ -919,7 +925,7 @@ export function createExtensionRuntime({
     const clean = {}
     for (const field of record.manifest.config) {
       if (!(field.key in values)) continue
-      clean[field.key] = sanitizeValue(values[field.key], field.type)
+      clean[field.key] = sanitizeValue(values[field.key], field)
     }
     store.values[id] = { ...previous, ...clean }
     writeJson(configPath, store)
@@ -944,13 +950,46 @@ export function createExtensionRuntime({
     return publicRecord(record)
   }
 
-  function sanitizeValue(value, type) {
+  function sanitizeValue(value, field) {
+    const type = field.type
     if (type === 'toggle') return value === true
     if (type === 'number') {
       const parsed = Number(value)
-      return Number.isFinite(parsed) ? parsed : 0
+      if (Number.isFinite(parsed)) return parsed
+      return Number.isFinite(Number(field.default)) ? Number(field.default) : 0
+    }
+    if (type === 'select') {
+      // Only a listed option is a value; anything else falls back to the
+      // default the manifest signed, then to the first option.
+      const options = field.options ?? []
+      const chosen = String(value ?? '')
+      if (options.includes(chosen)) return chosen
+      if (options.includes(String(field.default))) return String(field.default)
+      return options[0] ?? ''
     }
     return String(value ?? '').slice(0, 300)
+  }
+
+  /** The manifest's optional selfTest(ctx), run on demand from the marketplace
+   *  card. The hook speaks for itself: a bare boolean, or an {ok, message};
+   *  a thrown hook is the failure. Disabled extensions have no process to
+   *  ask — that is a verdict, not an error. */
+  async function runSelfTest(id) {
+    const lock = readLock()
+    const record = lock.extensions[id]
+    if (record === undefined) throw new Error(`extension "${id}" is not installed`)
+    if (record.enabled !== true) return { ok: false, message: 'the extension is disabled' }
+    const process_ = processes.get(id)
+    if (process_ === undefined) return { ok: false, message: 'the extension is not running' }
+    try {
+      const result = await process_.call('selfTest', [])
+      if (result && typeof result === 'object' && typeof result.ok === 'boolean') {
+        return { ok: result.ok, message: typeof result.message === 'string' ? result.message.slice(0, 200) : '' }
+      }
+      return { ok: true, message: '' }
+    } catch (error) {
+      return { ok: false, message: String(error?.message ?? error).slice(0, 200) }
+    }
   }
 
   // ── registry ─────────────────────────────────────────────────────────────
@@ -1248,6 +1287,7 @@ export function createExtensionRuntime({
       installedAt: record.installedAt,
       state: process_ === undefined ? 'stopped' : process_.state,
       error: process_?.error ?? '',
+      selfTestAvailable: process_?.hooks?.includes('selfTest') === true,
       secrets: manifest.permissions.secrets.map(key => {
         const current = (readSecrets().values[manifest.id] ?? {})[key]
         return { key, hasValue: typeof current === 'string' && current !== '', hint: typeof current === 'string' && current.length >= 4 ? MASK(current) : '' }
@@ -1287,6 +1327,8 @@ export function createExtensionRuntime({
           installedVersion: installed?.manifest.version,
           enabled: installed?.enabled === true,
           updateAvailable: installed !== undefined && installed.manifest.version !== entry.manifest.version,
+          // The install button's gate: the registry's floor against this host.
+          installable: compareVersions(hostVersion, entry.manifest.minHost) >= 0,
           state: processes.get(entry.manifest.id)?.state ?? 'stopped',
         }
       }),
@@ -1304,7 +1346,7 @@ export function createExtensionRuntime({
       // so a hot reload does not race a dying worker against a fresh mount.
       return Promise.allSettled(terminations)
     },
-    install, uninstall, setEnabled, saveConfig, saveSecret,
+    install, uninstall, setEnabled, saveConfig, saveSecret, runSelfTest,
     refreshRegistry, registryStatusSoon, coverImage,
     listInstalled, registryView, installedVersions,
     // The lane surface.

@@ -81,6 +81,7 @@
     "src/push.js",
     "src/recovery.js",
     "src/reload.js",
+    "src/semver.js",
     "src/store.js",
     "src/extensions.js",
     "src/stream.js",
