@@ -68,6 +68,14 @@ export function writeEacUser({ token, login = '', avatar = '' }, file = eacUserP
     fs.writeFileSync(temp, JSON.stringify(record, undefined, 2), { mode: 0o600 })
     restrictPermissions(temp)
     fs.renameSync(temp, file)
+    // Read-back verification: a rename that "succeeded" but left a truncated
+    // or missing file must surface here as null — the caller reports
+    // not-writable instead of a login that silently evaporates on relaunch.
+    const stored = readEacUser(file)
+    if (stored === null || stored.token !== token) {
+      try { fs.rmSync(file, { force: true }) } catch { /* the read already failed; removal is best-effort */ }
+      return null
+    }
     return record
   } catch {
     return null
