@@ -1,5 +1,5 @@
 {
-  "version": "2.8.1",
+  "version": "2.9.0",
   "algorithm": "sha256",
   "files": [
     {
@@ -14,8 +14,8 @@
     },
     {
       "path": "client.js",
-      "size": 610094,
-      "sha256": "fcdb88819fc46203f985244eec76130dfdc7f4e270bfa657327e1e91f52b9757"
+      "size": 612480,
+      "sha256": "70e84857d13035fad003b727bf9253f51bab43a4c91f6754baae127ce72e1748"
     },
     {
       "path": "cordis.patch.yml",
@@ -29,8 +29,8 @@
     },
     {
       "path": "index.js",
-      "size": 131532,
-      "sha256": "a34109bd22eda7061dfc20706482047cdb309884438b0e258a742e09e6bfcd4f"
+      "size": 134612,
+      "sha256": "ab173a5dd097f795a1f4e30e3feccf45d0de0eafce04450e255c13c5f87a4b78"
     },
     {
       "path": "LICENSE",
@@ -49,8 +49,8 @@
     },
     {
       "path": "package.json",
-      "size": 5156,
-      "sha256": "57bf5f25d4b7dfb992b58e0ac5cfe3ab3ed70aa29e0e6497a9c1743c8c1822e0"
+      "size": 5178,
+      "sha256": "54b8149a6666bb26fe20e870c73b3f84d058e5ac32cb6c8200b31cfe8a1e36e6"
     },
     {
       "path": "src/adapter.js",
@@ -129,8 +129,8 @@
     },
     {
       "path": "src/egress.js",
-      "size": 51730,
-      "sha256": "4f4f1aff10ea1860545fe90f806b3b0ada11d74d096cdd9e73046888d7d21318"
+      "size": 52017,
+      "sha256": "4f32d0db1861165d77b3f8c38d9926b9461e96545077cbaa63230863b0ec2935"
     },
     {
       "path": "src/engine-parts/win32-x64.000.part",
@@ -174,8 +174,8 @@
     },
     {
       "path": "src/extensions.js",
-      "size": 63117,
-      "sha256": "72a143603b4c6add7667a5966987818c21ff03f121624b417129686bdb9308db"
+      "size": 84537,
+      "sha256": "b6a87d013f429d60e8225908e17033b7780f795ce92061e64be1fca0d0a4208e"
     },
     {
       "path": "src/failure.js",
@@ -199,8 +199,8 @@
     },
     {
       "path": "src/http.js",
-      "size": 31899,
-      "sha256": "656c5f0a8e8c9c5dcc620557ca7d2afc3bb37628225a240fe9e88f7ef6ded2b9"
+      "size": 32359,
+      "sha256": "d6bec20365b2abb2ee01a8948809ef39bd7db9a8744d643ddf5331d8d0615174"
     },
     {
       "path": "src/image-pricing.js",
@@ -224,13 +224,13 @@
     },
     {
       "path": "src/magpie-engine.js",
-      "size": 55138,
-      "sha256": "684b0f178efec19baef457acdae23061f9bdba720d0ee006013b0ac471f2b71a"
+      "size": 57629,
+      "sha256": "7e33bc7481fc8c5051a7f3dd1fcb61973111c2b9bab7cc08331836a709aa1576"
     },
     {
       "path": "src/magpie-models.js",
-      "size": 5187,
-      "sha256": "e6e4261a6b0b8d5e290618f493c8e18c956d558040e8a36ee01de78973c5c01a"
+      "size": 6837,
+      "sha256": "0aa9a477cce435bdcc8ce22ee1ee15bd3017efe77ccd62f9c52432fe22f7bdc4"
     },
     {
       "path": "src/magpie-policy.js",
@@ -261,6 +261,11 @@
       "path": "src/picks.js",
       "size": 8054,
       "sha256": "aa4e7b85c81ddcf10a4f26016386a0c03d2c0e64e2929f71a56c9b2df9ed91e7"
+    },
+    {
+      "path": "src/plugins.js",
+      "size": 46841,
+      "sha256": "4d5c716b17bb56c4e180f7f1f9ab6ac4c16142c58eb3ad82c56eb45e2332d9e0"
     },
     {
       "path": "src/probe.js",
@@ -304,8 +309,8 @@
     },
     {
       "path": "src/store.js",
-      "size": 25226,
-      "sha256": "57d87c20f45aca0cd6fd14377bef65a538432f9997d39cb6fbfb18d30e9192de"
+      "size": 25475,
+      "sha256": "d7fac43fd0fae890c67e0d9b1bfad34188ff3b62013f38a0166e3750f029b006"
     },
     {
       "path": "src/stream.js",
@@ -319,8 +324,8 @@
     },
     {
       "path": "src/subscription-completion.js",
-      "size": 24780,
-      "sha256": "c97091813c5a193c837fe536a794ce6972c0e74e1b9ae6e441553ed799b75ad1"
+      "size": 25388,
+      "sha256": "0455d2b0572749636901ae1ae648683725187a9a0950db0d8865e30de50a16cf"
     },
     {
       "path": "src/subscriptions.js",
