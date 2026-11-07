@@ -747,12 +747,6 @@ export function createExtensionRuntime({
     } catch { /* the audit trail never blocks the lane */ }
   }
 
-  function sourcePathFor(id, version) {
-    const record = readLock().extensions[id]
-    const safeVersion = record?.manifest?.version === version ? version : String(version ?? '').replace(/[^\w.-]/g, '')
-    return path.join(installDir(id), safeVersion, 'main.mjs')
-  }
-
   /** Verify an installed package still hashes to what the registry signed. */
   function verifyInstalled(id) {
     const record = readLock().extensions[id]

@@ -35,6 +35,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -297,6 +298,68 @@ await new Promise(resolve => pickStub.listen(0, '127.0.0.1', resolve))
 pickStub.unref()
 process.env.OFM_PICKS_API_BASE = `http://127.0.0.1:${pickStub.address().port}`
 say(`pick-stats stub at ${process.env.OFM_PICKS_API_BASE}`)
+
+// The extension marketplace gets the same treatment as the feed and the picks:
+// a loopback registry built from the sibling `ofm-extensions` checkout, so the
+// screenshots and the install flow render against the real packages while the
+// run still reads nothing from the internet. Entries are re-signed with an
+// ephemeral key (the runtime pins its public half) and each `main.url` points at
+// this server; digests come from the local files, so an install verifies. The
+// fake-kernel import has already pinned a dead port by the time this runs, so
+// when the sibling checkout exists the fixture replaces that pin outright.
+const extensionRepo = path.join(ROOT, '..', 'ofm-extensions')
+const extensionRegistryPath = path.join(extensionRepo, 'registry.json')
+if (fs.existsSync(extensionRegistryPath)) {
+  const { stableStringify } = await import('../src/updater.js')
+  const registryPayload = JSON.parse(fs.readFileSync(extensionRegistryPath, 'utf8'))
+  const extensionPackages = new Map()
+  let fixtureUsable = Array.isArray(registryPayload.plugins) && registryPayload.plugins.length > 0
+  for (const entry of registryPayload.plugins ?? []) {
+    const sourcePath = path.join(extensionRepo, 'packages', entry.id, 'main.mjs')
+    if (!fs.existsSync(sourcePath)) { fixtureUsable = false; break }
+    const source = fs.readFileSync(sourcePath, 'utf8')
+    extensionPackages.set(entry.id, source)
+    entry.main = {
+      url: '', // the port is known only once the server listens; patched below
+      size: Buffer.byteLength(source),
+      sha256: crypto.createHash('sha256').update(source).digest('hex'),
+    }
+  }
+  if (fixtureUsable) {
+    const extensionBase = `http://127.0.0.1:${await freePort()}`
+    for (const entry of registryPayload.plugins) {
+      entry.main.url = `${extensionBase}/packages/${entry.id}/main.mjs`
+    }
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519')
+    const extensionSignature = crypto.sign(null, Buffer.from(stableStringify(registryPayload)), privateKey)
+      .toString('base64')
+    const extensionServer = http.createServer((req, res) => {
+      const url = new URL(String(req.url ?? ''), 'http://x')
+      if (url.pathname === '/registry.json') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(registryPayload))
+        return
+      }
+      if (url.pathname === '/registry.sig') {
+        res.writeHead(200, { 'content-type': 'text/plain' })
+        res.end(extensionSignature)
+        return
+      }
+      const match = /\/packages\/([\w-]+)\/main\.mjs/.exec(url.pathname)
+      if (match !== null && extensionPackages.has(match[1])) {
+        res.writeHead(200, { 'content-type': 'text/javascript' })
+        res.end(extensionPackages.get(match[1]))
+        return
+      }
+      res.writeHead(404).end()
+    })
+    await new Promise(resolve => extensionServer.listen(new URL(extensionBase).port, '127.0.0.1', resolve))
+    extensionServer.unref()
+    process.env.OFM_EXTENSIONS_REGISTRY = `${extensionBase}/registry.json`
+    process.env.OFM_EXTENSIONS_PUBLIC_KEY = publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
+    say(`extension registry fixture at ${process.env.OFM_EXTENSIONS_REGISTRY} (${registryPayload.plugins.length} entries)`)
+  }
+}
 
 const { apply, inject } = await import(pathToFileURL(path.join(ROOT, 'index.js')).href)
 const routes = []
@@ -854,7 +917,14 @@ for (const dispose of ctx.__disposers ?? []) { try { dispose() } catch { /* tear
 freeLane.close()
 feedServer.close()
 aggregateServer.close()
-fs.rmSync(home, { recursive: true, force: true })
+// Windows keeps a handle on the scratch home for a beat after the browser and
+// the extension workers let go; a locked temp dir must not fail an otherwise
+// green run (the OS clears it on its own).
+try {
+  fs.rmSync(home, { recursive: true, force: true })
+} catch (error) {
+  say(`cleanup: the scratch home stayed locked (${String(error?.code ?? error?.message ?? error)}); leaving ${home} for the OS`)
+}
 
 say('')
 say(`${report.length} screenshots in ${OUT_DIR}`)
