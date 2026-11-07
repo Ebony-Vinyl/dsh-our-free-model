@@ -109,6 +109,11 @@ function parseItem(row, now) {
     && /^https?:\/\//i.test(row.link.url)) {
     link = { url: row.link.url, label: typeof row.link.label === 'string' ? row.link.label.slice(0, 100) : '' }
   }
+  // `holdSeconds` asks the client to keep the modal's close control locked for
+  // a few seconds so the body is actually read (0/absent closes immediately).
+  // The ceiling keeps an owner from writing "hold for a week".
+  const holdSeconds = row.holdSeconds
+  const hold = Number.isInteger(holdSeconds) && holdSeconds >= 0 && holdSeconds <= 30 ? holdSeconds : 0
   return {
     id,
     title,
@@ -118,6 +123,7 @@ function parseItem(row, now) {
     ...expiresAt === undefined ? {} : { expiresAt },
     ...row.pinned === true ? { pinned: true } : {},
     ...link === undefined ? {} : { link },
+    ...(hold > 0 ? { holdSeconds: hold } : {}),
   }
 }
 

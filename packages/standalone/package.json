@@ -1,6 +1,6 @@
 {
   "name": "our-free-model-standalone",
-  "version": "2.9.0",
+  "version": "2.8.2",
   "private": true,
   "type": "module",
   "description": "Our Free Model 独立本地服务，无需安装 DSH",

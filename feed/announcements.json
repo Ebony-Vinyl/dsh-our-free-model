@@ -2,6 +2,27 @@
   "$schema": "./announcements.schema.md",
   "announcements": [
     {
+      "id": "2026-11-08-v2.8.2-picks-star-ask",
+      "title": "说点心里话：这三个项目，想请你顺手点个 Star",
+      "level": "urgent",
+      "pinned": true,
+      "holdSeconds": 3,
+      "createdAt": "2026-11-08T00:00:00Z",
+      "html": "<p>这个插件免费、无广告、不需要你登录任何账号。写它、维护它、每次上游改版半夜爬起来修适配，靠的都是同一批人的热情。而开源项目能拿到的唯一回报，就是 GitHub 上那一颗颗 <b>Star</b>——它几乎决定作者还能投入多少个晚上。</p><p>如果你用过这个插件，觉得它帮你省下了钱或者时间，<b>恳请花三十秒</b>看看同一作者的这三个项目：用得上就顺手点一个 Star；用不上也没关系，认真读到这里，对作者来说已经很实在了。</p><ul><li><a href=\"https://github.com/Ebony-Vinyl/EAC-Desktop\">EAC-Desktop</a> — 基于 DeepSeek Harness 的开源桌面工作台：Tauri 原生窗口、随包 Node 运行时，双击即进入工作，项目、会话、插件与皮肤市场都在一处。</li><li><a href=\"https://github.com/Ebony-Vinyl/EAC-Pack\">EAC-Pack</a> — 揽尽万象：让数百个 DSH 插件和谐共存的插件套件。</li><li><a href=\"https://github.com/Ebony-Vinyl/EAC-design-world\">EAC-design-world</a> — 在本地把视频和设计做完：多轨剪辑、模板与设计体系、原生预览画布和真实文件导出，不把素材交给任何人。</li></ul><p>三个仓库都在持续更新。<b>点 Star 不要钱，但对作者是真金白银般的鼓励。</b>谢谢每一个读到这里的人。</p>"
+    },
+    {
+      "id": "2026-11-07-v2.8.2-plugin-release",
+      "title": "v2.8.2：扩展市场自动更新（观察窗口防投毒）、迁移清单与模型货架",
+      "level": "update",
+      "pinned": true,
+      "createdAt": "2026-11-07T10:00:00Z",
+      "link": {
+        "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.2",
+        "label": "查看插件更新说明"
+      },
+      "html": "<p><b>2.8.2 给扩展市场补上自动更新与迁移两块短板。</b>自动更新默认关闭，开启后索引定时刷新时自动安装「已过观察窗口且处于启用状态」的扩展更新：一个新版本从被本机第一次看到起要沉淀 2 小时才允许自动安装（对齐 VS Code 2026 年新引入的供应链观察窗），期间随时可以手动更新；停用的扩展永远不会被自动启用。已安装页每张可更新的卡片现在直接显示最新一条更新说明与窗口倒计时。</p><p>迁移助手同步上架：已安装页可把当前扩展清单（id、版本、启停、配置；密钥永不导出）导出为 JSON，换机器或重装后一键按清单重装并恢复配置。扩展详情弹层新增模型货架——渠道插件装之前就能看到它接进哪些模型；页头新增索引来源徽标（实时镜像 / 内置快照一眼可辨）与自动更新开关；已安装页底部新增最近操作流水（安装、启停、配置、自动更新全部留痕）。</p><p>桌面端插件中心同步获得全部以上能力，并修复版本回退场景误报「有更新」的问题；正式扩展封面与更新内容已随市场仓库上线。npm 渠道同步发布 <b>@ebony-vinyl/dsh-our-free-model@2.8.2</b>；npm 上那个裸名的 dsh-our-free-model 仍是第三方打包，请勿安装。</p>"
+    },
+    {
       "id": "2026-11-01-v2.8.0-plugin-release",
       "title": "v2.8.0：免费道整形层对齐参考网关 v1.4.6，引擎一键跟进",
       "level": "update",

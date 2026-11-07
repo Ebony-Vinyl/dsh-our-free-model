@@ -55,6 +55,24 @@ check('expired items are dropped', () => {
   const feed = parseFeed({ announcements: [item({ expiresAt: '2026-09-20T00:00:00Z' }), item({ id: 'live', expiresAt: '2026-10-01T00:00:00Z' })] }, NOW)
   assert.deepEqual(feed.announcements.map(row => row.id), ['live'])
 })
+check('holdSeconds: kept in range, clamped/absent outside it', () => {
+  const feed = parseFeed({ announcements: [
+    item({ id: 'h-3', holdSeconds: 3 }),
+    item({ id: 'h-0', holdSeconds: 0 }),
+    item({ id: 'h-31', holdSeconds: 31 }),
+    item({ id: 'h-neg', holdSeconds: -2 }),
+    item({ id: 'h-frac', holdSeconds: 2.5 }),
+    item({ id: 'h-str', holdSeconds: '3' }),
+  ] }, NOW)
+  const holdOf = id => feed.announcements.find(row => row.id === id)?.holdSeconds
+  assert.equal(holdOf('h-3'), 3)
+  assert.equal(holdOf('h-0'), undefined, '0 carries no field')
+  assert.equal(holdOf('h-31'), undefined, 'above the 30s ceiling is dropped')
+  assert.equal(holdOf('h-neg'), undefined)
+  assert.equal(holdOf('h-frac'), undefined)
+  assert.equal(holdOf('h-str'), undefined)
+})
+
 check('unknown level falls back to info; overlong html row dropped', () => {
   const feed = parseFeed({ announcements: [item({ level: 'shout' })] }, NOW)
   assert.equal(feed.announcements[0].level, 'info')

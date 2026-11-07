@@ -58,7 +58,7 @@ async function readBody(req, limit = MAX_BODY_BYTES) {
 
 function validateSettings(patch) {
   const visibility = validateModelVisibility(patch)
-  const booleans = new Set(['enabled', 'exposeRegionModels', 'streamRecovery', 'standaloneProbe', 'standaloneLanEnabled', 'developerPlugins'])
+  const booleans = new Set(['enabled', 'exposeRegionModels', 'streamRecovery', 'standaloneProbe', 'standaloneLanEnabled', 'developerPlugins', 'autoUpdateExtensions'])
   const numbers = { probeIntervalMinutes: [1, 1440], defaultMaxTokens: [512, 131072], standaloneLanPort: [0, 65535] }
   const result = {}
   for (const [key, value] of Object.entries(patch)) {
@@ -86,6 +86,7 @@ export function managementSettings(value) {
     probeIntervalMinutes: value.probeIntervalMinutes ?? 15,
     defaultMaxTokens: value.defaultMaxTokens ?? 32768,
     developerPlugins: value.developerPlugins === true,
+    autoUpdateExtensions: value.autoUpdateExtensions === true,
   }
 }
 
@@ -338,7 +339,12 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
           registryError: status.error,
           pages: extensions.pages(),
           audit: extensions.auditTail(100),
-          settings: { developerPlugins: stores.settings.get().developerPlugins === true },
+          updates: extensions.updatesAvailable(),
+          registryMeta: extensions.registryMeta(),
+          settings: {
+            developerPlugins: stores.settings.get().developerPlugins === true,
+            autoUpdateExtensions: stores.settings.get().autoUpdateExtensions === true,
+          },
         })
       }
       if (method === 'GET' && suffix === '/pages') return reply(200, { pages: extensions.pages() })

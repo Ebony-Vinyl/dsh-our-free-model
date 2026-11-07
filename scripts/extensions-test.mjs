@@ -431,6 +431,39 @@ console.log('\n=== 7. disable and uninstall tear the lane down cleanly ===')
   check('the seeded kilo lane is back', modelRuntime.catalog.filter(row => row.channel === 'kilo').length, 1)
 }
 
+console.log('\n=== 7.5 the soak updater: first-sight stamp, window, auto-install ===')
+{
+  // The automatic updater only ever installs a version this host has watched
+  // soak past its supply-chain window, and only one the user left enabled.
+  // Registry rollback must read "no update", never "downgrade available".
+  await extensions.install('fixture-enhancement')
+  const registry = JSON.parse(JSON.stringify(registryPayload))
+  const row = registry.plugins.find(plugin => plugin.id === 'fixture-enhancement')
+  row.version = '1.2.0'
+  registryPayload = registry
+  signature = crypto.sign(null, Buffer.from(stableStringify(registry)), privateKey).toString('base64')
+  await extensions.refreshRegistry({ force: true })
+  const one = extensions.updatesAvailable().find(update => update.id === 'fixture-enhancement')
+  check('a newer registry version is noticed with a soak clock', [one?.from, one?.to, one?.ready], ['1.1.0', '1.2.0', false])
+  check('the first sight stamped the install record', typeof one?.seenAt === 'number' && one.seenAt > 0, true)
+  const parked = await extensions.autoUpdate()
+  check('a disabled update stays parked', parked.installed.length, 0)
+  await extensions.setEnabled('fixture-enhancement', true)
+  const lockPath = path.join(runtimeDataDir, 'extensions', 'installed.json')
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'))
+  lock.extensions['fixture-enhancement'].updateSeen = Date.now() - 3 * 60 * 60 * 1000
+  fs.writeFileSync(lockPath, JSON.stringify(lock, null, 1))
+  const done = await extensions.autoUpdate()
+  check('a soaked, enabled update installs itself', done.installed, [{ id: 'fixture-enhancement', from: '1.1.0', to: '1.2.0' }])
+  const after = extensions.listInstalled().find(item => item.id === 'fixture-enhancement')
+  check('the record reads the new version, still enabled', [after?.version, after?.enabled], ['1.2.0', true])
+  const audit = fs.readFileSync(path.join(runtimeDataDir, 'extensions', 'audit.jsonl'), 'utf8').trim().split('\n')
+  check('the auto-update is audited', JSON.parse(audit.at(-1)).action, 'auto-update')
+  const view = extensions.registryView().plugins.find(plugin => plugin.id === 'fixture-enhancement')
+  check('installed at the registry version reads no update pending', view.updateAvailable, false)
+  await extensions.uninstall('fixture-enhancement')
+}
+
 console.log('\n=== 8. reconciling the market never orphans a worker ===')
 {
   // Every install/enable/disable/uninstall reconciles the running set. A

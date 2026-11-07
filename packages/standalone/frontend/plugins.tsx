@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { AlertCircle, Boxes, Check, Download, ExternalLink, Eye, Loader2, Lock, Network, Puzzle, RefreshCw, Search, ShieldAlert, ShieldCheck, Trash2, Upload, X } from 'lucide-react'
 import { Button } from './components/ui'
-import type { Host, PluginPage, PluginRecord, PluginRegistryEntry, Summary } from './types'
+import type { Host, PluginPage, PluginRecord, PluginRegistryEntry, PluginUpdate, RegistryMeta, Summary } from './types'
 
 interface Marketplace {
   installed: PluginRecord[]
@@ -10,7 +10,9 @@ interface Marketplace {
   registryError: string
   pages: PluginPage[]
   audit: { at: string; action: string; id: string; version?: string; enabled?: boolean; key?: string }[]
-  settings: { developerPlugins: boolean }
+  updates?: PluginUpdate[]
+  registryMeta?: RegistryMeta
+  settings: { developerPlugins: boolean; autoUpdateExtensions: boolean }
 }
 
 type Tab = 'installed' | 'discover' | 'builtin'
@@ -32,6 +34,7 @@ const AUDIT_LABEL: Record<string, string> = {
   secret: '密钥',
   'self-test': '自检',
   'registry-refresh': '刷新市场',
+  'auto-update': '自动更新',
 }
 
 function kindLabel(record: { kinds?: string[]; kind?: string }): string {
@@ -78,13 +81,24 @@ function defaultsOf(record: PluginRecord): Record<string, unknown> {
   return { ...values, ...record.values }
 }
 
-/** 签名市场的封面横幅。服务端按摘要校验字节；加载失败只是没有横幅，卡片照常。 */
+/** 签名市场的封面横幅。服务端按摘要校验字节；加载失败只是没有横幅，卡片照常。
+ *  字节到位后淡入 —— 一张慢图不应该把卡片骨架撕开一个洞。 */
 function PluginCover({ id, kind }: { id: string; kind: string }) {
   const [failed, setFailed] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   if (failed) return null
-  return <div className={`plugin-cover ${kind}`}>
-    <img src={`/api/management/plugins/cover?id=${encodeURIComponent(id)}`} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />
+  return <div className={`plugin-cover ${kind}${loaded ? ' loaded' : ''}`}>
+    <img src={`/api/management/plugins/cover?id=${encodeURIComponent(id)}`} alt="" loading="lazy" decoding="async"
+      onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
   </div>
+}
+
+/** soak 倒计时的一句话：就绪的更新与仍在窗口里的更新读法不同。 */
+function soakHint(update: PluginUpdate | undefined): string {
+  if (update === undefined) return ''
+  if (update.ready) return '已过观察窗口，点「全部更新」或单个「更新」立即安装'
+  const hours = Math.max(1, Math.ceil(update.soakRemainingMs / 3_600_000))
+  return `观察窗口还剩约 ${hours} 小时（新版本上线后先沉淀，防供应链投毒）；也可手动立即更新`
 }
 
 export function Plugins({ summary, host, active }: { summary: Summary; host: Host; active: boolean }) {
@@ -152,6 +166,8 @@ export function Plugins({ summary, host, active }: { summary: Summary; host: Hos
   const registry = useMemo(() => registryRows.filter(entry =>
     matches(entry) && (kindFilter === 'all' || kindOf(entry) === kindFilter)), [registryRows, needle, kindFilter])
 
+  const updatesById = useMemo(() => new Map((data?.updates ?? []).map(update => [update.id, update])), [data])
+  const registryMeta = data?.registryMeta
   const updateCandidates = useMemo(() => (data?.installed ?? [])
     .filter(record => record.builtin !== true)
     .filter(record => {
@@ -202,6 +218,19 @@ export function Plugins({ summary, host, active }: { summary: Summary; host: Hos
     setBusy('developer')
     try {
       await host.saveSettings({ developerPlugins: data.settings.developerPlugins !== true })
+      await load(true)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '设置保存失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const toggleAutoUpdate = async () => {
+    if (data === undefined || busy !== '') return
+    setBusy('autoupdate')
+    try {
+      await host.saveSettings({ autoUpdateExtensions: data.settings.autoUpdateExtensions !== true })
       await load(true)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '设置保存失败')
@@ -375,6 +404,7 @@ export function Plugins({ summary, host, active }: { summary: Summary; host: Hos
         {record.config.length > 0 && <Button variant="ghost" onClick={() => setOpenConfig(openConfig === record.id ? '' : record.id)}>{openConfig === record.id ? '收起配置' : '配置'}</Button>}
         {record.selfTestAvailable && <Button variant="ghost" onClick={() => { void selfTest(record) }} disabled={busy !== ''}>{busy === `self:${record.id}` ? '自检中…' : '自检'}</Button>}
         {update?.updateAvailable && update.installable && <Button onClick={() => setInstallTarget(update)}>更新到 v{update.version}</Button>}
+      {update?.updateAvailable && <p className="plugin-soak">{(update.changelog ?? [])[0] ?? ''}{(update.changelog ?? []).length > 0 ? ' · ' : ''}{soakHint(updatesById.get(record.id))}</p>}
         {!record.builtin && <Button variant="ghost" className="danger" onClick={() => { if (window.confirm(`卸载 ${record.name}？它的配置、密钥与本地存储会一起删除。`)) void act('/plugins/uninstall', { id: record.id }, `uninstall:${record.id}`) }} disabled={busy !== ''}>
           <Trash2 size={14} />卸载
         </Button>}
@@ -449,6 +479,14 @@ export function Plugins({ summary, host, active }: { summary: Summary; host: Hos
           {updateProgress !== null ? `更新中 ${updateProgress.done}/${updateProgress.total}` : `全部更新${updateCandidates.length > 0 ? `（${updateCandidates.length}）` : ''}`}
         </Button>
       </div>
+      <div className="plugins-subrow">
+        <label className="plugin-switch" title="注册表定时刷新时，自动安装已过观察窗口且处于启用状态的更新">
+          <input type="checkbox" checked={data?.settings.autoUpdateExtensions === true} onChange={() => void toggleAutoUpdate()} disabled={busy !== ''} /><span>自动更新插件</span>
+        </label>
+        {registryMeta?.source ? <span className="plugin-source" title={`索引来源：${registryMeta.source} · 生成于 ${registryMeta.generatedAt || '—'}`}>
+          索引来源 {registryMeta.source === 'bundled' ? '本地内置快照' : (() => { try { return new URL(registryMeta.source).hostname } catch { return registryMeta.source } })()}
+        </span> : null}
+      </div>
     </header>
 
     {error && <div className="notice error-notice" role="alert"><AlertCircle size={16} /><span>{error}</span></div>}
@@ -519,6 +557,10 @@ export function Plugins({ summary, host, active }: { summary: Summary; host: Hos
           {(installTarget.models?.length ?? 0) > 0 && <span><Puzzle size={13} />{installTarget.models?.length} 个模型</span>}
           {installTarget.pages.length > 0 && <span><ExternalLink size={13} />{installTarget.pages.length} 个页面</span>}
         </div>
+        {(installTarget.models ?? []).length > 0 && <div className="plugin-models">
+          {installTarget.models?.slice(0, 12).map(model => <span className="plugin-model" key={model.id} title={model.id}>{model.name ?? model.id}</span>)}
+          {(installTarget.models?.length ?? 0) > 12 && <span className="plugin-muted">+{installTarget.models!.length - 12}</span>}
+        </div>}
         <div className="plugin-permissions">
           <strong>这个插件会获得</strong>
           {permissionList(installTarget).length === 0 ? <p className="plugin-muted"><ShieldCheck size={14} />无额外权限。</p> : <ul>{permissionList(installTarget).map(row => <li key={row}>{row.startsWith('网络') ? <Network size={12} /> : row.startsWith('密钥') ? <Lock size={12} /> : null}{row}</li>)}</ul>}

@@ -305,6 +305,7 @@ window.__ModuleLoader__.load({
         'news.osDenied': '浏览器拒绝了通知权限；需要在系统/浏览器设置里手动恢复。',
         'news.link': '查看详情',
         'news.urgentTitle': '重要公告',
+        'news.holdHint': '为确保读完，{s} 秒后可关闭',
         'news.gotIt': '知道了',
         'news.lastFetch': '最近拉取',
         'news.fetchFailed': '公告源暂不可达（显示的是缓存）',
@@ -466,6 +467,29 @@ window.__ModuleLoader__.load({
         'ext.storageOff': '不读写本地文件',
         'ext.originEmpty': '无网络访问',
         'ext.notInstalledHint': '尚未安装，详情仅供参考。',
+        'ext.autoUpdate': '自动更新',
+        'ext.autoUpdateHint': '索引刷新时，自动安装已过观察窗口且处于启用状态的扩展更新；新版本先沉淀 {h} 小时再自动安装，防供应链投毒。',
+        'ext.source': '索引来源',
+        'ext.sourceBundled': '内置快照',
+        'ext.soakReady': '已过观察窗口，可立即更新',
+        'ext.soakWaiting': '观察窗口约剩 {h} 小时（新版本先沉淀再自动装，防供应链投毒）；也可手动立即更新',
+        'ext.auditTitle': '最近操作',
+        'ext.auditEmpty': '暂无记录。',
+        'ext.auditInstall': '安装',
+        'ext.auditInstallLocal': '本地安装',
+        'ext.auditUninstall': '卸载',
+        'ext.auditEnabled': '启停',
+        'ext.auditConfig': '配置',
+        'ext.auditSecret': '密钥',
+        'ext.auditAutoUpdate': '自动更新',
+        'ext.auditRegistry': '刷新市场',
+        'ext.exportShelf': '导出清单',
+        'ext.importShelf': '导入清单',
+        'ext.exportDone': '扩展清单已导出（JSON，不含密钥）',
+        'ext.importDone': '已恢复 {ok} 个扩展{fail}',
+        'ext.importFail': '，{n} 个失败（可能已下架或不兼容）',
+        'ext.importInvalid': '清单文件不是有效的 JSON，或没有可安装的扩展',
+        'ext.shelfTitle': '迁移助手：清单只含 id、版本、启停与配置，密钥永不导出',
         'sponsor.bannerTag': '中转站',
         'sponsor.bannerTitle': '北辰 API 中转站',
         'sponsor.bannerDescription': 'OFM 官方合作中转站，为用户提供稳定、开放、高性价比的大模型 API 接入服务。支持 Claude、ChatGPT、Grok、Gemini、智谱 GLM、Kimi、DeepSeek 等主流模型，适合在 Codex、Gemini CLI、Claude Code 及其他开发工具中统一配置使用。邀请可获百分之十的返现。',
@@ -1156,6 +1180,7 @@ window.__ModuleLoader__.load({
         'news.osDenied': 'Notification permission was denied; restore it in your system or browser settings.',
         'news.link': 'Read more',
         'news.urgentTitle': 'Important announcement',
+        'news.holdHint': 'Read on — this dialog can close in {s}s',
         'news.gotIt': 'Got it',
         'news.lastFetch': 'Last fetch',
         'news.fetchFailed': 'Feed unreachable right now (showing the cached copy)',
@@ -1317,6 +1342,29 @@ window.__ModuleLoader__.load({
         'ext.storageOff': 'Reads and writes no local files',
         'ext.originEmpty': 'No network access',
         'ext.notInstalledHint': 'Not installed yet — details are for reference.',
+        'ext.autoUpdate': 'Auto-update',
+        'ext.autoUpdateHint': 'On each registry refresh, install enabled updates that have cleared the observation window; a new version soaks {h} hours before it auto-installs, blunting supply-chain attacks.',
+        'ext.source': 'Index source',
+        'ext.sourceBundled': 'bundled snapshot',
+        'ext.soakReady': 'Cleared the observation window — update now',
+        'ext.soakWaiting': 'About {h}h left in the observation window (new versions soak before auto-install, blunting supply-chain attacks); manual update is always available',
+        'ext.auditTitle': 'Recent actions',
+        'ext.auditEmpty': 'Nothing yet.',
+        'ext.auditInstall': 'Install',
+        'ext.auditInstallLocal': 'Local install',
+        'ext.auditUninstall': 'Uninstall',
+        'ext.auditEnabled': 'Enable/disable',
+        'ext.auditConfig': 'Config',
+        'ext.auditSecret': 'Secret',
+        'ext.auditAutoUpdate': 'Auto-update',
+        'ext.auditRegistry': 'Refresh index',
+        'ext.exportShelf': 'Export list',
+        'ext.importShelf': 'Import list',
+        'ext.exportDone': 'Extension list exported (JSON, no secrets)',
+        'ext.importDone': 'Restored {ok} extension(s){fail}',
+        'ext.importFail': ', {n} failed (delisted or incompatible)',
+        'ext.importInvalid': 'The file is not valid JSON, or carries no installable extensions',
+        'ext.shelfTitle': 'Migration: the list carries ids, versions, toggles and config — never secrets',
         'sponsor.bannerTag': 'Relay',
         'sponsor.bannerTitle': 'Beichen API relay',
         'sponsor.bannerDescription': 'OFM’s official relay partner provides stable, open and cost-effective model API access. Claude, ChatGPT, Grok, Gemini, GLM, Kimi and DeepSeek are supported for one consistent setup in Codex, Gemini CLI, Claude Code and other developer tools. Invite others to receive 10% cashback.',
@@ -1974,6 +2022,8 @@ window.__ModuleLoader__.load({
 .ofm_toast.warn::before{background:var(--dsw-alias-state-warning-primary,#f0a441)}
 .ofm_toast.urgent::before{background:var(--dsw-alias-state-error-primary)}
 .ofm_toast.warn{border-color:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f0a441) 42%,var(--dsw-alias-border-l2))}
+/* urgent 弹层的关闭倒计时提示：弱化、右对齐到按钮旁 */
+.ofm_holdhint{font-size:11.5px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}
 .ofm_toast.urgent{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 42%,var(--dsw-alias-border-l2))}
 .ofm_toast .ofm_toasttitle{font-weight:660;font-size:12.5px;display:flex;align-items:center;gap:7px}
 .ofm_toast .ofm_toastbody{color:var(--dsw-alias-label-secondary);max-height:180px;overflow:auto;overflow-wrap:anywhere}
@@ -2861,9 +2911,23 @@ window.__ModuleLoader__.load({
 /* 标签点选浏览 / 接管内置渠道徽标 / 分段控件计数（magpie 市场的分类手势） */
 .ofm_tagbtn{cursor:pointer;font:inherit;transition:border-color .18s var(--ease-instrument),color .18s var(--ease-instrument),transform .18s var(--ease-instrument)}
 .ofm_tagbtn:hover{border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 62%,transparent);color:var(--dsw-alias-state-business-primary);transform:translateY(-1px)}
-.ofm_replacetag{flex:none;font-size:10px;font-weight:700;line-height:1;padding:2px 8px;border-radius:999px;white-space:nowrap;color:#7a4d00;background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 22%,transparent);border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 52%,transparent)}
+.ofm_replacetag{flex:none;font-size:10px;font-weight:700;line-height:1;padding:2px 8px;border-radius:999px;white-space:nowrap;color:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 80%,var(--dsw-alias-label-primary));background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 22%,transparent);border:1px solid color-mix(in srgb,var(--dsw-alias-state-warning-primary,#f2a65a) 52%,transparent)}
 .ofm_segcount{margin-left:5px;font-size:9.5px;font-weight:650;color:var(--dsw-alias-label-tertiary);background:color-mix(in srgb,var(--dsw-alias-label-secondary) 10%,transparent);padding:1px 5px;border-radius:999px}
 .ofm_seg button[aria-pressed="true"] .ofm_segcount{color:var(--dsw-alias-label-secondary)}
+/* 2.10 增补：soak 说明行、索引来源徽标、最近操作行、模型货架、清单导入标签 */
+.ofm_soakline{margin:2px 0 0;font-size:11.5px;line-height:1.55;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
+.ofm_extsource{flex:none;font-size:10.5px;line-height:1;padding:4px 10px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 74%,transparent);white-space:nowrap}
+.ofm_importlabel{display:inline-flex;align-items:center}
+.ofm_audrows{display:flex;flex-direction:column;gap:4px}
+.ofm_audrow{display:flex;align-items:baseline;gap:10px;font-size:12px;flex-wrap:wrap}
+.ofm_audrow code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--dsw-alias-label-secondary)}
+.ofm_audat{flex:none;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}
+.ofm_inlinehint{display:inline-flex;align-items:center;cursor:help}
+.ofm_modelshelf{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ofm_modelchip{font-size:10.5px;line-height:1;padding:4px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 82%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 62%,transparent);color:var(--dsw-alias-label-secondary);white-space:nowrap;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+/* 封面淡入：字节到位前不占住卡片顶部的视觉重量 */
+.ofm_extcover img{opacity:0;transition:opacity .45s var(--ease-instrument)}
+.ofm_extcover img.ofm_loaded{opacity:1}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -3196,8 +3260,20 @@ window.__ModuleLoader__.load({
       return undefined
     }
 
-    /** Modal surface for `urgent` announcements; dismiss runs the ack callback. */
-    function showUrgentModal({ title, html, confirmLabel, onClose }) {
+    /** Urgent announcement ids already shown on this page. Both the arrival
+     *  push and the boot re-check consult it, so one announcement opens one
+     *  modal per page load — a replace, never a stack. */
+    const urgentShownIds = new Set()
+
+    /** Modal surface for `urgent` announcements; dismiss runs the ack callback.
+     *
+     *  `holdMs` keeps the close control locked for that long with a visible
+     *  countdown: an announcement that must be read should not be dismissible
+     *  by reflex. The timer is one-shot and cleared with the modal. The hint
+     *  text travels in from the caller like `confirmLabel` — this function
+     *  predates any `t` binding and must not grow one (same rule as
+     *  showToast's comment below). */
+    function showUrgentModal({ title, html, confirmLabel, onClose, holdMs = 0, holdHint = '' }) {
       try {
         document.querySelector('.ofm_scrim[data-ofm-urgent]')?.remove()
         const scrim = document.createElement('div')
@@ -3219,8 +3295,35 @@ window.__ModuleLoader__.load({
         ok.type = 'button'
         ok.className = 'ofm_btn primary'
         ok.textContent = confirmLabel ?? 'OK'
-        ok.addEventListener('click', () => { scrim.remove(); onClose?.() })
+        ok.addEventListener('click', () => {
+          if (ok.disabled === true) return
+          scrim.remove()
+          if (holdTimer !== undefined) { clearTimeout(holdTimer); holdTimer = undefined }
+          onClose?.()
+        })
         foot.appendChild(ok)
+        let remaining = Math.max(0, Math.round(Number(holdMs) || 0))
+        let holdTimer
+        const settle = () => {
+          ok.disabled = false
+          ok.textContent = confirmLabel ?? 'OK'
+          hint?.remove()
+          hint = undefined
+        }
+        // 倒计时提示行：告诉用户这不是坏的按钮，是刻意的三秒。
+        let hint = remaining > 0 ? document.createElement('span') : undefined
+        if (hint !== undefined) {
+          hint.className = 'ofm_holdhint'
+          hint.setAttribute('aria-live', 'polite')
+          foot.appendChild(hint)
+        }
+        const tick = () => {
+          if (remaining <= 0) { settle(); return }
+          ok.disabled = true
+          hint.textContent = String(holdHint ?? '').replace('{s}', String(Math.ceil(remaining / 1000)))
+          holdTimer = setTimeout(() => { remaining = Math.max(0, remaining - 250); tick() }, 250)
+        }
+        tick()
         modal.appendChild(head)
         modal.appendChild(body)
         modal.appendChild(foot)
@@ -7523,6 +7626,10 @@ window.__ModuleLoader__.load({
       const [typeFilter, setTypeFilter] = useState('all')
       const [sortKey, setSortKey] = useState('curated')
       const [updatingAll, setUpdatingAll] = useState(false)
+      /* 2.10 增补：自动更新开关与它的 soak 提示、索引来源、最近操作。
+         `updates` 由后端在每次索引读取时算好（seenAt 记第一次看到新版本），
+         页面只读；写开关走既有 /settings 路由。 */
+      const [autoUpdateBusy, setAutoUpdateBusy] = useState(false)
       /* Tag browsing (magpie's category gesture): click a tag chip, the grid
          narrows to it. `updateProgress` counts a running 全部更新; `selfTests`
          keeps each card's latest selfTest verdict. */
@@ -7616,6 +7723,22 @@ window.__ModuleLoader__.load({
         if (ua !== ub) return ua - ub
         return String(b.installedAt ?? '').localeCompare(String(a.installedAt ?? ''))
       })
+      /* soak 状态：updates[] 由后端在索引读取时算好，id 对齐。 */
+      const updatesById = new Map((state.updates ?? []).map(update => [update.id, update]))
+      const soakHint = plugin => {
+        const update = updatesById.get(plugin.id)
+        if (update === undefined) return ''
+        if (update.ready === true) return t('ext.soakReady')
+        return t('ext.soakWaiting').replace('{h}', String(Math.max(1, Math.ceil(update.soakRemainingMs / 3_600_000))))
+      }
+      const auditLabel = action => ({ install: t('ext.auditInstall'), 'install-local': t('ext.auditInstallLocal'), uninstall: t('ext.auditUninstall'), 'set-enabled': t('ext.auditEnabled'), config: t('ext.auditConfig'), secret: t('ext.auditSecret'), 'self-test': t('ext.selfTest'), 'auto-update': t('ext.auditAutoUpdate'), 'registry-refresh': t('ext.auditRegistry') })[action] ?? action
+      const sourceLabel = meta => {
+        if (meta?.source === 'bundled') return t('ext.sourceBundled')
+        const source = String(meta?.source ?? '')
+        if (source === '') return ''
+        try { return `${new URL(source).hostname}（缓存）` } catch { return source }
+      }
+
       const updateAll = async () => {
         if (updatingAll === true || updates.length === 0) return
         setUpdatingAll(true)
@@ -7629,6 +7752,59 @@ window.__ModuleLoader__.load({
           }
         } finally { setUpdatingAll(false); setUpdateProgress(null) }
       }
+      /* 自动更新开关：写回 /settings 的持久位；页面值以响应的 settings 为准。 */
+      const toggleAutoUpdate = async () => {
+        if (autoUpdateBusy === true) return
+        setAutoUpdateBusy(true)
+        try {
+          const next = state.autoUpdate !== true
+          await post('/settings', { autoUpdateExtensions: next }, 15_000)
+          setState(current => ({ ...current, autoUpdate: next }))
+        } catch (error) {
+          showToast({ title: t('ext.failed'), body: String(error?.message ?? error), tone: 'warn' })
+        } finally { setAutoUpdateBusy(false) }
+      }
+      /* 迁移助手：导出已安装清单（id、版本、启停、配置；密钥永不导出）。 */
+      const exportShelf = () => {
+        const rows = state.installed ?? []
+        if (rows.length === 0) return
+        const shelf = {
+          version: 1, exportedAt: new Date().toISOString(),
+          plugins: rows.map(record => ({ id: record.id, version: record.version, enabled: record.enabled === true, config: record.values ?? {} })),
+        }
+        const blob = new Blob([JSON.stringify(shelf, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `ofm-extensions-${new Date().toISOString().slice(0, 10)}.json`
+        link.click()
+        URL.revokeObjectURL(url)
+        showToast({ title: t('ext.exportDone'), holdMs: 6000 })
+      }
+      /* 迁移助手：按清单逐个重装并恢复配置与启停；一个失败不拖累其余。 */
+      const importShelf = async file => {
+        let shelf
+        try { shelf = JSON.parse(await file.text()) } catch { shelf = null }
+        const entries = shelf !== null && typeof shelf === 'object' && Array.isArray(shelf?.plugins)
+          ? shelf.plugins.filter(row => row !== null && typeof row === 'object' && typeof row.id === 'string')
+          : []
+        if (entries.length === 0) { showToast({ title: t('ext.importInvalid'), tone: 'warn' }); return }
+        let restored = 0
+        let failed = 0
+        for (const entry of entries) {
+          try {
+            await post('/extensions/install', { id: entry.id }, 120_000)
+            if (entry.config !== null && typeof entry.config === 'object' && !Array.isArray(entry.config)) {
+              await post('/extensions/config', { id: entry.id, values: entry.config }, 30_000)
+            }
+            if (entry.enabled === true) await post('/extensions/toggle', { id: entry.id, enabled: true }, 60_000)
+            restored += 1
+          } catch { failed += 1 }
+        }
+        await load()
+        showToast({ title: t('ext.importDone').replace('{ok}', String(restored)).replace('{fail}', failed > 0 ? t('ext.importFail').replace('{n}', String(failed)) : ''), tone: failed > 0 ? 'warn' : undefined, holdMs: 8000 })
+      }
+
       /* The manifest's optional selfTest(ctx), run from the card. The verdict is
          data, not a toast: a failed hook paints ✗ + its reason on the card. */
       const runSelfTest = async id => {
@@ -7765,6 +7941,14 @@ window.__ModuleLoader__.load({
           key: plugin.id, style: { '--i': String(index) },
         },
           h(ExtensionCover, { plugin }), head, blurb, tagRow, actions,
+          /* 可更新的卡片多一行：最新一条更新说明 + soak 状态。一个「有更新」
+             徽标不解释为什么值得装，这一行解释。 */
+          plugin.updateAvailable === true
+            ? h('p', { className: 'ofm_soakline' }, [
+              (plugin.changelog ?? [])[0] ?? '',
+              (plugin.changelog ?? []).length > 0 ? ' · ' : '',
+              soakHint(plugin),
+            ].join('')) : null,
           fields.length > 0 ? h('div', { className: 'ofm_sec', style: { gap: 4 } }, fields) : null,
           controls)
       }
@@ -7800,10 +7984,18 @@ window.__ModuleLoader__.load({
             h('div', { className: 'ofm_seg', role: 'group', 'aria-label': t('ext.sort') },
               [['curated', t('ext.sortCurated')], ['newest', t('ext.sortNewest')], ['name', t('ext.sortName')]].map(([key, label]) =>
                 h('button', { key, type: 'button', 'aria-pressed': sortKey === key ? 'true' : 'false', onClick: () => setSortKey(key) }, label)))),
-          tagFilter !== '' ? h('div', { className: 'ofm_row ofm_exttoolbar' },
-            h('span', { className: 'ofm_note' }, `${t('ext.filterTag')}:`),
-            h('span', { className: 'ofm_tag' }, tagFilter),
-            h(Button, { onClick: () => setTagFilter('') }, t('ext.clearSearch'))) : null,
+          h('div', { className: 'ofm_row ofm_exttoolbar' },
+            h('span', { className: 'ofm_inlinehint', title: t('ext.autoUpdateHint').replace('{h}', String(state.registryMeta?.soakHours ?? 2)) },
+              h(Switch, {
+                label: t('ext.autoUpdate'), checked: state.autoUpdate === true, disabled: autoUpdateBusy,
+                onChange: () => { void toggleAutoUpdate() },
+              })),
+            sourceLabel(state.registryMeta) !== ''
+              ? h('span', { className: 'ofm_extsource', title: `${t('ext.source')}: ${state.registryMeta?.source ?? ''}` },
+                `${t('ext.source')} · ${sourceLabel(state.registryMeta)}`) : null,
+            tagFilter !== '' ? h('span', { className: 'ofm_note' }, `${t('ext.filterTag')}:`) : null,
+            tagFilter !== '' ? h('span', { className: 'ofm_tag' }, tagFilter) : null,
+            tagFilter !== '' ? h(Button, { onClick: () => setTagFilter('') }, t('ext.clearSearch')) : null),
           !registry && state.status === 'ready' ? h('div', { className: 'ofm_callout' },
             h('div', null,
               h('b', null, t('ext.empty')),
@@ -7819,23 +8011,41 @@ window.__ModuleLoader__.load({
             h('p', { className: 'ofm_note' }, t('ext.discoverEmpty')),
             (query.trim() !== '' || typeFilter !== 'all' || tagFilter !== '')
               ? h(Button, { onClick: () => { setQuery(''); setTypeFilter('all'); setTagFilter(''); searchRef.current?.focus?.() } }, t('ext.clearSearch'))
-              : null) : null)
+              : h('a', { className: 'ofm_linkbtn', href: 'https://github.com/Ebony-Vinyl/ofm-extensions', target: '_blank', rel: 'noopener noreferrer' }, t('ext.openRepo'))) : null)
         : tab === 'installed' ? h(Fragment, null,
-          updates.length > 0 ? h('div', { className: 'ofm_row' },
-            h('span', { className: 'ofm_badge region-blocked' }, t('ext.updateCount').replace('{n}', String(updates.length))),
-            h(Button, { kind: 'primary', disabled: updatingAll, busy: updatingAll, onClick: updateAll },
+          h('div', { className: 'ofm_row ofm_exttoolbar' },
+            updates.length > 0 ? h('span', { className: 'ofm_badge region-blocked' }, t('ext.updateCount').replace('{n}', String(updates.length))) : null,
+            updates.length > 0 ? h(Button, { kind: 'primary', disabled: updatingAll, busy: updatingAll, onClick: updateAll },
               updatingAll && updateProgress !== null
                 ? t('ext.updateProgress').replace('{i}', String(updateProgress.done)).replace('{n}', String(updateProgress.total))
-                : t('ext.updateAll'))) : null,
+                : t('ext.updateAll')) : null,
+            h(Button, { onClick: exportShelf, disabled: installed.length === 0, title: t('ext.shelfTitle') }, t('ext.exportShelf')),
+            h('label', { className: 'ofm_importlabel', title: t('ext.shelfTitle') },
+              h('input', {
+                type: 'file', accept: 'application/json,.json', hidden: true,
+                onChange: event => { const file = event.target.files?.[0]; if (file !== undefined) void importShelf(file); event.target.value = '' },
+              }),
+              h(Button, { disabled: busyId !== '' }, t('ext.importShelf')))),
           installed.length === 0 ? h('p', { className: 'ofm_note' }, t('ext.installedEmpty'))
             : h('div', { className: 'ofm_grid ofm_extgrid' }, installedSorted.map((record, index) => cardFor({
               ...record, summary: record.description,
               tags: registryById.get(record.id)?.tags ?? [],
               publishedAt: registryById.get(record.id)?.publishedAt ?? record.installedAt,
               updateAvailable: registryById.get(record.id)?.updateAvailable === true,
+              changelog: registryById.get(record.id)?.changelog ?? [],
               cover: registryById.get(record.id)?.cover,
               installed: true,
-            }, index))))
+            }, index))),
+          installed.length > 0 ? h(Section, { title: t('ext.auditTitle') },
+            (state.audit ?? []).length > 0
+              ? h('div', { className: 'ofm_audrows' },
+                state.audit.slice().reverse().slice(0, 12).map((entry, index) => h('div', { className: 'ofm_audrow', key: `${entry.at}-${index}` },
+                  h('span', { className: 'ofm_audat' }, new Date(entry.at).toLocaleString(t.locale)),
+                  h('b', null, auditLabel(entry.action)),
+                  h('code', null, entry.id),
+                  entry.version !== undefined ? h('span', { className: 'ofm_note' }, `v${entry.version}`) : null,
+                  entry.enabled !== undefined ? h('span', { className: 'ofm_note' }, entry.enabled === true ? t('ext.enable') : t('ext.disable')) : null)))
+              : h('p', { className: 'ofm_note' }, t('ext.auditEmpty'))) : null)
         : h('div', { className: 'ofm_panel' },
           h('div', { className: 'ofm_paneltitle' }, t('ext.security')),
           h('p', { className: 'ofm_note', style: { lineHeight: 1.7 } }, t('ext.securityBody')),
@@ -7869,6 +8079,8 @@ window.__ModuleLoader__.load({
         h('img', {
           src: `${API}/extensions/cover?id=${encodeURIComponent(plugin.id)}`,
           alt: '', loading: 'lazy', decoding: 'async',
+          // 淡入：字节到位前不占住卡片顶部的视觉重量，一张慢图不撕开骨架。
+          onLoad: event => event.currentTarget.classList.add('ofm_loaded'),
           onError: () => setFailed(true),
         }))
     }
@@ -7927,6 +8139,12 @@ window.__ModuleLoader__.load({
               detail.hooks.map(hookName => h('code', { key: hookName }, hookName))) : null,
             h('div', { className: 'ofm_kv' }, meta.map(([label, value]) => h('div', { className: 'ofm_kvc', key: label },
               h('b', null, value), h('span', null, label)))),
+            /* 渠道插件的模型货架：装之前就知道它接进哪些模型，而不只是个数。 */
+            (detail.models ?? []).length > 0 ? h('div', { className: 'ofm_modelshelf' },
+              detail.models.slice(0, 14).map(model => h('span', {
+                className: 'ofm_modelchip', key: model.id, title: `${model.id}${model.wire ? ` · ${model.wire}` : ''}`,
+              }, model.name ?? model.id)),
+              detail.models.length > 14 ? h('span', { className: 'ofm_note' }, `+${detail.models.length - 14}`) : null) : null,
             (detail.changelog ?? []).length > 0 ? h('div', { className: 'ofm_sec' },
               h('b', { style: { fontSize: 12.5 } }, t('ext.changelog')),
               h('ul', { className: 'ofm_changelog' }, detail.changelog.map((row, index) =>
@@ -8200,10 +8418,14 @@ window.__ModuleLoader__.load({
             for (const item of data.items ?? []) {
               osNotify(t('toast.annTitle'), item.title)
               if (item.level === 'urgent') {
+                if (urgentShownIds.has(item.id)) continue
+                urgentShownIds.add(item.id)
                 showUrgentModal({
                   title: `${t('news.urgentTitle')} · ${item.title}`,
                   html: item.html ?? '',
                   confirmLabel: t('news.gotIt'),
+                  holdMs: (item.holdSeconds ?? 0) * 1000,
+                  holdHint: t('news.holdHint'),
                   onClose: () => { void post('/announcements/ack', { id: item.id }).catch(() => {}) },
                 })
               } else {
@@ -8234,6 +8456,26 @@ window.__ModuleLoader__.load({
             window.dispatchEvent(new CustomEvent('ofm:hello', { detail: data }))
           })
         }
+        // 升级场景：公告在页面关闭期间到达（插件重启后的首轮轮询），到达推送
+        // 没有任何观看者。打开流之前补一次已读检查——最新一条未确认的 urgent
+        // 照样弹层，关闭即 ack。显示过的一律不重复（本次页面生命周期内）。
+        void (async () => {
+          try {
+            const view = await api('/announcements')
+            const candidates = (view?.items ?? []).filter(item => item.level === 'urgent' && item.acked !== true && urgentShownIds.has(item.id) === false)
+            const item = candidates.sort((left, right) => Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0))[0]
+            if (item === undefined || disposed === true) return
+            urgentShownIds.add(item.id)
+            showUrgentModal({
+              title: `${t('news.urgentTitle')} · ${item.title}`,
+              html: item.html ?? '',
+              confirmLabel: t('news.gotIt'),
+              holdMs: (item.holdSeconds ?? 0) * 1000,
+              holdHint: t('news.holdHint'),
+              onClose: () => { void post('/announcements/ack', { id: item.id }).catch(() => {}) },
+            })
+          } catch { /* the modal is best effort; the center still lists it */ }
+        })()
         open()
         return () => {
           disposed = true

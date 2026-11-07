@@ -95,7 +95,8 @@
 
 /* 签名封面横幅：卡片头部之后一条 4:1 的图，柔入渐隐，弱网失败就整条消失。 */
 .plugin-cover { position: relative; margin: -4px -4px 0; border-radius: 14px; overflow: hidden; aspect-ratio: 8 / 3; background: var(--accent-soft); }
-.plugin-cover img { width: 100%; height: 100%; object-fit: cover; display: block; animation: plugin-fade .4s ease both; }
+.plugin-cover img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .45s ease; }
+.plugin-cover.loaded img { opacity: 1; }
 .plugin-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, .18)); pointer-events: none; }
 .plugin-card .plugin-cover + header { margin-top: 10px; }
 @keyframes plugin-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -146,3 +147,12 @@
 .plugin-import { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: transparent; color: var(--ink-soft); border-radius: 10px; padding: 7px 13px; font: inherit; font-size: 13.5px; cursor: pointer; transition: background .16s ease, border-color .16s ease; }
 .plugin-import:hover { background: var(--hover); border-color: var(--line); }
 .plugin-import:active { transform: translateY(1px); }
+
+/* 自动更新行与索引来源：头部第二行，弱化呈现 */
+.plugins-subrow{display:flex;align-items:center;gap:14px;padding-top:8px;flex-wrap:wrap}
+.plugin-source{font-size:11px;color:var(--ink-soft, #6b7280);border:1px solid var(--border);border-radius:999px;padding:2px 10px;white-space:nowrap}
+/* 可更新卡片上的一行 soak 说明 */
+.plugin-soak{margin:6px 0 0;font-size:11.5px;line-height:1.5;color:var(--ink-soft, #6b7280);overflow-wrap:anywhere}
+/* 安装弹层里的模型货架 */
+.plugin-models{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.plugin-model{font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--border);background:var(--accent-soft);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}

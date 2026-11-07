@@ -355,7 +355,12 @@ export async function startStandalone({
     // The marketplace index refreshes on its own cadence too: an update that
     // lands upstream should reach the Installed tab without the user opening
     // the market first. The TTL cache keeps ticks cheap; failures are silent.
-    const registryTimer = setInterval(() => { void extensions.refreshRegistry().catch(() => {}) }, 6 * 60 * 60 * 1000)
+    const registryTimer = setInterval(() => {
+      void extensions.refreshRegistry().catch(() => {})
+      // Same contract as the plugin side: the automatic updater rides the
+      // registry tick and only ever installs a soaked, still-enabled update.
+      if (settings.get().autoUpdateExtensions === true) void extensions.autoUpdate().catch(() => {})
+    }, 6 * 60 * 60 * 1000)
     registryTimer.unref?.()
     await reconcileRelay()
 

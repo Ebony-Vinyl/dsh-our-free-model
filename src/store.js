@@ -163,6 +163,11 @@ export const SETTINGS_INITIAL = {
    *  default: the signed marketplace is the trust root, and a local package is
    *  an explicit developer action with its own warning and badge. */
   developerPlugins: false,
+  /** Install extension updates automatically once the registry tick runs and
+   *  the newer version has soaked past its supply-chain window (see
+   *  AUTO_UPDATE_SOAK_MS in src/extensions.js). Off by default: the update
+   *  badge is the prompt, the button is the decision. */
+  autoUpdateExtensions: false,
   /** Show region-limited models in the picker as soon as they answer. */
   exposeRegionModels: true,
   /** Advertisement only: retain catalog entries and historical model resolution. */

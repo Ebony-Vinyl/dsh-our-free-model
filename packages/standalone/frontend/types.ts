@@ -30,6 +30,7 @@ export interface ServiceSettings {
   probeIntervalMinutes: number
   defaultMaxTokens: number
   developerPlugins: boolean
+  autoUpdateExtensions: boolean
 }
 
 export interface PluginPermissions { network: string[]; secrets: string[]; storage: boolean }
@@ -105,6 +106,23 @@ export interface PluginRegistryEntry extends Omit<PluginRecord, 'enabled' | 'ins
   state: string
   fileCount: number
 }
+export interface PluginUpdate {
+  id: string
+  from: string
+  to: string
+  seenAt: number
+  ready: boolean
+  soakRemainingMs: number
+  enabled: boolean
+}
+
+export interface RegistryMeta {
+  source: string
+  fetchedAt: number
+  generatedAt: string
+  soakHours: number
+}
+
 export interface PluginsSummary {
   installedCount: number
   builtinCount: number

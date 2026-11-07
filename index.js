@@ -1529,7 +1529,13 @@ export function apply(ctx, config) {
     // lands upstream should reach the Installed tab without the user opening
     // the market first. The TTL cache keeps ticks cheap; failures are silent —
     // the next tick retries and the last good view keeps serving.
-    const registryTimer = setInterval(() => { void extensions.refreshRegistry().catch(() => {}) }, 6 * 60 * 60 * 1000)
+    const registryTimer = setInterval(() => {
+      void extensions.refreshRegistry().catch(() => {})
+      // The automatic updater rides the same tick: it only installs what the
+      // soak has already cleared, so no extra network touch beyond the
+      // refresh's own fetches, and a failure is next tick's retry.
+      if (settings.get().autoUpdateExtensions === true) void extensions.autoUpdate().catch(() => {})
+    }, 6 * 60 * 60 * 1000)
     registryTimer.unref?.()
     return () => clearInterval(registryTimer)
   }, 'our-free-model: extensions')
@@ -2078,7 +2084,7 @@ export function createApiRoutes(deps) {
         const patch = await readJson(req)
         const visibility = validateModelVisibility(patch)
         const current = deps.settings.get()
-        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch', 'freeLane']), ...visibility }, current)
+        const next = sanitizeSettings({ ...current, ...pick(patch, ['enabled', 'exposeRegionModels', 'probeIntervalMinutes', 'defaultMaxTokens', 'announcementAck', 'feedUrl', 'feedPollMinutes', 'notifyOs', 'updateCheckHours', 'autoReloadWatch', 'freeLane', 'developerPlugins', 'autoUpdateExtensions']), ...visibility }, current)
         if (next.autoReloadWatch === true && deps.update.status().hotReloadAvailable === false) next.autoReloadWatch = false
         if (patch.forward !== undefined) {
           const forward = { ...(current.forward ?? {}), ...pick(patch.forward, ['enabled', 'host', 'port']) }
@@ -2192,7 +2198,18 @@ export function createApiRoutes(deps) {
           // read failed; `registryError` used to be structurally empty because
           // `registryView()` never throws.
           const status = await extensions.registryStatusSoon()
-          return send(200, { installed: extensions.listInstalled().filter(record => record.builtin !== true), registry: status.registry, registryError: status.error })
+          // `updates` feeds the soak countdown on the Installed tab; `audit`
+          // gives the page its own 最近操作 trail; the settings bit lets the
+          // toolbar's auto-update switch render the value it will write.
+          return send(200, {
+            installed: extensions.listInstalled().filter(record => record.builtin !== true),
+            registry: status.registry,
+            registryError: status.error,
+            updates: extensions.updatesAvailable(),
+            registryMeta: extensions.registryMeta(),
+            audit: extensions.auditTail(30),
+            autoUpdate: deps.settings.get().autoUpdateExtensions === true,
+          })
         }
         if (method === 'POST' && routePath === '/extensions/registry/refresh') {
           try {

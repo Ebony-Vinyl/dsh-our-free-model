@@ -25,6 +25,7 @@
   "createdAt": "2026-10-01T00:00:00Z",
   "expiresAt": "2026-10-15T00:00:00Z", // 可选，过期自动消失
   "link": { "url": "https://…", "label": "查看详情" },  // 可选
+  "holdSeconds": 3,                   // 可选：urgent 弹层的关闭锁，0-30 秒倒数后才允许关闭
   "html": "<p>正文，<strong>支持受限白名单的 HTML</strong></p>"
 }
 ```

@@ -102,6 +102,16 @@ const HOOK_TIMEOUT_MS = {
   selfTest: 10_000,
 }
 
+/**
+ * How long an update must have been visible in the signed registry before the
+ * automatic updater will install it. VS Code adopted the same two-hour soak
+ * for exactly this reason: an upstream compromise surfaces in mirrors, issue
+ * trackers and the marketplace's own commit history long before the soak ends.
+ * A user who wants the bytes sooner clicks 更新 — the soak only governs the
+ * updates nobody has asked for.
+ */
+const AUTO_UPDATE_SOAK_MS = 2 * 60 * 60 * 1000
+
 /** The registry repo, and the only hosts an extension's code may download from. */
 const EXTENSIONS_REPO = process.env.OFM_EXTENSIONS_REPO ?? 'Ebony-Vinyl/ofm-extensions'
 const REGISTRY_HOSTS = new Set(['raw.githubusercontent.com', 'cdn.jsdelivr.net', 'gcore.jsdelivr.net', 'gh-proxy.com'])
@@ -1763,12 +1773,85 @@ export function createExtensionRuntime({
           installed: installed !== undefined,
           installedVersion: installed?.manifest.version,
           enabled: installed?.enabled === true,
-          updateAvailable: installed !== undefined && installed.manifest.version !== entry.manifest.version,
+          updateAvailable: installed !== undefined && compareVersions(installed.manifest.version, entry.manifest.version) < 0,
           // The install button's gate: host floor and plugin API range.
           installable: compareVersions(hostVersion, entry.manifest.minHost) >= 0 && entry.manifest.apiCompatible !== false,
           state: pending.get(entry.manifest.id) !== undefined ? 'pending' : (processes.get(entry.manifest.id)?.state ?? 'stopped'),
         }
       }),
+    }
+  }
+
+  /**
+   * Every installed extension the live registry carries at a newer version.
+   *
+   * The first observation of a newer version stamps `updateSeen` into the
+   * install record — that stamp, not the registry's own timestamps, starts the
+   * auto-update soak clock. A read here is also the only place the stamp is
+   * written: the marketplace page calls this on every load, so a version the
+   * user saw in the UI is a version the soak has been counting for.
+   */
+  function updatesAvailable() {
+    const view = registryCache?.view ?? null
+    if (view === null) return []
+    const lock = readLock()
+    let stamped = false
+    const now = Date.now()
+    const out = []
+    for (const entry of view.plugins) {
+      const record = lock.extensions[entry.manifest.id]
+      if (record === undefined) continue
+      if (compareVersions(record.manifest.version, entry.manifest.version) >= 0) continue
+      // An update the host could not even run (minHost floor, dead API range)
+      // never enters the soak: the badge would promise an install that the
+      // gate refuses the moment it fires.
+      if (compareVersions(hostVersion, entry.manifest.minHost) < 0 || entry.manifest.apiCompatible === false) continue
+      const seenAt = typeof record.updateSeen === 'number' && record.updateSeen > 0 ? record.updateSeen : now
+      if (seenAt === now) { record.updateSeen = seenAt; stamped = true }
+      out.push({
+        id: entry.manifest.id,
+        from: record.manifest.version,
+        to: entry.manifest.version,
+        seenAt,
+        ready: now - seenAt >= AUTO_UPDATE_SOAK_MS,
+        soakRemainingMs: Math.max(0, AUTO_UPDATE_SOAK_MS - (now - seenAt)),
+        enabled: record.enabled === true,
+      })
+    }
+    if (stamped === true) writeLock(lock)
+    return out
+  }
+
+  /**
+   * The automatic updater, driven by the registry tick (6h) rather than the
+   * page: an update that has soaked past the window installs itself, then the
+   * same install/verify/scan path a button press takes. Disabled extensions
+   * are never auto-enabled — a update the user parked stays parked.
+   */
+  async function autoUpdate() {
+    const updates = updatesAvailable().filter(update => update.ready === true && update.enabled === true)
+    const installedRows = []
+    const failed = []
+    for (const update of updates) {
+      try {
+        const record = await install(update.id, { version: update.to })
+        installedRows.push({ id: update.id, from: update.from, to: record.version })
+        audit('auto-update', update.id, { from: update.from, to: update.to })
+      } catch (error) {
+        failed.push({ id: update.id, reason: String(error?.message ?? error).slice(0, 200) })
+      }
+    }
+    return { installed: installedRows, failed, checked: updates.length }
+  }
+
+  /** Where the served registry snapshot came from, for the page's source pill:
+   *  a `bundled` answer reads very differently from a live mirror one. */
+  function registryMeta() {
+    return {
+      source: registryCache?.source ?? '',
+      fetchedAt: typeof registryCache?.fetchedAt === 'number' ? registryCache.fetchedAt : 0,
+      generatedAt: registryCache?.view?.generatedAt ?? '',
+      soakHours: AUTO_UPDATE_SOAK_MS / 3_600_000,
     }
   }
 
@@ -1787,7 +1870,7 @@ export function createExtensionRuntime({
       return Promise.allSettled(terminations)
     },
     install, installLocal, uninstall, setEnabled, saveConfig, saveSecret, runSelfTest,
-    refreshRegistry, registryStatusSoon, coverImage,
+    refreshRegistry, registryStatusSoon, coverImage, updatesAvailable, autoUpdate, registryMeta,
     listInstalled, registryView, installedVersions,
     registerBuiltin, contributions, pages, pageAsset, pageRpc, auditTail, startWatching,
     // The lane surface.

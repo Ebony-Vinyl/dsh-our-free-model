@@ -1,7 +1,7 @@
 {
-  "version": "2.9.0",
+  "version": "2.8.2",
   "base": "../",
-  "publishedAt": "2026-11-07T09:54:29.728Z",
+  "publishedAt": "2026-11-07T15:42:42.108Z",
   "notes": "",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 612480,
-      "sha256": "70e84857d13035fad003b727bf9253f51bab43a4c91f6754baae127ce72e1748"
+      "size": 628734,
+      "sha256": "54ba792f5fd3238c01623c3581bf47ad11d0384df4defa7fdd35ee91c9594515"
     },
     {
       "path": "cordis.patch.yml",
@@ -31,8 +31,8 @@
     },
     {
       "path": "index.js",
-      "size": 134612,
-      "sha256": "ab173a5dd097f795a1f4e30e3feccf45d0de0eafce04450e255c13c5f87a4b78"
+      "size": 135491,
+      "sha256": "e905f725e42c71b32bd0a7a6b87df85bff6d90c26403232e4c4372e692f83a42"
     },
     {
       "path": "LICENSE",
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 5178,
-      "sha256": "54b8149a6666bb26fe20e870c73b3f84d058e5ac32cb6c8200b31cfe8a1e36e6"
+      "sha256": "8f6dd1a7f5aa21f085789312fb946025213eea0a1d03f8f4efdeeba18d3b6ff0"
     },
     {
       "path": "src/adapter.js",
@@ -176,8 +176,8 @@
     },
     {
       "path": "src/extensions.js",
-      "size": 84537,
-      "sha256": "b6a87d013f429d60e8225908e17033b7780f795ce92061e64be1fca0d0a4208e"
+      "size": 88329,
+      "sha256": "d5f2915c5039b8eb8f7c293d9860e21d375fb4b1ca42241e9a048cf7df1e43e8"
     },
     {
       "path": "src/failure.js",
@@ -186,8 +186,8 @@
     },
     {
       "path": "src/feed.js",
-      "size": 13366,
-      "sha256": "06cbe31d895d7f9dd6b39f9a4992b9d495ad50acd3fb772fec0799694d3c9519"
+      "size": 13779,
+      "sha256": "c0bdd7d6e15e82addce05757407441c72a4dd56925fe4aa22111512bf144d555"
     },
     {
       "path": "src/forward.js",
@@ -311,8 +311,8 @@
     },
     {
       "path": "src/store.js",
-      "size": 25475,
-      "sha256": "d7fac43fd0fae890c67e0d9b1bfad34188ff3b62013f38a0166e3750f029b006"
+      "size": 25787,
+      "sha256": "64d3d5690ab0a632aa7bfaec388d99ca0ce5c7b98ff972b916ee9d270878c214"
     },
     {
       "path": "src/stream.js",
@@ -405,5 +405,5 @@
       "sha256": "239962f2e01f9a19455ee3377a89f7e8113a4981dc0c6f1ff87298a52ace4d4c"
     }
   ],
-  "signature": "fA5b+RU/Z+qkjTKCQveuuAqpS/M0LDyNOmAzNF7uJtR6giIvWv6loaAnZtc8eJd+ULnml/LLs6vzm0fMCgopCg=="
+  "signature": "kRf4UTKPFfv50p2V0+WB+XMUwmQOtG5dIYiGVINhJwNQOq/0iOAh4sPnDkabjbiUtHEEFFzx2ea/3F68mWPGBQ=="
 }
