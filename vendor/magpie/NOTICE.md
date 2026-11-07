@@ -4,8 +4,13 @@ Upstream: https://github.com/yetone/magpie.git
 Pinned revision: 6a900e0d048e592cbc9120dd2c3f515aab9ef04a
 Source build version: ofm-6a900e0d048e
 
-Built without upstream modifications using the nogui tag. This excludes the native
-desktop shell and retains the complete embedded web UI and built-in plugins.
+Built with 1 guard patch applied on top of the pinned
+revision (0001-agent-sync-skip-an-empty-catalog.patch in scripts/magpie-engine-patches): an agent
+sync that finds an empty catalog skips the write instead of emptying the
+agent's own model list — a provider-less engine must never wipe a wired
+agent's picker. Everything else is built without upstream modifications
+using the nogui tag, which excludes the native desktop shell and retains
+the complete embedded web UI and built-in plugins.
 The owner disables automatic binary updates; upgrades go through this builder.
 The upstream MIT license is reproduced in LICENSE. Go dependency license and
 notice files below are copied verbatim from the modules linked into this build.

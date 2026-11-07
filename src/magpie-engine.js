@@ -767,7 +767,22 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
       const env = { ...process.env }
       // An inherited Magpie override must never redirect this owned instance.
       for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('MAGPIE_')) delete env[key]
+      // The engine wires every agent it finds under the user's home (ZCode's
+      // provider_config.json, Codex's config.toml, …) to itself when it starts.
+      // This engine's catalog is its own and may be empty, so that startup sync
+      // would rewrite those agents with no models. Give it a home of its own:
+      // it still serves its page, and no file of a real agent is touched. The
+      // Windows folders os.UserConfigDir reads are moved too, for the agents
+      // that keep their settings there (VS Code, Cline, …).
+      const agentHome = path.join(home, 'agent-home')
+      const agentRoaming = path.join(agentHome, 'AppData', 'Roaming')
+      const agentLocal = path.join(agentHome, 'AppData', 'Local')
+      for (const dir of [agentHome, agentRoaming, agentLocal]) {
+        await mkdir(dir, { recursive: true, mode: 0o700 })
+      }
       Object.assign(env, {
+        HOME: agentHome, USERPROFILE: agentHome,
+        APPDATA: agentRoaming, LOCALAPPDATA: agentLocal,
         XDG_CONFIG_HOME: dirs.config, XDG_CACHE_HOME: dirs.cache,
         XDG_DATA_HOME: dirs.data, XDG_STATE_HOME: dirs.state,
         MAGPIE_ADDR: `127.0.0.1:${gatewayPort}`, MAGPIE_WEB_KEY: webKey,

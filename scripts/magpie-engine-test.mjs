@@ -33,6 +33,8 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('content-type','application/json');
     res.end(JSON.stringify({ok:true,pid:process.pid,config:process.env.XDG_CONFIG_HOME,
       cache:process.env.XDG_CACHE_HOME,data:process.env.XDG_DATA_HOME,state:process.env.XDG_STATE_HOME,
+      home:process.env.HOME, userProfile:process.env.USERPROFILE, appData:process.env.APPDATA,
+      localAppData:process.env.LOCALAPPDATA,
       gateway:process.env.MAGPIE_ADDR, noAccountsEnv:process.env.MAGPIE_NO_ACCOUNTS || ''}));
   } else if (url.pathname === '/api/headers') {
     let body = ''; for await (const chunk of req) body += chunk;
@@ -325,6 +327,11 @@ async function fixtureTests() {
   const settings = await (await owned.request('GET', '/api/settings')).json()
   const gateway = owned.gateway()
   for (const key of ['config', 'cache', 'data', 'state']) assert(settings[key].startsWith(path.join(dataDir, 'magpie')))
+  // The engine's startup sync wires the agents found under HOME (ZCode's
+  // provider_config.json, Codex's config.toml, ...) to its own catalog: its
+  // HOME must be private, or an empty engine rewrites those agents with no
+  // models (the 2026-11-07 ZCode wipe). agent-home is that private home.
+  for (const key of ['home', 'userProfile', 'appData', 'localAppData']) assert(settings[key].startsWith(path.join(dataDir, 'magpie', 'agent-home')))
   assert.equal(settings.noAccountsEnv, '')
   assert(!JSON.stringify(starts).includes(gateway.key))
   assert.deepEqual(Object.keys(starts[0]).sort(), ['available', 'error', 'revision', 'state', 'version'])

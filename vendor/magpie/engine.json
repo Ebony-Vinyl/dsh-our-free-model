@@ -19,50 +19,56 @@
     ],
     "go": "go version go1.27.1 windows/amd64"
   },
+  "patches": [
+    {
+      "name": "0001-agent-sync-skip-an-empty-catalog.patch",
+      "sha256": "50acab57addbd3821a6a293f2a6be4f496b4fb4a8e118b3cfd224f29e83747aa"
+    }
+  ],
   "binaries": {
     "win32-x64": {
       "path": "bin/magpie-win32-x64.exe",
-      "sha256": "1f4b2f350fe09f42c0ac8a859c2ccb5f03dcd0c13d4e066cd689a1acda23e604",
+      "sha256": "5fafc3a970d9144fedd21820c6afec55b86c8206f916498144c3611ec9795bc2",
       "compressed": {
         "algorithm": "gzip",
-        "size": 27223733,
-        "sha256": "4f3afd03b709cda47b3b4ad4723cdbf12a74a027b321da4f1a6c0a5983e7ff56",
-        "outputSize": 64811008,
+        "size": 27224805,
+        "sha256": "086f69612914773fa96749bea7ddf4a7b319ff8e3e7404df14a298d69221bcb5",
+        "outputSize": 64812032,
         "parts": [
           {
             "path": "src/engine-parts/win32-x64.000.part",
             "size": 4194304,
-            "sha256": "f8dea6313012982c0b3cde2badda9733a7baee19d90c5dd73abe66d7bdc58de4"
+            "sha256": "e9848284c36cdbe9b7c33b6d6dadbc351c1cf1d2dda75bae334d09efa34821c3"
           },
           {
             "path": "src/engine-parts/win32-x64.001.part",
             "size": 4194304,
-            "sha256": "8b790e0dc8debc3d1c1817d2874afe2b6935909efcfba5eca239106e0572d499"
+            "sha256": "001b67dde65246e33a1fb285eb299a816126db1168d9ee8459f59b25a22536d1"
           },
           {
             "path": "src/engine-parts/win32-x64.002.part",
             "size": 4194304,
-            "sha256": "131e57f9211b71a81868e361873ce1bdc87ff026bd2cf8723779b73c68ed1380"
+            "sha256": "80d3425897688eb84c797f70a00fae1c347a68e2d42b8963f8969eede24acfd9"
           },
           {
             "path": "src/engine-parts/win32-x64.003.part",
             "size": 4194304,
-            "sha256": "e4c553e91328c9e95d701e8bb3d800dc155ed4c6003b9b5b31597a29f76d2fea"
+            "sha256": "29c1553354b563cc322e270b1b1a062fb8375ef484ef9bd855ee731c85435b77"
           },
           {
             "path": "src/engine-parts/win32-x64.004.part",
             "size": 4194304,
-            "sha256": "20b5ffa9453af953ffd771513d858cf0ab4e22ba863d86b4edf2d5e1c33c4a19"
+            "sha256": "4a436e1d813407269d29291d349ec345c71532f18b9c7cd6fab3c770190fb336"
           },
           {
             "path": "src/engine-parts/win32-x64.005.part",
             "size": 4194304,
-            "sha256": "f2902a4a09f9f55fc3b0d7f5922e61cac58dd58942733e70b5fb212c8f788eb1"
+            "sha256": "105729c3b79ef03cb5d8af809b331ba901bfd57fda2e417a0104753c4186ed4a"
           },
           {
             "path": "src/engine-parts/win32-x64.006.part",
-            "size": 2057909,
-            "sha256": "c399bbd95b0101b571674f96a0efc255517b677c0b9ced203851c263b3e734bb"
+            "size": 2058981,
+            "sha256": "e21f28935ce2fa13dad0b3746a3799db6340346d4fc35fd21f6b20f00c0f36d7"
           }
         ]
       }
