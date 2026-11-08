@@ -46,6 +46,29 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const manifestPath = path.join(root, 'feed', 'manifest.json')
 const integrityPath = path.join(root, 'catalog', 'integrity.json')
 
+// The desktop installers embed their version from three files of their own
+// (tauri names the dmg by it, NSIS reports it, the app's updater compares
+// with it). A release whose desktop version lags package.json ships an
+// installer that calls itself the previous version — the 2.8.3 miss — so
+// the release gate refuses to run until the four agree.
+const desktopRoot = path.join(root, 'packages', 'desktop')
+const desktopVersions = {
+  'package.json': JSON.parse(fs.readFileSync(path.join(desktopRoot, 'package.json'), 'utf8')).version,
+  'src-tauri/tauri.conf.json': JSON.parse(fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'tauri.conf.json'), 'utf8')).version,
+  'src-tauri/Cargo.toml': /^version = "(.+)"$/m.exec(fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'Cargo.toml'), 'utf8'))[1],
+  'src-tauri/Cargo.lock': (() => {
+    const lock = fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'Cargo.lock'), 'utf8')
+    const entry = lock.indexOf('name = "ofm-desktop"')
+    return /^version = "(.+)"$/m.exec(lock.slice(entry))[1]
+  })(),
+}
+for (const [file, version] of Object.entries(desktopVersions)) {
+  if (version !== pkg.version) {
+    console.error(`packages/desktop/${file} is version ${version}, but package.json is ${pkg.version} — the installers would ship the wrong version; bump them together`)
+    process.exit(1)
+  }
+}
+
 const keyArg = process.argv.indexOf('--key') === -1 ? null : process.argv[process.argv.indexOf('--key') + 1]
 const keyPath = keyArg ?? process.env.OFM_MANIFEST_KEY ?? ''
 let signingKey = null
