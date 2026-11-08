@@ -305,8 +305,11 @@ try {
     await form().getByLabel('Model IDs').fill('local-codex')
     await button(form(), 'Confirm import').click()
     await form().waitFor({ state: 'detached' })
-    assert.deepEqual(posts('import-local').at(-1).body, { provider: 'codex', models: ['local-codex'], label: 'Local Codex' })
-    assert.equal(subscriptions.list().length, before + 1)
+    assert.deepEqual(posts('import-local').at(-1).body, { provider: 'codex', models: ['local-codex'], replaceId: codexId, label: 'Local Codex' })
+    const local = subscriptions.list().find(account => account.label === 'Local Codex')
+    assert.equal(local.id, codexId, 'the same native credentials must update the existing account')
+    assert.equal(subscriptions.list().length, before)
+    assert.deepEqual(local.models, ['local-codex'])
     emptyDiscovery = true
     await button(page, 'Find local accounts').click()
     await text(candidates, 'No local sign-ins available to import.')
@@ -346,6 +349,30 @@ try {
     await row(codexId).getByText('Quota query failed', { exact: true }).waitFor({ state: 'detached' })
     assert.equal(await row(codexId).locator('progress').count(), 0)
     quotaMode = 'ok'
+  })
+  await check('expired Claude credentials offer a re-import that replaces the same account', async () => {
+    quotaMode = 'error'
+    await button(row(claudeId), 'Refresh quotas').click()
+    await text(row(claudeId), 'Quota query failed')
+    assert.ok((await row(claudeId).innerText()).includes('require re-import'))
+    const before = subscriptions.list().length
+    await button(row(claudeId), 'Re-import').click()
+    const reimport = form()
+    assert.equal(await reimport.getByLabel('Provider', { exact: true }).isDisabled(), true)
+    assert.equal(await reimport.locator('text=Replace this account while keeping its models and enabled state.').count(), 1)
+    await reimport.getByLabel('Model IDs').fill('claude-refreshed')
+    await reimport.getByRole('textbox', { name: 'Credentials JSON', exact: true }).fill(JSON.stringify({
+      claudeAiOauth: { ...native.claude.claudeAiOauth, accessToken: 'fixture-claude-refreshed-token-123456', refreshToken: 'fixture-claude-refreshed-refresh-123456' },
+    }))
+    await button(reimport, 'Confirm import').click()
+    await reimport.waitFor({ state: 'detached' })
+    const rows = subscriptions.list()
+    assert.equal(rows.length, before, 're-import must replace instead of appending')
+    const replaced = rows.find(account => account.id === claudeId)
+    assert.deepEqual(replaced.models, ['claude-refreshed'])
+    assert.equal(replaced.enabled, true)
+    quotaMode = 'ok'
+    await clean()
   })
   await check('failed enable writes keep the saved switch state; pending writes disable repeat actions', async () => {
     failWrite = true

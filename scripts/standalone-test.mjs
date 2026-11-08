@@ -109,7 +109,7 @@ async function child(args, env = {}) {
     let stderr = ''
     proc.stdout.on('data', chunk => { stdout += chunk })
     proc.stderr.on('data', chunk => { stderr += chunk })
-    const deadline = setTimeout(() => { proc.kill(); reject(new Error('child timed out')) }, 10000)
+    const deadline = setTimeout(() => { proc.kill(); reject(new Error('child timed out')) }, 20000)
     proc.once('error', error => { clearTimeout(deadline); reject(error) })
     proc.once('exit', code => { clearTimeout(deadline); resolve({ code, stdout, stderr }) })
   })

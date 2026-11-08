@@ -15,9 +15,10 @@ interface QuotaWindow {
   name: string; kind?: string; windowSeconds?: number; usedPercent?: number; remainingPercent?: number
   resetsAt?: number | string; limit?: number; remaining?: number
 }
+interface QuotaError { code?: string; message?: string }
 interface Account {
   id: string; provider: string; label: string; enabled: boolean; plan?: string; models: string[]
-  quota?: { windows: QuotaWindow[]; fetchedAt?: number; checkedAt?: string; error?: string; state?: string; status?: string; plan?: string }
+  quota?: { windows: QuotaWindow[]; fetchedAt?: number; checkedAt?: string; error?: QuotaError | string; state?: string; status?: string; plan?: string }
 }
 interface Workbench { clients: Client[]; accounts: Account[] }
 interface Candidate { provider: string; label: string; available: boolean }
@@ -27,6 +28,17 @@ const dateLabel = (value?: number | string) => {
   if (value === undefined || value === '') return ''
   const date = new Date(typeof value === 'number' && value < 1e12 ? value * 1000 : value)
   return Number.isNaN(date.valueOf()) ? '' : date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+const quotaFailure = (account?: Account): QuotaError | null => {
+  const value = account?.quota?.error
+  if (!value) return null
+  return typeof value === 'string' ? { message: value } : value
+}
+const quotaFailureText = (account?: Account) => {
+  const failure = quotaFailure(account)
+  if (!failure) return ''
+  if (failure.code === 'AUTH_REQUIRED') return '登录凭据已过期，请重新导入该账号。'
+  return failure.message ? `额度查询失败：${failure.message}` : '额度查询失败，请稍后重试。'
 }
 
 function ClientRow({ client, summary, onChanged }: { client: Client; summary: Summary; onChanged(): Promise<void> }) {
@@ -101,16 +113,19 @@ function QuotaMeter({ title, window }: { title: string; window?: QuotaWindow }) 
   </div>
 }
 
-function ImportSubscription({ candidates, onClose, onSaved }: { candidates: Candidate[]; onClose(): void; onSaved(): Promise<void> }) {
-  const [tab, setTab] = useState<'api' | 'json' | 'file'>('api')
-  const [provider, setProvider] = useState('api')
-  const [label, setLabel] = useState('')
+function ImportSubscription({ candidates, initialProvider, replaceId, replaceLabel, replaceModels, onClose, onSaved }: {
+  candidates: Candidate[]; initialProvider?: string; replaceId?: string; replaceLabel?: string; replaceModels?: string[]
+  onClose(): void; onSaved(): Promise<void>
+}) {
+  const [tab, setTab] = useState<'api' | 'json' | 'file'>(initialProvider && initialProvider !== 'api' ? 'json' : 'api')
+  const [provider, setProvider] = useState(initialProvider ?? 'api')
+  const [label, setLabel] = useState(replaceLabel ?? '')
   const [apiKey, setApiKey] = useState('')
   const [json, setJson] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
-  const [models, setModels] = useState('')
+  const [models, setModels] = useState((replaceModels ?? []).join(', '))
   const [format, setFormat] = useState('openai-chat')
-  const [quotaOnly, setQuotaOnly] = useState(false)
+  const [quotaOnly, setQuotaOnly] = useState(replaceId ? (replaceModels?.length ?? 0) === 0 : false)
   const [filename, setFilename] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -167,6 +182,7 @@ function ImportSubscription({ candidates, onClose, onSaved }: { candidates: Cand
       provider: actualProvider, ...(label.trim() ? { label: label.trim() } : {}),
       ...payload, ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
       ...(models.trim() ? { models: splitModels(models) } : {}), credentials,
+      ...(replaceId ? { replaceId } : {}),
     }
     if (actualProvider === 'api') { payload.baseUrl = actualUrl; payload.format = payload.format ?? format }
     else { delete payload.baseUrl; delete payload.format }
@@ -186,7 +202,8 @@ function ImportSubscription({ candidates, onClose, onSaved }: { candidates: Cand
       <div className="wb-segments wb-import-tabs" aria-label="导入方式">
         {([['api', 'API Key', KeyRound], ['json', 'JSON 凭据', FileJson], ['file', 'JSON 文件', Upload]] as const).map(([id, name, Icon]) => <button key={id} type="button" aria-pressed={tab === id} disabled={busy} onClick={() => chooseTab(id)}><Icon size={14} />{name}</button>)}
       </div>
-      <div className="wb-form-grid"><label>供应商<select required value={provider} disabled={busy || tab === 'api'} onChange={event => setProvider(event.target.value)}><option value="api">第三方 API</option><option value="codex">Codex 订阅</option><option value="claude">Claude 订阅</option><option value="gemini">Gemini 订阅</option></select></label>
+      {replaceId && <p className="wb-status" role="status"><Check size={15} />将替换已有账号；模型与启用状态会保留。</p>}
+      <div className="wb-form-grid"><label>供应商<select required value={provider} disabled={busy || tab === 'api' || !!replaceId} onChange={event => setProvider(event.target.value)}><option value="api">第三方 API</option><option value="codex">Codex 订阅</option><option value="claude">Claude 订阅</option><option value="gemini">Gemini 订阅</option></select></label>
         <label>账号名称<Input value={label} disabled={busy} placeholder="可选" onChange={event => setLabel(event.target.value)} /></label></div>
       {tab === 'api' && <label>API Key<Input type="password" autoComplete="new-password" spellCheck={false} required value={apiKey} disabled={busy} onChange={event => setApiKey(event.target.value)} /></label>}
       {tab === 'json' && <label>凭据 JSON<textarea rows={6} spellCheck={false} autoComplete="off" required value={json} disabled={busy} onChange={event => setJson(event.target.value)} /></label>}
@@ -205,7 +222,7 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
   const workbench = useManagementResource<Workbench>('/workbench', active)
   const subscriptions = useManagementResource<{ accounts: Account[] }>('/subscriptions', active)
   const discovery = useManagementResource<{ candidates: Candidate[] }>('/subscriptions/discover', active)
-  const [importing, setImporting] = useState(false)
+  const [importing, setImporting] = useState<null | { provider?: string; replaceId?: string; replaceLabel?: string; replaceModels?: string[] }>(null)
   const [local, setLocal] = useState(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -222,9 +239,14 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
     if (lock.current) return
     lock.current = true; setBusy(key); setError(''); setStatus('')
     try {
-      await management(path, body)
+      const result = await management<{ accounts: Account[] }>(path, body)
       if (!live.current) return
-      setStatus(path.endsWith('/quota') ? '额度查询已完成。' : path.endsWith('/import-local') ? '本机订阅已导入。' : '订阅设置已更新。')
+      if (path.endsWith('/quota')) {
+        const account = result.accounts?.find(row => row.id === body.id)
+        const failure = quotaFailureText(account)
+        if (failure) setError(failure)
+        else setStatus('额度查询已完成。')
+      } else setStatus(path.endsWith('/import-local') ? '本机订阅已导入。' : '订阅设置已更新。')
       setRemoving(''); await subscriptions.reload()
       if (!path.endsWith('/quota')) await host.refresh()
     } catch (reason) { if (live.current) setError(failureMessage(reason)) }
@@ -243,11 +265,14 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
       {workbench.data?.clients.length === 0 && <div className="wb-empty"><Terminal size={24} /><strong>服务未返回可配置的客户端</strong><Button variant="outline" onClick={() => void workbench.reload()}>重新检测</Button></div>}
     </section>
     <div className="wb-section-heading wb-subscription-heading"><h2><Clock3 size={17} />订阅与额度 <small>{accounts.length}</small></h2>
-      <div><Button variant="outline" aria-expanded={local} onClick={() => setLocal(!local)}><FolderSearch size={15} />本机发现</Button><Button onClick={() => setImporting(true)}><Plus size={15} />导入订阅</Button></div></div>
+      <div><Button variant="outline" aria-expanded={local} onClick={() => setLocal(!local)}><FolderSearch size={15} />本机发现</Button><Button onClick={() => setImporting({})}><Plus size={15} />导入订阅</Button></div></div>
     {local && <section className="wb-discovery" aria-label="本机订阅发现">
       <div className="wb-discovery-heading"><strong>本机订阅</strong><Button variant="ghost" aria-label="重新发现本机订阅" title="重新发现本机订阅" disabled={discovery.loading || !!busy} busy={discovery.loading} onClick={() => void discovery.reload()}><RefreshCw size={15} /></Button></div>
       {discovery.error && <p role="alert" className="wb-error">{discovery.error}</p>}
-      {candidates.map(candidate => <div className="wb-candidate" key={candidate.provider}><span><strong>{candidate.label}</strong><small>{candidate.provider}</small></span><Badge tone={candidate.available ? 'blue' : 'neutral'}>{candidate.available ? '可导入' : '未发现'}</Badge><Button variant="outline" disabled={!candidate.available || !!busy} busy={busy === `local:${candidate.provider}`} onClick={() => void run('/subscriptions/import-local', { provider: candidate.provider }, `local:${candidate.provider}`)}><Upload size={14} />导入</Button></div>)}
+      {candidates.map(candidate => {
+        const matches = accounts.filter(account => account.provider === candidate.provider)
+        return <div className="wb-candidate" key={candidate.provider}><span><strong>{candidate.label}</strong><small>{candidate.provider}</small></span><Badge tone={candidate.available ? 'blue' : 'neutral'}>{candidate.available ? '可导入' : '未发现'}</Badge><Button variant="outline" disabled={!candidate.available || !!busy} busy={busy === `local:${candidate.provider}`} onClick={() => void run('/subscriptions/import-local', { provider: candidate.provider, ...(matches.length === 1 ? { replaceId: matches[0].id } : {}) }, `local:${candidate.provider}`)}><Upload size={14} />导入</Button></div>
+      })}
       {!discovery.loading && !candidates.length && !discovery.error && <p className="wb-discovery-empty">未发现本机订阅</p>}
     </section>}
     <div className="wb-toolbar"><label className="wb-search"><Search size={16} /><Input aria-label="搜索订阅" placeholder="搜索账号、供应商或方案" value={search} onChange={event => setSearch(event.target.value)} /></label><span className="wb-toolbar-meta">5 小时 / 每周额度</span></div>
@@ -264,15 +289,16 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
             <Switch checked={account.enabled} aria-label={`启用订阅 ${account.label}`} disabled={!!busy} onCheckedChange={enabled => void run('/subscriptions/enabled', { id: account.id, enabled }, `enable:${account.id}`)} /></div>
           <div className="wb-quota-windows"><QuotaMeter title="5 小时" window={fiveHour} /><QuotaMeter title="每周" window={weekly} />{other.map((window, index) => <QuotaMeter title={window.name} window={window} key={`${window.name}:${index}`} />)}</div>
           <div className="wb-account-actions"><Button variant="ghost" title={`刷新 ${account.label} 额度`} aria-label={`刷新 ${account.label} 额度`} disabled={!!busy} busy={busy === `quota:${account.id}`} onClick={() => void run('/subscriptions/quota', { id: account.id }, `quota:${account.id}`)}><RefreshCw size={15} /></Button>
+            {quotaFailure(account)?.code === 'AUTH_REQUIRED' && <Button variant="outline" disabled={!!busy} onClick={() => setImporting({ provider: account.provider, replaceId: account.id, replaceLabel: account.label, replaceModels: account.models })}>重新导入</Button>}
             <Button variant="ghost" title={`移除 ${account.label}`} aria-label={`移除 ${account.label}`} className="wb-danger" disabled={!!busy} onClick={() => setRemoving(account.id)}><Trash2 size={15} /></Button></div>
           <div className="wb-account-foot"><Badge tone={account.enabled ? 'success' : 'neutral'}>{account.enabled ? '已启用' : '已停用'}</Badge>{!account.models?.length && <Badge>仅额度</Badge>}
-            <span>{account.quota?.error ? '额度暂不可用' : account.quota?.fetchedAt || account.quota?.checkedAt ? `更新于 ${dateLabel(account.quota.fetchedAt ?? account.quota.checkedAt)}` : '额度尚未查询'}{account.quota?.state ? ` · ${account.quota.state}` : ''}</span></div>
+            <span className={account.quota?.error ? 'wb-error' : undefined}>{account.quota?.error ? quotaFailureText(account) : account.quota?.fetchedAt || account.quota?.checkedAt ? `更新于 ${dateLabel(account.quota.fetchedAt ?? account.quota.checkedAt)}` : '额度尚未查询'}{account.quota?.state ? ` · ${account.quota.state}` : ''}</span></div>
           {removing === account.id && <div className="wb-remove"><span>移除订阅 {account.label}？</span><Button variant="outline" disabled={!!busy} onClick={() => setRemoving('')}>取消</Button><Button variant="outline" className="wb-danger" disabled={!!busy} busy={busy === `remove:${account.id}`} onClick={() => void run('/subscriptions/remove', { id: account.id }, `remove:${account.id}`)}><Trash2 size={14} />确认移除</Button></div>}
         </div>
       })}
       {!rows.length && <div className="wb-empty"><KeyRound size={24} /><strong>{search ? '没有匹配的订阅' : subscriptions.loading ? '正在读取订阅' : '尚无订阅账号'}</strong>
-        {search ? <Button variant="outline" onClick={() => setSearch('')}>清除搜索</Button> : <Button variant="outline" onClick={() => setImporting(true)}><Plus size={14} />导入订阅</Button>}</div>}
+        {search ? <Button variant="outline" onClick={() => setSearch('')}>清除搜索</Button> : <Button variant="outline" onClick={() => setImporting({})}><Plus size={14} />导入订阅</Button>}</div>}
     </section>
-    {importing && active && <ImportSubscription candidates={candidates} onClose={() => setImporting(false)} onSaved={async () => { await Promise.all([subscriptions.reload(), host.refresh()]); if (live.current) setStatus('订阅已导入。') }} />}
+    {importing && active && <ImportSubscription candidates={candidates} initialProvider={importing.provider} replaceId={importing.replaceId} replaceLabel={importing.replaceLabel} replaceModels={importing.replaceModels} onClose={() => setImporting(null)} onSaved={async () => { await Promise.all([subscriptions.reload(), host.refresh()]); if (live.current) setStatus(importing.replaceId ? '订阅已更新。' : '订阅已导入。') }} />}
   </div>
 }

@@ -74,13 +74,37 @@ try {
     const service = newService()
     const input = codex()
     const first = service.import(input)
-    const second = service.import({ ...codex(), label: 'Second account' })
+    const other = codex()
+    other.credentials.tokens.access_token = 'codex-second-account-access-123456'
+    const second = service.import({ ...other, label: 'Second account' })
     input.credentials.tokens.access_token = 'mutated'
     first.models[0] = 'mutated'
     first.quota.windows.push({ usedPercent: 100 })
     assert.notEqual(first.id, second.id)
     assert.equal(service.list()[0].quota.windows.length, 0)
     assert.equal(service.list()[0].models[0], 'gpt-5.4')
+  })
+  await check('the same credentials import once; an explicit replacement updates the stale record', () => {
+    const service = newService()
+    const input = claude()
+    const first = service.import({ ...input, label: 'Claude local' })
+    const again = service.import(input)
+    assert.equal(again.id, first.id, 'an unchanged native file must not add a duplicate')
+    assert.equal(again.label, 'Claude local', 'an omitted label must not rename the existing account')
+    assert.equal(service.list().length, 1)
+
+    const refreshed = claude()
+    refreshed.credentials.claudeAiOauth.accessToken = 'claude-private-refreshed-access-123456'
+    refreshed.credentials.claudeAiOauth.refreshToken = 'claude-private-refreshed-refresh-123456'
+    const replaced = service.import({ ...refreshed, label: 'Claude refreshed', replaceId: first.id })
+    assert.equal(replaced.id, first.id, 'replacement keeps the account identity')
+    assert.equal(replaced.label, 'Claude refreshed')
+    assert.equal(service.list().length, 1)
+    assert.deepEqual(service.list()[0].models, refreshed.models)
+
+    assert.throws(() => service.import({ ...claude(), replaceId: 'missing' }), errorCode('NOT_FOUND'))
+    assert.throws(() => service.import({ ...codex(), replaceId: first.id }), errorCode('INVALID_INPUT'))
+    noSecrets(service.list())
   })
   await check('malformed credentials, providers, labels, expiry, models and formats fail safely', () => {
     const service = newService()
@@ -306,6 +330,21 @@ try {
     const service = newService({ home })
     assert.deepEqual(service.discover(), [])
     assert.throws(() => service.importLocal({ provider: 'codex' }), errorCode('LOCAL_AUTH_UNAVAILABLE'))
+  })
+  await check('a changed native login can replace the single account without losing its models', () => {
+    const home = path.join(scratch, 'replace-native')
+    const file = path.join(home, '.codex', 'auth.json')
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(codex().credentials))
+    const service = newService({ home })
+    const first = service.importLocal({ provider: 'codex', models: ['gpt-5.4'] })
+    const changed = codex()
+    changed.credentials.tokens.access_token = 'codex-reauthorized-access-123456'
+    fs.writeFileSync(file, JSON.stringify(changed.credentials))
+    const replaced = service.importLocal({ provider: 'codex', replaceId: first.id })
+    assert.equal(replaced.id, first.id)
+    assert.deepEqual(replaced.models, ['gpt-5.4'], 'omitting models must preserve the existing list')
+    assert.equal(service.list().length, 1)
   })
   await check('Codex real quota URL/headers parse 5h, weekly, absolute reset and credit balance', async () => {
     const reset = Math.floor(Date.now() / 1000) + 3600

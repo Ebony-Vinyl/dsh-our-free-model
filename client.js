@@ -709,6 +709,8 @@ window.__ModuleLoader__.load({
         'sub.operationFailed': '操作未完成，请重试。',
         'sub.enabled': '启用账号',
         'sub.refreshQuota': '刷新额度',
+        'sub.reimport': '重新导入',
+        'sub.replacing': '将替换现有账号，并保留其模型与启用状态。',
         'sub.remove': '移除',
         'sub.confirmRemove': '确认移除',
         'sub.removeQuestion': '移除此账号及保存的凭据？',
@@ -1584,6 +1586,8 @@ window.__ModuleLoader__.load({
         'sub.operationFailed': 'Operation failed. Please retry.',
         'sub.enabled': 'Enable account',
         'sub.refreshQuota': 'Refresh quotas',
+        'sub.reimport': 'Re-import',
+        'sub.replacing': 'Replace this account while keeping its models and enabled state.',
         'sub.remove': 'Remove',
         'sub.confirmRemove': 'Confirm removal',
         'sub.removeQuestion': 'Remove this account and its saved credentials?',
@@ -6400,10 +6404,10 @@ window.__ModuleLoader__.load({
     }
 
     function SubscriptionImport(props) {
-      const { t, localProvider, busy, onImport, onCancel } = props
-      const [provider, setProvider] = useState(localProvider ?? 'codex')
+      const { t, localProvider, initialProvider, replaceId, replaceModels, busy, onImport, onCancel } = props
+      const [provider, setProvider] = useState(initialProvider ?? localProvider ?? 'codex')
       const [label, setLabel] = useState('')
-      const [modelText, setModelText] = useState('')
+      const [modelText, setModelText] = useState((replaceModels ?? []).join(', '))
       const [mode, setMode] = useState('paste')
       const [json, setJson] = useState('')
       const [apiKey, setApiKey] = useState('')
@@ -6444,7 +6448,7 @@ window.__ModuleLoader__.load({
           id.length > 240 || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/.test(id) || id.startsWith('subscription:'))) {
           setError(t('sub.invalidModels')); return
         }
-        const body = { provider, models, ...(label.trim() ? { label: label.trim() } : {}) }
+        const body = { provider, models, ...(replaceId ? { replaceId } : {}), ...(label.trim() ? { label: label.trim() } : {}) }
         if (!localProvider && provider === 'api') {
           if (!apiKey.trim()) { setError(t('sub.keyRequired')); return }
           let endpoint
@@ -6470,10 +6474,11 @@ window.__ModuleLoader__.load({
       }
       const disabled = busy || reading
       return h('form', { className: 'ofm_subform', onSubmit: submit, 'aria-label': t('sub.add'), 'aria-busy': disabled },
+        replaceId ? h('p', { className: 'ofm_note' }, t('sub.replacing')) : null,
         h('div', { className: 'ofm_duo' },
           h('label', null, t('sub.provider'),
             h('select', {
-              className: 'ofm_input', 'aria-label': t('sub.provider'), value: provider, disabled: disabled || !!localProvider,
+              className: 'ofm_input', 'aria-label': t('sub.provider'), value: provider, disabled: disabled || !!localProvider || !!replaceId,
               onChange: event => { clearCredentials(); setProvider(event.target.value) },
             }, Object.entries(SUBSCRIPTION_PROVIDERS).map(([id, name]) => h('option', { key: id, value: id }, name)))),
           h('label', null, t('sub.label'),
@@ -6534,7 +6539,7 @@ window.__ModuleLoader__.load({
           h('time', { dateTime: window.resetsAt }, new Date(reset).toLocaleString(t.locale === 'zh' ? 'zh-CN' : 'en-US'))) : null)
     }
 
-    function SubscriptionAccount({ t, account, busy, mutate }) {
+    function SubscriptionAccount({ t, account, busy, mutate, onReimport }) {
       const [confirm, setConfirm] = useState(false)
       const quota = account.quota ?? {}
       const windows = Array.isArray(quota.windows) ? quota.windows : []
@@ -6562,7 +6567,8 @@ window.__ModuleLoader__.load({
           Number.isFinite(checked) ? h('span', null, `${t('sub.checked')}: `,
             h('time', { dateTime: quota.checkedAt }, new Date(checked).toLocaleString(t.locale === 'zh' ? 'zh-CN' : 'en-US'))) : null),
         quota.status === 'error' ? h('div', { className: 'ofm_callout ofm_error', role: 'alert' },
-          h('b', null, t('sub.quotaFailed')), quota.error?.message ? h('span', null, quota.error.message) : null) : null,
+          h('b', null, t('sub.quotaFailed')), quota.error?.message ? h('span', null, quota.error.message) : null,
+          quota.error?.code === 'AUTH_REQUIRED' ? h(Button, { kind: 'ghost', disabled: !!busy, onClick: onReimport }, t('sub.reimport')) : null) : null,
         h('div', { className: 'ofm_subwindows' },
           h(SubscriptionWindow, { t, window: fiveHour, fallback: t('sub.fiveHour') }),
           h(SubscriptionWindow, { t, window: weekly, fallback: t('sub.weekly') }),
@@ -6629,7 +6635,8 @@ window.__ModuleLoader__.load({
         panel.error ? h(PanelError, { t, title: t('sub.loadFailed'), message: t('sub.operationFailed'), onRetry: panel.reload }) : null,
         error ? h('div', { className: 'ofm_callout ofm_error', role: 'alert' }, error) : null,
         editor ? h(SubscriptionImport, {
-          key: editor.provider ?? 'manual', t, localProvider: editor.provider, busy: !!busy,
+          key: editor.replaceId ?? (editor.local ? `local:${editor.provider}` : editor.provider ?? 'manual'),
+          t, initialProvider: editor.provider, localProvider: editor.local ? editor.provider : undefined, replaceId: editor.replaceId, replaceModels: editor.replaceModels, busy: !!busy,
           onImport: mutate, onCancel: () => setEditor(null),
         }) : null,
         candidates !== null ? h('section', { className: 'ofm_subcandidates', 'aria-label': t('sub.candidates') },
@@ -6637,9 +6644,15 @@ window.__ModuleLoader__.load({
           candidates.length === 0 ? h('span', { className: 'ofm_note' }, t('sub.noCandidates'))
             : candidates.map(row => h('div', { key: row.id, className: 'ofm_directoryactions' },
               h('span', null, SUBSCRIPTION_PROVIDERS[row.provider]),
-              h(Button, { disabled: !!busy, onClick: () => { setEditor({ provider: row.provider }); setError('') } }, t('sub.review'))))) : null,
+              h(Button, { disabled: !!busy, onClick: () => {
+                const matches = accounts.filter(account => account.provider === row.provider)
+                setEditor({ provider: row.provider, local: true,
+                  ...(matches.length === 1 ? { replaceId: matches[0].id, replaceModels: matches[0].models } : {}) })
+                setError('')
+              } }, t('sub.review'))))) : null,
         panel.status === 'ready' ? accounts.length
-          ? accounts.map(account => h(SubscriptionAccount, { key: account.id, t, account, busy, mutate }))
+          ? accounts.map(account => h(SubscriptionAccount, { key: account.id, t, account, busy, mutate,
+            onReimport: () => { setEditor({ provider: account.provider, replaceId: account.id, replaceModels: account.models }); setError('') } }))
           : h('p', { className: 'ofm_note' }, t('sub.empty')) : null)
     }
 

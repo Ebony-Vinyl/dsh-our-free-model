@@ -334,6 +334,18 @@ export function createSubscriptions({
     models: [...account.models],
     quota: clone(account.quota),
   })
+  // The same native file imported twice is the same account, not a second
+  // one. Tokens that changed after a fresh sign-in are deliberately not
+  // guessed at: a caller replaces that record explicitly with replaceId.
+  const sameCredentials = (left, right) => {
+    if (left.provider !== right.provider) return false
+    if ((left.baseUrl ?? null) !== (right.baseUrl ?? null) || (left.format ?? null) !== (right.format ?? null)) return false
+    const names = new Set([...Object.keys(left.credentials), ...Object.keys(right.credentials)])
+    for (const name of names) {
+      if ((left.credentials[name] ?? null) !== (right.credentials[name] ?? null)) return false
+    }
+    return true
+  }
   const find = id => {
     if (typeof id !== 'string') throw fail('INVALID_INPUT', 'Invalid subscription ID')
     const account = accounts.find(row => row.id === id)
@@ -530,8 +542,31 @@ export function createSubscriptions({
   return {
     list() { return accounts.map(publicRow) },
     import(input) {
+      const replaceId = input?.replaceId
+      if (replaceId !== undefined && (typeof replaceId !== 'string' || replaceId === '')) {
+        throw fail('INVALID_INPUT', 'Invalid replacement account')
+      }
       const valid = normalize(input)
       const now = new Date().toISOString()
+      if (replaceId !== undefined) {
+        const prior = find(replaceId)
+        if (prior.provider !== valid.provider) throw fail('INVALID_INPUT', 'Replacement provider mismatch')
+        const next = { ...prior, ...valid, label: input.label === undefined ? prior.label : valid.label,
+          models: input.models === undefined ? prior.models : valid.models,
+          id: prior.id, enabled: prior.enabled,
+          createdAt: prior.createdAt, updatedAt: now, quota: blankQuota() }
+        persist(accounts.map(row => row === prior ? next : row))
+        return publicRow(next)
+      }
+      const duplicate = accounts.find(row => sameCredentials(row, valid))
+      if (duplicate) {
+        const next = { ...duplicate, ...valid, label: input.label === undefined ? duplicate.label : valid.label,
+          models: input.models === undefined ? duplicate.models : valid.models,
+          id: duplicate.id, enabled: duplicate.enabled,
+          createdAt: duplicate.createdAt, updatedAt: now, quota: blankQuota() }
+        persist(accounts.map(row => row === duplicate ? next : row))
+        return publicRow(next)
+      }
       const account = { ...valid, id: crypto.randomUUID(), enabled: true, createdAt: now, updatedAt: now, quota: blankQuota() }
       persist([...accounts, account])
       return publicRow(account)
@@ -554,7 +589,8 @@ export function createSubscriptions({
       let credentials
       try { credentials = readPrivate(path.join(home, ...NATIVE[input.provider])) }
       catch { throw fail('LOCAL_AUTH_UNAVAILABLE', 'Native subscription credentials unavailable', 404) }
-      return this.import({ provider: input.provider, credentials, label: input.label, models: input.models })
+      return this.import({ provider: input.provider, credentials, label: input.label, models: input.models,
+        ...(input.replaceId === undefined ? {} : { replaceId: input.replaceId }) })
     },
     async refreshQuota({ id, signal } = {}) {
       const account = find(id)

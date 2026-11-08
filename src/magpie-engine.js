@@ -485,6 +485,87 @@ function engineAppearanceBridge() {
   }).observe(root, { attributes: true, attributeFilter: ['data-theme'] })
 }
 
+// Google's Antigravity verification link arrives inside a transient status
+// toast. Keep the link available after the toast clears, without changing the
+// engine's account flow or accepting any other host.
+function engineVerificationLinks() {
+  const pattern = /https:\/\/accounts\.google\.com\/[^\s"'<>]+/g
+  let latest = ''
+  let banner
+  let code
+  let rendered = ''
+  let dismissed = ''
+  const makeButton = label => {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = label
+    button.style.cssText = 'font:12px/1.4 system-ui,sans-serif;padding:5px 9px;border:1px solid var(--line,#cfd4d1);border-radius:6px;background:var(--card,#fff);color:var(--fg,#1c1c21);cursor:pointer'
+    return button
+  }
+  const ensure = () => {
+    if (!document.body) return
+    if (banner && rendered === latest) return
+    if (!banner && dismissed === latest) return
+    if (!banner) {
+      banner = document.createElement('div')
+      banner.id = 'ofm-verification-link'
+      banner.setAttribute('role', 'status')
+      banner.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:min(560px,calc(100vw - 32px));padding:12px 14px;border:1px solid var(--line,#d0d5d2);border-radius:10px;background:var(--card,#fff);color:var(--fg,#1c1c21);box-shadow:0 8px 28px rgba(0,0,0,.18);display:grid;gap:8px;font:12px/1.5 system-ui,sans-serif'
+      const title = document.createElement('strong')
+      title.textContent = 'Google 账号验证'
+      code = document.createElement('code')
+      code.style.cssText = 'display:block;max-height:72px;overflow:auto;user-select:text;font:11px/1.5 ui-monospace,Consolas,monospace;color:var(--fg-2,#555);overflow-wrap:anywhere'
+      const actions = document.createElement('div')
+      actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center'
+      const copy = makeButton('复制验证链接')
+      copy.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(latest)
+          copy.textContent = '已复制'
+        } catch {
+          const range = document.createRange()
+          range.selectNodeContents(code)
+          const selection = window.getSelection()
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+          copy.textContent = '已选中，请复制'
+        }
+        setTimeout(() => { copy.textContent = '复制验证链接' }, 1800)
+      }
+      const open = document.createElement('a')
+      open.textContent = '打开验证页面'
+      open.target = '_blank'
+      open.rel = 'noopener noreferrer'
+      open.style.cssText = 'font:12px/1.4 system-ui,sans-serif;padding:5px 9px;border:1px solid var(--line,#cfd4d1);border-radius:6px;color:var(--accent,#2f6d59);text-decoration:none'
+      const close = makeButton('关闭')
+      close.onclick = () => { dismissed = latest; banner.remove(); banner = undefined; code = undefined; rendered = '' }
+      actions.append(copy, open, close)
+      banner.append(title, code, actions)
+      document.body.append(banner)
+    }
+    code.textContent = latest
+    banner.querySelector('a').href = latest
+    rendered = latest
+  }
+  const scan = () => {
+    if (!document.body) return
+    let found = false
+    for (const node of document.querySelectorAll('.status')) {
+      const matches = (node.textContent || '').match(pattern)
+      if (!matches?.length) continue
+      found = true
+      latest = matches[0].replace(/[)\].,;]+$/, '')
+      ensure()
+      continue
+    }
+    if (!found && !banner) dismissed = ''
+  }
+  new MutationObserver(scan).observe(document.documentElement, {
+    childList: true, subtree: true, characterData: true,
+  })
+  scan()
+}
+
 function engineProductCopy(brandIcon) {
   if (typeof window.t !== 'function' || typeof I18N === 'undefined') return
   const translate = window.t
@@ -600,7 +681,7 @@ function rewriteHTML(html, pathname, prefix, mount = MAGPIE_UI_PREFIX) {
   if (plugin) return html
   const main = pathname === '/' || pathname === '/index.html'
   const appearance = main
-    ? `<style id="ofm-engine-appearance">${engineAppearanceCSS}</style><script>(${engineAppearanceBridge.toString()})();</script>` : ''
+    ? `<style id="ofm-engine-appearance">${engineAppearanceCSS}</style><script>(${engineAppearanceBridge.toString()})();</script><script>(${engineVerificationLinks.toString()})();</script>` : ''
   if (main) {
     // Include the bundled pages' dictionaries, registered after core i18n.js.
     html = html.replace(/<script\b[^>]*\bsrc=(["'])(?:\.\/)?app\.js(?:\?[^"']*)?\1[^>]*>\s*<\/script>/i,

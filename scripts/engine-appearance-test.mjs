@@ -64,6 +64,39 @@ try {
   assert.equal(await frame.evaluate(() => providers.presets.find(preset => preset.id === 'remote-magpie')?.name), 'Remote magpie')
   console.log('ok main UI hides upstream brand and preserves real provider controls')
 
+  await frame.evaluate(() => {
+    const other = document.createElement('div')
+    other.className = 'status err'
+    other.textContent = 'fixture failure https://example.invalid/verify?demo=1'
+    document.body.append(other)
+  })
+  await frame.waitForTimeout(100)
+  assert.equal(await frame.locator('#ofm-verification-link').count(), 0,
+    'only the Google verification host may open the persistent helper')
+  await frame.evaluate(() => {
+    const google = document.createElement('div')
+    google.className = 'status err'
+    google.textContent = 'fixture failure https://accounts.google.com/v3/signin/continue?demo=1'
+    document.body.append(google)
+  })
+  await frame.locator('#ofm-verification-link').waitFor()
+  assert.match(await frame.locator('#ofm-verification-link').innerText(), /accounts\.google\.com\/v3\/signin\/continue\?demo=1/)
+  assert.equal(await frame.locator('#ofm-verification-link a').getAttribute('href'),
+    'https://accounts.google.com/v3/signin/continue?demo=1')
+  await frame.locator('#ofm-verification-link').getByRole('button', { name: '关闭', exact: true }).click()
+  await frame.locator('#ofm-verification-link').waitFor({ state: 'detached' })
+  await frame.evaluate(() => document.querySelectorAll('.status').forEach(node => node.remove()))
+  await frame.waitForTimeout(100)
+  await frame.evaluate(() => {
+    const again = document.createElement('div')
+    again.className = 'status err'
+    again.textContent = 'fixture retry https://accounts.google.com/v3/signin/continue?demo=2'
+    document.body.append(again)
+  })
+  await frame.locator('#ofm-verification-link').waitFor()
+  assert.match(await frame.locator('#ofm-verification-link').innerText(), /demo=2/)
+  console.log('ok Google verification links stay available without accepting other hosts')
+
   const theme = {
     type: 'ofm:engine-theme', fontFamily: '"Arial", sans-serif', colorScheme: 'light',
     variables: {
