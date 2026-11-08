@@ -1,5 +1,5 @@
 {
-  "version": "2.8.2",
+  "version": "2.8.3",
   "algorithm": "sha256",
   "files": [
     {
@@ -49,8 +49,8 @@
     },
     {
       "path": "package.json",
-      "size": 5178,
-      "sha256": "8f6dd1a7f5aa21f085789312fb946025213eea0a1d03f8f4efdeeba18d3b6ff0"
+      "size": 5208,
+      "sha256": "d717e757e7c9358b5c7f5dcfcb3f5313564d677e7e3e1e75ef60dec03ee1839b"
     },
     {
       "path": "src/adapter.js",
@@ -135,37 +135,37 @@
     {
       "path": "src/engine-parts/win32-x64.000.part",
       "size": 4194304,
-      "sha256": "e9848284c36cdbe9b7c33b6d6dadbc351c1cf1d2dda75bae334d09efa34821c3"
+      "sha256": "271153d125146ba96c31094e624fc82ee336bc3e71f1d56d5863d65b502139ff"
     },
     {
       "path": "src/engine-parts/win32-x64.001.part",
       "size": 4194304,
-      "sha256": "001b67dde65246e33a1fb285eb299a816126db1168d9ee8459f59b25a22536d1"
+      "sha256": "9b1e05b21030112cd03751c4d629f58aeda6a069f6eb0abc893afa0fa29d9357"
     },
     {
       "path": "src/engine-parts/win32-x64.002.part",
       "size": 4194304,
-      "sha256": "80d3425897688eb84c797f70a00fae1c347a68e2d42b8963f8969eede24acfd9"
+      "sha256": "a68960865289e3c8d71bc95c7bb7160ff80495aa67e4f96c070af0a9014f8c5a"
     },
     {
       "path": "src/engine-parts/win32-x64.003.part",
       "size": 4194304,
-      "sha256": "29c1553354b563cc322e270b1b1a062fb8375ef484ef9bd855ee731c85435b77"
+      "sha256": "58875c04d968c05f11c05716304f700fbd8441dac4a4ac4cb7be84a7ad2a0334"
     },
     {
       "path": "src/engine-parts/win32-x64.004.part",
       "size": 4194304,
-      "sha256": "4a436e1d813407269d29291d349ec345c71532f18b9c7cd6fab3c770190fb336"
+      "sha256": "116f4f9cf15d75ca00dca072eb8610de0f88f18cd2d4c4f08c1eb768cfb55da2"
     },
     {
       "path": "src/engine-parts/win32-x64.005.part",
       "size": 4194304,
-      "sha256": "105729c3b79ef03cb5d8af809b331ba901bfd57fda2e417a0104753c4186ed4a"
+      "sha256": "364374b4a62dac550fa25b498b0b064a7bae74a7496867ad7c1dda6e9cfeff8f"
     },
     {
       "path": "src/engine-parts/win32-x64.006.part",
-      "size": 2058981,
-      "sha256": "e21f28935ce2fa13dad0b3746a3799db6340346d4fc35fd21f6b20f00c0f36d7"
+      "size": 3512186,
+      "sha256": "f95bcd7723547caa0827e8efc4f5a4586154011f54c1a5eb85c393b905de2328"
     },
     {
       "path": "src/engine-payload.js",
@@ -224,8 +224,8 @@
     },
     {
       "path": "src/magpie-engine.js",
-      "size": 57629,
-      "sha256": "7e33bc7481fc8c5051a7f3dd1fcb61973111c2b9bab7cc08331836a709aa1576"
+      "size": 58641,
+      "sha256": "37e4fe37a927793b04a8e6a8f4d242174d008d954cdda486fee2a3e275ec4dff"
     },
     {
       "path": "src/magpie-models.js",
@@ -389,8 +389,8 @@
     },
     {
       "path": "vendor/magpie/engine.json",
-      "size": 9162,
-      "sha256": "97e4040e37c22f5aeef0a61bc7b21f80d5fdd4f685d52a992b6da43113f3e517"
+      "size": 9435,
+      "sha256": "526a1a719be073ea8be97f9c03dbf6b8ddd0f53bc9fead91a079a00ea5af4412"
     },
     {
       "path": "vendor/magpie/LICENSE",
@@ -399,8 +399,8 @@
     },
     {
       "path": "vendor/magpie/NOTICE.md",
-      "size": 123764,
-      "sha256": "239962f2e01f9a19455ee3377a89f7e8113a4981dc0c6f1ff87298a52ace4d4c"
+      "size": 135147,
+      "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ]
 }
