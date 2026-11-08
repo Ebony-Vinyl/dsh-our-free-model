@@ -74,6 +74,10 @@ const server = http.createServer((req, res) => {
 })
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 server.unref()
+// Same reason as legacy-upgrade-test: Node's default 5s keep-alive timeout
+// closes the sockets a finished download leaves pooled while the checks
+// between downloads run, and the next request dies as ECONNRESET.
+server.keepAliveTimeout = 600_000
 const base = `http://127.0.0.1:${server.address().port}`
 
 function updaterFor(pkgDir, dataDir) {

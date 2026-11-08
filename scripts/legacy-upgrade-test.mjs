@@ -55,6 +55,12 @@ const server = http.createServer((req, res) => {
   res.end(rel === tamperedPath ? Buffer.alloc(body.length) : body)
 })
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+// Node's default 5s keep-alive timeout closes the pooled idle sockets a
+// finished download left behind while the checks between downloads run
+// (restore and its file-by-file comparison can take that long); the next
+// request then dies on the closed socket as ECONNRESET. Hold the
+// connections for the whole run instead.
+server.keepAliveTimeout = 600_000
 const url = `http://127.0.0.1:${server.address().port}/feed/manifest.json`
 let checks = 0
 const check = async (name, run) => { await run(); console.log(`ok ${++checks} - ${name}`) }

@@ -136,7 +136,20 @@ for (const [target, entry] of Object.entries(metadata.binaries)) {
       || !zlib.gunzipSync(compressed, { maxOutputLength: binary.length }).equals(binary)) throw new Error(`分片还原结果不一致：${target}`)
     continue
   }
-  const compressed = zlib.gzipSync(binary, { level: 9 })
+  // 旧升级器把清单限制在 80 个文件、每个文件 4 MiB。引擎增大后，普通
+  // gzip -9 会溢出到第 8 个分片，把整个清单顶过 80（非分片文件现有 73 个，
+  // 只容得下 7 个分片）；此时改用 zopfli 重新压缩——仍是标准的 gzip 流，
+  // 只是更省的 DEFLATE 编码，任何 gunzip 都能解开（上面的校验要求的正是
+  // 这一点，不是某个特定压缩器）。zopfli 压 70+ MB 需要几分钟，只在溢出
+  // 时发生。
+  let compressed = zlib.gzipSync(binary, { level: 9 })
+  const partBudget = 7 * 4 * 1024 * 1024
+  if (compressed.length > partBudget) {
+    const mod = await import('@gfx/zopfli')
+    const gzipAsync = mod.gzipAsync ?? mod.default?.gzipAsync
+    compressed = await gzipAsync(binary, { numiterations: 15 })
+    if (compressed.length > partBudget) throw new Error(`zopfli 压缩后仍超出 7 个分片的 4 MiB 预算：${compressed.length}`)
+  }
   const parts = []
   for (let offset = 0; offset < compressed.length; offset += 4 * 1024 * 1024) {
     const bytes = compressed.subarray(offset, offset + 4 * 1024 * 1024)
