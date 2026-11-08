@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
+import { createReadStream, existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
@@ -550,6 +550,30 @@ async function fixtureTests() {
     await early.close()
     assert((await outcome) instanceof Error)
     assert.equal(early.status().state, 'closed')
+  })
+  await check('a claude-tui-broken mark from a previous engine is forgotten when the revision changes', async () => {
+    const metadata = JSON.parse(await readFile(path.join(root, 'vendor/magpie/engine.json'), 'utf8'))
+    const dataDir = await makeFixture('tui-broken')
+    const agentLocal = path.join(dataDir, 'magpie', 'agent-home', 'AppData', 'Local')
+    const marker = path.join(agentLocal, 'magpie', 'claude-tui-broken')
+    const revisionFile = path.join(dataDir, 'magpie', '.ofm-engine-revision')
+    await mkdir(path.join(agentLocal, 'magpie'), { recursive: true })
+    await writeFile(marker, '3')
+    await writeFile(revisionFile, '0000000000000000000000000000000000000000\n')
+    const upgraded = engine({ dataDir, binary: process.execPath })
+    try {
+      await upgraded.start()
+      assert(!existsSync(marker), 'a stale broken mark must not outlive an engine upgrade')
+      assert.equal((await readFile(revisionFile, 'utf8')).trim(), metadata.revision)
+      // The same revision's own mark is its business: an unchanged engine
+      // keeps it, so its backoff still spares every boot a readyWait.
+      await writeFile(marker, '2')
+    } finally { await upgraded.close() }
+    const same = engine({ dataDir, binary: process.execPath })
+    try {
+      await same.start()
+      assert(existsSync(marker), 'an up-to-date engine keeps its own broken mark')
+    } finally { await same.close() }
   })
 }
 

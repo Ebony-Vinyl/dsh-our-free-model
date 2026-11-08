@@ -5,7 +5,7 @@ import { chmod, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/prom
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const revision = '6a900e0d048e592cbc9120dd2c3f515aab9ef04a'
+export const revision = 'eef99e4bbebaf363840847dce4a33ee72eb37945'
 const upstream = 'https://github.com/yetone/magpie.git'
 const version = `ofm-${revision.slice(0, 12)}`
 const root = fileURLToPath(new URL('../', import.meta.url))

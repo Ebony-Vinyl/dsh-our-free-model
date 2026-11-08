@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "name": "magpie",
   "upstream": "https://github.com/yetone/magpie.git",
-  "revision": "6a900e0d048e592cbc9120dd2c3f515aab9ef04a",
-  "version": "ofm-6a900e0d048e",
+  "revision": "eef99e4bbebaf363840847dce4a33ee72eb37945",
+  "version": "ofm-eef99e4bbeba",
   "license": "MIT",
   "build": {
     "command": [
@@ -14,7 +14,7 @@
       "-trimpath",
       "-buildvcs=true",
       "-ldflags",
-      "-s -w -X main.version=ofm-6a900e0d048e",
+      "-s -w -X main.version=ofm-eef99e4bbeba",
       "."
     ],
     "go": "go version go1.27.1 windows/amd64"
@@ -28,47 +28,47 @@
   "binaries": {
     "win32-x64": {
       "path": "bin/magpie-win32-x64.exe",
-      "sha256": "5fafc3a970d9144fedd21820c6afec55b86c8206f916498144c3611ec9795bc2",
+      "sha256": "02876489caff4aaac2a50356cabff3fe708f17d07af052f6fd7b8433a4ba7446",
       "compressed": {
         "algorithm": "gzip",
-        "size": 27224805,
-        "sha256": "086f69612914773fa96749bea7ddf4a7b319ff8e3e7404df14a298d69221bcb5",
-        "outputSize": 64812032,
+        "size": 28678010,
+        "sha256": "d95463d290d9137cd39cf1631f8f8f83a803d56d0228921e610cabaa8a15796f",
+        "outputSize": 72745472,
         "parts": [
           {
             "path": "src/engine-parts/win32-x64.000.part",
             "size": 4194304,
-            "sha256": "e9848284c36cdbe9b7c33b6d6dadbc351c1cf1d2dda75bae334d09efa34821c3"
+            "sha256": "271153d125146ba96c31094e624fc82ee336bc3e71f1d56d5863d65b502139ff"
           },
           {
             "path": "src/engine-parts/win32-x64.001.part",
             "size": 4194304,
-            "sha256": "001b67dde65246e33a1fb285eb299a816126db1168d9ee8459f59b25a22536d1"
+            "sha256": "9b1e05b21030112cd03751c4d629f58aeda6a069f6eb0abc893afa0fa29d9357"
           },
           {
             "path": "src/engine-parts/win32-x64.002.part",
             "size": 4194304,
-            "sha256": "80d3425897688eb84c797f70a00fae1c347a68e2d42b8963f8969eede24acfd9"
+            "sha256": "a68960865289e3c8d71bc95c7bb7160ff80495aa67e4f96c070af0a9014f8c5a"
           },
           {
             "path": "src/engine-parts/win32-x64.003.part",
             "size": 4194304,
-            "sha256": "29c1553354b563cc322e270b1b1a062fb8375ef484ef9bd855ee731c85435b77"
+            "sha256": "58875c04d968c05f11c05716304f700fbd8441dac4a4ac4cb7be84a7ad2a0334"
           },
           {
             "path": "src/engine-parts/win32-x64.004.part",
             "size": 4194304,
-            "sha256": "4a436e1d813407269d29291d349ec345c71532f18b9c7cd6fab3c770190fb336"
+            "sha256": "116f4f9cf15d75ca00dca072eb8610de0f88f18cd2d4c4f08c1eb768cfb55da2"
           },
           {
             "path": "src/engine-parts/win32-x64.005.part",
             "size": 4194304,
-            "sha256": "105729c3b79ef03cb5d8af809b331ba901bfd57fda2e417a0104753c4186ed4a"
+            "sha256": "364374b4a62dac550fa25b498b0b064a7bae74a7496867ad7c1dda6e9cfeff8f"
           },
           {
             "path": "src/engine-parts/win32-x64.006.part",
-            "size": 2058981,
-            "sha256": "e21f28935ce2fa13dad0b3746a3799db6340346d4fc35fd21f6b20f00c0f36d7"
+            "size": 3512186,
+            "sha256": "f95bcd7723547caa0827e8efc4f5a4586154011f54c1a5eb85c393b905de2328"
           }
         ]
       }
@@ -196,6 +196,13 @@
       ]
     },
     {
+      "path": "github.com/gen2brain/h265",
+      "version": "v0.2.4",
+      "licenses": [
+        "LICENSE"
+      ]
+    },
+    {
       "path": "github.com/go-ole/go-ole",
       "version": "v1.3.0",
       "licenses": [
@@ -297,6 +304,13 @@
       "version": "v0.4.7",
       "licenses": [
         "LICENSE.txt"
+      ]
+    },
+    {
+      "path": "github.com/santhosh-tekuri/jsonschema/v6",
+      "version": "v6.0.3",
+      "licenses": [
+        "LICENSE"
       ]
     },
     {

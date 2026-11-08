@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, createHash } from 'node:crypto'
 import { existsSync, readFileSync, createReadStream, statSync } from 'node:fs'
-import { mkdir, readFile, writeFile, rename, link, unlink, realpath } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, rename, link, unlink, realpath, rm } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
 import path from 'node:path'
@@ -779,6 +779,22 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
       const agentLocal = path.join(agentHome, 'AppData', 'Local')
       for (const dir of [agentHome, agentRoaming, agentLocal]) {
         await mkdir(dir, { recursive: true, mode: 0o700 })
+      }
+      // The engine goes straight to -p for a while after Claude Code's
+      // interactive mode failed to start (its claude-tui-broken mark, under
+      // this engine's LOCALAPPDATA). A mark earned by the previous engine
+      // says nothing about this one: after an engine upgrade that carries a
+      // start fix, a stale mark would keep the TUI off for up to a day.
+      // Forget it when the engine's revision changes.
+      const engineRevision = metadata.revision || ''
+      if (engineRevision !== '') {
+        const revisionFile = path.join(home, '.ofm-engine-revision')
+        let previousRevision = ''
+        try { previousRevision = (await readFile(revisionFile, 'utf8')).trim() } catch { /* first boot: no mark to forget either */ }
+        if (previousRevision !== engineRevision) {
+          await rm(path.join(agentLocal, 'magpie', 'claude-tui-broken'), { force: true }).catch(() => {})
+          await writeFile(revisionFile, `${engineRevision}\n`).catch(() => {})
+        }
       }
       // Windows folds every ancestor of a session folder into a 260-character
       // budget; this redirection adds ~40, and claude appends a slug of the

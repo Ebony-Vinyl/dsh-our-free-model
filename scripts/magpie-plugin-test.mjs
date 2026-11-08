@@ -227,19 +227,23 @@ try {
     const listing = await ok(first, 'GET', '/engine/ui/api/providers')
     assert.ok(listing.json && typeof listing.json === 'object')
     const presets = listing.json.presets.filter(preset => preset.kind !== 'partner')
-    // 60 pinned built-ins minus Huawei Cloud, which this build does not offer.
-    assert.equal(presets.length, 59, 'every offered built-in preset must reach the plugin management API')
-    assert.equal(new Set(presets.map(preset => preset.id)).size, 59)
+    // Upstream's +3 built-ins since 6a900e0 (longcat, volcengine-decision,
+    // voyage), still minus Huawei Cloud, which this build does not offer.
+    assert.equal(presets.length, 62, 'every offered built-in preset must reach the plugin management API')
+    assert.equal(new Set(presets.map(preset => preset.id)).size, 62)
     const regional = presets.filter(preset => preset.regions?.length)
     assert.equal(regional.length, 14)
-    assert.equal(regional.reduce((total, preset) => total + preset.regions.length, 0), 64)
+    // One fewer than 64: Tencent's enterprise plan merged into the plan tier
+    // as lkeap's host moved to tokenhub.tencentmaas.com (upstream).
+    assert.equal(regional.reduce((total, preset) => total + preset.regions.length, 0), 63)
     // The excluded channel must be absent from the very list the add sheet reads.
     assert.ok(!presets.some(preset => preset.id === 'huaweicloud'), 'Huawei Cloud must not be offered')
     assert.ok(!JSON.stringify(presets).toLowerCase().includes('huawei'), 'no Huawei Cloud preset may reach the page')
     for (const id of ['moonshot-cn', 'kimi-code', 'stepfun', 'stepfun-cn', 'tencent-cloud',
       'qwen-cn', 'qwen-token-plan', 'bailian-token-plan', 'qwencloud', 'qwencloud-token-plan', 'bedrock', 'nous', 'commandcode', 'modelscope',
       'aihubmix', 'pipellm', '302ai', 'cherryin', 'yylx', 'typesafe', 'vercel-jev', 'cloudflare-jev',
-      'bailian-decision', 'qwen-decision', 'omlx', 'mlx-serve', 'remote-magpie']) {
+      'bailian-decision', 'qwen-decision', 'omlx', 'mlx-serve', 'remote-magpie',
+      'longcat', 'volcengine-decision', 'voyage']) {
       assert.ok(presets.some(preset => preset.id === id), `missing native preset ${id}`)
     }
   })
