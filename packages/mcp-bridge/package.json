@@ -1,9 +1,9 @@
 {
   "name": "@ebony-vinyl/ofm-mcp-bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Official MCP stdio bridge for the Our Free Model standalone service. Exposes ofm_models / ofm_chat / ofm_usage tools to any MCP client.",
+  "description": "Official MCP stdio bridge for the Our Free Model standalone service. Exposes ofm_models / ofm_chat / ofm_task / ofm_usage tools to any MCP client.",
   "license": "MIT",
   "bin": {
     "ofm-mcp": "./src/index.mjs"

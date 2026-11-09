@@ -72,7 +72,7 @@ function check(name, cond, extra = "") {
 const init = byId[1]?.result?.serverInfo;
 check("initialize", Boolean(init), `server=${init?.name} v${init?.version}`);
 const tools = byId[2]?.result?.tools?.map((t) => t.name) || [];
-check("tools/list", tools.includes("ofm_models") && tools.includes("ofm_chat") && tools.includes("ofm_usage"), `tools=${tools.join(",")}`);
+check("tools/list", tools.includes("ofm_models") && tools.includes("ofm_chat") && tools.includes("ofm_usage") && tools.includes("ofm_task"), `tools=${tools.join(",")}`);
 const chatParams = byId[2]?.result?.tools?.find((t) => t.name === "ofm_chat")?.inputSchema?.properties || {};
 check("ofm_chat exposes no max_tokens", !("max_tokens" in chatParams), `params=${Object.keys(chatParams).join(",")}`);
 const usage = byId[3]?.result?.content?.[0]?.text || "";

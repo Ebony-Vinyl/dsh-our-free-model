@@ -4,7 +4,8 @@
  *
  * Tools:
  *   ofm_models    — list models available on the local gateway
- *   ofm_chat      — one prompt in, one reply out
+ *   ofm_chat      — one prompt in, one reply out (optional save_to keeps long output on disk, returns a preview)
+ *   ofm_task      — delegate a multi-step task to a model running an internal sandboxed read/write loop; only the final summary returns
  *   ofm_usage     — local usage statistics (no upstream request)
  *   ofm_channels  — account-channel overview (accounts, credits, EAC pool)
  *   ofm_checkin   — daily check-in / claim credits for logged-in channels
@@ -17,7 +18,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Supervisor, envConfig, log } from "./supervisor.mjs";
 import { RetryBudget, sleepWithBackoff, isBudgetRejection } from "./retry.mjs";
@@ -92,7 +93,7 @@ const NO_TOOLS_NOTE =
   "[note] The upstream model emitted tool calls (it behaves like a CLI agent). " +
   "This request is a plain API call with no tools; retried once with a strict text-only instruction.";
 
-const server = new McpServer({ name: "ofm-mcp-bridge", version: "0.2.0" });
+const server = new McpServer({ name: "ofm-mcp-bridge", version: "0.3.0" });
 
 server.tool(
   "ofm_models",
@@ -109,105 +110,334 @@ server.tool(
   }
 );
 
+// One full chat round-trip with self-healing: max_tokens halve-on-reject and
+// 429 backoff via RetryBudget, one strict text-only retry when the model emits
+// tool_calls, and a single budget doubling when reasoning consumed everything
+// with no visible text. Callers never pass max_tokens themselves.
+async function completeText(model, messages, notes, initialTokens) {
+  const budget = new RetryBudget();
+  const disableRewrite = process.env.OFM_DISABLE_PROMPT_REWRITE === "1";
+
+  async function call(msgs, tokens) {
+    for (;;) {
+      try {
+        const payload = { model, messages: msgs, stream: false };
+        if (tokens !== undefined) payload.max_tokens = tokens;
+        return await ofmFetch("/v1/chat/completions", { method: "POST", body: JSON.stringify(payload) });
+      } catch (err) {
+        if (isBudgetRejection(err.message) && budget.take()) {
+          const halved = Math.floor((tokens ?? 32768) / 2);
+          if (halved >= 256) {
+            notes.push(`[note] max_tokens=${tokens ?? "upstream default"} rejected by upstream, halved to ${halved}.`);
+            tokens = halved;
+            continue;
+          }
+        }
+        if (err.status === 429 && budget.take()) {
+          log("upstream 429, backing off (honoring Retry-After if present)");
+          await sleepWithBackoff(1, err.retryAfter);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  let tokens = initialTokens;
+  let body = await call(messages, tokens);
+  let { text, toolCalls, finish } = extract(body);
+
+  // Model acted like a CLI agent and emitted tool calls -> one strict retry.
+  if (!text.trim() && toolCalls) {
+    if (disableRewrite) {
+      throw new Error(
+        "Model emitted tool_calls instead of answering and prompt rewriting is disabled " +
+          "(OFM_DISABLE_PROMPT_REWRITE=1). Raw: " + JSON.stringify(body).slice(0, 400)
+      );
+    }
+    notes.push(NO_TOOLS_NOTE);
+    log("model emitted tool_calls; retrying with strict text-only system prompt");
+    const hasSystem = messages[0]?.role === "system";
+    const sysText =
+      (hasSystem ? messages[0].content + "\n\n" : "") +
+      "You are called via a plain API with NO tools. Never emit tool_calls or JSON. " +
+      "Answer the user directly in plain text.";
+    const rest = hasSystem ? messages.slice(1) : messages;
+    body = await call([{ role: "system", content: sysText }, ...rest], tokens);
+    ({ text, toolCalls, finish } = extract(body));
+  }
+
+  // Reasoning consumed the whole budget with no visible content -> double once.
+  if (!text.trim() && !toolCalls) {
+    const doubled = Math.min((tokens ?? 32768) * 2, 262144);
+    if (budget.take() && doubled !== tokens) {
+      notes.push(
+        `[note] Empty reply (reasoning consumed the budget, finish_reason=${finish || "n/a"}). Retried with max_tokens=${doubled}.`
+      );
+      log(`empty reply (finish=${finish || "n/a"}); retrying with max_tokens=${doubled}`);
+      tokens = doubled;
+      body = await call(messages, tokens);
+      ({ text, toolCalls, finish } = extract(body));
+    }
+  }
+
+  if (!text.trim()) {
+    throw new Error(
+      `Model returned no visible text (finish_reason=${finish || "n/a"}${toolCalls ? ", emitted tool_calls" : ""}).`
+    );
+  }
+  return text;
+}
+
+async function firstModelId() {
+  const data = await ofmFetch("/v1/models");
+  const ids = (data.data || []).map((m) => m.id);
+  if (!ids.length) throw new Error("No models available on the OFM service.");
+  return ids[0];
+}
+
 server.tool(
   "ofm_chat",
   "Send one prompt to a model on the local Our Free Model gateway and return the reply text. " +
-    "Call ofm_models first to pick a model id. Do not send secrets: free upstreams may log prompts.",
+    "Call ofm_models first to pick a model id. For long-form output pass save_to — the full reply is written to " +
+    "that local file and only a short preview is returned, keeping the host conversation small. " +
+    "Do not send secrets: free upstreams may log prompts.",
   {
     prompt: z.string().describe("User prompt to send."),
     model: z.string().optional().describe("Model id from ofm_models. Defaults to the first available model."),
     system: z.string().optional().describe("Optional system prompt."),
+    save_to: z.string().optional().describe("Absolute file path to save the full reply to. When set, only a preview is returned."),
+    max_return_chars: z.number().optional().describe("Preview size when save_to is set (default 1200)."),
   },
-  async ({ prompt, model, system }) => {
-    if (!model) {
-      const data = await ofmFetch("/v1/models");
-      const ids = (data.data || []).map((m) => m.id);
-      if (!ids.length) throw new Error("No models available on the OFM service.");
-      model = ids[0];
-    }
-    const budget = new RetryBudget();
-    const baseMessages = [];
-    if (system) baseMessages.push({ role: "system", content: system });
-    baseMessages.push({ role: "user", content: prompt });
-
+  async ({ prompt, model, system, save_to, max_return_chars }) => {
+    if (!model) model = await firstModelId();
     const notes = [];
-    let maxTokens = defaultMaxTokens();
-    let disableRewrite = process.env.OFM_DISABLE_PROMPT_REWRITE === "1";
-
-    async function call(messages, tokens) {
-      for (;;) {
-        try {
-          const payload = { model, messages, stream: false };
-          if (tokens !== undefined) payload.max_tokens = tokens;
-          return await ofmFetch("/v1/chat/completions", { method: "POST", body: JSON.stringify(payload) });
-        } catch (err) {
-          if (isBudgetRejection(err.message) && budget.take()) {
-            const halved = Math.floor((tokens ?? 32768) / 2);
-            if (halved >= 256) {
-              notes.push(`[note] max_tokens=${tokens ?? "upstream default"} rejected by upstream, halved to ${halved}.`);
-              tokens = halved;
-              continue;
-            }
-          }
-          if (err.status === 429 && budget.take()) {
-            log("upstream 429, backing off (honoring Retry-After if present)");
-            await sleepWithBackoff(1, err.retryAfter);
-            continue;
-          }
-          throw err;
-        }
-      }
-    }
-
-    let body = await call(baseMessages, maxTokens);
-    let { text, toolCalls, finish } = extract(body);
-
-    // Model acted like a CLI agent and emitted tool calls -> one strict retry.
-    if (!text.trim() && toolCalls) {
-      if (disableRewrite) {
-        throw new Error(
-          "Model emitted tool_calls instead of answering and prompt rewriting is disabled " +
-            "(OFM_DISABLE_PROMPT_REWRITE=1). Raw: " + JSON.stringify(body).slice(0, 400)
-        );
-      }
-      notes.push(NO_TOOLS_NOTE);
-      log("model emitted tool_calls; retrying with strict text-only system prompt");
-      const strict = [
-        {
-          role: "system",
-          content:
-            (system ? system + "\n\n" : "") +
-            "You are called via a plain API with NO tools. Never emit tool_calls or JSON. " +
-            "Answer the user directly in plain text.",
-        },
-        { role: "user", content: prompt },
-      ];
-      body = await call(strict, maxTokens);
-      ({ text, toolCalls, finish } = extract(body));
-    }
-
-    // Reasoning consumed the whole budget with no visible content -> double once.
-    if (!text.trim() && !toolCalls && (finish === "length" || !text)) {
-      const doubled = Math.min((maxTokens ?? 32768) * 2, 262144);
-      if (budget.take() && doubled !== maxTokens) {
-        notes.push(
-          `[note] Empty reply (reasoning consumed the budget, finish_reason=${finish || "n/a"}). Retried with max_tokens=${doubled}.`
-        );
-        log(`empty reply (finish=${finish || "n/a"}); retrying with max_tokens=${doubled}`);
-        maxTokens = doubled;
-        body = await call(baseMessages, maxTokens);
-        ({ text, toolCalls, finish } = extract(body));
-      }
-    }
-
-    if (!text.trim()) {
-      throw new Error(
-        `Model returned no visible text (finish_reason=${finish || "n/a"}${toolCalls ? ", emitted tool_calls" : ""}).`
-      );
-    }
-
+    const messages = [];
+    if (system) messages.push({ role: "system", content: system });
+    messages.push({ role: "user", content: prompt });
+    const text = await completeText(model, messages, notes, defaultMaxTokens());
     const noteText = notes.length ? notes.join("\n") + "\n" : "";
-    return { content: [{ type: "text", text: `[model: ${body.model || model}]\n${noteText}${text}` }] };
+
+    if (save_to) {
+      const outPath = path.resolve(save_to);
+      mkdirSync(path.dirname(outPath), { recursive: true });
+      writeFileSync(outPath, text, "utf8");
+      const limit = Math.max(200, max_return_chars ?? 1200);
+      const shown = text.length <= limit ? text : text.slice(0, limit) + `\n...[truncated, ${text.length - limit} more chars]`;
+      return {
+        content: [
+          {
+            type: "text",
+            text: `[model: ${model}]\n${noteText}${shown}\n[full output: ${text.length} chars saved to ${outPath}]`,
+          },
+        ],
+      };
+    }
+    return { content: [{ type: "text", text: `[model: ${model}]\n${noteText}${text}` }] };
+  }
+);
+
+// --- ofm_task: delegate a multi-step task into the bridge --------------------
+// The model runs an internal read/write/list loop inside a sandbox dir using a
+// strict JSON protocol. Intermediate reasoning, drafts and file contents never
+// leave the bridge conversation loop (they still go to the upstream as model
+// context — never point the sandbox at private data). The host caller only
+// receives the final short summary, minimizing host-side token spend.
+
+const TASK_READ_CAP = 20000;
+const TASK_SUMMARY_CAP = 4000;
+const TASK_READ_BUDGET = 100000; // cumulative chars a delegate may read per task, limits bulk exfiltration
+const TASK_MAX_TOKENS = 131072;
+
+function safeJoin(rootDir, p) {
+  const root = path.resolve(rootDir);
+  const full = path.resolve(root, p || ".");
+  if (full !== root && !full.startsWith(root + path.sep)) {
+    throw new Error("path escapes the sandbox");
+  }
+  return full;
+}
+
+function parseAction(text) {
+  let t = text.trim();
+  t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  try {
+    return JSON.parse(t);
+  } catch {}
+  const m = t.match(/\{[\s\S]*\}/);
+  if (m) {
+    try {
+      return JSON.parse(m[0]);
+    } catch {}
+  }
+  return null;
+}
+
+function execAction(rootDir, act) {
+  const op = String(act.op || "").toLowerCase();
+  if (op === "list") {
+    const dir = safeJoin(rootDir, act.path);
+    const entries = readdirSync(dir, { withFileTypes: true });
+    return entries.length
+      ? entries.map((e) => `${e.isDirectory() ? "dir " : "file"} ${e.name}`).join("\n")
+      : "(empty directory)";
+  }
+  if (op === "read") {
+    const full = safeJoin(rootDir, act.path);
+    const raw = readFileSync(full, "utf8");
+    return raw.length > TASK_READ_CAP ? raw.slice(0, TASK_READ_CAP) + `\n...[truncated at ${TASK_READ_CAP} chars]` : raw;
+  }
+  if (op === "write") {
+    const full = safeJoin(rootDir, act.path);
+    const content = typeof act.content === "string" ? act.content : String(act.content ?? "");
+    mkdirSync(path.dirname(full), { recursive: true });
+    writeFileSync(full, content, "utf8");
+    return `ok: wrote ${content.length} chars to ${path.relative(path.resolve(rootDir), full)}`;
+  }
+  throw new Error(`unsupported op "${op}" (allowed: list, read, write, done)`);
+}
+
+function taskProtocol(workdir) {
+  return (
+    `You are a task delegate running inside a sandbox. SANDBOX ROOT: ${workdir}\n` +
+    `Execute the given task step by step using file operations. Respond with EXACTLY ONE JSON object per turn and nothing else:\n` +
+    `{"op":"list","path":"."}                          -> list a directory\n` +
+    `{"op":"read","path":"file.txt"}                   -> read a text file (capped)\n` +
+    `{"op":"write","path":"file.txt","content":"..."}   -> create/overwrite a file inside the sandbox\n` +
+    `{"op":"done","summary":"..."}                     -> finish with the final result for the caller\n` +
+    `Rules:\n` +
+    `- All paths are relative to the sandbox root; never escape it; no shell access.\n` +
+    `- Write any long deliverable (stories, documents, code, reports) to files in the sandbox.\n` +
+    `- Keep "summary" concise (under ${TASK_SUMMARY_CAP} chars): state the outcome and list output file paths. Do NOT paste full file contents into the summary.\n` +
+    `- When the task is complete, always finish with {"op":"done",...}.`
+  );
+}
+
+server.tool(
+  "ofm_task",
+  "Delegate a multi-step task to a model that runs a self-contained loop INSIDE this bridge " +
+    "(it reads/writes files in a sandbox workdir and iterates on its own). Intermediate reasoning, drafts and file " +
+    "contents never enter this conversation — you only receive a short final summary and output file paths. " +
+    "Use this instead of many back-and-forth ofm_chat calls when the job needs drafting, iterating or file work; " +
+    "it minimizes host-side token usage. Then inspect results locally with Read if needed. " +
+    "PRIVACY: never point workdir at a directory containing private data — every file the delegate reads is sent " +
+    "to the upstream as context (third party, may be logged). Reads are capped per file and cumulatively.",
+  {
+    task: z.string().describe("Full, self-contained task description for the delegate."),
+    workdir: z.string().optional().describe("Sandbox directory the delegate may read/write. Defaults to a fresh dir under the OFM data dir."),
+    model: z.string().optional().describe("Model id from ofm_models. Defaults to the first available model."),
+    max_rounds: z.number().optional().describe("Max delegate rounds (default 12, cap 24)."),
+  },
+  async ({ task, workdir, model, max_rounds }) => {
+    if (!model) model = await firstModelId();
+    const rootDir = workdir
+      ? path.resolve(workdir)
+      : path.join(cfg.dataDir, "tasks", `task-${Date.now()}`);
+    mkdirSync(rootDir, { recursive: true });
+
+    const rounds = Math.min(Math.max(Math.floor(max_rounds ?? 12), 1), 24);
+    const notes = [];
+    const messages = [
+      { role: "system", content: taskProtocol(rootDir) },
+      { role: "user", content: task },
+    ];
+
+    let summary = "";
+    let filesWritten = [];
+    let usedRounds = 0;
+    let parseFails = 0;
+    let ok = false;
+    let lastText = "";
+    let readBudgetUsed = 0;
+
+    for (let r = 1; r <= rounds; r++) {
+      usedRounds = r;
+      let reply;
+      try {
+        reply = await completeText(model, messages, notes, TASK_MAX_TOKENS);
+      } catch (e) {
+        notes.push(`[note] round ${r} chat failed: ${String(e.message || e).slice(0, 200)}`);
+        log(`ofm_task round ${r} chat failed: ${String(e.message || e).slice(0, 200)}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                { ok: false, error: "delegate chat failed", round: r, workdir: rootDir, model, notes },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      lastText = reply;
+      const act = parseAction(reply);
+      if (!act) {
+        parseFails++;
+        messages.push({ role: "assistant", content: reply.slice(0, TASK_READ_CAP) });
+        if (parseFails >= 2) {
+          messages.push({
+            role: "user",
+            content: 'Final attempt: reply with exactly {"op":"done","summary":"<your final result>"}. No other text.',
+          });
+        } else {
+          messages.push({
+            role: "user",
+            content: 'Invalid reply. Respond with EXACTLY ONE JSON object: {"op":"list"|"read"|"write"|"done", ...}. No markdown, no prose.',
+          });
+        }
+        continue;
+      }
+      parseFails = 0;
+      if (String(act.op || "").toLowerCase() === "done") {
+        ok = true;
+        summary = String(act.summary ?? "").slice(0, TASK_SUMMARY_CAP * 2);
+        break;
+      }
+      let resultText;
+      try {
+        if (String(act.op).toLowerCase() === "read" && readBudgetUsed >= TASK_READ_BUDGET) {
+          throw new Error(`cumulative read budget (${TASK_READ_BUDGET} chars) exhausted — finish with {"op":"done"}`);
+        }
+        resultText = execAction(rootDir, act);
+        if (String(act.op).toLowerCase() === "read") readBudgetUsed += resultText.length;
+        if (String(act.op).toLowerCase() === "write" && act.path) filesWritten.push(String(act.path));
+        if (resultText.length > TASK_READ_CAP) resultText = resultText.slice(0, TASK_READ_CAP) + "\n...[truncated]";
+      } catch (e) {
+        resultText = `error: ${String(e.message || e).slice(0, 300)}`;
+      }
+      messages.push({ role: "assistant", content: JSON.stringify(act).slice(0, TASK_READ_CAP) });
+      messages.push({ role: "user", content: `RESULT:\n${resultText}\n\nContinue (next JSON object) or finish with {"op":"done","summary":...}.` });
+    }
+
+    if (!ok) {
+      const lastAct = parseAction(lastText);
+      summary = summary || (lastAct?.summary ? String(lastAct.summary) : lastText.slice(0, TASK_SUMMARY_CAP));
+      notes.push(`[note] delegate hit the ${rounds}-round limit without an explicit done; returning last known state.`);
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              ok,
+              rounds_used: usedRounds,
+              max_rounds: rounds,
+              model,
+              workdir: rootDir,
+              files_written: filesWritten,
+              summary: summary.slice(0, TASK_SUMMARY_CAP),
+              ...(notes.length ? { notes } : {}),
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
   }
 );
 
