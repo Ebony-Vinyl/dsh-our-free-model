@@ -41153,7 +41153,7 @@ var HTTP_HEADER_PRODUCT_CODE = "X-Product-Code";
 var BUDDY_USER_AGENT = "CodeBuddyIDE/1.106.1";
 var BUDDY_DEPLOYMENT_TYPE = "SaaS";
 var AUTH_REFRESH_SOURCE = "ide-main";
-var API_DOMAIN = "copilot.tencent.com";
+var API_DOMAIN = "www.workbuddy.ai";
 function credentialExpiresAtMs2(credential) {
   const raw = credential.expires_at;
   if (typeof raw === "string" && raw.length > 0) {
@@ -41567,184 +41567,6 @@ function parseModelMeta(record) {
 // vendor/channel-pack/src/product.ts
 var WORKBUDDY_UA_INTL = "WorkBuddy/5.5.2 WorkBuddy AI/5.5.2 CLI/5.5.2";
 var WORKBUDDY_UA_CN = "WorkBuddy/5.5.2 WorkBuddy/5.5.2 CLI/5.5.2";
-var CODEBUDDY_FALLBACK_MODELS = [
-  {
-    id: "hy4-preview",
-    name: "Hy4 preview",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["high"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 64e3
-  },
-  {
-    id: "hy3",
-    name: "Hy3",
-    contextWindow: 192e3,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 64e3
-  },
-  {
-    id: "hy3-x",
-    name: "Hy3",
-    contextWindow: 192e3,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 64e3
-  },
-  {
-    // maxOutputTokens 实测（2026-09-19）：scoped 端点 128000、/v3/config 131072。
-    // 取 **128000**（两个端点的较小者）：它是服务端真正接受的额度，131072 是
-    // /v3/config 的声明值。取小者避免因端点差异被上游拒绝；远端可用时仍以
-    // 远端下发值为准，本字段只在远端缺失时补位。
-    id: "deepseek-v4.1-flash",
-    name: "Deepseek-V4.1-Flash",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high", "max"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 128e3
-  },
-  {
-    id: "deepseek-v4-pro",
-    name: "Deepseek-V4-Pro",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high", "xhigh"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 128e3
-  },
-  {
-    // 2026-09 补录：远端 /v3/config 与 scoped 端点均返回该模型，且实测能看图
-    // （纯红图问答答出「红色」）。它不在 craft/cli agent 白名单里，但可正常调用，
-    // 也是适配器 DEFAULT_MODEL 的取值。
-    //
-    // 档位沿用适配器静态表 REASONING_EFFORTS 的既有取值 [low,high,max]（该表有
-    // 实测依据：三档会显著改变返回的 reasoning_content 长度）。注意上游
-    // /v3/config 声明的是 [low,high,xhigh]，与本表不一致；实测服务端对 low /
-    // medium / high / xhigh / max 一律返回 200（不报非法参数），无法据此判定
-    // 哪一组才真实生效，故不擅自改动既有行为，仅记录该分歧待后续验证。
-    id: "deepseek-v4-flash",
-    name: "Deepseek-V4-Flash",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high", "max"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 5e4
-  },
-  {
-    id: "glm-5.3",
-    name: "GLM-5.3",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high", "max"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 64e3
-  },
-  {
-    id: "glm-5.3-flash",
-    name: "GLM-5.3-Flash",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high", "max"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 32e3
-  },
-  {
-    id: "glm-5.2",
-    name: "GLM-5.2",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["high", "xhigh"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 64e3
-  },
-  {
-    // supportsImages 为 true 有实测依据：纯红图问答答出「红色」。
-    // 注意 scoped 端点（/console/enterprises/personal/models）对它返回
-    // supportsImages=false，与 /v3/config、IDE 缓存、wb2api 清单三处矛盾；
-    // 实测以「能看到图」为准，故保留 true（远端若下发 true 则两者一致，
-    // 只有 scoped 端点先命中时才会被它的 false 覆盖，见 buddy-adapter 的
-    // supportsImagesFor 修正）。
-    id: "glm-5.1",
-    name: "GLM-5.1",
-    contextWindow: 2e5,
-    supportsImages: true,
-    reasoningEfforts: ["medium"],
-    maxOutputTokens: 48e3
-  },
-  {
-    id: "glm-5v-turbo",
-    name: "GLM-5V-Turbo",
-    contextWindow: 2e5,
-    supportsImages: true,
-    reasoningEfforts: ["medium"],
-    maxOutputTokens: 64e3
-  },
-  {
-    id: "kimi-k3-1",
-    name: "Kimi-K3-1",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["medium"],
-    maxOutputTokens: 32e3
-  },
-  {
-    // 2026-09 补录：旧注释曾把它列为「service info not found」而排除，但实测
-    // 可正常调用且能看图（纯红图问答答出「红色」），远端两端点也都在下发。
-    id: "kimi-k2.8-preview",
-    name: "Kimi-K2.8-Preview",
-    contextWindow: 1e6,
-    supportsImages: true,
-    reasoningEfforts: ["low", "high", "max"],
-    defaultReasoningEffort: "high",
-    maxOutputTokens: 64e3
-  },
-  {
-    id: "kimi-k2.7",
-    name: "Kimi-K2.7",
-    contextWindow: 256e3,
-    supportsImages: true,
-    reasoningEfforts: ["medium"],
-    maxOutputTokens: 32e3
-  },
-  {
-    id: "kimi-k2.6",
-    name: "Kimi-K2.6",
-    contextWindow: 256e3,
-    supportsImages: true,
-    reasoningEfforts: ["medium"],
-    maxOutputTokens: 32e3
-  },
-  {
-    id: "minimax-m3",
-    name: "MiniMax-M3",
-    contextWindow: 512e3,
-    supportsImages: true,
-    reasoningEfforts: ["medium"],
-    maxOutputTokens: 64e3
-  }
-];
-var CODEBUDDY = {
-  id: "buddy",
-  platform: "ide",
-  endpoint: "https://copilot.tencent.com",
-  apiDomain: "copilot.tencent.com",
-  displayName: "CodeBuddy (\u817E\u8BAF)",
-  productCode: "codebuddy",
-  userAgent: "CodeBuddyIDE/1.106.1",
-  // 中国版只有一条产品线，无需按模型分档：全部模型沿用 IDE UA。
-  userAgentByModelFamily: [],
-  attributionName: "CodeBuddy",
-  clientVersion: "1.106.1",
-  cliVersion: "2.137.1",
-  defaultCredentialRef: "BUDDY_ACCESS_TOKEN",
-  appendSessionParams: false,
-  fallbackModels: CODEBUDDY_FALLBACK_MODELS
-};
 var WORKBUDDY_FALLBACK_MODELS = [
   // 注：以下 maxOutputTokens 全部来自 2026-09-19 对国际版 `/v3/config` 的实测
   // （`node scripts/dump-max-output.mjs`）。该值就是用户在 IDE 里实际拿到的
@@ -42245,7 +42067,7 @@ var BuddyAdapter = class _BuddyAdapter extends LlmAdapter5 {
   constructor(options) {
     super();
     this.options = options;
-    this.product = options.product ?? CODEBUDDY;
+    this.product = options.product ?? WORKBUDDY;
     this.fetchImpl = options.fetchImpl ?? createDomesticFetch();
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, "");
     const fallback = this.product.fallbackModels ?? [];
@@ -43221,7 +43043,7 @@ function positiveMaxTokens(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
 }
 function registerBuddyLlm(ctx, options) {
-  const product = options.product ?? CODEBUDDY;
+  const product = options.product ?? WORKBUDDY;
   const adapter = new BuddyAdapter(options);
   registerAdapterIdempotent(ctx.llm, [product.id], adapter);
   return adapter;
@@ -43263,7 +43085,7 @@ async function request(method, url, headers, options) {
   }
   return { status: response.status, body };
 }
-async function fetchAuthState(fetcher = createDomesticFetch(), signal, product = CODEBUDDY) {
+async function fetchAuthState(fetcher = createDomesticFetch(), signal, product = WORKBUDDY) {
   const url = `${product.endpoint}${AUTH_STATE_PATH}?platform=${product.platform}`;
   const headers = {
     [HTTP_HEADER_DOMAIN]: product.apiDomain,
@@ -43294,7 +43116,7 @@ async function fetchAuthState(fetcher = createDomesticFetch(), signal, product =
 }
 async function loopGetToken(state, options = {}) {
   const fetcher = options.fetcher ?? createDomesticFetch();
-  const product = options.product ?? CODEBUDDY;
+  const product = options.product ?? WORKBUDDY;
   const url = `${product.endpoint}${AUTH_TOKEN_PATH}?state=${encodeURIComponent(state)}`;
   const headers = {
     [HTTP_HEADER_NO_AUTHORIZATION]: "true",
@@ -43329,7 +43151,7 @@ async function loopGetToken(state, options = {}) {
 }
 async function getAccount(state, token, options = {}) {
   const fetcher = options.fetcher ?? createDomesticFetch();
-  const product = options.product ?? CODEBUDDY;
+  const product = options.product ?? WORKBUDDY;
   const url = `${product.endpoint}${LOGIN_ACCOUNT_PATH}?state=${encodeURIComponent(state)}`;
   const headers = {
     // ⚠️ `||` 而非裸 `token.domain`：token 由 `parseTokenData` → `readStringField`
@@ -43349,7 +43171,7 @@ async function getAccount(state, token, options = {}) {
     Authorization: `Bearer ${token.accessToken}`,
     [HTTP_HEADER_NO_USER_ID]: "true",
     [HTTP_HEADER_NO_ENTERPRISE_ID]: "true",
-    "User-Agent": (options.product ?? CODEBUDDY).userAgent
+    "User-Agent": (options.product ?? WORKBUDDY).userAgent
   };
   const deadline = Date.now() + (options.timeoutMs ?? LOGIN_TIMEOUT_MS);
   const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
@@ -43378,7 +43200,7 @@ async function getAccount(state, token, options = {}) {
     throw new Error(`login/account HTTP ${status} code=${code}: ${responseMessage(body)}`);
   }
 }
-async function refreshToken(credential, fetcher = createDomesticFetch(), signal, product = CODEBUDDY) {
+async function refreshToken(credential, fetcher = createDomesticFetch(), signal, product = WORKBUDDY) {
   if (!isRefreshable(credential)) {
     throw new RefreshTokenExpiredError("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
   }
@@ -43417,7 +43239,7 @@ var RefreshTokenExpiredError = class extends Error {
     this.name = "RefreshTokenExpiredError";
   }
 };
-async function fetchModels(credential, fetcher = createDomesticFetch(), signal, product = CODEBUDDY) {
+async function fetchModels(credential, fetcher = createDomesticFetch(), signal, product = WORKBUDDY) {
   if (credential.access_token.length === 0) return [];
   const headers = {
     ...credentialAuthHeaders(credential),
@@ -43518,7 +43340,7 @@ function decorateLoginUrl(authUrl, product) {
 async function runBuddyLoginFlow(options = {}) {
   const fetcher = options.fetcher ?? createDomesticFetch();
   const open = options.openBrowser ?? defaultOpenBrowser;
-  const product = options.product ?? CODEBUDDY;
+  const product = options.product ?? WORKBUDDY;
   let state;
   let authUrl;
   if (options.state) {
@@ -43712,7 +43534,6 @@ var BUDDY_EXPIRY_ACCESSORS = {
   refreshableOf: isRefreshable,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var BUDDY_CREDENTIAL_REF = "BUDDY_ACCESS_TOKEN";
 function parseCredential(value) {
   try {
     const parsed = JSON.parse(value);
@@ -43723,7 +43544,7 @@ function parseCredential(value) {
 }
 var BuddyAuth = class extends Service {
   constructor(ctx, options = {}) {
-    const product = options.product ?? CODEBUDDY;
+    const product = options.product ?? WORKBUDDY;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
     this.options = options;
     this.product = product;
@@ -68005,7 +67826,6 @@ function apply(ctx, config = {}) {
   suppressAutoSettingsPage(ctx);
   registerProviderSettings(
     ctx,
-    "llm-buddy",
     "llm-workbuddy",
     "llm-lobsterai",
     "llm-qoder",
@@ -68057,10 +67877,6 @@ function apply(ctx, config = {}) {
       return void 0;
     }
   };
-  const buddyBalanceSelector = new BuddyBalanceSelector({
-    product: CODEBUDDY,
-    resolveCredential: resolveBuddyCredentialByRef
-  });
   const workbuddyBalanceSelector = new BuddyBalanceSelector({
     product: WORKBUDDY,
     resolveCredential: resolveBuddyCredentialByRef
@@ -68258,45 +68074,6 @@ function apply(ctx, config = {}) {
     readImage: makeReadImage(ctx),
     accountPool: pool,
     product: TRAE
-  });
-  const buddy = new BuddyAuth(ctx);
-  const buddyAdapter = registerBuddyLlm(ctx, {
-    credentialRef: credentialRef15(BUDDY_CREDENTIAL_REF),
-    resolveCredential: async (modelId) => {
-      const picked = await pickBuddyCredential({
-        product: CODEBUDDY,
-        selector: buddyBalanceSelector,
-        displayName: "CodeBuddy",
-        modelId,
-        // 免费模型跳过「锁定 + 临期积分」这道门（判据见 BuddyAdapter.isFreeModel）。
-        // `buddyAdapter` 在此处是自引用：闭包只在注册完成后才执行，故无 TDZ 问题。
-        isFreeModel: await buddyAdapter.isFreeModel(modelId)
-      });
-      if (picked.credential) return picked.credential;
-      const available2 = await pool.getAvailableAccount(CODEBUDDY.id, modelId ?? "", picked.tried);
-      if (available2) {
-        reportLedgerAccount(CODEBUDDY.id, available2.entry.id);
-        return available2.credential;
-      }
-      throwIfAllAccountsRateLimited(CODEBUDDY, modelId);
-      const resolved = await ctx.credentials.resolve(credentialRef15(BUDDY_CREDENTIAL_REF));
-      if (!resolved) return void 0;
-      try {
-        return JSON.parse(resolved.value);
-      } catch {
-        return void 0;
-      }
-    },
-    // 刷新**账号池里实际使用的那一个账号**，而不是默认单凭据 ref ——
-    // 后者在 Channel Pack 登录路径下根本不存在，会把 401 报成「未配置凭据」
-    // 并自锁。详见 createPoolRefresh 的注释。
-    refresh: createPoolRefresh(pool, "buddy", buddy),
-    fetchRemoteModels: () => buddy.fetchModels(pool),
-    readImage: makeReadImage(ctx),
-    // 图片请求版本（缩放）桥接：issue !IKITT9。不可用时适配器自动回退原图。
-    readImageRequest: makeReadImageRequest(ctx),
-    accountPool: pool,
-    product: CODEBUDDY
   });
   const workbuddy = new BuddyAuth(ctx, { product: WORKBUDDY });
   const workbuddyAdapter = registerBuddyLlm(ctx, {

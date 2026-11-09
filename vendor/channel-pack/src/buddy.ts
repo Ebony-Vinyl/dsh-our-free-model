@@ -17,7 +17,6 @@
 // ── API 端点常量（逆向自 genie 扩展 product.json + index.js） ──
 
 /** 主 API 端点（product.json endpoint）。 */
-export const API_ENDPOINT = 'https://copilot.tencent.com'
 /** API 路径前缀（product.json authentication.attributes.prefixPath）。 */
 export const PREFIX_PATH = '/plugin'
 /** 平台标识（product.json authentication.attributes.platform）。 */
@@ -95,7 +94,7 @@ export const BUDDY_DEPLOYMENT_TYPE = 'SaaS'
 export const AUTH_REFRESH_SOURCE = 'ide-main'
 
 /** API 端点的裸域名（X-Domain 头的值）。 */
-export const API_DOMAIN = 'copilot.tencent.com'
+export const API_DOMAIN = 'www.workbuddy.ai'
 
 // ── 凭据数据结构 ──
 

@@ -8,7 +8,7 @@ import { registerTraeLlm } from './trae-adapter.js'
 import { registerClineLlm } from './cline-adapter.js'
 import { registerBuddyLlm } from './buddy-adapter.js'
 import { BUDDY_CREDENTIAL_REF, BuddyAuth, createPoolRefresh } from './buddy-auth.js'
-import { CODEBUDDY, WORKBUDDY, type BuddyProduct } from './product.js'
+import { WORKBUDDY, type BuddyProduct } from './product.js'
 import { buddyExpiringWindowDays } from './buddy-balance-rank.js'
 import { BuddyBalanceSelector, pickBuddyAccount } from './buddy-balance-selector.js'
 import type { BuddyCredential } from './buddy.js'
@@ -269,7 +269,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   // ⚠️ 2026-10-01 起各 provider 已**不再**声明为可配置 provider，故这批 namespace
   // 在模型设置页上已无消费者（详见该函数头的说明）。
   registerProviderSettings(
-    ctx, 'llm-buddy', 'llm-workbuddy', 'llm-lobsterai',
+    ctx, 'llm-workbuddy', 'llm-lobsterai',
     'llm-qoder', 'llm-qodercn', 'llm-trae', 'llm-cline', 'llm-loomy', 'llm-raccoon',
     'llm-minimax', 'llm-zcode', 'llm-gemini',
   )
@@ -363,10 +363,6 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
    * 判据出处见 `buddy-balance-rank.ts`（为什么是 15 天、为什么用 DeductionEndTime
    * 而不是 CycleEndTime / ExpiredTime，都有实测对照）。
    */
-  const buddyBalanceSelector = new BuddyBalanceSelector({
-    product: CODEBUDDY,
-    resolveCredential: resolveBuddyCredentialByRef,
-  })
   const workbuddyBalanceSelector = new BuddyBalanceSelector({
     product: WORKBUDDY,
     resolveCredential: resolveBuddyCredentialByRef,
@@ -714,56 +710,6 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   // （前缀**不可剥**），推理是**标准 OpenAI 兼容**端点。
   // 服务名由 ClineAuth 依 product.id 派生，注册为 ctx.clineAuth。
   // 不注册斜杠命令：入口在 Channel Pack 的 Cline 面板。
-  const buddy = new BuddyAuth(ctx)
-  const buddyAdapter = registerBuddyLlm(ctx, {
-    credentialRef: credentialRef(BUDDY_CREDENTIAL_REF),
-    resolveCredential: async (modelId?: string) => {
-      // 优先按「快到期积分」分档选号（锁定永久积分时也走这条，见上）。
-      const picked = await pickBuddyCredential({
-        product: CODEBUDDY,
-        selector: buddyBalanceSelector,
-        displayName: 'CodeBuddy',
-        modelId,
-        // 免费模型跳过「锁定 + 临期积分」这道门（判据见 BuddyAdapter.isFreeModel）。
-        // `buddyAdapter` 在此处是自引用：闭包只在注册完成后才执行，故无 TDZ 问题。
-        isFreeModel: await buddyAdapter.isFreeModel(modelId),
-      })
-      if (picked.credential) return picked.credential
-      // 回退到账号池的既有选择（凭据损坏的账号已被 tried 排除），最后才退单凭据 ref。
-      // provider 实参用 CODEBUDDY.id 而非字面量 'buddy'：写死字面量在改名/多产品
-      // 场景下会静默查不到账号（本插件在 workbuddy 上踩过同类坑）。
-      // ⚠️ `modelId` 必须透传：限流按**模型**记（`modelRateLimits[model]`），
-      // 传空串会让 `getAvailableAccount` 的限流过滤整体短路
-      //（`if (modelId.length === 0) return true`）→ 被标记限流的账号仍被选中。
-      const available = await pool.getAvailableAccount(CODEBUDDY.id, modelId ?? '', picked.tried)
-      // Token 账本（第 2 期）：回报「本笔请求解析出的账号」。
-      if (available) {
-        reportLedgerAccount(CODEBUDDY.id, available.entry.id)
-        return available.credential as BuddyCredential
-      }
-      // 退到单凭据 ref 之前先证明失败原因：全被模型限流时报明确的限流错误，
-      // 而不是让它降级成误导性的 MISSING_CREDENTIAL（见该助手的说明）。
-      throwIfAllAccountsRateLimited(CODEBUDDY, modelId)
-      const resolved = await ctx.credentials.resolve(credentialRef(BUDDY_CREDENTIAL_REF))
-      if (!resolved) return undefined
-      try {
-        return JSON.parse(resolved.value) as BuddyCredential
-      } catch {
-        return undefined
-      }
-    },
-    // 刷新**账号池里实际使用的那一个账号**，而不是默认单凭据 ref ——
-    // 后者在 Channel Pack 登录路径下根本不存在，会把 401 报成「未配置凭据」
-    // 并自锁。详见 createPoolRefresh 的注释。
-    refresh: createPoolRefresh(pool, 'buddy', buddy),
-    fetchRemoteModels: () => buddy.fetchModels(pool),
-    readImage: makeReadImage(ctx),
-    // 图片请求版本（缩放）桥接：issue !IKITT9。不可用时适配器自动回退原图。
-    readImageRequest: makeReadImageRequest(ctx),
-    accountPool: pool,
-    product: CODEBUDDY,
-  })
-
   // ===== WorkBuddy (腾讯 WorkBuddy) 服务 =====
   // 与 CodeBuddy 同源（同后端、同协议），差异全部由 product 配置承载。
   // 服务名由 BuddyAuth 依 product.id 派生，故两个产品分别注册为

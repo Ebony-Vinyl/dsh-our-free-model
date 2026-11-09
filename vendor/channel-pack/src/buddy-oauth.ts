@@ -43,7 +43,7 @@ import {
 } from './buddy.js'
 import type { BuddyAccount, BuddyCredential, BuddyRemoteModel, BuddyToken } from './buddy.js'
 import { createDomesticFetch } from './domestic-direct.js'
-import { CODEBUDDY, type BuddyProduct } from './product.js'
+import { WORKBUDDY, type BuddyProduct } from './product.js'
 
 /** 在浏览器中打开登录 URL；永不抛出（失败时打印 URL 供手动打开）。 */
 export type OpenBrowser = (url: string) => void
@@ -138,7 +138,7 @@ async function request(
 export async function fetchAuthState(
   fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
-  product: BuddyProduct = CODEBUDDY,
+  product: BuddyProduct = WORKBUDDY,
 ): Promise<{ state: string; authUrl: string }> {
   const url = `${product.endpoint}${AUTH_STATE_PATH}?platform=${product.platform}`
   const headers: Record<string, string> = {
@@ -188,7 +188,7 @@ export async function loopGetToken(
   } = {},
 ): Promise<BuddyToken> {
   const fetcher = options.fetcher ?? createDomesticFetch()
-  const product = options.product ?? CODEBUDDY
+  const product = options.product ?? WORKBUDDY
   const url = `${product.endpoint}${AUTH_TOKEN_PATH}?state=${encodeURIComponent(state)}`
   const headers: Record<string, string> = {
     [HTTP_HEADER_NO_AUTHORIZATION]: 'true',
@@ -242,7 +242,7 @@ export async function getAccount(
   } = {},
 ): Promise<BuddyAccount> {
   const fetcher = options.fetcher ?? createDomesticFetch()
-  const product = options.product ?? CODEBUDDY
+  const product = options.product ?? WORKBUDDY
   const url = `${product.endpoint}${LOGIN_ACCOUNT_PATH}?state=${encodeURIComponent(state)}`
   const headers: Record<string, string> = {
     // ⚠️ `||` 而非裸 `token.domain`：token 由 `parseTokenData` → `readStringField`
@@ -262,7 +262,7 @@ export async function getAccount(
     Authorization: `Bearer ${token.accessToken}`,
     [HTTP_HEADER_NO_USER_ID]: 'true',
     [HTTP_HEADER_NO_ENTERPRISE_ID]: 'true',
-    'User-Agent': (options.product ?? CODEBUDDY).userAgent,
+    'User-Agent': (options.product ?? WORKBUDDY).userAgent,
   }
   const deadline = Date.now() + (options.timeoutMs ?? LOGIN_TIMEOUT_MS)
   const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS
@@ -304,7 +304,7 @@ export async function refreshToken(
   credential: BuddyCredential,
   fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
-  product: BuddyProduct = CODEBUDDY,
+  product: BuddyProduct = WORKBUDDY,
 ): Promise<BuddyToken> {
   if (!isRefreshable(credential)) {
     throw new RefreshTokenExpiredError('无 refresh_token，请重新登录')
@@ -363,7 +363,7 @@ export async function fetchModels(
   credential: BuddyCredential,
   fetcher: typeof fetch = createDomesticFetch(),
   signal?: AbortSignal,
-  product: BuddyProduct = CODEBUDDY,
+  product: BuddyProduct = WORKBUDDY,
 ): Promise<BuddyRemoteModel[]> {
   if (credential.access_token.length === 0) return []
   const headers: Record<string, string> = {
@@ -563,7 +563,7 @@ export function decorateLoginUrl(authUrl: string, product: BuddyProduct): string
 export async function runBuddyLoginFlow(options: BuddyLoginFlowOptions = {}): Promise<BuddyLoginFlowResult> {
   const fetcher = options.fetcher ?? createDomesticFetch()
   const open = options.openBrowser ?? defaultOpenBrowser
-  const product = options.product ?? CODEBUDDY
+  const product = options.product ?? WORKBUDDY
 
   let state: string
   let authUrl: string

@@ -37,7 +37,7 @@ import {
   formatCreditsRate,
 } from './buddy.js'
 import type { BuddyCredential, BuddyRemoteModel } from './buddy.js'
-import { CODEBUDDY, resolveUserAgent, type BuddyFallbackModel, type BuddyProduct } from './product.js'
+import { WORKBUDDY, resolveUserAgent, type BuddyFallbackModel, type BuddyProduct } from './product.js'
 import { normalizeHarnessMessages } from './message-shape.js'
 import { projectRequestImage, type ImageRequestTarget } from './image-budget.js'
 import { createBlankReasoningSuppressor, createReasoningLoopDetector, hasUsableToolName, isProseTruncatedByStopString, isReasoningLoopGuardEnabled, isTruncatedArguments, normalizeToolArguments, readWithIdleTimeout, reasoningLoopFailure, resolveEmptyResponseReason, resolveToolPairing, splitThinkTaggedContent, stripBareThinkCloseTagIfEnabled, stripCourseLeakFromHistoryContent, stripCourseLeakIfEnabled } from './sse.js'
@@ -903,7 +903,7 @@ export class BuddyAdapter extends LlmAdapter {
   constructor(private readonly options: BuddyAdapterOptions) {
     super()
     // 默认 CodeBuddy，保证既有行为完全不变。
-    this.product = options.product ?? CODEBUDDY
+    this.product = options.product ?? WORKBUDDY
     this.fetchImpl = options.fetchImpl ?? createDomesticFetch()
     this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, '')
     const fallback = this.product.fallbackModels ?? []
@@ -2500,7 +2500,7 @@ function positiveMaxTokens(value: number | undefined): number | undefined {
  * 在该页留下无人使用的行。原因、依据与恢复方式见 `llm-register-compat.ts` 模块头。
  */
 export function registerBuddyLlm(ctx: Context, options: BuddyAdapterOptions): BuddyAdapter {
-  const product = options.product ?? CODEBUDDY
+  const product = options.product ?? WORKBUDDY
   const adapter = new BuddyAdapter(options)
   registerAdapterIdempotent(ctx.llm, [product.id], adapter)
   // 返回实例：Channel Pack「显示列表」需要 `listAllModels()`（不受黑名单影响、

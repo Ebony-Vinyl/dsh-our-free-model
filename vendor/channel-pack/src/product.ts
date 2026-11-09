@@ -164,124 +164,10 @@ export interface BuddyProduct {
  * - `productCode: 'codebuddy'` ↔ `src/buddy.ts:79`  `BUDDY_PRODUCT_CODE`
  * - `userAgent: 'CodeBuddyIDE/1.106.1'` ↔ `src/buddy.ts:77`  `BUDDY_USER_AGENT`
  * - `defaultCredentialRef: 'BUDDY_ACCESS_TOKEN'` ↔ `src/buddy-auth.ts:27`  `BUDDY_CREDENTIAL_REF`
- * - `endpoint`/`apiDomain`     ↔ `src/buddy.ts:20/86`  `API_ENDPOINT` / `API_DOMAIN`
+ * - `endpoint`/`apiDomain`     ↔ 产品各自的端点常量（国际版与国内版不同域）
  *
  * 迁移完成前两处取值必须保持一致，改动需同步（见文件头「迁移关系」）。
  */
-/**
- * CodeBuddy（中国版）的内置模型目录。
- *
- * 数据来源：`/v3/config` 的 `craft` agent 白名单，并**逐个用真实请求验证可用**
- * （`POST /v2/chat/completions`，stream 模式）。只收录实测返回可用的模型 ——
- * 远端 `data.models` 里另有一批 `code=11102 service info not found` 的条目
- * （glm-4.6/4.7/5.0、minimax-m2.5、kimi-k2.5/k2.8-preview、hunyuan-* 等），
- * 列进选择器只会让用户选中后报错，故一律不收录。
- */
-const CODEBUDDY_FALLBACK_MODELS: readonly BuddyFallbackModel[] = [
-  {
-    id: 'hy4-preview', name: 'Hy4 preview', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['high'], defaultReasoningEffort: 'high', maxOutputTokens: 64_000,
-  },
-  {
-    id: 'hy3', name: 'Hy3', contextWindow: 192_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high'], defaultReasoningEffort: 'high', maxOutputTokens: 64_000,
-  },
-  {
-    id: 'hy3-x', name: 'Hy3', contextWindow: 192_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high'], defaultReasoningEffort: 'high', maxOutputTokens: 64_000,
-  },
-  {
-    // maxOutputTokens 实测（2026-09-19）：scoped 端点 128000、/v3/config 131072。
-    // 取 **128000**（两个端点的较小者）：它是服务端真正接受的额度，131072 是
-    // /v3/config 的声明值。取小者避免因端点差异被上游拒绝；远端可用时仍以
-    // 远端下发值为准，本字段只在远端缺失时补位。
-    id: 'deepseek-v4.1-flash', name: 'Deepseek-V4.1-Flash', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high', 'max'], defaultReasoningEffort: 'high', maxOutputTokens: 128_000,
-  },
-  {
-    id: 'deepseek-v4-pro', name: 'Deepseek-V4-Pro', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high', 'xhigh'], defaultReasoningEffort: 'high', maxOutputTokens: 128_000,
-  },
-  {
-    // 2026-09 补录：远端 /v3/config 与 scoped 端点均返回该模型，且实测能看图
-    // （纯红图问答答出「红色」）。它不在 craft/cli agent 白名单里，但可正常调用，
-    // 也是适配器 DEFAULT_MODEL 的取值。
-    //
-    // 档位沿用适配器静态表 REASONING_EFFORTS 的既有取值 [low,high,max]（该表有
-    // 实测依据：三档会显著改变返回的 reasoning_content 长度）。注意上游
-    // /v3/config 声明的是 [low,high,xhigh]，与本表不一致；实测服务端对 low /
-    // medium / high / xhigh / max 一律返回 200（不报非法参数），无法据此判定
-    // 哪一组才真实生效，故不擅自改动既有行为，仅记录该分歧待后续验证。
-    id: 'deepseek-v4-flash', name: 'Deepseek-V4-Flash', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high', 'max'], defaultReasoningEffort: 'high', maxOutputTokens: 50_000,
-  },
-  {
-    id: 'glm-5.3', name: 'GLM-5.3', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high', 'max'], defaultReasoningEffort: 'high', maxOutputTokens: 64_000,
-  },
-  {
-    id: 'glm-5.3-flash', name: 'GLM-5.3-Flash', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high', 'max'], defaultReasoningEffort: 'high', maxOutputTokens: 32_000,
-  },
-  {
-    id: 'glm-5.2', name: 'GLM-5.2', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['high', 'xhigh'], defaultReasoningEffort: 'high', maxOutputTokens: 64_000,
-  },
-  {
-    // supportsImages 为 true 有实测依据：纯红图问答答出「红色」。
-    // 注意 scoped 端点（/console/enterprises/personal/models）对它返回
-    // supportsImages=false，与 /v3/config、IDE 缓存、wb2api 清单三处矛盾；
-    // 实测以「能看到图」为准，故保留 true（远端若下发 true 则两者一致，
-    // 只有 scoped 端点先命中时才会被它的 false 覆盖，见 buddy-adapter 的
-    // supportsImagesFor 修正）。
-    id: 'glm-5.1', name: 'GLM-5.1', contextWindow: 200_000, supportsImages: true, reasoningEfforts: ['medium'],
-    maxOutputTokens: 48_000,
-  },
-  {
-    id: 'glm-5v-turbo', name: 'GLM-5V-Turbo', contextWindow: 200_000, supportsImages: true, reasoningEfforts: ['medium'],
-    maxOutputTokens: 64_000,
-  },
-  {
-    id: 'kimi-k3-1', name: 'Kimi-K3-1', contextWindow: 1_000_000, supportsImages: true, reasoningEfforts: ['medium'],
-    maxOutputTokens: 32_000,
-  },
-  {
-    // 2026-09 补录：旧注释曾把它列为「service info not found」而排除，但实测
-    // 可正常调用且能看图（纯红图问答答出「红色」），远端两端点也都在下发。
-    id: 'kimi-k2.8-preview', name: 'Kimi-K2.8-Preview', contextWindow: 1_000_000, supportsImages: true,
-    reasoningEfforts: ['low', 'high', 'max'], defaultReasoningEffort: 'high', maxOutputTokens: 64_000,
-  },
-  {
-    id: 'kimi-k2.7', name: 'Kimi-K2.7', contextWindow: 256_000, supportsImages: true, reasoningEfforts: ['medium'],
-    maxOutputTokens: 32_000,
-  },
-  {
-    id: 'kimi-k2.6', name: 'Kimi-K2.6', contextWindow: 256_000, supportsImages: true, reasoningEfforts: ['medium'],
-    maxOutputTokens: 32_000,
-  },
-  {
-    id: 'minimax-m3', name: 'MiniMax-M3', contextWindow: 512_000, supportsImages: true, reasoningEfforts: ['medium'],
-    maxOutputTokens: 64_000,
-  },
-]
-
-export const CODEBUDDY: BuddyProduct = {
-  id: 'buddy',
-  platform: 'ide',
-  endpoint: 'https://copilot.tencent.com',
-  apiDomain: 'copilot.tencent.com',
-  displayName: 'CodeBuddy (腾讯)',
-  productCode: 'codebuddy',
-  userAgent: 'CodeBuddyIDE/1.106.1',
-  // 中国版只有一条产品线，无需按模型分档：全部模型沿用 IDE UA。
-  userAgentByModelFamily: [],
-  attributionName: 'CodeBuddy',
-  clientVersion: '1.106.1',
-  cliVersion: '2.137.1',
-  defaultCredentialRef: 'BUDDY_ACCESS_TOKEN',
-  appendSessionParams: false,
-  fallbackModels: CODEBUDDY_FALLBACK_MODELS,
-}
 
 /**
  * WorkBuddy 国际版的内置模型目录。
@@ -408,7 +294,7 @@ export const WORKBUDDY: BuddyProduct = {
 }
 
 /** 全部产品配置，供按 id 查询与遍历注册使用。 */
-export const ALL_PRODUCTS: readonly BuddyProduct[] = [CODEBUDDY, WORKBUDDY]
+export const ALL_PRODUCTS: readonly BuddyProduct[] = [WORKBUDDY]
 
 /** 按 provider id 取产品配置；未知 id 返回 undefined。 */
 export function productById(id: string): BuddyProduct | undefined {

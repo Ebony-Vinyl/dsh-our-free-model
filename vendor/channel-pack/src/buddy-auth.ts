@@ -23,7 +23,7 @@ import { RefreshScheduler } from './refresh.js'
 import { createDomesticFetch } from './domestic-direct.js'
 import type { BuddyCredential, BuddyRemoteModel } from './buddy.js'
 import { AccountPool } from './account-pool.js'
-import { CODEBUDDY, type BuddyProduct } from './product.js'
+import { WORKBUDDY, type BuddyProduct } from './product.js'
 import {
   refreshAccountWithReconcile,
   syncAccountExpiry,
@@ -45,7 +45,7 @@ const BUDDY_EXPIRY_ACCESSORS: ExpiryAccessors<BuddyCredential> = {
 /**
  * CodeBuddy 的登录结果存储所用的凭据引用。
  *
- * 等价于 `CODEBUDDY.defaultCredentialRef`，保留此导出仅为兼容既有导入方；
+ * 等价于 `WORKBUDDY.defaultCredentialRef`，保留此导出仅为兼容既有导入方；
  * 新代码请改用 `BuddyAuth` 实例的 `credentialRefName` 字段（随产品变化）。
  */
 export const BUDDY_CREDENTIAL_REF = 'BUDDY_ACCESS_TOKEN'
@@ -135,7 +135,7 @@ export class BuddyAuth extends Service {
     private readonly options: { fetcher?: typeof fetch; product?: BuddyProduct; serviceName?: string } = {},
   ) {
     // 默认 CodeBuddy，保证既有行为完全不变。
-    const product = options.product ?? CODEBUDDY
+    const product = options.product ?? WORKBUDDY
     // 服务名必须随产品区分：cordis 的 Service 在构造时按名称注册，同名第二次
     // 注册会抛 `service "buddyAuth" has been registered at <root>`，而
     // CodeBuddy 与 WorkBuddy 需要同时存在两个实例。按产品 id 派生即可得到

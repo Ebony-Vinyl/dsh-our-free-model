@@ -4729,7 +4729,6 @@ window.__ModuleLoader__.load({
 
     /** 与现有 RPC 的能力对应：余额、每日领取及独立签到状态分别判断。 */
     const CHANNEL_CREDITS = {
-      buddy: { claim: true, status: true },
       workbuddy: {},
       lobsterai: { claim: true },
       qoder: { claim: true },
