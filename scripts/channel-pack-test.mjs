@@ -56,6 +56,10 @@ const hooks = registerHooks({
 process.env.DSH_CHANNEL_PACK_STATE_DIR = scratch
 process.env.DSH_HOME = scratch
 process.env.DSH_OPENAI_GATEWAY_ENABLED = '0'
+// 本套件用替换 globalThis.fetch 的方式断言"不会真的发出请求"。而 plug-in 对国内
+// 渠道域名会走 DoH 取真实 IP 后直连（绕过 globalThis.fetch），导致替身失效。
+// 这里显式关闭直连：测试关心的是挂载/路由/凭据链路，不关心 DNS 劫持。
+process.env.OFM_DOMESTIC_DIRECT = '0'
 process.env.QODER_MACHINE_TOKEN_PATH = path.join(scratch, 'machine-token.json')
 process.env.QODER_RUNTIME_INFO = path.join(scratch, 'missing-runtime-info.exe')
 const savedFetch = globalThis.fetch
@@ -132,9 +136,9 @@ try {
   apply(ctx, { disableOpencode: true, outlet })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
-  assert.equal(adapters.size, 10, 'all other account providers remain registered')
+  assert.equal(adapters.size, 11, 'all other account providers remain registered (10 upstream + WorkBuddy international)')
   verifyChannelImagePricing(adapters)
-  console.log('ok  十渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
+  console.log('ok  十一渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
   assert.equal(writes.length, 0, 'mount neither creates nor deletes credentials')
   assert.equal(fetched.some(url => url.includes('opencode') || url.includes('models.dev')), false, 'no OpenCode capability/catalog warmup')
   assert.deepEqual(ctx.accountPool.listAccountsByProvider('opencode'), state.accounts.filter(entry => entry.provider === 'opencode'), 'historical account data survives')
@@ -281,10 +285,10 @@ try {
     visit(node.children)
   }
   visit(tree)
-  assert.equal(cards.length, 10)
+  assert.equal(cards.length, 11)
   for (const provider of ['opencode', 'unsupported-alpha', 'unsupported-beta']) assert.equal(cards.includes(provider), false)
   assert.deepEqual([...cards].sort(), [...adapters.keys()].sort(), 'UI and mounted account providers agree')
-  console.log('ok  actual channel page: 10 account cards, OpenCode and unsupported providers removed')
+  console.log('ok  actual channel page: 11 account cards, OpenCode and unsupported providers removed')
   await verifyChannelModelActions()
   await verifyChannelCreditsUi()
   console.log('ok  共享渠道余额：十渠道能力、失败原因、重试、签到反馈和请求交错')
