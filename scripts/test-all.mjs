@@ -56,6 +56,7 @@ const suites = [
   ['updater', 'updater-test.mjs', []],
   ['upgrade-ui', 'upgrade-ui-test.mjs', []],
   ['reload', 'reload-test.mjs', []],
+  ['reload-notice', 'reload-notice-test.mjs', []],
   ['forward', 'forward-test.mjs', []],
   ['gemini-gateway', 'gemini-gateway-test.mjs', []],
   ['private-file', 'private-file-permissions-test.mjs', []],

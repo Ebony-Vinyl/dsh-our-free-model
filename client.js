@@ -8362,6 +8362,35 @@ window.__ModuleLoader__.load({
       } catch { return 'en' }
     }
 
+    /**
+     * Decide whether this page announces the last hot reload.
+     *
+     * The server acknowledgement is authoritative because it survives a new
+     * origin: another port, another hostname, or the desktop shell's random
+     * port all have an empty localStorage. The cache only short-circuits a
+     * repeat check in the same origin, which also covers an ack whose write
+     * has not landed yet.
+     */
+    function reloadNoticePlan(meta, cached) {
+      const at = Number(meta?.reloadedAt ?? 0)
+      if (!Number.isFinite(at) || at <= 0) return { at: 0, show: false }
+      const seen = Number(meta?.reloadNoticeSeen ?? 0)
+      if (seen === at) return { at, show: false }
+      if (cached !== undefined && cached !== null && String(at) === String(cached)) return { at, show: false }
+      return { at, show: true }
+    }
+
+    /** Show the toast at most once, then acknowledge that timestamp. */
+    async function announceReloadNotice(meta, cached, { show, ack, remember }) {
+      const plan = reloadNoticePlan(meta, cached)
+      if (plan.at <= 0) return { ...plan, shown: false }
+      remember(plan.at)
+      if (!plan.show) return { ...plan, shown: false }
+      show(plan)
+      try { await ack(plan.at) } catch { /* localStorage already blocks a repeat here */ }
+      return { ...plan, shown: true }
+    }
+
     function apply(ctx) {
       const t = ctx.locale.bind(NS)
       ctx.effect(() => ctx.locale.register(NS, { zh: DICT.zh, en: DICT.en }), 'our-free-model: dictionaries')
@@ -8485,23 +8514,23 @@ window.__ModuleLoader__.load({
       }, 'our-free-model: push subscription')
 
       // A hot reload or in-app upgrade swaps this bundle while the page stays
-      // open. The only durable marker across that swap is localStorage, so the
-      // successor announces what happened exactly once.
+      // open. The server records the acknowledgement, so the successor
+      // announces what happened exactly once across every origin.
       ctx.effect(() => {
         void (async () => {
           try {
             const meta = await api('/meta')
-            const at = Number(meta?.reloadedAt ?? 0)
-            if (at <= 0) return
-            let seen = ''
-            try { seen = window.localStorage?.getItem('ofm.reloadedAt') ?? '' } catch { /* storage unavailable */ }
-            if (String(at) === seen) return
-            try { window.localStorage?.setItem('ofm.reloadedAt', String(at)) } catch { /* ignore */ }
-            showToast({
-              title: meta.version !== '' ? `Our Free Model ${meta.version}` : 'Our Free Model',
-              body: t('reload.done').replace('{n}', String(meta.reloadCount ?? 0)),
-              actions: [{ label: t('reload.refresh'), onClick: () => { try { window.location.reload() } catch { /* top-level navigation refused */ } } }],
-              holdMs: 12000,
+            let cached = ''
+            try { cached = window.localStorage?.getItem('ofm.reloadedAt') ?? '' } catch { /* storage unavailable */ }
+            await announceReloadNotice(meta, cached, {
+              show: () => showToast({
+                title: meta.version !== '' ? `Our Free Model ${meta.version}` : 'Our Free Model',
+                body: t('reload.done').replace('{n}', String(meta.reloadCount ?? 0)),
+                actions: [{ label: t('reload.refresh'), onClick: () => { try { window.location.reload() } catch { /* top-level navigation refused */ } } }],
+                holdMs: 12000,
+              }),
+              ack: at => post('/reload-notice/ack', { at }),
+              remember: at => { try { window.localStorage?.setItem('ofm.reloadedAt', String(at)) } catch { /* ignore */ } },
             })
           } catch { /* backend absent */ }
         })()
@@ -8563,7 +8592,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject
     exports.name = 'our-free-model'
     // Headless test seams use the same stub React as scripts/client-lint.mjs.
-    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, DICT, useChannelRpc, Shell, SubscriptionsPage, Disclaimer, CSS }
+    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, DICT, useChannelRpc, Shell, SubscriptionsPage, Disclaimer, CSS, reloadNoticePlan, announceReloadNotice }
     return module.exports
   },
 })
