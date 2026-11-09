@@ -14,11 +14,20 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
-var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
 };
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __export = (target, all) => {
   for (var name2 in all)
@@ -41,126 +50,88 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// vendor/channel-pack/src/open-browser.ts
-var open_browser_exports = {};
-__export(open_browser_exports, {
-  openBrowser: () => openBrowser
-});
-import { spawn } from "node:child_process";
-function openBrowser(url) {
-  const warn = (error) => {
-    console.error("[channel-pack] failed to open browser; open manually:", url, error);
-  };
-  const win = process.platform === "win32";
-  if (win) {
-    const args = ["/c", "start", '""', `"${url}"`];
-    try {
-      const child = spawn("cmd", args, { detached: true, stdio: "ignore", windowsVerbatimArguments: true });
-      child.on("error", warn);
-      child.unref();
-      return;
-    } catch (error) {
-      warn(error);
-      return;
-    }
-  }
-  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
-  try {
-    const child = spawn(cmd, [url], { detached: true, stdio: "ignore" });
-    child.on("error", warn);
-    child.unref();
-  } catch (error) {
-    warn(error);
-  }
-}
-var init_open_browser = __esm({
-  "vendor/channel-pack/src/open-browser.ts"() {
-    "use strict";
-  }
-});
-
 // node_modules/undici/lib/core/symbols.js
 var require_symbols = __commonJS({
   "node_modules/undici/lib/core/symbols.js"(exports, module) {
     "use strict";
     module.exports = {
-      kClose: Symbol("close"),
-      kDestroy: Symbol("destroy"),
-      kDispatch: Symbol("dispatch"),
-      kUrl: Symbol("url"),
-      kRequestOrigin: Symbol("request origin"),
-      kRedirectCacheControl: Symbol("redirect cache control"),
-      kOriginless: Symbol("originless"),
-      kWriting: Symbol("writing"),
-      kResuming: Symbol("resuming"),
-      kQueue: Symbol("queue"),
-      kConnect: Symbol("connect"),
-      kConnecting: Symbol("connecting"),
-      kKeepAliveDefaultTimeout: Symbol("default keep alive timeout"),
-      kKeepAliveMaxTimeout: Symbol("max keep alive timeout"),
-      kKeepAliveTimeoutThreshold: Symbol("keep alive timeout threshold"),
-      kKeepAliveTimeoutValue: Symbol("keep alive timeout"),
-      kKeepAlive: Symbol("keep alive"),
-      kHeadersTimeout: Symbol("headers timeout"),
-      kBodyTimeout: Symbol("body timeout"),
-      kServerName: Symbol("server name"),
-      kLocalAddress: Symbol("local address"),
-      kHost: Symbol("host"),
-      kNoRef: Symbol("no ref"),
-      kBodyUsed: Symbol("used"),
-      kBody: Symbol("abstracted request body"),
-      kRunning: Symbol("running"),
-      kBlocking: Symbol("blocking"),
-      kPending: Symbol("pending"),
-      kSize: Symbol("size"),
-      kBusy: Symbol("busy"),
-      kQueued: Symbol("queued"),
-      kFree: Symbol("free"),
-      kConnected: Symbol("connected"),
-      kClosed: Symbol("closed"),
-      kNeedDrain: Symbol("need drain"),
-      kReset: Symbol("reset"),
-      kDestroyed: Symbol.for("nodejs.stream.destroyed"),
-      kResume: Symbol("resume"),
-      kOnError: Symbol("on error"),
-      kMaxHeadersSize: Symbol("max headers size"),
-      kRunningIdx: Symbol("running index"),
-      kPendingIdx: Symbol("pending index"),
-      kError: Symbol("error"),
-      kClients: Symbol("clients"),
-      kClient: Symbol("client"),
-      kParser: Symbol("parser"),
-      kOnDestroyed: Symbol("destroy callbacks"),
-      kPipelining: Symbol("pipelining"),
-      kSocket: Symbol("socket"),
-      kHostHeader: Symbol("host header"),
-      kConnector: Symbol("connector"),
-      kStrictContentLength: Symbol("strict content length"),
-      kMaxRedirections: Symbol("maxRedirections"),
-      kMaxRequests: Symbol("maxRequestsPerClient"),
-      kProxy: Symbol("proxy agent options"),
-      kCounter: Symbol("socket request counter"),
-      kMaxResponseSize: Symbol("max response size"),
-      kHTTP2Session: Symbol("http2Session"),
-      kHTTP2Options: Symbol("http2 options"),
-      kHTTP2SessionState: Symbol("http2Session state"),
-      kRetryHandlerDefaultRetry: Symbol("retry agent default retry"),
-      kConstruct: Symbol("constructable"),
-      kListeners: Symbol("listeners"),
-      kHTTPContext: Symbol("http context"),
-      kMaxConcurrentStreams: Symbol("max concurrent streams"),
-      kHostAuthority: Symbol("host authority"),
-      kHTTP2InitialWindowSize: Symbol("http2 initial window size"),
-      kHTTP2ConnectionWindowSize: Symbol("http2 connection window size"),
-      kEnableConnectProtocol: Symbol("http2session connect protocol"),
-      kRemoteSettings: Symbol("http2session remote settings"),
-      kHTTP2Stream: Symbol("http2session client stream"),
-      kPingInterval: Symbol("ping interval"),
-      kUseMilo: Symbol("use milo"),
-      kNoProxyAgent: Symbol("no proxy agent"),
-      kHttpProxyAgent: Symbol("http proxy agent"),
-      kHttpsProxyAgent: Symbol("https proxy agent"),
-      kSocks5ProxyAgent: Symbol("socks5 proxy agent")
+      kClose: /* @__PURE__ */ Symbol("close"),
+      kDestroy: /* @__PURE__ */ Symbol("destroy"),
+      kDispatch: /* @__PURE__ */ Symbol("dispatch"),
+      kUrl: /* @__PURE__ */ Symbol("url"),
+      kRequestOrigin: /* @__PURE__ */ Symbol("request origin"),
+      kRedirectCacheControl: /* @__PURE__ */ Symbol("redirect cache control"),
+      kOriginless: /* @__PURE__ */ Symbol("originless"),
+      kWriting: /* @__PURE__ */ Symbol("writing"),
+      kResuming: /* @__PURE__ */ Symbol("resuming"),
+      kQueue: /* @__PURE__ */ Symbol("queue"),
+      kConnect: /* @__PURE__ */ Symbol("connect"),
+      kConnecting: /* @__PURE__ */ Symbol("connecting"),
+      kKeepAliveDefaultTimeout: /* @__PURE__ */ Symbol("default keep alive timeout"),
+      kKeepAliveMaxTimeout: /* @__PURE__ */ Symbol("max keep alive timeout"),
+      kKeepAliveTimeoutThreshold: /* @__PURE__ */ Symbol("keep alive timeout threshold"),
+      kKeepAliveTimeoutValue: /* @__PURE__ */ Symbol("keep alive timeout"),
+      kKeepAlive: /* @__PURE__ */ Symbol("keep alive"),
+      kHeadersTimeout: /* @__PURE__ */ Symbol("headers timeout"),
+      kBodyTimeout: /* @__PURE__ */ Symbol("body timeout"),
+      kServerName: /* @__PURE__ */ Symbol("server name"),
+      kLocalAddress: /* @__PURE__ */ Symbol("local address"),
+      kHost: /* @__PURE__ */ Symbol("host"),
+      kNoRef: /* @__PURE__ */ Symbol("no ref"),
+      kBodyUsed: /* @__PURE__ */ Symbol("used"),
+      kBody: /* @__PURE__ */ Symbol("abstracted request body"),
+      kRunning: /* @__PURE__ */ Symbol("running"),
+      kBlocking: /* @__PURE__ */ Symbol("blocking"),
+      kPending: /* @__PURE__ */ Symbol("pending"),
+      kSize: /* @__PURE__ */ Symbol("size"),
+      kBusy: /* @__PURE__ */ Symbol("busy"),
+      kQueued: /* @__PURE__ */ Symbol("queued"),
+      kFree: /* @__PURE__ */ Symbol("free"),
+      kConnected: /* @__PURE__ */ Symbol("connected"),
+      kClosed: /* @__PURE__ */ Symbol("closed"),
+      kNeedDrain: /* @__PURE__ */ Symbol("need drain"),
+      kReset: /* @__PURE__ */ Symbol("reset"),
+      kDestroyed: /* @__PURE__ */ Symbol.for("nodejs.stream.destroyed"),
+      kResume: /* @__PURE__ */ Symbol("resume"),
+      kOnError: /* @__PURE__ */ Symbol("on error"),
+      kMaxHeadersSize: /* @__PURE__ */ Symbol("max headers size"),
+      kRunningIdx: /* @__PURE__ */ Symbol("running index"),
+      kPendingIdx: /* @__PURE__ */ Symbol("pending index"),
+      kError: /* @__PURE__ */ Symbol("error"),
+      kClients: /* @__PURE__ */ Symbol("clients"),
+      kClient: /* @__PURE__ */ Symbol("client"),
+      kParser: /* @__PURE__ */ Symbol("parser"),
+      kOnDestroyed: /* @__PURE__ */ Symbol("destroy callbacks"),
+      kPipelining: /* @__PURE__ */ Symbol("pipelining"),
+      kSocket: /* @__PURE__ */ Symbol("socket"),
+      kHostHeader: /* @__PURE__ */ Symbol("host header"),
+      kConnector: /* @__PURE__ */ Symbol("connector"),
+      kStrictContentLength: /* @__PURE__ */ Symbol("strict content length"),
+      kMaxRedirections: /* @__PURE__ */ Symbol("maxRedirections"),
+      kMaxRequests: /* @__PURE__ */ Symbol("maxRequestsPerClient"),
+      kProxy: /* @__PURE__ */ Symbol("proxy agent options"),
+      kCounter: /* @__PURE__ */ Symbol("socket request counter"),
+      kMaxResponseSize: /* @__PURE__ */ Symbol("max response size"),
+      kHTTP2Session: /* @__PURE__ */ Symbol("http2Session"),
+      kHTTP2Options: /* @__PURE__ */ Symbol("http2 options"),
+      kHTTP2SessionState: /* @__PURE__ */ Symbol("http2Session state"),
+      kRetryHandlerDefaultRetry: /* @__PURE__ */ Symbol("retry agent default retry"),
+      kConstruct: /* @__PURE__ */ Symbol("constructable"),
+      kListeners: /* @__PURE__ */ Symbol("listeners"),
+      kHTTPContext: /* @__PURE__ */ Symbol("http context"),
+      kMaxConcurrentStreams: /* @__PURE__ */ Symbol("max concurrent streams"),
+      kHostAuthority: /* @__PURE__ */ Symbol("host authority"),
+      kHTTP2InitialWindowSize: /* @__PURE__ */ Symbol("http2 initial window size"),
+      kHTTP2ConnectionWindowSize: /* @__PURE__ */ Symbol("http2 connection window size"),
+      kEnableConnectProtocol: /* @__PURE__ */ Symbol("http2session connect protocol"),
+      kRemoteSettings: /* @__PURE__ */ Symbol("http2session remote settings"),
+      kHTTP2Stream: /* @__PURE__ */ Symbol("http2session client stream"),
+      kPingInterval: /* @__PURE__ */ Symbol("ping interval"),
+      kUseMilo: /* @__PURE__ */ Symbol("use milo"),
+      kNoProxyAgent: /* @__PURE__ */ Symbol("no proxy agent"),
+      kHttpProxyAgent: /* @__PURE__ */ Symbol("http proxy agent"),
+      kHttpsProxyAgent: /* @__PURE__ */ Symbol("https proxy agent"),
+      kSocks5ProxyAgent: /* @__PURE__ */ Symbol("socks5 proxy agent")
     };
   }
 });
@@ -173,7 +144,7 @@ var require_timers = __commonJS({
     var RESOLUTION_MS = 1e3;
     var TICK_MS = (RESOLUTION_MS >> 1) - 1;
     var fastNowTimeout;
-    var kFastTimer = Symbol("kFastTimer");
+    var kFastTimer = /* @__PURE__ */ Symbol("kFastTimer");
     var fastTimers = [];
     var NOT_IN_LIST = -2;
     var TO_BE_CLEARED = -1;
@@ -398,7 +369,7 @@ var require_timers = __commonJS({
 var require_errors = __commonJS({
   "node_modules/undici/lib/core/errors.js"(exports, module) {
     "use strict";
-    var kUndiciError = Symbol.for("undici.error.UND_ERR");
+    var kUndiciError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR");
     var UndiciError = class extends Error {
       constructor(message, options) {
         super(message, options);
@@ -412,7 +383,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kConnectTimeoutError = Symbol.for("undici.error.UND_ERR_CONNECT_TIMEOUT");
+    var kConnectTimeoutError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_CONNECT_TIMEOUT");
     var ConnectTimeoutError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -427,7 +398,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kHeadersTimeoutError = Symbol.for("undici.error.UND_ERR_HEADERS_TIMEOUT");
+    var kHeadersTimeoutError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_HEADERS_TIMEOUT");
     var HeadersTimeoutError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -442,7 +413,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kHeadersOverflowError = Symbol.for("undici.error.UND_ERR_HEADERS_OVERFLOW");
+    var kHeadersOverflowError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_HEADERS_OVERFLOW");
     var HeadersOverflowError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -457,7 +428,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kBodyTimeoutError = Symbol.for("undici.error.UND_ERR_BODY_TIMEOUT");
+    var kBodyTimeoutError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_BODY_TIMEOUT");
     var BodyTimeoutError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -472,7 +443,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kInvalidArgumentError = Symbol.for("undici.error.UND_ERR_INVALID_ARG");
+    var kInvalidArgumentError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_INVALID_ARG");
     var InvalidArgumentError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -487,7 +458,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kInvalidReturnValueError = Symbol.for("undici.error.UND_ERR_INVALID_RETURN_VALUE");
+    var kInvalidReturnValueError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_INVALID_RETURN_VALUE");
     var InvalidReturnValueError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -502,7 +473,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kAbortError = Symbol.for("undici.error.UND_ERR_ABORT");
+    var kAbortError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_ABORT");
     var AbortError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -517,7 +488,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kRequestAbortedError = Symbol.for("undici.error.UND_ERR_ABORTED");
+    var kRequestAbortedError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_ABORTED");
     var RequestAbortedError = class extends AbortError {
       constructor(message) {
         super(message);
@@ -532,7 +503,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kInformationalError = Symbol.for("undici.error.UND_ERR_INFO");
+    var kInformationalError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_INFO");
     var InformationalError = class extends UndiciError {
       constructor(message, options) {
         super(message, options);
@@ -547,7 +518,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kRequestContentLengthMismatchError = Symbol.for("undici.error.UND_ERR_REQ_CONTENT_LENGTH_MISMATCH");
+    var kRequestContentLengthMismatchError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_REQ_CONTENT_LENGTH_MISMATCH");
     var RequestContentLengthMismatchError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -562,7 +533,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kResponseContentLengthMismatchError = Symbol.for("undici.error.UND_ERR_RES_CONTENT_LENGTH_MISMATCH");
+    var kResponseContentLengthMismatchError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_RES_CONTENT_LENGTH_MISMATCH");
     var ResponseContentLengthMismatchError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -577,7 +548,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kClientDestroyedError = Symbol.for("undici.error.UND_ERR_DESTROYED");
+    var kClientDestroyedError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_DESTROYED");
     var ClientDestroyedError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -592,7 +563,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kClientClosedError = Symbol.for("undici.error.UND_ERR_CLOSED");
+    var kClientClosedError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_CLOSED");
     var ClientClosedError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -607,7 +578,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kSocketError = Symbol.for("undici.error.UND_ERR_SOCKET");
+    var kSocketError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_SOCKET");
     var SocketError = class extends UndiciError {
       constructor(message, socket) {
         super(message);
@@ -623,7 +594,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kNotSupportedError = Symbol.for("undici.error.UND_ERR_NOT_SUPPORTED");
+    var kNotSupportedError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_NOT_SUPPORTED");
     var NotSupportedError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -638,7 +609,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kBalancedPoolMissingUpstreamError = Symbol.for("undici.error.UND_ERR_BPL_MISSING_UPSTREAM");
+    var kBalancedPoolMissingUpstreamError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_BPL_MISSING_UPSTREAM");
     var BalancedPoolMissingUpstreamError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -653,7 +624,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kWebAssemblyNotSupportedError = Symbol.for("undici.error.ERR_WEBASSEMBLY_NOT_SUPPORTED");
+    var kWebAssemblyNotSupportedError = /* @__PURE__ */ Symbol.for("undici.error.ERR_WEBASSEMBLY_NOT_SUPPORTED");
     var WebAssemblyNotSupportedError = class extends Error {
       constructor(message) {
         super(message || "WebAssembly is not supported in this environment, but is required for HTTP/1 parsing");
@@ -666,7 +637,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kHTTPParserError = Symbol.for("undici.error.UND_ERR_HTTP_PARSER");
+    var kHTTPParserError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_HTTP_PARSER");
     var HTTPParserError = class extends Error {
       constructor(message, code, data) {
         super(message);
@@ -681,7 +652,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kResponseExceededMaxSizeError = Symbol.for("undici.error.UND_ERR_RES_EXCEEDED_MAX_SIZE");
+    var kResponseExceededMaxSizeError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_RES_EXCEEDED_MAX_SIZE");
     var ResponseExceededMaxSizeError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -696,7 +667,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kRequestRetryError = Symbol.for("undici.error.UND_ERR_REQ_RETRY");
+    var kRequestRetryError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_REQ_RETRY");
     var RequestRetryError = class extends UndiciError {
       constructor(message, code, { headers, data }) {
         super(message);
@@ -714,7 +685,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kResponseError = Symbol.for("undici.error.UND_ERR_RESPONSE");
+    var kResponseError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_RESPONSE");
     var ResponseError = class extends UndiciError {
       constructor(message, code, { headers, body, bodyTruncated = false }) {
         super(message);
@@ -733,7 +704,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kSecureProxyConnectionError = Symbol.for("undici.error.UND_ERR_PRX_TLS");
+    var kSecureProxyConnectionError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_PRX_TLS");
     var SecureProxyConnectionError = class extends UndiciError {
       constructor(cause, message, options = {}) {
         super(message, { cause, ...options });
@@ -749,7 +720,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kProxyConnectionError = Symbol.for("undici.error.UND_ERR_PRX_CONN");
+    var kProxyConnectionError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_PRX_CONN");
     var ProxyConnectionError = class extends UndiciError {
       constructor(cause, message, options = {}) {
         super(message, { cause, ...options });
@@ -765,7 +736,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kMaxRedirectsError = Symbol.for("undici.error.UND_ERR_REDIRECT_MAX");
+    var kMaxRedirectsError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_REDIRECT_MAX");
     var MaxRedirectsError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -780,7 +751,7 @@ var require_errors = __commonJS({
         return true;
       }
     };
-    var kMaxOriginsReachedError = Symbol.for("undici.error.UND_ERR_MAX_ORIGINS_REACHED");
+    var kMaxOriginsReachedError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_MAX_ORIGINS_REACHED");
     var MaxOriginsReachedError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -803,7 +774,7 @@ var require_errors = __commonJS({
         this.code = code || "UND_ERR_SOCKS5";
       }
     };
-    var kMessageSizeExceededError = Symbol.for("undici.error.UND_ERR_WS_MESSAGE_SIZE_EXCEEDED");
+    var kMessageSizeExceededError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_WS_MESSAGE_SIZE_EXCEEDED");
     var MessageSizeExceededError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -1805,10 +1776,10 @@ var require_util = __commonJS({
       }
       return obj;
     }
-    function errorRequest(client, request, err) {
+    function errorRequest(client, request2, err) {
       try {
-        request.onResponseError(err);
-        assert(request.aborted);
+        request2.onResponseError(err);
+        assert(request2.aborted);
       } catch (err2) {
         client.emit("error", err2);
       }
@@ -2436,7 +2407,7 @@ var require_constants2 = __commonJS({
 var require_global = __commonJS({
   "node_modules/undici/lib/web/fetch/global.js"(exports, module) {
     "use strict";
-    var globalOrigin = Symbol.for("undici.globalOrigin.1");
+    var globalOrigin = /* @__PURE__ */ Symbol.for("undici.globalOrigin.1");
     function getGlobalOrigin() {
       return globalThis[globalOrigin];
     }
@@ -3526,11 +3497,11 @@ var require_util2 = __commonJS({
     function normalizeBinaryStringToUtf8(value) {
       return Buffer.from(value, "binary").toString("utf8");
     }
-    function requestCurrentURL(request) {
-      return request.urlList[request.urlList.length - 1];
+    function requestCurrentURL(request2) {
+      return request2.urlList[request2.urlList.length - 1];
     }
-    function requestBadPort(request) {
-      const url = requestCurrentURL(request);
+    function requestBadPort(request2) {
+      const url = requestCurrentURL(request2);
       if (urlIsHttpHttpsScheme(url) && badPortsSet.has(url.port)) {
         return "blocked";
       }
@@ -3568,10 +3539,10 @@ var require_util2 = __commonJS({
       }
       return policy;
     }
-    function setRequestReferrerPolicyOnRedirect(request, actualResponse) {
+    function setRequestReferrerPolicyOnRedirect(request2, actualResponse) {
       const policy = parseReferrerPolicy(actualResponse);
       if (policy !== "") {
-        request.referrerPolicy = policy;
+        request2.referrerPolicy = policy;
       }
     }
     function crossOriginResourcePolicyCheck() {
@@ -3591,33 +3562,33 @@ var require_util2 = __commonJS({
       header = httpRequest.mode;
       httpRequest.headersList.set("sec-fetch-mode", header, true);
     }
-    function appendRequestOriginHeader(request) {
-      let serializedOrigin = request.origin;
+    function appendRequestOriginHeader(request2) {
+      let serializedOrigin = request2.origin;
       if (serializedOrigin === "client" || serializedOrigin === void 0) {
         return;
       }
-      if (request.responseTainting === "cors" || request.mode === "websocket") {
-        request.headersList.append("origin", serializedOrigin, true);
-      } else if (request.method !== "GET" && request.method !== "HEAD") {
-        switch (request.referrerPolicy) {
+      if (request2.responseTainting === "cors" || request2.mode === "websocket") {
+        request2.headersList.append("origin", serializedOrigin, true);
+      } else if (request2.method !== "GET" && request2.method !== "HEAD") {
+        switch (request2.referrerPolicy) {
           case "no-referrer":
             serializedOrigin = null;
             break;
           case "no-referrer-when-downgrade":
           case "strict-origin":
           case "strict-origin-when-cross-origin":
-            if (request.origin && urlHasHttpsScheme(request.origin) && !urlHasHttpsScheme(requestCurrentURL(request))) {
+            if (request2.origin && urlHasHttpsScheme(request2.origin) && !urlHasHttpsScheme(requestCurrentURL(request2))) {
               serializedOrigin = null;
             }
             break;
           case "same-origin":
-            if (!sameOrigin(request, requestCurrentURL(request))) {
+            if (!sameOrigin(request2, requestCurrentURL(request2))) {
               serializedOrigin = null;
             }
             break;
           default:
         }
-        request.headersList.append("origin", serializedOrigin, true);
+        request2.headersList.append("origin", serializedOrigin, true);
       }
     }
     function coarsenTime(timestamp, crossOriginIsolatedCapability) {
@@ -3671,18 +3642,18 @@ var require_util2 = __commonJS({
         referrerPolicy: policyContainer.referrerPolicy
       };
     }
-    function determineRequestsReferrer(request) {
-      const policy = request.referrerPolicy;
+    function determineRequestsReferrer(request2) {
+      const policy = request2.referrerPolicy;
       assert(policy);
       let referrerSource = null;
-      if (request.referrer === "client") {
+      if (request2.referrer === "client") {
         const globalOrigin = getGlobalOrigin();
         if (!globalOrigin || globalOrigin.origin === "null") {
           return "no-referrer";
         }
         referrerSource = new URL(globalOrigin);
-      } else if (webidl.is.URL(request.referrer)) {
-        referrerSource = request.referrer;
+      } else if (webidl.is.URL(request2.referrer)) {
+        referrerSource = request2.referrer;
       }
       let referrerURL = stripURLForReferrer(referrerSource);
       const referrerOrigin = stripURLForReferrer(referrerSource, true);
@@ -3700,14 +3671,14 @@ var require_util2 = __commonJS({
         case "unsafe-url":
           return referrerURL;
         case "strict-origin": {
-          const currentURL = requestCurrentURL(request);
+          const currentURL = requestCurrentURL(request2);
           if (isURLPotentiallyTrustworthy(referrerURL) && !isURLPotentiallyTrustworthy(currentURL)) {
             return "no-referrer";
           }
           return referrerOrigin;
         }
         case "strict-origin-when-cross-origin": {
-          const currentURL = requestCurrentURL(request);
+          const currentURL = requestCurrentURL(request2);
           if (sameOrigin(referrerURL, currentURL)) {
             return referrerURL;
           }
@@ -3717,17 +3688,17 @@ var require_util2 = __commonJS({
           return referrerOrigin;
         }
         case "same-origin":
-          if (sameOrigin(request, referrerURL)) {
+          if (sameOrigin(request2, referrerURL)) {
             return referrerURL;
           }
           return "no-referrer";
         case "origin-when-cross-origin":
-          if (sameOrigin(request, referrerURL)) {
+          if (sameOrigin(request2, referrerURL)) {
             return referrerURL;
           }
           return referrerOrigin;
         case "no-referrer-when-downgrade": {
-          const currentURL = requestCurrentURL(request);
+          const currentURL = requestCurrentURL(request2);
           if (isURLPotentiallyTrustworthy(referrerURL) && !isURLPotentiallyTrustworthy(currentURL)) {
             return "no-referrer";
           }
@@ -3794,7 +3765,7 @@ var require_util2 = __commonJS({
       if (url.protocol === "blob:") return true;
       return isOriginPotentiallyTrustworthy(url.origin);
     }
-    function tryUpgradeRequestToAPotentiallyTrustworthyURL(request) {
+    function tryUpgradeRequestToAPotentiallyTrustworthyURL(request2) {
     }
     function sameOrigin(A, B) {
       if (A.origin === B.origin && A.origin === "null") {
@@ -4173,7 +4144,7 @@ var require_util2 = __commonJS({
       }
       return gettingDecodingSplitting(value);
     }
-    function hasAuthenticationEntry(request) {
+    function hasAuthenticationEntry(request2) {
       return false;
     }
     function includesCredentials(url) {
@@ -4525,9 +4496,9 @@ var require_request = __commonJS({
       }
       return true;
     }
-    var kHandler = Symbol("handler");
-    var kController = Symbol("controller");
-    var kResume = Symbol("resume");
+    var kHandler = /* @__PURE__ */ Symbol("handler");
+    var kController = /* @__PURE__ */ Symbol("controller");
+    var kResume = /* @__PURE__ */ Symbol("resume");
     var RequestController = class {
       #paused = false;
       #reason = null;
@@ -4856,7 +4827,7 @@ var require_request = __commonJS({
         return this;
       }
     };
-    function processHeader(request, key, val) {
+    function processHeader(request2, key, val) {
       if (val && (typeof val === "object" && !Array.isArray(val))) {
         throw new InvalidArgumentError(`invalid ${key} header`);
       } else if (val === void 0) {
@@ -4903,24 +4874,24 @@ var require_request = __commonJS({
         }
       }
       if (headerName === "host") {
-        if (request.host !== null) {
+        if (request2.host !== null) {
           throw new InvalidArgumentError("duplicate host header");
         }
         if (typeof val !== "string") {
           throw new InvalidArgumentError("invalid host header");
         }
-        request.host = val;
+        request2.host = val;
       } else if (headerName === "content-length") {
-        if (request.contentLength !== null) {
+        if (request2.contentLength !== null) {
           throw new InvalidArgumentError("duplicate content-length header");
         }
         if (!isValidContentLengthHeaderValue(val)) {
           throw new InvalidArgumentError("invalid content-length header");
         }
-        request.contentLength = parseInt(val, 10);
-      } else if (request.contentType === null && headerName === "content-type") {
-        request.contentType = val;
-        request.headers.push(key, val);
+        request2.contentLength = parseInt(val, 10);
+      } else if (request2.contentType === null && headerName === "content-type") {
+        request2.contentType = val;
+        request2.headers.push(key, val);
       } else if (headerName === "transfer-encoding" || headerName === "keep-alive" || headerName === "upgrade") {
         throw new InvalidArgumentError(`invalid ${headerName} header`);
       } else if (headerName === "connection") {
@@ -4934,13 +4905,13 @@ var require_request = __commonJS({
             throw new InvalidArgumentError("invalid connection header");
           }
           if (trimmed === "close") {
-            request.reset = true;
+            request2.reset = true;
           }
         }
       } else if (headerName === "expect") {
         throw new NotSupportedError("expect header not supported");
       } else {
-        request.headers.push(key, val);
+        request2.headers.push(key, val);
       }
     }
     var isFormData;
@@ -5017,10 +4988,10 @@ var require_dispatcher_base = __commonJS({
     } = require_errors();
     var { kDestroy, kClose, kClosed, kDestroyed, kDispatch } = require_symbols();
     var { defaultWebSocketMaxFragments, defaultWebSocketMaxPayloadSize } = require_constants();
-    var kOnDestroyed = Symbol("onDestroyed");
-    var kOnClosed = Symbol("onClosed");
-    var kWebSocketOptions = Symbol("webSocketOptions");
-    var kEventSourceOptions = Symbol("eventSourceOptions");
+    var kOnDestroyed = /* @__PURE__ */ Symbol("onDestroyed");
+    var kOnClosed = /* @__PURE__ */ Symbol("onClosed");
+    var kWebSocketOptions = /* @__PURE__ */ Symbol("webSocketOptions");
+    var kEventSourceOptions = /* @__PURE__ */ Symbol("eventSourceOptions");
     var DispatcherBase = class extends Dispatcher {
       /** @type {boolean} */
       [kDestroyed] = false;
@@ -7870,7 +7841,7 @@ var require_parser_h1 = __commonJS({
     } = require_symbols();
     var FastBuffer = Buffer[Symbol.species];
     var removeAllListeners = util.removeAllListeners;
-    var kPausedByHandler = Symbol("kPausedByHandler");
+    var kPausedByHandler = /* @__PURE__ */ Symbol("kPausedByHandler");
     var BUFFER_PAGE_SIZE = 4096;
     var INITIAL_BUFFER_SIZE = 128 * 1024;
     var EMPTY_BUF = Buffer.alloc(0);
@@ -8170,8 +8141,8 @@ var require_parser_h1 = __commonJS({
           this.timeout.refresh();
         }
         if (len > 0) {
-          const request = client[kQueue][client[kRunningIdx]];
-          assert(request);
+          const request2 = client[kQueue][client[kRunningIdx]];
+          assert(request2);
           assert(this.timeoutType === TIMEOUT_BODY);
           assert(this.statusCode >= 200);
           if (maxResponseSize > -1 && this.bytesRead + len > maxResponseSize) {
@@ -8179,7 +8150,7 @@ var require_parser_h1 = __commonJS({
           }
           this.bytesRead += len;
           this.directBodyRemaining -= len;
-          if (request.onResponseData(data.subarray(0, len)) === false) {
+          if (request2.onResponseData(data.subarray(0, len)) === false) {
             this.directBodyCompletePending = this.directBodyRemaining === 0;
             this.pauseParser();
             this[kPausedByHandler] = true;
@@ -8297,11 +8268,11 @@ var require_parser_h1 = __commonJS({
           if (socket.destroyed) {
             return this.fail(this.milo.ERROR_CALLBACK_ERROR, "Other side closed");
           }
-          const request = client[kQueue][client[kRunningIdx]];
-          if (!request) {
+          const request2 = client[kQueue][client[kRunningIdx]];
+          if (!request2) {
             return this.fail(this.milo.ERROR_CALLBACK_ERROR, "Missing request");
           }
-          request.onResponseStarted();
+          request2.onResponseStarted();
         }
         for (; ; ) {
           const event = this.parserEvents[cursor];
@@ -8332,8 +8303,8 @@ var require_parser_h1 = __commonJS({
                 return;
               }
               assert(statusCode >= 100);
-              const request = client2[kQueue][client2[kRunningIdx]];
-              assert(request);
+              const request2 = client2[kQueue][client2[kRunningIdx]];
+              assert(request2);
               this.statusCode = 0;
               this.statusText = "";
               this.bytesRead = 0;
@@ -8349,12 +8320,12 @@ var require_parser_h1 = __commonJS({
               if (statusCode < 200) {
                 break;
               }
-              if (request.method !== "HEAD" && contentLength !== -1 && bytesRead !== contentLength) {
+              if (request2.method !== "HEAD" && contentLength !== -1 && bytesRead !== contentLength) {
                 util.destroy(socket2, new ResponseContentLengthMismatchError());
                 this.pauseParser();
                 break;
               }
-              request.onResponseEnd(trailers);
+              request2.onResponseEnd(trailers);
               client2[kQueue][client2[kRunningIdx]++] = null;
               if (socket2[kWriting]) {
                 assert(client2[kRunning] === 0);
@@ -8436,8 +8407,8 @@ var require_parser_h1 = __commonJS({
               if (socket2.destroyed) {
                 return this.fail(milo.ERROR_CALLBACK_ERROR, "Other side closed");
               }
-              const request = client2[kQueue][client2[kRunningIdx]];
-              if (!request) {
+              const request2 = client2[kQueue][client2[kRunningIdx]];
+              if (!request2) {
                 return this.fail(milo.ERROR_CALLBACK_ERROR, "Missing request");
               }
               assert(!this.upgrade);
@@ -8449,7 +8420,7 @@ var require_parser_h1 = __commonJS({
                 );
                 return this.fail(milo.ERROR_CALLBACK_ERROR, "Bad response");
               }
-              if (shouldUpgrade && !request.upgrade) {
+              if (shouldUpgrade && !request2.upgrade) {
                 util.destroy(
                   socket2,
                   new SocketError("bad upgrade", util.getSocketInfo(socket2))
@@ -8458,15 +8429,15 @@ var require_parser_h1 = __commonJS({
               }
               assert(this.timeoutType === TIMEOUT_HEADERS);
               this.statusCode = statusCode;
-              this.shouldKeepAlive = shouldKeepAlive || request.method === "HEAD" && !socket2[kReset] && /(?:^|,)[\t ]*keep-alive[\t ]*(?:,|$)/i.test(this.connection) && !/(?:^|,)[\t ]*close[\t ]*(?:,|$)/i.test(this.connection);
+              this.shouldKeepAlive = shouldKeepAlive || request2.method === "HEAD" && !socket2[kReset] && /(?:^|,)[\t ]*keep-alive[\t ]*(?:,|$)/i.test(this.connection) && !/(?:^|,)[\t ]*close[\t ]*(?:,|$)/i.test(this.connection);
               this.contentLength = bodyKind === BODY_KIND_CONTENT_LENGTH ? contentLength : -1;
               if (this.statusCode >= 200) {
-                const bodyTimeout = request.bodyTimeout != null ? request.bodyTimeout : client2[kBodyTimeout];
+                const bodyTimeout = request2.bodyTimeout != null ? request2.bodyTimeout : client2[kBodyTimeout];
                 this.setTimeout(bodyTimeout, TIMEOUT_BODY);
               } else if (this.timeout?.refresh) {
                 this.timeout.refresh();
               }
-              if (request.method === "CONNECT") {
+              if (request2.method === "CONNECT") {
                 assert(client2[kRunning] === 1);
                 milo.setIsConnect(this.parser, true);
                 this.upgrade = true;
@@ -8498,20 +8469,20 @@ var require_parser_h1 = __commonJS({
               } else {
                 socket2[kReset] = true;
               }
-              const pause = request.onResponseStart(
+              const pause = request2.onResponseStart(
                 statusCode,
                 headers,
                 this.resume,
                 statusText
               ) === false;
-              if (request.aborted) {
+              if (request2.aborted) {
                 return this.fail(milo.ERROR_CALLBACK_ERROR, "Request aborted");
               }
-              if (request.method === "HEAD" || statusCode < 200) {
+              if (request2.method === "HEAD" || statusCode < 200) {
                 this.setShouldSkipBody(true);
               }
               this.headersSuspended = true;
-              if (!pause && request.method !== "HEAD" && statusCode >= 200 && statusCode !== 204 && statusCode !== 205 && statusCode !== 304 && bodyKind === BODY_KIND_CONTENT_LENGTH && contentLength > 0 && !hasTrailers) {
+              if (!pause && request2.method !== "HEAD" && statusCode >= 200 && statusCode !== 204 && statusCode !== 205 && statusCode !== 304 && bodyKind === BODY_KIND_CONTENT_LENGTH && contentLength > 0 && !hasTrailers) {
                 this.directBodyRemaining = contentLength;
               }
               if (socket2[kBlocking]) {
@@ -8521,7 +8492,7 @@ var require_parser_h1 = __commonJS({
               if (pause) {
                 this.pauseParser();
                 this[kPausedByHandler] = true;
-              } else if (request.method === "HEAD" || statusCode < 200 || statusCode === 204 || statusCode === 205 || statusCode === 304 || bodyKind === BODY_KIND_CONTENT_LENGTH && contentLength === 0) {
+              } else if (request2.method === "HEAD" || statusCode < 200 || statusCode === 204 || statusCode === 205 || statusCode === 304 || bodyKind === BODY_KIND_CONTENT_LENGTH && contentLength === 0) {
                 this.directBodyCompletePending = true;
               }
               break;
@@ -8533,8 +8504,8 @@ var require_parser_h1 = __commonJS({
               if (socket2.destroyed) {
                 return this.fail(milo.ERROR_CALLBACK_ERROR, "Other side closed");
               }
-              const request = client2[kQueue][client2[kRunningIdx]];
-              assert(request);
+              const request2 = client2[kQueue][client2[kRunningIdx]];
+              assert(request2);
               assert(this.timeoutType === TIMEOUT_BODY);
               if (this.timeout?.refresh) {
                 this.timeout.refresh();
@@ -8549,7 +8520,7 @@ var require_parser_h1 = __commonJS({
               }
               this.bytesRead += len;
               const buffer = currentBufferRef;
-              if (request.onResponseData(
+              if (request2.onResponseData(
                 new FastBuffer(buffer.buffer, buffer.byteOffset + at, len)
               ) === false) {
                 this.pauseParser();
@@ -8605,9 +8576,9 @@ var require_parser_h1 = __commonJS({
         assert(client[kSocket] === socket);
         assert(!socket.destroyed);
         assert(!this.paused);
-        const request = client[kQueue][client[kRunningIdx]];
-        assert(request);
-        assert(request.upgrade || request.method === "CONNECT");
+        const request2 = client[kQueue][client[kRunningIdx]];
+        assert(request2);
+        assert(request2.upgrade || request2.method === "CONNECT");
         this.statusCode = 0;
         this.statusText = "";
         this.shouldKeepAlive = false;
@@ -8629,7 +8600,7 @@ var require_parser_h1 = __commonJS({
           new InformationalError("upgrade")
         );
         try {
-          request.onRequestUpgrade(statusCode, headers, socket);
+          request2.onRequestUpgrade(statusCode, headers, socket);
         } catch (err) {
           util.destroy(socket, err);
         }
@@ -9383,10 +9354,10 @@ var require_client_h1 = __commonJS({
     var EMPTY_BUF = Buffer.alloc(0);
     var FastBuffer = Buffer[Symbol.species];
     var removeAllListeners = util.removeAllListeners;
-    var kIdleSocketValidation = Symbol("kIdleSocketValidation");
-    var kIdleSocketValidationTimeout = Symbol("kIdleSocketValidationTimeout");
-    var kSocketUsed = Symbol("kSocketUsed");
-    var kTypeOfService = Symbol("kTypeOfService");
+    var kIdleSocketValidation = /* @__PURE__ */ Symbol("kIdleSocketValidation");
+    var kIdleSocketValidationTimeout = /* @__PURE__ */ Symbol("kIdleSocketValidationTimeout");
+    var kSocketUsed = /* @__PURE__ */ Symbol("kSocketUsed");
+    var kTypeOfService = /* @__PURE__ */ Symbol("kTypeOfService");
     var extractBody;
     function lazyllhttp() {
       if (typeof WebAssembly === "undefined") {
@@ -9711,11 +9682,11 @@ var require_client_h1 = __commonJS({
           util.destroy(socket, new SocketError("bad response", util.getSocketInfo(socket)));
           return -1;
         }
-        const request = client[kQueue][client[kRunningIdx]];
-        if (!request) {
+        const request2 = client[kQueue][client[kRunningIdx]];
+        if (!request2) {
           return -1;
         }
-        request.onResponseStarted();
+        request2.onResponseStarted();
         return 0;
       }
       /**
@@ -9785,9 +9756,9 @@ var require_client_h1 = __commonJS({
         assert(!socket.destroyed);
         assert(!this.paused);
         assert((headers.length & 1) === 0);
-        const request = client[kQueue][client[kRunningIdx]];
-        assert(request);
-        assert(request.upgrade || request.method === "CONNECT");
+        const request2 = client[kQueue][client[kRunningIdx]];
+        assert(request2);
+        assert(request2.upgrade || request2.method === "CONNECT");
         this.statusCode = 0;
         this.statusText = "";
         this.shouldKeepAlive = false;
@@ -9804,9 +9775,9 @@ var require_client_h1 = __commonJS({
         client[kQueue][client[kRunningIdx]++] = null;
         client.emit("disconnect", client[kUrl], [client], new InformationalError("upgrade"));
         try {
-          request.onRequestUpgrade(statusCode, headers, socket, statusText);
+          request2.onRequestUpgrade(statusCode, headers, socket, statusText);
         } catch (err) {
-          util.errorRequest(client, request, err);
+          util.errorRequest(client, request2, err);
           util.destroy(socket, err);
         }
         client[kResume]();
@@ -9826,8 +9797,8 @@ var require_client_h1 = __commonJS({
           util.destroy(socket, new SocketError("bad response", util.getSocketInfo(socket)));
           return -1;
         }
-        const request = client[kQueue][client[kRunningIdx]];
-        if (!request) {
+        const request2 = client[kQueue][client[kRunningIdx]];
+        if (!request2) {
           return -1;
         }
         assert(!this.upgrade);
@@ -9836,29 +9807,29 @@ var require_client_h1 = __commonJS({
           util.destroy(socket, new SocketError("bad response", util.getSocketInfo(socket)));
           return -1;
         }
-        if (upgrade && !request.upgrade) {
+        if (upgrade && !request2.upgrade) {
           util.destroy(socket, new SocketError("bad upgrade", util.getSocketInfo(socket)));
           return -1;
         }
         assert(this.timeoutType === TIMEOUT_HEADERS);
         this.statusCode = statusCode;
         this.shouldKeepAlive = shouldKeepAlive || // Override llhttp value which does not allow keepAlive for HEAD.
-        request.method === "HEAD" && !socket[kReset] && /(?:^|,)[\t ]*keep-alive[\t ]*(?:,|$)/i.test(this.connection) && !/(?:^|,)[\t ]*close[\t ]*(?:,|$)/i.test(this.connection);
-        if (request.method === "HEAD" || statusCode === 204 || statusCode === 304) {
-          if (request.method !== "HEAD" && (this.contentLength > 0 || this.hasTransferEncoding)) {
+        request2.method === "HEAD" && !socket[kReset] && /(?:^|,)[\t ]*keep-alive[\t ]*(?:,|$)/i.test(this.connection) && !/(?:^|,)[\t ]*close[\t ]*(?:,|$)/i.test(this.connection);
+        if (request2.method === "HEAD" || statusCode === 204 || statusCode === 304) {
+          if (request2.method !== "HEAD" && (this.contentLength > 0 || this.hasTransferEncoding)) {
             this.shouldKeepAlive = false;
           }
           this.contentLength = -1;
         }
         if (this.statusCode >= 200) {
-          const bodyTimeout = request.bodyTimeout != null ? request.bodyTimeout : client[kBodyTimeout];
+          const bodyTimeout = request2.bodyTimeout != null ? request2.bodyTimeout : client[kBodyTimeout];
           this.setTimeout(bodyTimeout, TIMEOUT_BODY);
         } else if (this.timeout) {
           if (this.timeout.refresh) {
             this.timeout.refresh();
           }
         }
-        if (request.method === "CONNECT") {
+        if (request2.method === "CONNECT") {
           assert(client[kRunning] === 1);
           this.upgrade = true;
           return 2;
@@ -9886,11 +9857,11 @@ var require_client_h1 = __commonJS({
         } else {
           socket[kReset] = true;
         }
-        const pause = request.onResponseStart(statusCode, headers, this.resume, statusText) === false;
-        if (request.aborted) {
+        const pause = request2.onResponseStart(statusCode, headers, this.resume, statusText) === false;
+        if (request2.aborted) {
           return -1;
         }
-        if (request.method === "HEAD") {
+        if (request2.method === "HEAD") {
           return 1;
         }
         if (statusCode < 200) {
@@ -9911,8 +9882,8 @@ var require_client_h1 = __commonJS({
         if (socket.destroyed) {
           return -1;
         }
-        const request = client[kQueue][client[kRunningIdx]];
-        assert(request);
+        const request2 = client[kQueue][client[kRunningIdx]];
+        assert(request2);
         assert(this.timeoutType === TIMEOUT_BODY);
         if (this.timeout) {
           if (this.timeout.refresh) {
@@ -9925,7 +9896,7 @@ var require_client_h1 = __commonJS({
           return -1;
         }
         this.bytesRead += buf.length;
-        if (request.onResponseData(buf) === false) {
+        if (request2.onResponseData(buf) === false) {
           return constants.ERROR.PAUSED;
         }
         return 0;
@@ -9943,8 +9914,8 @@ var require_client_h1 = __commonJS({
         }
         assert(statusCode >= 100);
         assert((this.headers.length & 1) === 0);
-        const request = client[kQueue][client[kRunningIdx]];
-        assert(request);
+        const request2 = client[kQueue][client[kRunningIdx]];
+        assert(request2);
         this.statusCode = 0;
         this.statusText = "";
         this.bytesRead = 0;
@@ -9961,7 +9932,7 @@ var require_client_h1 = __commonJS({
           util.destroy(socket, new ResponseContentLengthMismatchError());
           return -1;
         }
-        request.onResponseEnd(headers);
+        request2.onResponseEnd(headers);
         client[kQueue][client[kRunningIdx]++] = null;
         socket[kSocketUsed] = client[kPending] === 0;
         if (socket[kWriting]) {
@@ -10030,8 +10001,8 @@ var require_client_h1 = __commonJS({
       return {
         version: "h1",
         defaultPipelining: 1,
-        write(request) {
-          return writeH1(client, request);
+        write(request2) {
+          return writeH1(client, request2);
         },
         resume() {
           resumeH1(client);
@@ -10058,18 +10029,18 @@ var require_client_h1 = __commonJS({
          * @param {import('../core/request.js')} request
          * @returns {boolean}
          */
-        busy(request) {
+        busy(request2) {
           if (socket[kWriting] || socket[kReset] || socket[kBlocking] || socket[kIdleSocketValidation] === 1) {
             return true;
           }
-          if (request) {
-            if (client[kRunning] > 0 && !request.idempotent) {
+          if (request2) {
+            if (client[kRunning] > 0 && !request2.idempotent) {
               return true;
             }
-            if (client[kRunning] > 0 && (request.upgrade || request.method === "CONNECT")) {
+            if (client[kRunning] > 0 && (request2.upgrade || request2.method === "CONNECT")) {
               return true;
             }
-            if (client[kRunning] > 0 && util.bodyLength(request.body) !== 0 && (util.isStream(request.body) || util.isAsyncIterable(request.body) || util.isFormDataLike(request.body))) {
+            if (client[kRunning] > 0 && util.bodyLength(request2.body) !== 0 && (util.isStream(request2.body) || util.isAsyncIterable(request2.body) || util.isFormDataLike(request2.body))) {
               return true;
             }
           }
@@ -10122,13 +10093,13 @@ var require_client_h1 = __commonJS({
         assert(client[kPending] === 0);
         const requests2 = client[kQueue].splice(client[kRunningIdx]);
         for (let i = 0; i < requests2.length; i++) {
-          const request = requests2[i];
-          util.errorRequest(client, request, err);
+          const request2 = requests2[i];
+          util.errorRequest(client, request2, err);
         }
       } else if (client[kRunning] > 0 && err.code !== "UND_ERR_INFO") {
-        const request = client[kQueue][client[kRunningIdx]];
+        const request2 = client[kQueue][client[kRunningIdx]];
         client[kQueue][client[kRunningIdx]++] = null;
-        util.errorRequest(client, request, err);
+        util.errorRequest(client, request2, err);
       }
       client[kPendingIdx] = client[kRunningIdx];
       assert(client[kRunning] === 0);
@@ -10196,8 +10167,8 @@ var require_client_h1 = __commonJS({
           }
         } else if (client[kRunning] > 0 && socket[kParser].statusCode < 200) {
           if (socket[kParser].timeoutType !== TIMEOUT_HEADERS) {
-            const request = client[kQueue][client[kRunningIdx]];
-            const headersTimeout = request.headersTimeout != null ? request.headersTimeout : client[kHeadersTimeout];
+            const request2 = client[kQueue][client[kRunningIdx]];
+            const headersTimeout = request2.headersTimeout != null ? request2.headersTimeout : client[kHeadersTimeout];
             socket[kParser].setTimeout(headersTimeout, TIMEOUT_HEADERS);
           }
         }
@@ -10206,11 +10177,11 @@ var require_client_h1 = __commonJS({
     function shouldSendContentLength(method) {
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
-    function setTypeOfService(socket, request) {
+    function setTypeOfService(socket, request2) {
       if (typeof socket.setTypeOfService !== "function") {
         return;
       }
-      const typeOfService = request.typeOfService;
+      const typeOfService = request2.typeOfService;
       if (typeOfService === void 0) {
         return;
       }
@@ -10224,26 +10195,26 @@ var require_client_h1 = __commonJS({
       } catch {
       }
     }
-    function writeH1(client, request) {
-      const { method, path: path2, host, upgrade, blocking, reset } = request;
-      let { body, headers, contentLength } = request;
+    function writeH1(client, request2) {
+      const { method, path: path2, host, upgrade, blocking, reset } = request2;
+      let { body, headers, contentLength } = request2;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util.isFormDataLike(body)) {
         if (!extractBody) {
           extractBody = require_body().extractBody;
         }
         const [bodyStream, contentType] = extractBody(body);
-        if (request.contentType == null) {
+        if (request2.contentType == null) {
           headers.push("content-type", contentType);
         }
         body = bodyStream.stream;
         contentLength = bodyStream.length;
-      } else if (util.isBlobLike(body) && request.contentType == null) {
+      } else if (util.isBlobLike(body) && request2.contentType == null) {
         const contentType = body.type;
         if (contentType) {
           const contentTypeValue = `${contentType}`;
           if (!util.isValidHeaderValue(contentTypeValue)) {
-            util.errorRequest(client, request, new InvalidArgumentError("invalid content-type header"));
+            util.errorRequest(client, request2, new InvalidArgumentError("invalid content-type header"));
             return false;
           }
           headers.push("content-type", contentTypeValue);
@@ -10255,14 +10226,14 @@ var require_client_h1 = __commonJS({
       const bodyLength = util.bodyLength(body);
       contentLength = bodyLength ?? contentLength;
       if (contentLength === null) {
-        contentLength = request.contentLength;
+        contentLength = request2.contentLength;
       }
       if (contentLength === 0 && !expectsPayload) {
         contentLength = null;
       }
-      if (shouldSendContentLength(method) && contentLength > 0 && request.contentLength !== null && request.contentLength !== contentLength) {
+      if (shouldSendContentLength(method) && contentLength > 0 && request2.contentLength !== null && request2.contentLength !== contentLength) {
         if (client[kStrictContentLength]) {
-          util.errorRequest(client, request, new RequestContentLengthMismatchError());
+          util.errorRequest(client, request2, new RequestContentLengthMismatchError());
           return false;
         }
         process.emitWarning(new RequestContentLengthMismatchError());
@@ -10270,19 +10241,19 @@ var require_client_h1 = __commonJS({
       const socket = client[kSocket];
       clearIdleSocketValidation(socket);
       const abort = (err) => {
-        if (request.aborted || request.completed) {
+        if (request2.aborted || request2.completed) {
           return;
         }
-        util.errorRequest(client, request, err || new RequestAbortedError());
+        util.errorRequest(client, request2, err || new RequestAbortedError());
         util.destroy(body);
         util.destroy(socket, new InformationalError("aborted"));
       };
       try {
-        request.onRequestStart(abort, null);
+        request2.onRequestStart(abort, null);
       } catch (err) {
-        util.errorRequest(client, request, err);
+        util.errorRequest(client, request2, err);
       }
-      if (request.aborted) {
+      if (request2.aborted) {
         return false;
       }
       if (method === "HEAD") {
@@ -10300,7 +10271,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      setTypeOfService(socket, request);
+      setTypeOfService(socket, request2);
       let header = `${method} ${path2} HTTP/1.1\r
 `;
       if (typeof host === "string") {
@@ -10334,31 +10305,31 @@ upgrade: ${upgrade}\r
         }
       }
       if (channels.sendHeaders.hasSubscribers) {
-        channels.sendHeaders.publish({ request, headers: header, socket });
+        channels.sendHeaders.publish({ request: request2, headers: header, socket });
       }
       if (!body || bodyLength === 0) {
-        writeBuffer(abort, null, client, request, socket, contentLength, header, expectsPayload);
+        writeBuffer(abort, null, client, request2, socket, contentLength, header, expectsPayload);
       } else if (util.isBuffer(body)) {
-        writeBuffer(abort, body, client, request, socket, contentLength, header, expectsPayload);
+        writeBuffer(abort, body, client, request2, socket, contentLength, header, expectsPayload);
       } else if (util.isBlobLike(body)) {
         if (typeof body.stream === "function") {
-          writeIterable(abort, body.stream(), client, request, socket, contentLength, header, expectsPayload);
+          writeIterable(abort, body.stream(), client, request2, socket, contentLength, header, expectsPayload);
         } else {
-          writeBlob(abort, body, client, request, socket, contentLength, header, expectsPayload);
+          writeBlob(abort, body, client, request2, socket, contentLength, header, expectsPayload);
         }
       } else if (util.isStream(body)) {
-        writeStream(abort, body, client, request, socket, contentLength, header, expectsPayload);
+        writeStream(abort, body, client, request2, socket, contentLength, header, expectsPayload);
       } else if (util.isIterable(body)) {
-        writeIterable(abort, body, client, request, socket, contentLength, header, expectsPayload);
+        writeIterable(abort, body, client, request2, socket, contentLength, header, expectsPayload);
       } else {
         assert(false);
       }
       return true;
     }
-    function writeStream(abort, body, client, request, socket, contentLength, header, expectsPayload) {
+    function writeStream(abort, body, client, request2, socket, contentLength, header, expectsPayload) {
       assert(contentLength !== 0 || client[kRunning] === 0, "stream body cannot be pipelined");
       let finished = false;
-      const writer = new AsyncWriter({ abort, socket, request, contentLength, client, expectsPayload, header });
+      const writer = new AsyncWriter({ abort, socket, request: request2, contentLength, client, expectsPayload, header });
       const onData = function(chunk) {
         if (finished) {
           return;
@@ -10424,7 +10395,7 @@ upgrade: ${upgrade}\r
         setImmediate(onClose);
       }
     }
-    function writeBuffer(abort, body, client, request, socket, contentLength, header, expectsPayload) {
+    function writeBuffer(abort, body, client, request2, socket, contentLength, header, expectsPayload) {
       try {
         if (!body) {
           if (contentLength === 0) {
@@ -10444,18 +10415,18 @@ upgrade: ${upgrade}\r
 `, "latin1");
           socket.write(body);
           socket.uncork();
-          request.onBodySent(body);
-          if (!expectsPayload && request.reset !== false) {
+          request2.onBodySent(body);
+          if (!expectsPayload && request2.reset !== false) {
             socket[kReset] = true;
           }
         }
-        request.onRequestSent();
+        request2.onRequestSent();
         client[kResume]();
       } catch (err) {
         abort(err);
       }
     }
-    async function writeBlob(abort, body, client, request, socket, contentLength, header, expectsPayload) {
+    async function writeBlob(abort, body, client, request2, socket, contentLength, header, expectsPayload) {
       try {
         if (contentLength != null && contentLength !== body.size) {
           throw new RequestContentLengthMismatchError();
@@ -10467,9 +10438,9 @@ upgrade: ${upgrade}\r
 `, "latin1");
         socket.write(buffer);
         socket.uncork();
-        request.onBodySent(buffer);
-        request.onRequestSent();
-        if (!expectsPayload && request.reset !== false) {
+        request2.onBodySent(buffer);
+        request2.onRequestSent();
+        if (!expectsPayload && request2.reset !== false) {
           socket[kReset] = true;
         }
         client[kResume]();
@@ -10477,7 +10448,7 @@ upgrade: ${upgrade}\r
         abort(err);
       }
     }
-    async function writeIterable(abort, body, client, request, socket, contentLength, header, expectsPayload) {
+    async function writeIterable(abort, body, client, request2, socket, contentLength, header, expectsPayload) {
       assert(contentLength !== 0 || client[kRunning] === 0, "iterator body cannot be pipelined");
       let callback = null;
       function onDrain() {
@@ -10496,7 +10467,7 @@ upgrade: ${upgrade}\r
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
-      const writer = new AsyncWriter({ abort, socket, request, contentLength, client, expectsPayload, header });
+      const writer = new AsyncWriter({ abort, socket, request: request2, contentLength, client, expectsPayload, header });
       try {
         for await (const chunk of body) {
           if (socket[kError]) {
@@ -10525,9 +10496,9 @@ upgrade: ${upgrade}\r
        * @param {boolean} arg.expectsPayload
        * @param {string} arg.header
        */
-      constructor({ abort, socket, request, contentLength, client, expectsPayload, header }) {
+      constructor({ abort, socket, request: request2, contentLength, client, expectsPayload, header }) {
         this.socket = socket;
-        this.request = request;
+        this.request = request2;
         this.contentLength = contentLength;
         this.client = client;
         this.bytesWritten = 0;
@@ -10556,7 +10527,7 @@ upgrade: ${upgrade}\r
        * @returns
        */
       write(chunk) {
-        const { socket, request, contentLength, client, bytesWritten, expectsPayload, header } = this;
+        const { socket, request: request2, contentLength, client, bytesWritten, expectsPayload, header } = this;
         if (socket[kError]) {
           throw socket[kError];
         }
@@ -10581,7 +10552,7 @@ upgrade: ${upgrade}\r
         }
         socket.cork();
         if (bytesWritten === 0) {
-          if (!expectsPayload && request.reset !== false) {
+          if (!expectsPayload && request2.reset !== false) {
             socket[kReset] = true;
           }
           if (contentLength === null) {
@@ -10601,7 +10572,7 @@ ${len.toString(16)}\r
         this.bytesWritten += len;
         const ret = socket.write(chunk);
         socket.uncork();
-        request.onBodySent(chunk);
+        request2.onBodySent(chunk);
         if (!ret) {
           if (socket[kParser].timeout && socket[kParser].timeoutType === TIMEOUT_HEADERS) {
             if (socket[kParser].timeout.refresh) {
@@ -10615,8 +10586,8 @@ ${len.toString(16)}\r
        * @returns {void}
        */
       end() {
-        const { socket, contentLength, client, bytesWritten, expectsPayload, header, request } = this;
-        request.onRequestSent();
+        const { socket, contentLength, client, bytesWritten, expectsPayload, header, request: request2 } = this;
+        request2.onRequestSent();
         socket[kWriting] = false;
         if (socket[kError]) {
           throw socket[kError];
@@ -10715,15 +10686,16 @@ var require_client_h2 = __commonJS({
       kMaxResponseSize
     } = require_symbols();
     var { channels } = require_diagnostics();
-    var kOpenStreams = Symbol("open streams");
-    var kRequestStreamId = Symbol("request stream id");
-    var kRequestStream = Symbol("request stream");
-    var kRequestStreamCleanup = Symbol("request stream cleanup");
-    var kRequestStreamState = Symbol("request stream state");
-    var kReceivedGoAway = Symbol("received goaway");
-    var kGoAwayReplayAttempts = Symbol("goaway replay attempts");
-    var kRefusedStreamRetry = Symbol("refused stream retry");
+    var kOpenStreams = /* @__PURE__ */ Symbol("open streams");
+    var kRequestStreamId = /* @__PURE__ */ Symbol("request stream id");
+    var kRequestStream = /* @__PURE__ */ Symbol("request stream");
+    var kRequestStreamCleanup = /* @__PURE__ */ Symbol("request stream cleanup");
+    var kRequestStreamState = /* @__PURE__ */ Symbol("request stream state");
+    var kReceivedGoAway = /* @__PURE__ */ Symbol("received goaway");
+    var kGoAwayReplayAttempts = /* @__PURE__ */ Symbol("goaway replay attempts");
+    var kRefusedStreamRetry = /* @__PURE__ */ Symbol("refused stream retry");
     var MAX_GOAWAY_REPLAY_ATTEMPTS = 1;
+    var MIN_PROBE_TIMEOUT = 1e3;
     var extractBody;
     var http2;
     try {
@@ -10770,48 +10742,48 @@ var require_client_h2 = __commonJS({
     function getGoAwayPendingIdx(client, lastStreamID) {
       const maxAcceptedStreamID = Number.isInteger(lastStreamID) ? lastStreamID : Number.MAX_SAFE_INTEGER;
       for (let i = client[kRunningIdx]; i < client[kPendingIdx]; i++) {
-        const request = client[kQueue][i];
-        if (request == null) {
+        const request2 = client[kQueue][i];
+        if (request2 == null) {
           continue;
         }
-        if (typeof request[kRequestStreamId] !== "number" || request[kRequestStreamId] > maxAcceptedStreamID) {
+        if (typeof request2[kRequestStreamId] !== "number" || request2[kRequestStreamId] > maxAcceptedStreamID) {
           return i;
         }
       }
       return client[kPendingIdx];
     }
-    function detachRequestFromStream(request) {
-      request[kRequestStreamId] = null;
-      request[kRequestStream] = null;
-      request[kRequestStreamCleanup] = null;
+    function detachRequestFromStream(request2) {
+      request2[kRequestStreamId] = null;
+      request2[kRequestStream] = null;
+      request2[kRequestStreamCleanup] = null;
     }
-    function bindRequestToStream(request, stream, cleanup) {
-      const previousCleanup = request[kRequestStreamCleanup];
-      const previousStream = request[kRequestStream];
-      detachRequestFromStream(request);
+    function bindRequestToStream(request2, stream, cleanup) {
+      const previousCleanup = request2[kRequestStreamCleanup];
+      const previousStream = request2[kRequestStream];
+      detachRequestFromStream(request2);
       previousCleanup?.(previousStream);
-      request[kRequestStreamId] = stream.id;
-      request[kRequestStream] = stream;
-      request[kRequestStreamCleanup] = cleanup;
+      request2[kRequestStreamId] = stream.id;
+      request2[kRequestStream] = stream;
+      request2[kRequestStreamCleanup] = cleanup;
     }
-    function clearRequestStream(request) {
-      const cleanup = request[kRequestStreamCleanup];
-      const stream = request[kRequestStream];
-      detachRequestFromStream(request);
+    function clearRequestStream(request2) {
+      const cleanup = request2[kRequestStreamCleanup];
+      const stream = request2[kRequestStream];
+      detachRequestFromStream(request2);
       cleanup?.(stream);
     }
-    function requeueUnsentRequest(client, request) {
-      client[kQueue].splice(client[kPendingIdx] + 1, 0, request);
+    function requeueUnsentRequest(client, request2) {
+      client[kQueue].splice(client[kPendingIdx] + 1, 0, request2);
     }
-    function completeRequest(client, request, resetPendingIdx = false) {
+    function completeRequest(client, request2, resetPendingIdx = false) {
       const queue = client[kQueue];
       const runningIdx = client[kRunningIdx];
-      if (runningIdx < client[kPendingIdx] && queue[runningIdx] === request) {
+      if (runningIdx < client[kPendingIdx] && queue[runningIdx] === request2) {
         queue[runningIdx] = null;
         client[kRunningIdx] = runningIdx + 1;
         return;
       }
-      const index = queue.indexOf(request, runningIdx);
+      const index = queue.indexOf(request2, runningIdx);
       if (index === -1 || index >= client[kPendingIdx]) {
         return;
       }
@@ -10821,17 +10793,17 @@ var require_client_h2 = __commonJS({
         client[kPendingIdx] = client[kRunningIdx];
       }
     }
-    function canReplayRequest(request) {
-      const { body } = request;
+    function canReplayRequest(request2) {
+      const { body } = request2;
       return body == null || util.isBuffer(body) || util.isBlobLike(body);
     }
-    function hasResponseStarted(request) {
-      const state = request[kRequestStream]?.[kRequestStreamState];
+    function hasResponseStarted(request2) {
+      const state = request2[kRequestStream]?.[kRequestStreamState];
       return state?.responseReceived === true;
     }
-    function registerGoAwayRefusal(request) {
-      const attempts = (request[kGoAwayReplayAttempts] ?? 0) + 1;
-      request[kGoAwayReplayAttempts] = attempts;
+    function registerGoAwayRefusal(request2) {
+      const attempts = (request2[kGoAwayReplayAttempts] ?? 0) + 1;
+      request2[kGoAwayReplayAttempts] = attempts;
       return attempts <= MAX_GOAWAY_REPLAY_ATTEMPTS;
     }
     function closeStream(stream, code = NGHTTP2_REFUSED_STREAM) {
@@ -10842,9 +10814,9 @@ var require_client_h2 = __commonJS({
         }
       }
     }
-    function detachRequestStreamForClose(request) {
-      const stream = request[kRequestStream];
-      clearRequestStream(request);
+    function detachRequestStreamForClose(request2) {
+      const stream = request2[kRequestStream];
+      clearRequestStream(request2);
       severRequestStream(stream);
       return stream;
     }
@@ -10884,6 +10856,9 @@ var require_client_h2 = __commonJS({
         // Armed while the peer advertises MAX_CONCURRENT_STREAMS = 0 and we have
         // work that cannot start. See setNoStreamsTimeout.
         noStreamsTimeout: null,
+        // Armed while a PING checks whether the peer is still there after a
+        // stream timed out. See probeHttp2Session.
+        probeTimeout: null,
         // Sockets start out ref'd. Session ref/unref proxies to the socket, so a
         // single cached flag lets us skip redundant uv ref/unref calls, provided
         // every ref/unref of the session or its socket goes through
@@ -10919,8 +10894,8 @@ var require_client_h2 = __commonJS({
          * @param {import('../core/request.js')} request
          * @returns {boolean}
         */
-        write(request) {
-          return writeH2(client, request);
+        write(request2) {
+          return writeH2(client, request2);
         },
         /**
          * @returns {void}
@@ -10949,18 +10924,21 @@ var require_client_h2 = __commonJS({
          * @param {import('../core/request.js')} request
          * @returns {boolean}
         */
-        busy(request) {
+        busy(request2) {
           if (session[kRemoteSettings] === false && client[kRunning] > 0) {
+            return true;
+          }
+          if (session[kHTTP2SessionState].probeTimeout != null) {
             return true;
           }
           if (client[kRunning] >= client[kMaxConcurrentStreams]) {
             return true;
           }
-          if (request != null) {
+          if (request2 != null) {
             if (client[kRunning] > 0) {
-              if ((request.upgrade === "websocket" || request.method === "CONNECT") && session[kRemoteSettings] === false) return true;
+              if ((request2.upgrade === "websocket" || request2.method === "CONNECT") && session[kRemoteSettings] === false) return true;
             } else {
-              return (request.upgrade === "websocket" || request.method === "CONNECT") && session[kRemoteSettings] === false;
+              return (request2.upgrade === "websocket" || request2.method === "CONNECT") && session[kRemoteSettings] === false;
             }
           }
           return false;
@@ -11034,6 +11012,41 @@ var require_client_h2 = __commonJS({
           util.errorRequest(client, requests2[i], err);
         }
       }
+      session[kError] = err;
+      resetHttp2Session(session, err);
+    }
+    function probeHttp2Session(session, timeout) {
+      const state = session[kHTTP2SessionState];
+      if (state.probeTimeout != null || session.closed || session.destroyed) {
+        return;
+      }
+      try {
+        session.ping(onHttp2ProbeAck.bind(session));
+      } catch {
+        return;
+      }
+      state.probeTimeout = setTimeout(onHttp2ProbeTimeout, Math.max(timeout, MIN_PROBE_TIMEOUT), session).unref();
+    }
+    function clearHttp2ProbeTimeout(session) {
+      const state = session[kHTTP2SessionState];
+      if (state?.probeTimeout != null) {
+        clearTimeout(state.probeTimeout);
+        state.probeTimeout = null;
+      }
+    }
+    function onHttp2ProbeAck() {
+      if (this[kHTTP2SessionState].probeTimeout == null) {
+        return;
+      }
+      clearHttp2ProbeTimeout(this);
+      this[kClient][kResume]();
+    }
+    function onHttp2ProbeTimeout(session) {
+      session[kHTTP2SessionState].probeTimeout = null;
+      if (session.closed || session.destroyed) {
+        return;
+      }
+      const err = new SocketError("HTTP/2: connection unresponsive", util.getSocketInfo(session[kSocket]));
       session[kError] = err;
       resetHttp2Session(session, err);
     }
@@ -11142,14 +11155,14 @@ var require_client_h2 = __commonJS({
       const retriableRequests = [];
       const streamsToClose = [];
       for (let i = pendingIdx; i < previousPendingIdx; i++) {
-        const request = client[kQueue][i];
-        if (request != null) {
-          const responseStarted = hasResponseStarted(request);
-          streamsToClose.push(detachRequestStreamForClose(request));
-          if (!responseStarted && canReplayRequest(request) && registerGoAwayRefusal(request)) {
-            retriableRequests.push(request);
+        const request2 = client[kQueue][i];
+        if (request2 != null) {
+          const responseStarted = hasResponseStarted(request2);
+          streamsToClose.push(detachRequestStreamForClose(request2));
+          if (!responseStarted && canReplayRequest(request2) && registerGoAwayRefusal(request2)) {
+            retriableRequests.push(request2);
           } else {
-            util.errorRequest(client, request, err);
+            util.errorRequest(client, request2, err);
           }
         }
       }
@@ -11171,6 +11184,7 @@ var require_client_h2 = __commonJS({
       }
       clearHttp2IdleTimeout(this);
       clearNoStreamsTimeout(this);
+      clearHttp2ProbeTimeout(this);
       if (!this.closed && !this.destroyed) {
         this.close();
       }
@@ -11188,6 +11202,7 @@ var require_client_h2 = __commonJS({
       }
       clearHttp2IdleTimeout(this);
       clearNoStreamsTimeout(this);
+      clearHttp2ProbeTimeout(this);
       if (state.ping.interval != null) {
         clearInterval(state.ping.interval);
         state.ping.interval = null;
@@ -11196,9 +11211,9 @@ var require_client_h2 = __commonJS({
         assert(client[kPending] === 0);
         const requests2 = client[kQueue].splice(client[kRunningIdx]);
         for (let i = 0; i < requests2.length; i++) {
-          const request = requests2[i];
-          if (request != null) {
-            util.errorRequest(client, request, err);
+          const request2 = requests2[i];
+          if (request2 != null) {
+            util.errorRequest(client, request2, err);
           }
         }
       }
@@ -11316,9 +11331,9 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
-      if (request[kRequestStream] === stream) {
-        detachRequestFromStream(request);
+      const { request: request2 } = state;
+      if (request2[kRequestStream] === stream) {
+        detachRequestFromStream(request2);
       }
       removeUpgradeStreamListeners(stream);
       if (!stream.destroyed && !stream.closed) {
@@ -11329,8 +11344,8 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
-      if (state.responseReceived || request.aborted || request.completed) {
+      const { request: request2 } = state;
+      if (state.responseReceived || request2.aborted || request2.completed) {
         return;
       }
       releaseUpgradeStream(state.stream);
@@ -11354,30 +11369,30 @@ var require_client_h2 = __commonJS({
     function onUpgradeResponse(headers, _flags) {
       const stream = this;
       const state = stream[kRequestStreamState];
-      const { request } = state;
+      const { request: request2 } = state;
       state.responseReceived = true;
       const statusCode = headers[HTTP2_HEADER_STATUS];
       delete headers[HTTP2_HEADER_STATUS];
       try {
-        request.onRequestUpgrade(statusCode, headers, stream);
+        request2.onRequestUpgrade(statusCode, headers, stream);
       } catch (err) {
         state.abort(err);
         return;
       }
-      if (request.aborted) {
+      if (request2.aborted) {
         return;
       }
       removeUpgradeStreamListeners(stream);
-      detachRequestFromStream(request);
+      detachRequestFromStream(request2);
       finalizeRequest(state);
     }
     function setupUpgradeStream(stream, state) {
-      const { request, headersTimeout, session } = state;
+      const { request: request2, headersTimeout, session } = state;
       stream[kHTTP2Stream] = true;
       stream[kHTTP2Session] = session;
       stream[kRequestStreamState] = state;
       state.stream = stream;
-      bindRequestToStream(request, stream, releaseUpgradeStream);
+      bindRequestToStream(request2, stream, releaseUpgradeStream);
       stream.once("response", onUpgradeResponse);
       stream.on("error", onUpgradeStreamError);
       stream.once("end", onUpgradeStreamEnd);
@@ -11395,7 +11410,7 @@ var require_client_h2 = __commonJS({
       completeRequest(state.client, state.request, resetPendingIdx);
       state.client[kResume]();
     }
-    function openStream(client, request, session, abort, headers, options) {
+    function openStream(client, request2, session, abort, headers, options) {
       try {
         return session.request(headers, options);
       } catch (err) {
@@ -11404,7 +11419,7 @@ var require_client_h2 = __commonJS({
           wrappedErr2.cause = err;
           session[kError] = wrappedErr2;
           resetHttp2Session(session, wrappedErr2);
-          requeueUnsentRequest(client, request);
+          requeueUnsentRequest(client, request2);
           return null;
         }
         const wrappedErr = new InformationalError(err.message, { cause: err });
@@ -11416,13 +11431,13 @@ var require_client_h2 = __commonJS({
         return null;
       }
     }
-    function writeH2(client, request) {
-      const headersTimeout = request.headersTimeout ?? client[kHeadersTimeout];
-      const bodyTimeout = request.bodyTimeout ?? client[kBodyTimeout];
+    function writeH2(client, request2) {
+      const headersTimeout = request2.headersTimeout ?? client[kHeadersTimeout];
+      const bodyTimeout = request2.bodyTimeout ?? client[kBodyTimeout];
       const session = client[kHTTP2Session];
-      const { method, path: path2, host, upgrade, expectContinue, signal, protocol, headers: reqHeaders } = request;
+      const { method, path: path2, host, upgrade, expectContinue, signal, protocol, headers: reqHeaders } = request2;
       if (upgrade != null && upgrade !== "websocket") {
-        util.errorRequest(client, request, new InvalidArgumentError(`Custom upgrade "${upgrade}" not supported over HTTP/2`));
+        util.errorRequest(client, request2, new InvalidArgumentError(`Custom upgrade "${upgrade}" not supported over HTTP/2`));
         return false;
       }
       const headers = buildRequestHeaders(reqHeaders);
@@ -11430,13 +11445,13 @@ var require_client_h2 = __commonJS({
       headers[HTTP2_HEADER_METHOD] = method;
       const state = {
         abort: null,
-        body: request.body,
+        body: request2.body,
         bytesRead: 0,
         client,
         contentLength: null,
         expectsPayload: false,
         maxResponseSize: client[kMaxResponseSize],
-        request,
+        request: request2,
         headersTimeout,
         bodyTimeout,
         requestFinalized: false,
@@ -11449,13 +11464,13 @@ var require_client_h2 = __commonJS({
         stream: null
       };
       const abort = (err, resetPendingIdx = false) => {
-        if (request.aborted || request.completed) {
+        if (request2.aborted || request2.completed) {
           return;
         }
         err = err || new RequestAbortedError();
-        util.errorRequest(client, request, err);
+        util.errorRequest(client, request2, err);
         if (state.stream != null) {
-          clearRequestStream(request);
+          clearRequestStream(request2);
           const stream2 = state.stream;
           stream2.close();
           if (!stream2.destroyed) {
@@ -11469,18 +11484,18 @@ var require_client_h2 = __commonJS({
       state.abort = abort;
       let stream = null;
       try {
-        request.onRequestStart(abort, null);
+        request2.onRequestStart(abort, null);
       } catch (err) {
-        util.errorRequest(client, request, err);
+        util.errorRequest(client, request2, err);
       }
-      if (request.aborted) {
+      if (request2.aborted) {
         return false;
       }
       if (upgrade || method === "CONNECT") {
         refH2Session(session);
         if (upgrade === "websocket") {
           if (session[kEnableConnectProtocol] === false) {
-            util.errorRequest(client, request, new InformationalError("HTTP/2: Extended CONNECT protocol not supported by server"));
+            util.errorRequest(client, request2, new InformationalError("HTTP/2: Extended CONNECT protocol not supported by server"));
             unrefH2Session(session);
             return false;
           }
@@ -11492,7 +11507,7 @@ var require_client_h2 = __commonJS({
           } else {
             headers[HTTP2_HEADER_SCHEME] = protocol === "http:" ? "http" : "https";
           }
-          stream = openStream(client, request, session, abort, headers, { endStream: false, signal });
+          stream = openStream(client, request2, session, abort, headers, { endStream: false, signal });
           if (stream == null) {
             unrefH2Session(session);
             return false;
@@ -11500,7 +11515,7 @@ var require_client_h2 = __commonJS({
           setupUpgradeStream(stream, state);
           return true;
         }
-        stream = openStream(client, request, session, abort, headers, { endStream: false, signal });
+        stream = openStream(client, request2, session, abort, headers, { endStream: false, signal });
         if (stream == null) {
           unrefH2Session(session);
           return false;
@@ -11524,14 +11539,14 @@ var require_client_h2 = __commonJS({
         contentLength = bodyStream.length;
       }
       if (contentLength == null) {
-        contentLength = request.contentLength;
+        contentLength = request2.contentLength;
       }
       if (contentLength === 0 && !expectsPayload) {
         contentLength = null;
       }
-      if (shouldSendContentLength(method) && contentLength > 0 && request.contentLength != null && request.contentLength !== contentLength) {
+      if (shouldSendContentLength(method) && contentLength > 0 && request2.contentLength != null && request2.contentLength !== contentLength) {
         if (client[kStrictContentLength]) {
-          util.errorRequest(client, request, new RequestContentLengthMismatchError());
+          util.errorRequest(client, request2, new RequestContentLengthMismatchError());
           return false;
         }
         process.emitWarning(new RequestContentLengthMismatchError());
@@ -11547,7 +11562,7 @@ var require_client_h2 = __commonJS({
           header += `${key}: ${headers[key]}\r
 `;
         }
-        channels.sendHeaders.publish({ request, headers: header, socket: session[kSocket] });
+        channels.sendHeaders.publish({ request: request2, headers: header, socket: session[kSocket] });
       }
       const shouldEndStream = body === null || contentLength === 0;
       state.body = body;
@@ -11556,7 +11571,7 @@ var require_client_h2 = __commonJS({
       if (expectContinue) {
         headers[HTTP2_HEADER_EXPECT] = "100-continue";
       }
-      stream = openStream(client, request, session, abort, headers, { endStream: shouldEndStream, signal });
+      stream = openStream(client, request2, session, abort, headers, { endStream: shouldEndStream, signal });
       if (stream == null) {
         return false;
       }
@@ -11570,7 +11585,7 @@ var require_client_h2 = __commonJS({
       }
       stream[kHTTP2Session] = session;
       stream.on("close", completeRequestStream);
-      bindRequestToStream(request, stream, releaseRequestStream);
+      bindRequestToStream(request2, stream, releaseRequestStream);
       if (expectContinue) {
         stream.once("continue", writeBodyH2);
       }
@@ -11610,9 +11625,9 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
-      if (request[kRequestStream] === stream) {
-        detachRequestFromStream(request);
+      const { request: request2 } = state;
+      if (request2[kRequestStream] === stream) {
+        detachRequestFromStream(request2);
       }
       if (!stream.destroyed && !stream.closed) {
         removeRequestStreamListeners(stream);
@@ -11625,8 +11640,8 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request, maxResponseSize, responseContentLength } = state;
-      if (request.aborted || request.completed) {
+      const { request: request2, maxResponseSize, responseContentLength } = state;
+      if (request2.aborted || request2.completed) {
         return;
       }
       if (responseContentLength != null && state.bytesRead + chunk.length > responseContentLength) {
@@ -11638,7 +11653,7 @@ var require_client_h2 = __commonJS({
         return;
       }
       state.bytesRead += chunk.length;
-      if (request.onResponseData(chunk) === false) {
+      if (request2.onResponseData(chunk) === false) {
         pauseResponseStream(stream, state);
       }
     }
@@ -11662,13 +11677,13 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
-      if (request.aborted || request.completed) {
+      const { request: request2 } = state;
+      if (request2.aborted || request2.completed) {
         return;
       }
       const statusCode = headers[HTTP2_HEADER_STATUS];
       delete headers[HTTP2_HEADER_STATUS];
-      request.onResponseStart(Number(statusCode), headers, noop, "");
+      request2.onResponseStart(Number(statusCode), headers, noop, "");
     }
     function onResponse(headers) {
       const stream = this;
@@ -11676,7 +11691,7 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
+      const { request: request2 } = state;
       stream.off("response", onResponse);
       if (state.body != null && !state.bodySent && !stream.writableEnded) {
         stream.removeListener("continue", writeBodyH2);
@@ -11684,20 +11699,20 @@ var require_client_h2 = __commonJS({
       }
       const statusCode = Number(headers[HTTP2_HEADER_STATUS]);
       delete headers[HTTP2_HEADER_STATUS];
-      request.onResponseStarted();
+      request2.onResponseStarted();
       state.responseReceived = true;
-      if (request.method !== "HEAD" && statusCode !== 304) {
+      if (request2.method !== "HEAD" && statusCode !== 304) {
         const contentLength = headers[HTTP2_HEADER_CONTENT_LENGTH];
         state.responseContentLength = contentLength == null ? null : Number(contentLength);
       }
       if (state.headersTimeout || state.bodyTimeout) {
         stream.setTimeout(state.bodyTimeout);
       }
-      if (request.aborted || request.completed) {
+      if (request2.aborted || request2.completed) {
         releaseRequestStream(stream);
         return;
       }
-      if (request.onResponseStart(statusCode, headers, resumeResponseStream.bind(stream), "") === false) {
+      if (request2.onResponseStart(statusCode, headers, resumeResponseStream.bind(stream), "") === false) {
         pauseResponseStream(stream, state);
       }
       stream.on("data", onData);
@@ -11708,10 +11723,10 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
+      const { request: request2 } = state;
       stream.off("end", onEnd);
       if (state.responseReceived) {
-        if (!request.aborted && !request.completed) {
+        if (!request2.aborted && !request2.completed) {
           if (state.responseContentLength != null && state.bytesRead !== state.responseContentLength) {
             state.abort(new ResponseContentLengthMismatchError());
             return;
@@ -11724,16 +11739,16 @@ var require_client_h2 = __commonJS({
       }
     }
     function retryRefusedStream(stream, state) {
-      const { client, request } = state;
-      if (state.responseReceived || request.aborted || request.completed || request[kRefusedStreamRetry] || !canReplayRequest(request)) {
+      const { client, request: request2 } = state;
+      if (state.responseReceived || request2.aborted || request2.completed || request2[kRefusedStreamRetry] || !canReplayRequest(request2)) {
         return false;
       }
-      request[kRefusedStreamRetry] = true;
-      detachRequestStreamForClose(request);
+      request2[kRefusedStreamRetry] = true;
+      detachRequestStreamForClose(request2);
       state.stream = null;
       state.requestFinalized = true;
-      completeRequest(client, request);
-      client[kQueue].splice(client[kPendingIdx], 0, request);
+      completeRequest(client, request2);
+      client[kQueue].splice(client[kPendingIdx], 0, request2);
       client[kResume]();
       return true;
     }
@@ -11774,7 +11789,9 @@ var require_client_h2 = __commonJS({
         return;
       }
       stream.off("timeout", onTimeout);
-      const err = state.responseReceived ? new BodyTimeoutError(`HTTP/2: "stream timeout after ${state.bodyTimeout}"`) : new HeadersTimeoutError(`HTTP/2: "headers timeout after ${state.headersTimeout}"`);
+      const { responseReceived, session, bodyTimeout, headersTimeout } = state;
+      const err = responseReceived ? new BodyTimeoutError(`HTTP/2: "stream timeout after ${bodyTimeout}"`) : new HeadersTimeoutError(`HTTP/2: "headers timeout after ${headersTimeout}"`);
+      probeHttp2Session(session, responseReceived ? bodyTimeout : headersTimeout);
       state.abort(err);
     }
     function onTrailers(trailers) {
@@ -11783,10 +11800,10 @@ var require_client_h2 = __commonJS({
       if (state == null) {
         return;
       }
-      const { request } = state;
+      const { request: request2 } = state;
       stream.off("trailers", onTrailers);
       stream.off("data", onData);
-      if (request.aborted || request.completed) {
+      if (request2.aborted || request2.completed) {
         return;
       }
       state.trailers = trailers;
@@ -11795,14 +11812,14 @@ var require_client_h2 = __commonJS({
       const stream = this;
       const state = stream[kRequestStreamState];
       state.bodySent = true;
-      const { abort, body, client, contentLength, expectsPayload, request } = state;
+      const { abort, body, client, contentLength, expectsPayload, request: request2 } = state;
       if (!body || contentLength === 0) {
         writeBuffer(
           abort,
           stream,
           null,
           client,
-          request,
+          request2,
           client[kSocket],
           contentLength,
           expectsPayload
@@ -11813,7 +11830,7 @@ var require_client_h2 = __commonJS({
           stream,
           body,
           client,
-          request,
+          request2,
           client[kSocket],
           contentLength,
           expectsPayload
@@ -11825,7 +11842,7 @@ var require_client_h2 = __commonJS({
             stream,
             body.stream(),
             client,
-            request,
+            request2,
             client[kSocket],
             contentLength,
             expectsPayload
@@ -11836,7 +11853,7 @@ var require_client_h2 = __commonJS({
             stream,
             body,
             client,
-            request,
+            request2,
             client[kSocket],
             contentLength,
             expectsPayload
@@ -11850,7 +11867,7 @@ var require_client_h2 = __commonJS({
           stream,
           body,
           client,
-          request,
+          request2,
           contentLength
         );
       } else if (util.isIterable(body)) {
@@ -11859,7 +11876,7 @@ var require_client_h2 = __commonJS({
           stream,
           body,
           client,
-          request,
+          request2,
           client[kSocket],
           contentLength,
           expectsPayload
@@ -11868,7 +11885,7 @@ var require_client_h2 = __commonJS({
         assert(false);
       }
     }
-    function writeBuffer(abort, h2stream, body, client, request, socket, contentLength, expectsPayload) {
+    function writeBuffer(abort, h2stream, body, client, request2, socket, contentLength, expectsPayload) {
       try {
         if (body != null && util.isBuffer(body)) {
           assert(contentLength === body.byteLength, "buffer body must have content length");
@@ -11876,18 +11893,18 @@ var require_client_h2 = __commonJS({
           h2stream.write(body);
           h2stream.uncork();
           h2stream.end();
-          request.onBodySent(body);
+          request2.onBodySent(body);
         }
         if (!expectsPayload) {
           socket[kReset] = true;
         }
-        request.onRequestSent();
+        request2.onRequestSent();
         client[kResume]();
       } catch (error) {
         abort(error);
       }
     }
-    function writeStream(abort, socket, expectsPayload, h2stream, body, client, request, contentLength) {
+    function writeStream(abort, socket, expectsPayload, h2stream, body, client, request2, contentLength) {
       assert(contentLength !== 0 || client[kRunning] === 0, "stream body cannot be pipelined");
       const pipe = pipeline(
         body,
@@ -11898,7 +11915,7 @@ var require_client_h2 = __commonJS({
             abort(err);
           } else {
             util.removeAllListeners(pipe);
-            request.onRequestSent();
+            request2.onRequestSent();
             if (!expectsPayload) {
               socket[kReset] = true;
             }
@@ -11908,10 +11925,10 @@ var require_client_h2 = __commonJS({
       );
       util.addListener(pipe, "data", onPipeData);
       function onPipeData(chunk) {
-        request.onBodySent(chunk);
+        request2.onBodySent(chunk);
       }
     }
-    async function writeBlob(abort, h2stream, body, client, request, socket, contentLength, expectsPayload) {
+    async function writeBlob(abort, h2stream, body, client, request2, socket, contentLength, expectsPayload) {
       try {
         if (contentLength != null && contentLength !== body.size) {
           throw new RequestContentLengthMismatchError();
@@ -11921,8 +11938,8 @@ var require_client_h2 = __commonJS({
         h2stream.write(buffer);
         h2stream.uncork();
         h2stream.end();
-        request.onBodySent(buffer);
-        request.onRequestSent();
+        request2.onBodySent(buffer);
+        request2.onRequestSent();
         if (!expectsPayload) {
           socket[kReset] = true;
         }
@@ -11931,7 +11948,7 @@ var require_client_h2 = __commonJS({
         abort(err);
       }
     }
-    async function writeIterable(abort, h2stream, body, client, request, socket, contentLength, expectsPayload) {
+    async function writeIterable(abort, h2stream, body, client, request2, socket, contentLength, expectsPayload) {
       assert(contentLength !== 0 || client[kRunning] === 0, "iterator body cannot be pipelined");
       let callback = null;
       function onDrain() {
@@ -11956,13 +11973,13 @@ var require_client_h2 = __commonJS({
             throw socket[kError];
           }
           const res = h2stream.write(chunk);
-          request.onBodySent(chunk);
+          request2.onBodySent(chunk);
           if (!res) {
             await waitForDrain();
           }
         }
         h2stream.end();
-        request.onRequestSent();
+        request2.onRequestSent();
         if (!expectsPayload) {
           socket[kReset] = true;
         }
@@ -12040,7 +12057,7 @@ var require_client = __commonJS({
     } = require_symbols();
     var connectH1 = require_client_h1();
     var connectH2 = require_client_h2();
-    var kClosedResolve = Symbol("kClosedResolve");
+    var kClosedResolve = /* @__PURE__ */ Symbol("kClosedResolve");
     var getDefaultNodeMaxHeaderSize = http && http.maxHeaderSize && Number.isInteger(http.maxHeaderSize) && http.maxHeaderSize > 0 ? () => http.maxHeaderSize : () => {
       throw new InvalidArgumentError("http module not available or http.maxHeaderSize invalid");
     };
@@ -12303,10 +12320,10 @@ var require_client = __commonJS({
         this.once("connect", cb);
       }
       [kDispatch](opts, handler) {
-        const request = new Request2(this[kUrl].origin, opts, handler);
-        this[kQueue].push(request);
+        const request2 = new Request2(this[kUrl].origin, opts, handler);
+        this[kQueue].push(request2);
         if (this[kResuming]) {
-        } else if (util.bodyLength(request.body) == null && util.isIterable(request.body)) {
+        } else if (util.bodyLength(request2.body) == null && util.isIterable(request2.body)) {
           this[kResuming] = 1;
           queueMicrotask(() => resume(this));
         } else {
@@ -12330,9 +12347,9 @@ var require_client = __commonJS({
         return new Promise((resolve2) => {
           const requests2 = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests2.length; i++) {
-            const request = requests2[i];
-            if (request != null) {
-              util.errorRequest(this, request, err);
+            const request2 = requests2[i];
+            if (request2 != null) {
+              util.errorRequest(this, request2, err);
             }
           }
           const callback = () => {
@@ -12357,9 +12374,9 @@ var require_client = __commonJS({
         assert(client[kPendingIdx] === client[kRunningIdx]);
         const requests2 = client[kQueue].splice(client[kRunningIdx]);
         for (let i = 0; i < requests2.length; i++) {
-          const request = requests2[i];
-          if (request != null) {
-            util.errorRequest(client, request, err);
+          const request2 = requests2[i];
+          if (request2 != null) {
+            util.errorRequest(client, request2, err);
           }
         }
         assert(client[kSize] === 0);
@@ -12474,8 +12491,8 @@ var require_client = __commonJS({
           util.errorRequest(client, running2[i], err);
         }
         while (client[kPending] > 0 && client[kQueue][client[kPendingIdx]].servername === client[kServerName]) {
-          const request = client[kQueue].splice(client[kPendingIdx], 1)[0];
-          util.errorRequest(client, request, err);
+          const request2 = client[kQueue].splice(client[kPendingIdx], 1)[0];
+          util.errorRequest(client, request2, err);
         }
       } else {
         onError(client, err);
@@ -12530,19 +12547,19 @@ var require_client = __commonJS({
         if (client[kRunning] >= (getMaxConcurrent(client) || 1)) {
           return;
         }
-        const request = client[kQueue][client[kPendingIdx]];
-        if (request === null) {
+        const request2 = client[kQueue][client[kPendingIdx]];
+        if (request2 === null) {
           return;
         }
-        if (request.aborted) {
+        if (request2.aborted) {
           client[kQueue].splice(client[kPendingIdx], 1);
           continue;
         }
-        if (client[kUrl].protocol === "https:" && client[kServerName] !== request.servername) {
+        if (client[kUrl].protocol === "https:" && client[kServerName] !== request2.servername) {
           if (client[kRunning] > 0) {
             return;
           }
-          client[kServerName] = request.servername;
+          client[kServerName] = request2.servername;
           client[kHTTPContext]?.destroy(new InformationalError("servername changed"), () => {
             client[kHTTPContext] = null;
             resume(client);
@@ -12552,17 +12569,17 @@ var require_client = __commonJS({
           return;
         }
         if (!client[kHTTPContext]) {
-          client[kServerName] = request.servername;
+          client[kServerName] = request2.servername;
           connect(client);
           return;
         }
         if (client[kHTTPContext].destroyed) {
           return;
         }
-        if (client[kHTTPContext].busy(request)) {
+        if (client[kHTTPContext].busy(request2)) {
           return;
         }
-        if (!request.aborted && client[kHTTPContext].write(request)) {
+        if (!request2.aborted && client[kHTTPContext].write(request2)) {
           client[kPendingIdx]++;
         } else {
           client[kQueue].splice(client[kPendingIdx], 1);
@@ -12648,27 +12665,38 @@ var require_fixed_queue = __commonJS({
 var require_pool_base = __commonJS({
   "node_modules/undici/lib/dispatcher/pool-base.js"(exports, module) {
     "use strict";
+    var { AsyncResource } = __require("node:async_hooks");
     var { PoolStats } = require_stats();
     var DispatcherBase = require_dispatcher_base();
     var FixedQueue = require_fixed_queue();
     var { kConnected, kSize, kRunning, kPending, kQueued, kBusy, kFree, kUrl, kClose, kDestroy, kDispatch } = require_symbols();
-    var kClients = Symbol("clients");
-    var kNeedDrain = Symbol("needDrain");
-    var kQueue = Symbol("queue");
-    var kClosedResolve = Symbol("closed resolve");
-    var kOnDrain = Symbol("onDrain");
-    var kOnConnect = Symbol("onConnect");
-    var kOnDisconnect = Symbol("onDisconnect");
-    var kOnConnectionError = Symbol("onConnectionError");
-    var kOnClientBusy = Symbol("on client busy");
-    var kOnClientDrain = Symbol("on client drain");
-    var kDrainQueue = Symbol("drain queue");
-    var kGetDispatcher = Symbol("get dispatcher");
-    var kHasDispatcher = Symbol("has dispatcher");
-    var kAddClient = Symbol("add client");
-    var kRemoveClient = Symbol("remove client");
-    var kRetireClient = Symbol("retire client");
-    var kRetiring = Symbol("retiring clients");
+    var kClients = /* @__PURE__ */ Symbol("clients");
+    var kNeedDrain = /* @__PURE__ */ Symbol("needDrain");
+    var kQueue = /* @__PURE__ */ Symbol("queue");
+    var kClosedResolve = /* @__PURE__ */ Symbol("closed resolve");
+    var kOnDrain = /* @__PURE__ */ Symbol("onDrain");
+    var kOnConnect = /* @__PURE__ */ Symbol("onConnect");
+    var kOnDisconnect = /* @__PURE__ */ Symbol("onDisconnect");
+    var kOnConnectionError = /* @__PURE__ */ Symbol("onConnectionError");
+    var kOnClientBusy = /* @__PURE__ */ Symbol("on client busy");
+    var kOnClientDrain = /* @__PURE__ */ Symbol("on client drain");
+    var kDrainQueue = /* @__PURE__ */ Symbol("drain queue");
+    var kGetDispatcher = /* @__PURE__ */ Symbol("get dispatcher");
+    var kHasDispatcher = /* @__PURE__ */ Symbol("has dispatcher");
+    var kAddClient = /* @__PURE__ */ Symbol("add client");
+    var kRemoveClient = /* @__PURE__ */ Symbol("remove client");
+    var kRetireClient = /* @__PURE__ */ Symbol("retire client");
+    var kRetiring = /* @__PURE__ */ Symbol("retiring clients");
+    var QueuedRequest = class extends AsyncResource {
+      constructor(opts, handler) {
+        super("UNDICI_POOL_QUEUED_REQUEST");
+        this.opts = opts;
+        this.handler = handler;
+      }
+      dispatch(dispatcher) {
+        return this.runInAsyncScope(dispatcher.dispatch, dispatcher, this.opts, this.handler);
+      }
+    };
     function closeClients(pool) {
       const closeAll = [];
       for (let i = 0; i < pool[kClients].length; i++) {
@@ -12703,7 +12731,7 @@ var require_pool_base = __commonJS({
             break;
           }
           this[kQueued]--;
-          needDrain = !client.dispatch(item.opts, item.handler);
+          needDrain = !item.dispatch(client);
         }
         client[kNeedDrain] = needDrain;
         if (needDrain) {
@@ -12735,7 +12763,7 @@ var require_pool_base = __commonJS({
           }
           const item = queue.shift();
           this[kQueued]--;
-          if (!dispatcher.dispatch(item.opts, item.handler)) {
+          if (!item.dispatch(dispatcher)) {
             dispatcher[kNeedDrain] = true;
             this[kOnClientBusy](dispatcher);
             hasDispatcher = this[kHasDispatcher]();
@@ -12832,7 +12860,7 @@ var require_pool_base = __commonJS({
         const dispatcher = this[kGetDispatcher]();
         if (!dispatcher) {
           this[kNeedDrain] = true;
-          this[kQueue].push({ opts, handler });
+          this[kQueue].push(new QueuedRequest(opts, handler));
           this[kQueued]++;
         } else if (!dispatcher.dispatch(opts, handler)) {
           dispatcher[kNeedDrain] = true;
@@ -12933,11 +12961,11 @@ var require_pool = __commonJS({
     var util = require_util();
     var { kConnecting, kHTTPContext, kUrl, kQueued } = require_symbols();
     var buildConnector = require_connect();
-    var kOptions = Symbol("options");
-    var kConnections = Symbol("connections");
-    var kFactory = Symbol("factory");
-    var kProtocol = Symbol("protocol");
-    var kProtocolProbe = Symbol("protocol probe");
+    var kOptions = /* @__PURE__ */ Symbol("options");
+    var kConnections = /* @__PURE__ */ Symbol("connections");
+    var kFactory = /* @__PURE__ */ Symbol("factory");
+    var kProtocol = /* @__PURE__ */ Symbol("protocol");
+    var kProtocolProbe = /* @__PURE__ */ Symbol("protocol probe");
     function defaultFactory(origin, opts) {
       return new Client(origin, opts);
     }
@@ -13107,14 +13135,14 @@ var require_balanced_pool = __commonJS({
     var Pool2 = require_pool();
     var { kOriginless, kUrl } = require_symbols();
     var util = require_util();
-    var kFactory = Symbol("factory");
-    var kOptions = Symbol("options");
-    var kGreatestCommonDivisor = Symbol("kGreatestCommonDivisor");
-    var kCurrentWeight = Symbol("kCurrentWeight");
-    var kIndex = Symbol("kIndex");
-    var kWeight = Symbol("kWeight");
-    var kMaxWeightPerServer = Symbol("kMaxWeightPerServer");
-    var kErrorPenalty = Symbol("kErrorPenalty");
+    var kFactory = /* @__PURE__ */ Symbol("factory");
+    var kOptions = /* @__PURE__ */ Symbol("options");
+    var kGreatestCommonDivisor = /* @__PURE__ */ Symbol("kGreatestCommonDivisor");
+    var kCurrentWeight = /* @__PURE__ */ Symbol("kCurrentWeight");
+    var kIndex = /* @__PURE__ */ Symbol("kIndex");
+    var kWeight = /* @__PURE__ */ Symbol("kWeight");
+    var kMaxWeightPerServer = /* @__PURE__ */ Symbol("kMaxWeightPerServer");
+    var kErrorPenalty = /* @__PURE__ */ Symbol("kErrorPenalty");
     function getGreatestCommonDivisor(a, b) {
       if (a === 0) return b;
       while (b !== 0) {
@@ -13258,10 +13286,10 @@ var require_round_robin_pool = __commonJS({
     var util = require_util();
     var { kUrl, kQueued } = require_symbols();
     var buildConnector = require_connect();
-    var kOptions = Symbol("options");
-    var kConnections = Symbol("connections");
-    var kFactory = Symbol("factory");
-    var kIndex = Symbol("index");
+    var kOptions = /* @__PURE__ */ Symbol("options");
+    var kConnections = /* @__PURE__ */ Symbol("connections");
+    var kFactory = /* @__PURE__ */ Symbol("factory");
+    var kIndex = /* @__PURE__ */ Symbol("index");
     function defaultFactory(origin, opts) {
       return new Client(origin, opts);
     }
@@ -13387,17 +13415,17 @@ var require_agent = __commonJS({
     var Pool2 = require_pool();
     var Client = require_client();
     var util = require_util();
-    var kOnConnect = Symbol("onConnect");
-    var kOnDisconnect = Symbol("onDisconnect");
-    var kOnConnectionError = Symbol("onConnectionError");
-    var kOnDrain = Symbol("onDrain");
-    var kFactory = Symbol("factory");
-    var kOptions = Symbol("options");
-    var kOrigins = Symbol("origins");
+    var kOnConnect = /* @__PURE__ */ Symbol("onConnect");
+    var kOnDisconnect = /* @__PURE__ */ Symbol("onDisconnect");
+    var kOnConnectionError = /* @__PURE__ */ Symbol("onConnectionError");
+    var kOnDrain = /* @__PURE__ */ Symbol("onDrain");
+    var kFactory = /* @__PURE__ */ Symbol("factory");
+    var kOptions = /* @__PURE__ */ Symbol("options");
+    var kOrigins = /* @__PURE__ */ Symbol("origins");
     function defaultFactory(origin, opts) {
       return opts && opts.connections === 1 ? new Client(origin, opts) : new Pool2(origin, opts);
     }
-    var Agent2 = class extends DispatcherBase {
+    var Agent3 = class extends DispatcherBase {
       constructor({ factory: factory2 = defaultFactory, maxOrigins = Infinity, connect, tls, ...options } = {}) {
         if (typeof factory2 !== "function") {
           throw new InvalidArgumentError("factory must be a function.");
@@ -13514,7 +13542,7 @@ var require_agent = __commonJS({
         return allClientStats;
       }
     };
-    module.exports = Agent2;
+    module.exports = Agent3;
   }
 });
 
@@ -13907,13 +13935,13 @@ var require_socks5_client = __commonJS({
         }
         debug("starting handshake with", this.authMethods.length, "auth methods");
         this.state = STATES.HANDSHAKING;
-        const request = Buffer2.alloc(2 + this.authMethods.length);
-        request[0] = SOCKS_VERSION;
-        request[1] = this.authMethods.length;
+        const request2 = Buffer2.alloc(2 + this.authMethods.length);
+        request2[0] = SOCKS_VERSION;
+        request2[1] = this.authMethods.length;
         this.authMethods.forEach((method, i) => {
-          request[2 + i] = method;
+          request2[2 + i] = method;
         });
-        this.socket.write(request);
+        this.socket.write(request2);
       }
       /**
        * Handle handshake response from server
@@ -13955,13 +13983,13 @@ var require_socks5_client = __commonJS({
         if (usernameBuffer.length > 255 || passwordBuffer.length > 255) {
           throw new InvalidArgumentError("Username or password too long");
         }
-        const request = Buffer2.alloc(3 + usernameBuffer.length + passwordBuffer.length);
-        request[0] = 1;
-        request[1] = usernameBuffer.length;
-        usernameBuffer.copy(request, 2);
-        request[2 + usernameBuffer.length] = passwordBuffer.length;
-        passwordBuffer.copy(request, 3 + usernameBuffer.length);
-        this.socket.write(request);
+        const request2 = Buffer2.alloc(3 + usernameBuffer.length + passwordBuffer.length);
+        request2[0] = 1;
+        request2[1] = usernameBuffer.length;
+        usernameBuffer.copy(request2, 2);
+        request2[2 + usernameBuffer.length] = passwordBuffer.length;
+        passwordBuffer.copy(request2, 3 + usernameBuffer.length);
+        this.socket.write(request2);
       }
       /**
        * Handle authentication response
@@ -13996,22 +14024,22 @@ var require_socks5_client = __commonJS({
         }
         debug("connecting to", address, port);
         this.state = STATES.CONNECTING;
-        const request = this.buildConnectRequest(COMMANDS.CONNECT, address, port);
-        this.socket.write(request);
+        const request2 = this.buildConnectRequest(COMMANDS.CONNECT, address, port);
+        this.socket.write(request2);
       }
       /**
        * Build a SOCKS5 request
        */
       buildConnectRequest(command, address, port) {
         const { type: addressType, buffer: addressBuffer } = parseAddress(address);
-        const request = Buffer2.alloc(4 + addressBuffer.length + 2);
-        request[0] = SOCKS_VERSION;
-        request[1] = command;
-        request[2] = 0;
-        request[3] = addressType;
-        addressBuffer.copy(request, 4);
-        request.writeUInt16BE(port, 4 + addressBuffer.length);
-        return request;
+        const request2 = Buffer2.alloc(4 + addressBuffer.length + 2);
+        request2[0] = SOCKS_VERSION;
+        request2[1] = command;
+        request2[2] = 0;
+        request2[3] = addressType;
+        addressBuffer.copy(request2, 4);
+        request2.writeUInt16BE(port, 4 + addressBuffer.length);
+        return request2;
       }
       /**
        * Handle CONNECT response
@@ -14043,8 +14071,8 @@ var require_socks5_client = __commonJS({
           return;
         }
         if (reply2 !== REPLY_CODES.SUCCEEDED) {
-          const errorMessage4 = this.getReplyErrorMessage(reply2);
-          throw new Socks5ProxyError(`SOCKS5 connection failed: ${errorMessage4}`, `UND_ERR_SOCKS5_REPLY_${reply2}`);
+          const errorMessage5 = this.getReplyErrorMessage(reply2);
+          throw new Socks5ProxyError(`SOCKS5 connection failed: ${errorMessage5}`, `UND_ERR_SOCKS5_REPLY_${reply2}`);
         }
         let boundAddress;
         let offset = 4;
@@ -14125,15 +14153,15 @@ var require_socks5_proxy_agent = __commonJS({
     var { debuglog } = __require("node:util");
     var debug = debuglog("undici:socks5-proxy");
     var DEFAULT_SOCKS5_CONNECT_TIMEOUT = 5e3;
-    var kProxyUrl = Symbol("proxy url");
-    var kProxyHeaders = Symbol("proxy headers");
-    var kProxyAuth = Symbol("proxy auth");
-    var kProxyProtocol = Symbol("proxy protocol");
-    var kPools = Symbol("pools");
-    var kConnector = Symbol("connector");
-    var kConnectTimeout = Symbol("connect timeout");
-    var kRequestTls = Symbol("request tls settings");
-    var kRequestTlsTimeout = Symbol("request tls timeout");
+    var kProxyUrl = /* @__PURE__ */ Symbol("proxy url");
+    var kProxyHeaders = /* @__PURE__ */ Symbol("proxy headers");
+    var kProxyAuth = /* @__PURE__ */ Symbol("proxy auth");
+    var kProxyProtocol = /* @__PURE__ */ Symbol("proxy protocol");
+    var kPools = /* @__PURE__ */ Symbol("pools");
+    var kConnector = /* @__PURE__ */ Symbol("connector");
+    var kConnectTimeout = /* @__PURE__ */ Symbol("connect timeout");
+    var kRequestTls = /* @__PURE__ */ Symbol("request tls settings");
+    var kRequestTlsTimeout = /* @__PURE__ */ Symbol("request tls timeout");
     function createConnectTimeoutError(hostname, port, timeout) {
       return new ConnectTimeoutError(
         `Connect Timeout Error (attempted address: ${hostname}:${port}, timeout: ${timeout}ms)`
@@ -14385,7 +14413,7 @@ var require_proxy_agent = __commonJS({
   "node_modules/undici/lib/dispatcher/proxy-agent.js"(exports, module) {
     "use strict";
     var { kProxy, kClose, kDestroy, kDispatch } = require_symbols();
-    var Agent2 = require_agent();
+    var Agent3 = require_agent();
     var Pool2 = require_pool();
     var DispatcherBase = require_dispatcher_base();
     var { InvalidArgumentError, RequestAbortedError, SecureProxyConnectionError, ProxyConnectionError } = require_errors();
@@ -14394,14 +14422,14 @@ var require_proxy_agent = __commonJS({
     var { channels } = require_diagnostics();
     var Socks5ProxyAgent = require_socks5_proxy_agent();
     var { hasSafeIterator } = require_util();
-    var kAgent = Symbol("proxy agent");
-    var kClient = Symbol("proxy client");
-    var kProxyHeaders = Symbol("proxy headers");
-    var kRequestTls = Symbol("request tls settings");
-    var kProxyTls = Symbol("proxy tls settings");
-    var kConnectEndpoint = Symbol("connect endpoint function");
-    var kConnectEndpointHTTP1 = Symbol("connect endpoint function (http/1.1 only)");
-    var kTunnelProxy = Symbol("tunnel proxy");
+    var kAgent = /* @__PURE__ */ Symbol("proxy agent");
+    var kClient = /* @__PURE__ */ Symbol("proxy client");
+    var kProxyHeaders = /* @__PURE__ */ Symbol("proxy headers");
+    var kRequestTls = /* @__PURE__ */ Symbol("request tls settings");
+    var kProxyTls = /* @__PURE__ */ Symbol("proxy tls settings");
+    var kConnectEndpoint = /* @__PURE__ */ Symbol("connect endpoint function");
+    var kConnectEndpointHTTP1 = /* @__PURE__ */ Symbol("connect endpoint function (http/1.1 only)");
+    var kTunnelProxy = /* @__PURE__ */ Symbol("tunnel proxy");
     var proxyAuthorization = "proxy-authorization";
     function defaultProtocolPort(protocol) {
       return protocol === "https:" ? 443 : 80;
@@ -14539,7 +14567,7 @@ var require_proxy_agent = __commonJS({
         } else {
           this[kClient] = clientFactory(url, { connect });
         }
-        this[kAgent] = new Agent2({
+        this[kAgent] = new Agent3({
           ...opts,
           factory: factory2,
           connect: async (opts2, callback) => {
@@ -14709,7 +14737,7 @@ var require_env_http_proxy_agent = __commonJS({
     var DispatcherBase = require_dispatcher_base();
     var { kClose, kDestroy, kClosed, kDestroyed, kDispatch, kNoProxyAgent, kHttpProxyAgent, kHttpsProxyAgent } = require_symbols();
     var ProxyAgent2 = require_proxy_agent();
-    var Agent2 = require_agent();
+    var Agent3 = require_agent();
     var DEFAULT_PORTS = {
       "http:": 80,
       "https:": 443
@@ -14722,7 +14750,7 @@ var require_env_http_proxy_agent = __commonJS({
         super(opts);
         this.#opts = opts;
         const { httpProxy, httpsProxy, noProxy, ...agentOpts } = opts;
-        this[kNoProxyAgent] = new Agent2(agentOpts);
+        this[kNoProxyAgent] = new Agent3(agentOpts);
         const HTTP_PROXY = httpProxy ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
         if (HTTP_PROXY) {
           this[kHttpProxyAgent] = new ProxyAgent2({ ...agentOpts, uri: HTTP_PROXY });
@@ -14739,8 +14767,8 @@ var require_env_http_proxy_agent = __commonJS({
       }
       [kDispatch](opts, handler) {
         const url = new URL(opts.origin);
-        const agent = this.#getProxyAgentForUrl(url);
-        return agent.dispatch(opts, handler);
+        const agent2 = this.#getProxyAgentForUrl(url);
+        return agent2.dispatch(opts, handler);
       }
       [kClose]() {
         return Promise.all([
@@ -15381,12 +15409,12 @@ var require_retry_agent = __commonJS({
     var RetryAgent = class extends Dispatcher {
       #agent = null;
       #options = null;
-      constructor(agent, options = {}) {
+      constructor(agent2, options = {}) {
         super(options);
-        this.#agent = agent;
+        this.#agent = agent2;
         this.#options = options;
-        this[kUrl] = agent[kUrl];
-        this[kOriginless] = agent[kOriginless];
+        this[kUrl] = agent2[kUrl];
+        this[kOriginless] = agent2[kOriginless];
       }
       dispatch(opts, handler) {
         const retry = new RetryHandler({
@@ -15469,14 +15497,14 @@ var require_readable = __commonJS({
     var { Readable } = __require("node:stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError, AbortError } = require_errors();
     var util = require_util();
-    var kConsume = Symbol("kConsume");
-    var kReading = Symbol("kReading");
-    var kBody = Symbol("kBody");
-    var kAbort = Symbol("kAbort");
-    var kContentType = Symbol("kContentType");
-    var kContentLength = Symbol("kContentLength");
-    var kUsed = Symbol("kUsed");
-    var kBytesRead = Symbol("kBytesRead");
+    var kConsume = /* @__PURE__ */ Symbol("kConsume");
+    var kReading = /* @__PURE__ */ Symbol("kReading");
+    var kBody = /* @__PURE__ */ Symbol("kBody");
+    var kAbort = /* @__PURE__ */ Symbol("kAbort");
+    var kContentType = /* @__PURE__ */ Symbol("kContentType");
+    var kContentLength = /* @__PURE__ */ Symbol("kContentLength");
+    var kUsed = /* @__PURE__ */ Symbol("kUsed");
+    var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop = () => {
     };
     var BodyReadable = class extends Readable {
@@ -16049,10 +16077,10 @@ var require_api_request = __commonJS({
         }
       }
     };
-    function request(opts, callback) {
+    function request2(opts, callback) {
       if (callback === void 0) {
         return new Promise((resolve2, reject) => {
-          request.call(this, opts, (err, data) => {
+          request2.call(this, opts, (err, data) => {
             return err ? reject(err) : resolve2(data);
           });
         });
@@ -16068,7 +16096,7 @@ var require_api_request = __commonJS({
         queueMicrotask(() => callback(err, { opaque }));
       }
     }
-    module.exports = request;
+    module.exports = request2;
     module.exports.RequestHandler = RequestHandler;
   }
 });
@@ -16079,8 +16107,8 @@ var require_abort_signal = __commonJS({
     "use strict";
     var { addAbortListener } = require_util();
     var { RequestAbortedError } = require_errors();
-    var kListener = Symbol("kListener");
-    var kSignal = Symbol("kSignal");
+    var kListener = /* @__PURE__ */ Symbol("kListener");
+    var kSignal = /* @__PURE__ */ Symbol("kSignal");
     function abort(self) {
       if (self.abort) {
         self.abort(self[kSignal]?.reason);
@@ -16356,7 +16384,7 @@ var require_api_pipeline = __commonJS({
     var { addSignal, removeSignal } = require_abort_signal();
     function noop() {
     }
-    var kResume = Symbol("resume");
+    var kResume = /* @__PURE__ */ Symbol("resume");
     var PipelineRequest = class extends Readable {
       constructor() {
         super({ autoDestroy: true });
@@ -16751,7 +16779,7 @@ var require_mock_errors = __commonJS({
   "node_modules/undici/lib/mock/mock-errors.js"(exports, module) {
     "use strict";
     var { UndiciError } = require_errors();
-    var kMockNotMatchedError = Symbol.for("undici.error.UND_MOCK_ERR_MOCK_NOT_MATCHED");
+    var kMockNotMatchedError = /* @__PURE__ */ Symbol.for("undici.error.UND_MOCK_ERR_MOCK_NOT_MATCHED");
     var MockNotMatchedError = class extends UndiciError {
       constructor(message) {
         super(message);
@@ -16777,34 +16805,34 @@ var require_mock_symbols = __commonJS({
   "node_modules/undici/lib/mock/mock-symbols.js"(exports, module) {
     "use strict";
     module.exports = {
-      kAgent: Symbol("agent"),
-      kOptions: Symbol("options"),
-      kFactory: Symbol("factory"),
-      kDispatches: Symbol("dispatches"),
-      kDispatchKey: Symbol("dispatch key"),
-      kDefaultHeaders: Symbol("default headers"),
-      kDefaultTrailers: Symbol("default trailers"),
-      kContentLength: Symbol("content length"),
-      kMockAgent: Symbol("mock agent"),
-      kMockAgentSet: Symbol("mock agent set"),
-      kMockAgentGet: Symbol("mock agent get"),
-      kMockDispatch: Symbol("mock dispatch"),
-      kClose: Symbol("close"),
-      kOriginalClose: Symbol("original agent close"),
-      kOriginalDispatch: Symbol("original dispatch"),
-      kOrigin: Symbol("origin"),
-      kIsMockActive: Symbol("is mock active"),
-      kNetConnect: Symbol("net connect"),
-      kGetNetConnect: Symbol("get net connect"),
-      kConnected: Symbol("connected"),
-      kIgnoreTrailingSlash: Symbol("ignore trailing slash"),
-      kMockAgentMockCallHistoryInstance: Symbol("mock agent mock call history name"),
-      kMockAgentRegisterCallHistory: Symbol("mock agent register mock call history"),
-      kMockAgentAddCallHistoryLog: Symbol("mock agent add call history log"),
-      kMockAgentIsCallHistoryEnabled: Symbol("mock agent is call history enabled"),
-      kMockAgentAcceptsNonStandardSearchParameters: Symbol("mock agent accepts non standard search parameters"),
-      kMockCallHistoryAddLog: Symbol("mock call history add log"),
-      kTotalDispatchCount: Symbol("total dispatch count")
+      kAgent: /* @__PURE__ */ Symbol("agent"),
+      kOptions: /* @__PURE__ */ Symbol("options"),
+      kFactory: /* @__PURE__ */ Symbol("factory"),
+      kDispatches: /* @__PURE__ */ Symbol("dispatches"),
+      kDispatchKey: /* @__PURE__ */ Symbol("dispatch key"),
+      kDefaultHeaders: /* @__PURE__ */ Symbol("default headers"),
+      kDefaultTrailers: /* @__PURE__ */ Symbol("default trailers"),
+      kContentLength: /* @__PURE__ */ Symbol("content length"),
+      kMockAgent: /* @__PURE__ */ Symbol("mock agent"),
+      kMockAgentSet: /* @__PURE__ */ Symbol("mock agent set"),
+      kMockAgentGet: /* @__PURE__ */ Symbol("mock agent get"),
+      kMockDispatch: /* @__PURE__ */ Symbol("mock dispatch"),
+      kClose: /* @__PURE__ */ Symbol("close"),
+      kOriginalClose: /* @__PURE__ */ Symbol("original agent close"),
+      kOriginalDispatch: /* @__PURE__ */ Symbol("original dispatch"),
+      kOrigin: /* @__PURE__ */ Symbol("origin"),
+      kIsMockActive: /* @__PURE__ */ Symbol("is mock active"),
+      kNetConnect: /* @__PURE__ */ Symbol("net connect"),
+      kGetNetConnect: /* @__PURE__ */ Symbol("get net connect"),
+      kConnected: /* @__PURE__ */ Symbol("connected"),
+      kIgnoreTrailingSlash: /* @__PURE__ */ Symbol("ignore trailing slash"),
+      kMockAgentMockCallHistoryInstance: /* @__PURE__ */ Symbol("mock agent mock call history name"),
+      kMockAgentRegisterCallHistory: /* @__PURE__ */ Symbol("mock agent register mock call history"),
+      kMockAgentAddCallHistoryLog: /* @__PURE__ */ Symbol("mock agent add call history log"),
+      kMockAgentIsCallHistoryEnabled: /* @__PURE__ */ Symbol("mock agent is call history enabled"),
+      kMockAgentAcceptsNonStandardSearchParameters: /* @__PURE__ */ Symbol("mock agent accepts non standard search parameters"),
+      kMockCallHistoryAddLog: /* @__PURE__ */ Symbol("mock call history add log"),
+      kTotalDispatchCount: /* @__PURE__ */ Symbol("total dispatch count")
     };
   }
 });
@@ -16830,7 +16858,7 @@ var require_mock_utils = __commonJS({
       }
     } = __require("node:util");
     var { InvalidArgumentError } = require_errors();
-    var requestAborted = Symbol("request aborted");
+    var requestAborted = /* @__PURE__ */ Symbol("request aborted");
     function matchValue(match, value) {
       if (typeof match === "string") {
         return match === value;
@@ -17081,8 +17109,8 @@ var require_mock_utils = __commonJS({
       return dispatchMockReply(mockDispatches, mockDispatch2, key, opts, handler);
     }
     function dispatchMockReply(mockDispatches, mockDispatch2, key, opts, handler, resolvedResponse) {
-      const { data: responseData, delay } = mockDispatch2;
-      const response = resolvedResponse ?? responseData;
+      const { data: responseData2, delay } = mockDispatch2;
+      const response = resolvedResponse ?? responseData2;
       if (response.error !== null) {
         deleteMockDispatch(mockDispatches, key);
         handler.onResponseError(null, response.error);
@@ -17192,13 +17220,13 @@ var require_mock_utils = __commonJS({
         if (aborted) {
           return;
         }
-        const responseData2 = getResponseData(body);
+        const responseData3 = getResponseData(body);
         const responseHeaders = generateKeyValues(headers ?? {});
         const responseTrailers = generateKeyValues(trailers ?? {});
         controller.rawHeaders = responseHeaders;
         controller.rawTrailers = responseTrailers;
         handler.onResponseStart?.(controller, statusCode, parseHeaders(responseHeaders), getStatusText(statusCode));
-        handler.onResponseData?.(controller, Buffer.from(responseData2));
+        handler.onResponseData?.(controller, Buffer.from(responseData3));
         handler.onResponseEnd?.(controller, parseHeaders(responseTrailers));
         deleteMockDispatch(mockDispatches2, key);
       }
@@ -17277,16 +17305,16 @@ var require_mock_utils = __commonJS({
       return typeof body !== "string" && !Buffer.isBuffer(body) && !ArrayBuffer.isView(body) && typeof body[Symbol.iterator] === "function";
     }
     function buildMockDispatch() {
-      const agent = this[kMockAgent];
+      const agent2 = this[kMockAgent];
       const origin = this[kOrigin];
       const originalDispatch = this[kOriginalDispatch];
       return function dispatch(opts, handler) {
-        if (agent.isMockActive) {
+        if (agent2.isMockActive) {
           try {
             mockDispatch.call(this, opts, handler);
           } catch (error) {
             if (error.code === "UND_MOCK_ERR_MOCK_NOT_MATCHED") {
-              const netConnect2 = agent[kGetNetConnect]();
+              const netConnect2 = agent2[kGetNetConnect]();
               const totalInterceptsCount = this[kDispatches][kTotalDispatchCount] || this[kDispatches].length;
               const pendingInterceptsCount = this[kDispatches].filter(({ consumed }) => !consumed).length;
               const interceptsMessage = `, ${pendingInterceptsCount} interceptor(s) remaining out of ${totalInterceptsCount} defined`;
@@ -17326,7 +17354,7 @@ var require_mock_utils = __commonJS({
       return origin.toLowerCase();
     }
     function buildAndValidateMockOptions(opts) {
-      const { agent, ...mockOptions } = opts;
+      const { agent: agent2, ...mockOptions } = opts;
       if ("enableCallHistory" in mockOptions && typeof mockOptions.enableCallHistory !== "boolean") {
         throw new InvalidArgumentError("options.enableCallHistory must to be a boolean");
       }
@@ -17443,8 +17471,8 @@ var require_mock_interceptor = __commonJS({
         this[kContentLength] = false;
       }
       createMockScopeDispatchData({ statusCode, data, responseOptions }) {
-        const responseData = getResponseData(data);
-        const contentLength = this[kContentLength] ? { "content-length": responseData.length } : {};
+        const responseData2 = getResponseData(data);
+        const contentLength = this[kContentLength] ? { "content-length": responseData2.length } : {};
         const headers = { ...this[kDefaultHeaders], ...contentLength, ...responseOptions.headers };
         const trailers = { ...this[kDefaultTrailers], ...responseOptions.trailers };
         return { statusCode, data, headers, trailers };
@@ -17903,7 +17931,7 @@ var require_mock_agent = __commonJS({
   "node_modules/undici/lib/mock/mock-agent.js"(exports, module) {
     "use strict";
     var { kClients } = require_symbols();
-    var Agent2 = require_agent();
+    var Agent3 = require_agent();
     var {
       kAgent,
       kMockAgentSet,
@@ -17941,9 +17969,9 @@ var require_mock_agent = __commonJS({
         if (opts?.agent && typeof opts.agent.dispatch !== "function") {
           throw new InvalidArgumentError("Argument opts.agent must implement Agent");
         }
-        const agent = opts?.agent ? opts.agent : new Agent2(opts);
-        this[kAgent] = agent;
-        this[kClients] = agent[kClients];
+        const agent2 = opts?.agent ? opts.agent : new Agent3(opts);
+        this[kAgent] = agent2;
+        this[kClients] = agent2[kClients];
         this[kOptions] = mockOptions;
         if (this[kMockAgentIsCallHistoryEnabled]) {
           this[kMockAgentRegisterCallHistory]();
@@ -18332,10 +18360,10 @@ var require_snapshot_recorder = __commonJS({
         if (this.isUrlExcluded(requestOpts)) {
           return;
         }
-        const request = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
-        const hash = createRequestHash(request);
+        const request2 = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
+        const hash = createRequestHash(request2);
         const normalizedHeaders = normalizeHeaders(response.headers);
-        const responseData = {
+        const responseData2 = {
           statusCode: response.statusCode,
           headers: filterHeadersForStorage(normalizedHeaders, this.#headerFilters, this.matchOptions),
           body: Buffer.isBuffer(response.body) ? response.body.toString("base64") : Buffer.from(String(response.body || "")).toString("base64"),
@@ -18347,12 +18375,12 @@ var require_snapshot_recorder = __commonJS({
         }
         const existingSnapshot = this.#snapshots.get(hash);
         if (existingSnapshot && existingSnapshot.responses) {
-          existingSnapshot.responses.push(responseData);
+          existingSnapshot.responses.push(responseData2);
           existingSnapshot.timestamp = (/* @__PURE__ */ new Date()).toISOString();
         } else {
           this.#snapshots.set(hash, {
-            request,
-            responses: [responseData],
+            request: request2,
+            responses: [responseData2],
             // Always store as array for consistency
             callCount: 0,
             timestamp: (/* @__PURE__ */ new Date()).toISOString()
@@ -18385,8 +18413,8 @@ var require_snapshot_recorder = __commonJS({
         if (this.isUrlExcluded(requestOpts)) {
           return void 0;
         }
-        const request = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
-        const hash = createRequestHash(request);
+        const request2 = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
+        const hash = createRequestHash(request2);
         const snapshot = this.#snapshots.get(hash);
         if (!snapshot) return void 0;
         const currentCallCount = snapshot.callCount || 0;
@@ -18481,8 +18509,8 @@ var require_snapshot_recorder = __commonJS({
        * @returns {boolean} - True if snapshot was deleted, false if not found
        */
       deleteSnapshot(requestOpts) {
-        const request = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
-        const hash = createRequestHash(request);
+        const request2 = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
+        const hash = createRequestHash(request2);
         return this.#snapshots.delete(hash);
       }
       /**
@@ -18491,8 +18519,8 @@ var require_snapshot_recorder = __commonJS({
        * @returns {SnapshotInfo|null} - Snapshot information or null if not found
        */
       getSnapshotInfo(requestOpts) {
-        const request = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
-        const hash = createRequestHash(request);
+        const request2 = formatRequestKey(requestOpts, this.#headerFilters, this.matchOptions);
+        const hash = createRequestHash(request2);
         const snapshot = this.#snapshots.get(hash);
         if (!snapshot) return null;
         return {
@@ -18582,17 +18610,17 @@ var require_snapshot_recorder = __commonJS({
 var require_snapshot_agent = __commonJS({
   "node_modules/undici/lib/mock/snapshot-agent.js"(exports, module) {
     "use strict";
-    var Agent2 = require_agent();
+    var Agent3 = require_agent();
     var MockAgent = require_mock_agent();
     var { SnapshotRecorder } = require_snapshot_recorder();
     var { InvalidArgumentError, UndiciError } = require_errors();
     var util = require_util();
     var { validateSnapshotMode } = require_snapshot_utils();
-    var kSnapshotRecorder = Symbol("kSnapshotRecorder");
-    var kSnapshotMode = Symbol("kSnapshotMode");
-    var kSnapshotPath = Symbol("kSnapshotPath");
-    var kSnapshotLoaded = Symbol("kSnapshotLoaded");
-    var kRealAgent = Symbol("kRealAgent");
+    var kSnapshotRecorder = /* @__PURE__ */ Symbol("kSnapshotRecorder");
+    var kSnapshotMode = /* @__PURE__ */ Symbol("kSnapshotMode");
+    var kSnapshotPath = /* @__PURE__ */ Symbol("kSnapshotPath");
+    var kSnapshotLoaded = /* @__PURE__ */ Symbol("kSnapshotLoaded");
+    var kRealAgent = /* @__PURE__ */ Symbol("kRealAgent");
     var warningEmitted = false;
     var SnapshotAgent = class extends MockAgent {
       constructor(opts = {}) {
@@ -18635,7 +18663,7 @@ var require_snapshot_agent = __commonJS({
         });
         this[kSnapshotLoaded] = false;
         if (this[kSnapshotMode] === "record" || this[kSnapshotMode] === "update" || this[kSnapshotMode] === "playback" && opts.excludeUrls && opts.excludeUrls.length > 0) {
-          this[kRealAgent] = new Agent2(opts);
+          this[kRealAgent] = new Agent3(opts);
         }
         if ((this[kSnapshotMode] === "playback" || this[kSnapshotMode] === "update") && this[kSnapshotPath]) {
           this.loadSnapshots().catch(() => {
@@ -18679,7 +18707,7 @@ var require_snapshot_agent = __commonJS({
        * Records a real request and replays the response
        */
       #recordAndReplay(opts, handler) {
-        const responseData = {
+        const responseData2 = {
           statusCode: null,
           headers: {},
           trailers: {},
@@ -18694,30 +18722,30 @@ var require_snapshot_agent = __commonJS({
             return handler.onRequestUpgrade(controller, statusCode, headers, socket);
           },
           onResponseStart(controller, statusCode, headers, statusMessage) {
-            responseData.statusCode = statusCode;
-            responseData.headers = headers;
+            responseData2.statusCode = statusCode;
+            responseData2.headers = headers;
             return handler.onResponseStart(controller, statusCode, headers, statusMessage);
           },
           onResponseData(controller, chunk) {
-            responseData.body.push(chunk);
+            responseData2.body.push(chunk);
             return handler.onResponseData(controller, chunk);
           },
           onResponseEnd(controller, trailers) {
-            responseData.trailers = trailers;
-            const responseBody = Buffer.concat(responseData.body);
+            responseData2.trailers = trailers;
+            const responseBody = Buffer.concat(responseData2.body);
             self[kSnapshotRecorder].record(opts, {
-              statusCode: responseData.statusCode,
-              headers: responseData.headers,
+              statusCode: responseData2.statusCode,
+              headers: responseData2.headers,
               body: responseBody,
-              trailers: responseData.trailers
+              trailers: responseData2.trailers
             }).then(() => handler.onResponseEnd(controller, trailers)).catch((error) => handler.onResponseError(controller, error));
           },
           onResponseError(controller, error) {
             return handler.onResponseError(controller, error);
           }
         };
-        const agent = this[kRealAgent];
-        return agent.dispatch(opts, recordingHandler);
+        const agent2 = this[kRealAgent];
+        return agent2.dispatch(opts, recordingHandler);
       }
       /**
        * Replays a recorded response
@@ -18791,19 +18819,19 @@ var require_snapshot_agent = __commonJS({
        */
       #setupMockInterceptors() {
         for (const snapshot of this[kSnapshotRecorder].getSnapshots()) {
-          const { request, responses, response } = snapshot;
-          const url = new URL(request.url);
+          const { request: request2, responses, response } = snapshot;
+          const url = new URL(request2.url);
           const mockPool = this.get(url.origin);
-          const responseData = responses ? responses[0] : response;
-          if (!responseData) continue;
+          const responseData2 = responses ? responses[0] : response;
+          if (!responseData2) continue;
           mockPool.intercept({
             path: url.pathname + url.search,
-            method: request.method,
-            headers: request.headers,
-            body: request.body
-          }).reply(responseData.statusCode, responseData.body, {
-            headers: responseData.headers,
-            trailers: responseData.trailers
+            method: request2.method,
+            headers: request2.headers,
+            body: request2.body
+          }).reply(responseData2.statusCode, responseData2.body, {
+            headers: responseData2.headers,
+            trailers: responseData2.trailers
           }).persist();
         }
       }
@@ -18881,35 +18909,35 @@ var require_snapshot_agent = __commonJS({
 var require_global2 = __commonJS({
   "node_modules/undici/lib/global.js"(exports, module) {
     "use strict";
-    var globalDispatcher = Symbol.for("undici.globalDispatcher.2");
-    var legacyGlobalDispatcher = Symbol.for("undici.globalDispatcher.1");
+    var globalDispatcher = /* @__PURE__ */ Symbol.for("undici.globalDispatcher.2");
+    var legacyGlobalDispatcher = /* @__PURE__ */ Symbol.for("undici.globalDispatcher.1");
     var { InvalidArgumentError } = require_errors();
-    var Agent2 = require_agent();
+    var Agent3 = require_agent();
     var Dispatcher1Wrapper2 = require_dispatcher1_wrapper();
     var fallbackDispatcher;
     if (getGlobalDispatcher() === void 0) {
-      setGlobalDispatcher(new Agent2());
+      setGlobalDispatcher(new Agent3());
     }
-    function setGlobalDispatcher(agent) {
-      if (!agent || typeof agent.dispatch !== "function") {
+    function setGlobalDispatcher(agent2) {
+      if (!agent2 || typeof agent2.dispatch !== "function") {
         throw new InvalidArgumentError("Argument agent must implement Agent");
       }
       try {
         Object.defineProperty(globalThis, globalDispatcher, {
-          value: agent,
+          value: agent2,
           writable: true,
           enumerable: false,
           configurable: false
         });
       } catch (err) {
         if (err instanceof TypeError) {
-          fallbackDispatcher = agent;
+          fallbackDispatcher = agent2;
           return;
         }
         throw err;
       }
       try {
-        const legacyAgent = agent instanceof Dispatcher1Wrapper2 ? agent : new Dispatcher1Wrapper2(agent);
+        const legacyAgent = agent2 instanceof Dispatcher1Wrapper2 ? agent2 : new Dispatcher1Wrapper2(agent2);
         Object.defineProperty(globalThis, legacyGlobalDispatcher, {
           value: legacyAgent,
           writable: true,
@@ -19891,7 +19919,7 @@ var require_cache = __commonJS({
     var { kRequestOrigin } = require_symbols();
     var MAX_DELTA_SECONDS = 2147483647;
     var RESTRICTIVE_DIRECTIVE_NAMES = ["no-store", "private", "no-cache"];
-    var kInvalidCacheControlDirectives = Symbol("invalid cache-control directives");
+    var kInvalidCacheControlDirectives = /* @__PURE__ */ Symbol("invalid cache-control directives");
     function trimOWS(value) {
       return value.replace(/^[\t ]+|[\t ]+$/g, "");
     }
@@ -24658,7 +24686,7 @@ var require_request2 = __commonJS({
     var { kConstruct } = require_symbols();
     var assert = __require("node:assert");
     var { getMaxListeners, setMaxListeners, defaultMaxListeners } = __require("node:events");
-    var kAbortController = Symbol("abortController");
+    var kAbortController = /* @__PURE__ */ Symbol("abortController");
     var requestFinalizer = new FinalizationRegistry(({ signal, abort }) => {
       signal.removeEventListener("abort", abort);
     });
@@ -24725,7 +24753,7 @@ var require_request2 = __commonJS({
         webidl.argumentLengthCheck(arguments, 1, prefix);
         input = webidl.converters.RequestInfo(input);
         init = webidl.converters.RequestInit(init);
-        let request = null;
+        let request2 = null;
         let fallbackMode = null;
         const baseUrl = environmentSettingsObject.settingsObject.baseUrl;
         let signal = null;
@@ -24742,18 +24770,18 @@ var require_request2 = __commonJS({
               "Request cannot be constructed from a URL that includes credentials: " + input
             );
           }
-          request = makeRequest({ urlList: [parsedURL] });
+          request2 = makeRequest({ urlList: [parsedURL] });
           fallbackMode = "cors";
         } else {
           assert(webidl.is.Request(input));
-          request = input.#state;
+          request2 = input.#state;
           signal = input.#signal;
           this.#dispatcher = init.dispatcher || input.#dispatcher;
         }
         const origin = environmentSettingsObject.settingsObject.origin;
         let window = "client";
-        if (request.window?.constructor?.name === "EnvironmentSettingsObject" && sameOrigin(request.window, origin)) {
-          window = request.window;
+        if (request2.window?.constructor?.name === "EnvironmentSettingsObject" && sameOrigin(request2.window, origin)) {
+          window = request2.window;
         }
         if (init.window != null) {
           throw new TypeError(`'window' option '${window}' must be null`);
@@ -24761,66 +24789,66 @@ var require_request2 = __commonJS({
         if ("window" in init) {
           window = "no-window";
         }
-        request = makeRequest({
+        request2 = makeRequest({
           // URL request’s URL.
           // undici implementation note: this is set as the first item in request's urlList in makeRequest
           // method request’s method.
-          method: request.method,
+          method: request2.method,
           // header list A copy of request’s header list.
           // undici implementation note: headersList is cloned in makeRequest
-          headersList: request.headersList,
+          headersList: request2.headersList,
           // unsafe-request flag Set.
-          unsafeRequest: request.unsafeRequest,
+          unsafeRequest: request2.unsafeRequest,
           // client This’s relevant settings object.
           client: environmentSettingsObject.settingsObject,
           // window window.
           window,
           // priority request’s priority.
-          priority: request.priority,
+          priority: request2.priority,
           // origin request’s origin. The propagation of the origin is only significant for navigation requests
           // being handled by a service worker. In this scenario a request can have an origin that is different
           // from the current client.
-          origin: request.origin,
+          origin: request2.origin,
           // referrer request’s referrer.
-          referrer: request.referrer,
+          referrer: request2.referrer,
           // referrer policy request’s referrer policy.
-          referrerPolicy: request.referrerPolicy,
+          referrerPolicy: request2.referrerPolicy,
           // mode request’s mode.
-          mode: request.mode,
+          mode: request2.mode,
           // credentials mode request’s credentials mode.
-          credentials: request.credentials,
+          credentials: request2.credentials,
           // cache mode request’s cache mode.
-          cache: request.cache,
+          cache: request2.cache,
           // redirect mode request’s redirect mode.
-          redirect: request.redirect,
+          redirect: request2.redirect,
           // integrity metadata request’s integrity metadata.
-          integrity: request.integrity,
+          integrity: request2.integrity,
           // keepalive request’s keepalive.
-          keepalive: request.keepalive,
+          keepalive: request2.keepalive,
           // reload-navigation flag request’s reload-navigation flag.
-          reloadNavigation: request.reloadNavigation,
+          reloadNavigation: request2.reloadNavigation,
           // history-navigation flag request’s history-navigation flag.
-          historyNavigation: request.historyNavigation,
+          historyNavigation: request2.historyNavigation,
           // URL list A clone of request’s URL list.
-          urlList: [...request.urlList]
+          urlList: [...request2.urlList]
         });
         const initHasKey = Object.keys(init).length !== 0;
         if (initHasKey) {
-          if (request.mode === "navigate") {
-            request.mode = "same-origin";
+          if (request2.mode === "navigate") {
+            request2.mode = "same-origin";
           }
-          request.reloadNavigation = false;
-          request.historyNavigation = false;
-          request.origin = "client";
-          request.referrer = "client";
-          request.referrerPolicy = "";
-          request.url = request.urlList[request.urlList.length - 1];
-          request.urlList = [request.url];
+          request2.reloadNavigation = false;
+          request2.historyNavigation = false;
+          request2.origin = "client";
+          request2.referrer = "client";
+          request2.referrerPolicy = "";
+          request2.url = request2.urlList[request2.urlList.length - 1];
+          request2.urlList = [request2.url];
         }
         if (init.referrer !== void 0) {
           const referrer = init.referrer;
           if (referrer === "") {
-            request.referrer = "no-referrer";
+            request2.referrer = "no-referrer";
           } else {
             let parsedReferrer;
             try {
@@ -24829,14 +24857,14 @@ var require_request2 = __commonJS({
               throw new TypeError(`Referrer "${referrer}" is not a valid URL.`, { cause: err });
             }
             if (parsedReferrer.protocol === "about:" && parsedReferrer.hostname === "client" || origin && !sameOrigin(parsedReferrer, environmentSettingsObject.settingsObject.baseUrl)) {
-              request.referrer = "client";
+              request2.referrer = "client";
             } else {
-              request.referrer = parsedReferrer;
+              request2.referrer = parsedReferrer;
             }
           }
         }
         if (init.referrerPolicy !== void 0) {
-          request.referrerPolicy = init.referrerPolicy;
+          request2.referrerPolicy = init.referrerPolicy;
         }
         let mode;
         if (init.mode !== void 0) {
@@ -24851,33 +24879,33 @@ var require_request2 = __commonJS({
           });
         }
         if (mode != null) {
-          request.mode = mode;
+          request2.mode = mode;
         }
         if (init.credentials !== void 0) {
-          request.credentials = init.credentials;
+          request2.credentials = init.credentials;
         }
         if (init.cache !== void 0) {
-          request.cache = init.cache;
+          request2.cache = init.cache;
         }
-        if (request.cache === "only-if-cached" && request.mode !== "same-origin") {
+        if (request2.cache === "only-if-cached" && request2.mode !== "same-origin") {
           throw new TypeError(
             "'only-if-cached' can be set only with 'same-origin' mode"
           );
         }
         if (init.redirect !== void 0) {
-          request.redirect = init.redirect;
+          request2.redirect = init.redirect;
         }
         if (init.integrity != null) {
-          request.integrity = String(init.integrity);
+          request2.integrity = String(init.integrity);
         }
         if (init.keepalive !== void 0) {
-          request.keepalive = Boolean(init.keepalive);
+          request2.keepalive = Boolean(init.keepalive);
         }
         if (init.method !== void 0) {
           let method = init.method;
           const mayBeNormalized = normalizedMethodRecords[method];
           if (mayBeNormalized !== void 0) {
-            request.method = mayBeNormalized;
+            request2.method = mayBeNormalized;
           } else {
             if (!isValidHTTPToken(method)) {
               throw new TypeError(`'${method}' is not a valid HTTP method.`);
@@ -24887,9 +24915,9 @@ var require_request2 = __commonJS({
               throw new TypeError(`'${method}' HTTP method is unsupported.`);
             }
             method = normalizedMethodRecordsBase[upperCase] ?? method;
-            request.method = method;
+            request2.method = method;
           }
-          if (!patchMethodWarning && request.method === "patch") {
+          if (!patchMethodWarning && request2.method === "patch") {
             process.emitWarning("Using `patch` is highly likely to result in a `405 Method Not Allowed`. `PATCH` is much more likely to succeed.", {
               code: "UNDICI-FETCH-patch"
             });
@@ -24899,7 +24927,7 @@ var require_request2 = __commonJS({
         if (init.signal !== void 0) {
           signal = init.signal;
         }
-        this.#state = request;
+        this.#state = request2;
         const ac = new AbortController();
         this.#signal = ac.signal;
         if (signal != null) {
@@ -24922,12 +24950,12 @@ var require_request2 = __commonJS({
           }
         }
         this.#headers = new Headers2(kConstruct);
-        setHeadersList(this.#headers, request.headersList);
+        setHeadersList(this.#headers, request2.headersList);
         setHeadersGuard(this.#headers, "request");
         if (mode === "no-cors") {
-          if (!corsSafeListedMethodsSet.has(request.method)) {
+          if (!corsSafeListedMethodsSet.has(request2.method)) {
             throw new TypeError(
-              `'${request.method} is unsupported in no-cors mode.`
+              `'${request2.method} is unsupported in no-cors mode.`
             );
           }
           setHeadersGuard(this.#headers, "request-no-cors");
@@ -24946,14 +24974,14 @@ var require_request2 = __commonJS({
           }
         }
         const inputBody = webidl.is.Request(input) ? input.#state.body : null;
-        if ((init.body != null || inputBody != null) && (request.method === "GET" || request.method === "HEAD")) {
+        if ((init.body != null || inputBody != null) && (request2.method === "GET" || request2.method === "HEAD")) {
           throw new TypeError("Request with GET/HEAD method cannot have body.");
         }
         let initBody = null;
         if (init.body != null) {
           const [extractedBody, contentType] = extractBody(
             init.body,
-            request.keepalive
+            request2.keepalive
           );
           initBody = extractedBody;
           if (contentType && !getHeadersList(this.#headers).contains("content-type", true)) {
@@ -24965,12 +24993,12 @@ var require_request2 = __commonJS({
           if (initBody != null && init.duplex == null) {
             throw new TypeError("RequestInit: duplex option is required when sending a body.");
           }
-          if (request.mode !== "same-origin" && request.mode !== "cors") {
+          if (request2.mode !== "same-origin" && request2.mode !== "cors") {
             throw new TypeError(
               'If request is made from ReadableStream, mode should be "same-origin" or "cors"'
             );
           }
-          request.useCORSPreflightFlag = true;
+          request2.useCORSPreflightFlag = true;
         }
         let finalBody = inputOrInitBody;
         if (initBody == null && inputBody != null) {
@@ -25157,26 +25185,26 @@ var require_request2 = __commonJS({
         return `Request ${nodeUtil.formatWithOptions(options, properties)}`;
       }
       static {
-        setRequestSignal = (request, newSignal) => {
-          request.#signal = newSignal;
+        setRequestSignal = (request2, newSignal) => {
+          request2.#signal = newSignal;
         };
-        getRequestDispatcher = (request) => {
-          return request.#dispatcher;
+        getRequestDispatcher = (request2) => {
+          return request2.#dispatcher;
         };
-        setRequestDispatcher = (request, newDispatcher) => {
-          request.#dispatcher = newDispatcher;
+        setRequestDispatcher = (request2, newDispatcher) => {
+          request2.#dispatcher = newDispatcher;
         };
-        setRequestHeaders = (request, newHeaders) => {
-          request.#headers = newHeaders;
+        setRequestHeaders = (request2, newHeaders) => {
+          request2.#headers = newHeaders;
         };
-        getRequestState = (request) => {
-          return request.#state;
+        getRequestState = (request2) => {
+          return request2.#state;
         };
-        setRequestState = (request, newState) => {
-          request.#state = newState;
+        setRequestState = (request2, newState) => {
+          request2.#state = newState;
         };
-        removeRequestAbortListener = (request) => {
-          request.#abortCleanup?.();
+        removeRequestAbortListener = (request2) => {
+          request2.#abortCleanup?.();
         };
         webidl.is.Request = (arg) => {
           return arg != null && typeof arg === "object" && #state in arg;
@@ -25229,23 +25257,23 @@ var require_request2 = __commonJS({
         headersList: init.headersList ? new HeadersList(init.headersList) : new HeadersList()
       };
     }
-    function cloneRequest(request) {
-      const newRequest = makeRequest({ ...request, body: null });
-      if (request.body != null) {
-        newRequest.body = cloneBody(request.body);
+    function cloneRequest(request2) {
+      const newRequest = makeRequest({ ...request2, body: null });
+      if (request2.body != null) {
+        newRequest.body = cloneBody(request2.body);
       }
       return newRequest;
     }
     function fromInnerRequest(innerRequest, dispatcher, signal, guard) {
-      const request = new Request2(kConstruct);
-      setRequestState(request, innerRequest);
-      setRequestDispatcher(request, dispatcher);
-      setRequestSignal(request, signal);
+      const request2 = new Request2(kConstruct);
+      setRequestState(request2, innerRequest);
+      setRequestDispatcher(request2, dispatcher);
+      setRequestSignal(request2, signal);
       const headers = new Headers2(kConstruct);
-      setRequestHeaders(request, headers);
+      setRequestHeaders(request2, headers);
       setHeadersList(headers, innerRequest.headersList);
       setHeadersGuard(headers, guard);
-      return request;
+      return request2;
     }
     Object.defineProperties(Request2.prototype, {
       method: kEnumerableProperty,
@@ -25658,14 +25686,14 @@ var require_fetch = __commonJS({
         p.reject(e);
         return p.promise;
       }
-      const request = getRequestState(requestObject);
+      const request2 = getRequestState(requestObject);
       if (requestObject.signal.aborted) {
-        abortFetch(p, request, null, requestObject.signal.reason, null);
+        abortFetch(p, request2, null, requestObject.signal.reason, null);
         return p.promise;
       }
-      const globalObject = request.client.globalObject;
+      const globalObject = request2.client.globalObject;
       if (globalObject?.constructor?.name === "ServiceWorkerGlobalScope") {
-        request.serviceWorkers = "none";
+        request2.serviceWorkers = "none";
       }
       let responseObject = null;
       let locallyAborted = false;
@@ -25677,7 +25705,7 @@ var require_fetch = __commonJS({
           assert(controller != null);
           controller.abort(requestObject.signal.reason);
           const realResponse = responseObject?.deref();
-          abortFetch(p, request, realResponse, requestObject.signal.reason, controller.controller);
+          abortFetch(p, request2, realResponse, requestObject.signal.reason, controller.controller);
         }
       );
       const cleanupAbortListeners = () => {
@@ -25689,7 +25717,7 @@ var require_fetch = __commonJS({
           return;
         }
         if (response.aborted) {
-          abortFetch(p, request, responseObject, controller.serializedAbortReason, controller.controller);
+          abortFetch(p, request2, responseObject, controller.serializedAbortReason, controller.controller);
           cleanupAbortListeners();
           return;
         }
@@ -25703,7 +25731,7 @@ var require_fetch = __commonJS({
         p = null;
       };
       controller = fetching({
-        request,
+        request: request2,
         processResponseEndOfBody: (response) => {
           handleFetchDone(response);
           cleanupAbortListeners();
@@ -25753,12 +25781,12 @@ var require_fetch = __commonJS({
       );
     }
     var markResourceTiming = performance.markResourceTiming;
-    function abortFetch(p, request, responseObject, error, controller) {
+    function abortFetch(p, request2, responseObject, error, controller) {
       if (p) {
         p.reject(error);
       }
-      if (request.body?.stream != null && isReadable(request.body.stream)) {
-        request.body.stream.cancel(error).catch((err) => {
+      if (request2.body?.stream != null && isReadable(request2.body.stream)) {
+        request2.body.stream.cancel(error).catch((err) => {
           if (err.code === "ERR_INVALID_STATE") {
             return;
           }
@@ -25774,7 +25802,7 @@ var require_fetch = __commonJS({
       }
     }
     function fetching({
-      request,
+      request: request2,
       processRequestBodyChunkLength,
       processRequestEndOfBody,
       processResponse,
@@ -25789,9 +25817,9 @@ var require_fetch = __commonJS({
       assert(dispatcher);
       let taskDestination = null;
       let crossOriginIsolatedCapability = false;
-      if (request.client != null) {
-        taskDestination = request.client.globalObject;
-        crossOriginIsolatedCapability = request.client.crossOriginIsolatedCapability;
+      if (request2.client != null) {
+        taskDestination = request2.client.globalObject;
+        crossOriginIsolatedCapability = request2.client.crossOriginIsolatedCapability;
       }
       const currentTime = coarsenedSharedCurrentTime(crossOriginIsolatedCapability);
       const timingInfo = createOpaqueTimingInfo({
@@ -25799,7 +25827,7 @@ var require_fetch = __commonJS({
       });
       const fetchParams = {
         controller: new Fetch(dispatcher),
-        request,
+        request: request2,
         timingInfo,
         processRequestBodyChunkLength,
         processRequestEndOfBody,
@@ -25811,79 +25839,79 @@ var require_fetch = __commonJS({
         // Keep requestObject alive to prevent its AbortController from being GC'd
         requestObject
       };
-      assert(!request.body || request.body.stream);
-      if (request.window === "client") {
-        request.window = request.client?.globalObject?.constructor?.name === "Window" ? request.client : "no-window";
+      assert(!request2.body || request2.body.stream);
+      if (request2.window === "client") {
+        request2.window = request2.client?.globalObject?.constructor?.name === "Window" ? request2.client : "no-window";
       }
-      if (request.origin === "client") {
-        request.origin = request.client.origin;
+      if (request2.origin === "client") {
+        request2.origin = request2.client.origin;
       }
-      if (request.policyContainer === "client") {
-        if (request.client != null) {
-          request.policyContainer = clonePolicyContainer(
-            request.client.policyContainer
+      if (request2.policyContainer === "client") {
+        if (request2.client != null) {
+          request2.policyContainer = clonePolicyContainer(
+            request2.client.policyContainer
           );
         } else {
-          request.policyContainer = makePolicyContainer();
+          request2.policyContainer = makePolicyContainer();
         }
       }
-      if (!request.headersList.contains("accept", true)) {
+      if (!request2.headersList.contains("accept", true)) {
         const value = "*/*";
-        request.headersList.append("accept", value, true);
+        request2.headersList.append("accept", value, true);
       }
-      if (!request.headersList.contains("accept-language", true)) {
-        request.headersList.append("accept-language", "*", true);
+      if (!request2.headersList.contains("accept-language", true)) {
+        request2.headersList.append("accept-language", "*", true);
       }
-      if (request.priority === null) {
+      if (request2.priority === null) {
       }
-      if (subresourceSet.has(request.destination)) {
+      if (subresourceSet.has(request2.destination)) {
       }
       mainFetch(fetchParams, false);
       return fetchParams.controller;
     }
     async function mainFetch(fetchParams, recursive) {
       try {
-        const request = fetchParams.request;
+        const request2 = fetchParams.request;
         let response = null;
-        if (request.localURLsOnly && !urlIsLocal(requestCurrentURL(request))) {
+        if (request2.localURLsOnly && !urlIsLocal(requestCurrentURL(request2))) {
           response = makeNetworkError("local URLs only");
         }
-        tryUpgradeRequestToAPotentiallyTrustworthyURL(request);
-        if (requestBadPort(request) === "blocked") {
+        tryUpgradeRequestToAPotentiallyTrustworthyURL(request2);
+        if (requestBadPort(request2) === "blocked") {
           response = makeNetworkError("bad port");
         }
-        if (request.referrerPolicy === "") {
-          request.referrerPolicy = request.policyContainer.referrerPolicy;
+        if (request2.referrerPolicy === "") {
+          request2.referrerPolicy = request2.policyContainer.referrerPolicy;
         }
-        if (request.referrer !== "no-referrer") {
-          request.referrer = determineRequestsReferrer(request);
+        if (request2.referrer !== "no-referrer") {
+          request2.referrer = determineRequestsReferrer(request2);
         }
         if (response === null) {
-          const currentURL = requestCurrentURL(request);
+          const currentURL = requestCurrentURL(request2);
           if (
             // - request’s current URL’s origin is same origin with request’s origin,
             //   and request’s response tainting is "basic"
-            sameOrigin(currentURL, request.url) && request.responseTainting === "basic" || // request’s current URL’s scheme is "data"
+            sameOrigin(currentURL, request2.url) && request2.responseTainting === "basic" || // request’s current URL’s scheme is "data"
             currentURL.protocol === "data:" || // - request’s mode is "navigate" or "websocket"
-            (request.mode === "navigate" || request.mode === "websocket")
+            (request2.mode === "navigate" || request2.mode === "websocket")
           ) {
-            request.responseTainting = "basic";
+            request2.responseTainting = "basic";
             response = await schemeFetch(fetchParams);
-          } else if (request.mode === "same-origin") {
+          } else if (request2.mode === "same-origin") {
             response = makeNetworkError('request mode cannot be "same-origin"');
-          } else if (request.mode === "no-cors") {
-            if (request.redirect !== "follow") {
+          } else if (request2.mode === "no-cors") {
+            if (request2.redirect !== "follow") {
               response = makeNetworkError(
                 'redirect mode cannot be "follow" for "no-cors" request'
               );
             } else {
-              request.responseTainting = "opaque";
+              request2.responseTainting = "opaque";
               response = await schemeFetch(fetchParams);
             }
-          } else if (!urlIsHttpHttpsScheme(requestCurrentURL(request))) {
+          } else if (!urlIsHttpHttpsScheme(requestCurrentURL(request2))) {
             response = makeNetworkError("URL scheme must be a HTTP(S) scheme");
           } else {
-            request.responseTainting = "cors";
+            request2.responseTainting = "cors";
             response = await httpFetch(fetchParams);
           }
         }
@@ -25891,13 +25919,13 @@ var require_fetch = __commonJS({
           return response;
         }
         if (response.status !== 0 && !response.internalResponse) {
-          if (request.responseTainting === "cors") {
+          if (request2.responseTainting === "cors") {
           }
-          if (request.responseTainting === "basic") {
+          if (request2.responseTainting === "basic") {
             response = filterResponse(response, "basic");
-          } else if (request.responseTainting === "cors") {
+          } else if (request2.responseTainting === "cors") {
             response = filterResponse(response, "cors");
-          } else if (request.responseTainting === "opaque") {
+          } else if (request2.responseTainting === "opaque") {
             response = filterResponse(response, "opaque");
           } else {
             assert(false);
@@ -25905,26 +25933,26 @@ var require_fetch = __commonJS({
         }
         let internalResponse = response.status === 0 ? response : response.internalResponse;
         if (internalResponse.urlList.length === 0) {
-          internalResponse.urlList.push(...request.urlList);
+          internalResponse.urlList.push(...request2.urlList);
         }
-        if (!request.timingAllowFailed) {
+        if (!request2.timingAllowFailed) {
           response.timingAllowPassed = true;
         }
-        if (response.type === "opaque" && internalResponse.status === 206 && internalResponse.rangeRequested && !request.headers.contains("range", true)) {
+        if (response.type === "opaque" && internalResponse.status === 206 && internalResponse.rangeRequested && !request2.headers.contains("range", true)) {
           response = internalResponse = makeNetworkError();
         }
-        if (response.status !== 0 && (request.method === "HEAD" || request.method === "CONNECT" || nullBodyStatus.includes(internalResponse.status))) {
+        if (response.status !== 0 && (request2.method === "HEAD" || request2.method === "CONNECT" || nullBodyStatus.includes(internalResponse.status))) {
           internalResponse.body = null;
           fetchParams.controller.dump = true;
         }
-        if (request.integrity) {
+        if (request2.integrity) {
           const processBodyError = (reason) => fetchFinale(fetchParams, makeNetworkError(reason));
-          if (request.responseTainting === "opaque" || response.body == null) {
+          if (request2.responseTainting === "opaque" || response.body == null) {
             processBodyError(response.error);
             return;
           }
           const processBody = (bytes) => {
-            if (!bytesMatch(bytes, request.integrity)) {
+            if (!bytesMatch(bytes, request2.integrity)) {
               processBodyError("integrity mismatch");
               return;
             }
@@ -25943,8 +25971,8 @@ var require_fetch = __commonJS({
       if (isCancelled(fetchParams)) {
         return Promise.resolve(makeAppropriateNetworkError(fetchParams));
       }
-      const { request } = fetchParams;
-      const { protocol: scheme } = requestCurrentURL(request);
+      const { request: request2 } = fetchParams;
+      const { protocol: scheme } = requestCurrentURL(request2);
       switch (scheme) {
         case "about:": {
           return Promise.resolve(makeNetworkError("about scheme is not supported"));
@@ -25953,19 +25981,19 @@ var require_fetch = __commonJS({
           if (!resolveObjectURL) {
             resolveObjectURL = __require("node:buffer").resolveObjectURL;
           }
-          const blobURLEntry = requestCurrentURL(request);
+          const blobURLEntry = requestCurrentURL(request2);
           if (blobURLEntry.search.length !== 0) {
             return Promise.resolve(makeNetworkError("NetworkError when attempting to fetch resource."));
           }
           const blob = resolveObjectURL(blobURLEntry.toString());
-          if (request.method !== "GET" || !webidl.is.Blob(blob)) {
+          if (request2.method !== "GET" || !webidl.is.Blob(blob)) {
             return Promise.resolve(makeNetworkError("invalid method"));
           }
           const response = makeResponse();
           const fullLength = blob.size;
           const serializedFullLength = isomorphicEncode(`${fullLength}`);
           const type = blob.type;
-          if (!request.headersList.contains("range", true)) {
+          if (!request2.headersList.contains("range", true)) {
             const bodyWithType = extractBody(blob);
             response.statusText = "OK";
             response.body = bodyWithType[0];
@@ -25973,7 +26001,7 @@ var require_fetch = __commonJS({
             response.headersList.set("content-type", type, true);
           } else {
             response.rangeRequested = true;
-            const rangeHeader = request.headersList.get("range", true);
+            const rangeHeader = request2.headersList.get("range", true);
             const rangeValue = simpleRangeHeaderValue(rangeHeader, true);
             if (rangeValue === "failure") {
               return Promise.resolve(makeNetworkError("failed to fetch the data URL"));
@@ -26004,7 +26032,7 @@ var require_fetch = __commonJS({
           return Promise.resolve(response);
         }
         case "data:": {
-          const currentURL = requestCurrentURL(request);
+          const currentURL = requestCurrentURL(request2);
           const dataURLStruct = dataURLProcessor(currentURL);
           if (dataURLStruct === "failure") {
             return Promise.resolve(makeNetworkError("failed to fetch the data URL"));
@@ -26102,41 +26130,41 @@ var require_fetch = __commonJS({
       }
     }
     async function httpFetch(fetchParams) {
-      const request = fetchParams.request;
+      const request2 = fetchParams.request;
       let response = null;
       let actualResponse = null;
       const timingInfo = fetchParams.timingInfo;
-      if (request.serviceWorkers === "all") {
+      if (request2.serviceWorkers === "all") {
       }
       if (response === null) {
-        if (request.redirect === "follow") {
-          request.serviceWorkers = "none";
+        if (request2.redirect === "follow") {
+          request2.serviceWorkers = "none";
         }
         actualResponse = response = await httpNetworkOrCacheFetch(fetchParams);
-        if (request.responseTainting === "cors" && corsCheck(request, response) === "failure") {
+        if (request2.responseTainting === "cors" && corsCheck(request2, response) === "failure") {
           return makeNetworkError("cors failure");
         }
-        if (TAOCheck(request, response) === "failure") {
-          request.timingAllowFailed = true;
+        if (TAOCheck(request2, response) === "failure") {
+          request2.timingAllowFailed = true;
         }
       }
-      if ((request.responseTainting === "opaque" || response.type === "opaque") && crossOriginResourcePolicyCheck(
-        request.origin,
-        request.client,
-        request.destination,
+      if ((request2.responseTainting === "opaque" || response.type === "opaque") && crossOriginResourcePolicyCheck(
+        request2.origin,
+        request2.client,
+        request2.destination,
         actualResponse
       ) === "blocked") {
         return makeNetworkError("blocked");
       }
       if (redirectStatusSet.has(actualResponse.status)) {
-        if (request.redirect !== "manual") {
+        if (request2.redirect !== "manual") {
           fetchParams.controller.connection.destroy();
         }
-        if (request.redirect === "error") {
+        if (request2.redirect === "error") {
           response = makeNetworkError("unexpected redirect");
-        } else if (request.redirect === "manual") {
+        } else if (request2.redirect === "manual") {
           response = actualResponse;
-        } else if (request.redirect === "follow") {
+        } else if (request2.redirect === "follow") {
           response = await httpRedirectFetch(fetchParams, response);
         } else {
           assert(false);
@@ -26146,13 +26174,13 @@ var require_fetch = __commonJS({
       return response;
     }
     function httpRedirectFetch(fetchParams, response) {
-      const request = fetchParams.request;
+      const request2 = fetchParams.request;
       const actualResponse = response.internalResponse ? response.internalResponse : response;
       let locationURL;
       try {
         locationURL = responseLocationURL(
           actualResponse,
-          requestCurrentURL(request).hash
+          requestCurrentURL(request2).hash
         );
         if (locationURL == null) {
           return response;
@@ -26163,68 +26191,68 @@ var require_fetch = __commonJS({
       if (!urlIsHttpHttpsScheme(locationURL)) {
         return Promise.resolve(makeNetworkError("URL scheme must be a HTTP(S) scheme"));
       }
-      if (request.redirectCount === 20) {
+      if (request2.redirectCount === 20) {
         return Promise.resolve(makeNetworkError("redirect count exceeded"));
       }
-      request.redirectCount += 1;
-      if (request.mode === "cors" && (locationURL.username || locationURL.password) && !sameOrigin(request, locationURL)) {
+      request2.redirectCount += 1;
+      if (request2.mode === "cors" && (locationURL.username || locationURL.password) && !sameOrigin(request2, locationURL)) {
         return Promise.resolve(makeNetworkError('cross origin not allowed for request mode "cors"'));
       }
-      if (request.responseTainting === "cors" && (locationURL.username || locationURL.password)) {
+      if (request2.responseTainting === "cors" && (locationURL.username || locationURL.password)) {
         return Promise.resolve(makeNetworkError(
           'URL cannot contain credentials for request mode "cors"'
         ));
       }
-      if (actualResponse.status !== 303 && request.body != null && request.body.source == null) {
+      if (actualResponse.status !== 303 && request2.body != null && request2.body.source == null) {
         return Promise.resolve(makeNetworkError());
       }
-      if ([301, 302].includes(actualResponse.status) && request.method === "POST" || actualResponse.status === 303 && !GET_OR_HEAD.includes(request.method)) {
-        request.method = "GET";
-        request.body = null;
+      if ([301, 302].includes(actualResponse.status) && request2.method === "POST" || actualResponse.status === 303 && !GET_OR_HEAD.includes(request2.method)) {
+        request2.method = "GET";
+        request2.body = null;
         for (const headerName of requestBodyHeader) {
-          request.headersList.delete(headerName);
+          request2.headersList.delete(headerName);
         }
       }
-      if (!sameOrigin(requestCurrentURL(request), locationURL)) {
-        request.headersList.delete("authorization", true);
-        request.headersList.delete("proxy-authorization", true);
-        request.headersList.delete("cookie", true);
-        request.headersList.delete("host", true);
+      if (!sameOrigin(requestCurrentURL(request2), locationURL)) {
+        request2.headersList.delete("authorization", true);
+        request2.headersList.delete("proxy-authorization", true);
+        request2.headersList.delete("cookie", true);
+        request2.headersList.delete("host", true);
       }
-      if (request.body != null) {
-        assert(request.body.source != null);
-        request.body = safelyExtractBody(request.body.source)[0];
+      if (request2.body != null) {
+        assert(request2.body.source != null);
+        request2.body = safelyExtractBody(request2.body.source)[0];
       }
       const timingInfo = fetchParams.timingInfo;
       timingInfo.redirectEndTime = timingInfo.postRedirectStartTime = coarsenedSharedCurrentTime(fetchParams.crossOriginIsolatedCapability);
       if (timingInfo.redirectStartTime === 0) {
         timingInfo.redirectStartTime = timingInfo.startTime;
       }
-      request.urlList.push(locationURL);
-      setRequestReferrerPolicyOnRedirect(request, actualResponse);
+      request2.urlList.push(locationURL);
+      setRequestReferrerPolicyOnRedirect(request2, actualResponse);
       return mainFetch(fetchParams, true);
     }
     async function httpNetworkOrCacheFetch(fetchParams, isAuthenticationFetch = false, isNewConnectionFetch = false) {
-      const request = fetchParams.request;
+      const request2 = fetchParams.request;
       let httpFetchParams = null;
       let httpRequest = null;
       let response = null;
       const httpCache = null;
       const revalidatingFlag = false;
-      if (request.window === "no-window" && request.redirect === "error") {
+      if (request2.window === "no-window" && request2.redirect === "error") {
         httpFetchParams = fetchParams;
-        httpRequest = request;
+        httpRequest = request2;
       } else {
-        if (request.body?.source != null) {
-          httpRequest = cloneRequest(request);
+        if (request2.body?.source != null) {
+          httpRequest = cloneRequest(request2);
         } else {
-          httpRequest = cloneRequest({ ...request, body: null });
-          httpRequest.body = request.body;
+          httpRequest = cloneRequest({ ...request2, body: null });
+          httpRequest.body = request2.body;
         }
         httpFetchParams = { ...fetchParams };
         httpFetchParams.request = httpRequest;
       }
-      const includeCredentials = request.credentials === "include" || request.credentials === "same-origin" && request.responseTainting === "basic";
+      const includeCredentials = request2.credentials === "include" || request2.credentials === "same-origin" && request2.responseTainting === "basic";
       const contentLength = httpRequest.body ? httpRequest.body.length : null;
       let contentLengthHeaderValue = null;
       if (httpRequest.body == null && ["POST", "PUT"].includes(httpRequest.method)) {
@@ -26311,14 +26339,14 @@ var require_fetch = __commonJS({
         response.rangeRequested = true;
       }
       response.requestIncludesCredentials = includeCredentials;
-      if (response.status === 401 && httpRequest.responseTainting !== "cors" && includeCredentials && (request.useURLCredentials !== void 0 || isTraversableNavigable(request.traversableForUserPrompts))) {
-        if (request.body != null) {
-          if (request.body.source == null) {
+      if (response.status === 401 && httpRequest.responseTainting !== "cors" && includeCredentials && (request2.useURLCredentials !== void 0 || isTraversableNavigable(request2.traversableForUserPrompts))) {
+        if (request2.body != null) {
+          if (request2.body.source == null) {
             return response;
           }
-          request.body = safelyExtractBody(request.body.source)[0];
+          request2.body = safelyExtractBody(request2.body.source)[0];
         }
-        if (request.useURLCredentials === void 0 || isAuthenticationFetch) {
+        if (request2.useURLCredentials === void 0 || isAuthenticationFetch) {
           if (isCancelled(fetchParams)) {
             return makeAppropriateNetworkError(fetchParams);
           }
@@ -26328,7 +26356,7 @@ var require_fetch = __commonJS({
         response = await httpNetworkOrCacheFetch(fetchParams, true);
       }
       if (response.status === 407) {
-        if (request.window === "no-window") {
+        if (request2.window === "no-window") {
           return makeNetworkError();
         }
         if (isCancelled(fetchParams)) {
@@ -26340,7 +26368,7 @@ var require_fetch = __commonJS({
         // response’s status is 421
         response.status === 421 && // isNewConnectionFetch is false
         !isNewConnectionFetch && // request’s body is null, or request’s body is non-null and request’s body’s source is non-null
-        (request.body == null || request.body.source != null)
+        (request2.body == null || request2.body.source != null)
       ) {
         if (isCancelled(fetchParams)) {
           return makeAppropriateNetworkError(fetchParams);
@@ -26368,21 +26396,21 @@ var require_fetch = __commonJS({
           }
         }
       };
-      const request = fetchParams.request;
+      const request2 = fetchParams.request;
       let response = null;
       const timingInfo = fetchParams.timingInfo;
       const httpCache = null;
       if (httpCache == null) {
-        request.cache = "no-store";
+        request2.cache = "no-store";
       }
       const newConnection = forceNewConnection ? "yes" : "no";
-      if (request.mode === "websocket") {
+      if (request2.mode === "websocket") {
       } else {
       }
       let requestBody = null;
-      if (request.body == null && fetchParams.processRequestEndOfBody) {
+      if (request2.body == null && fetchParams.processRequestEndOfBody) {
         queueMicrotask(() => fetchParams.processRequestEndOfBody());
-      } else if (request.body != null) {
+      } else if (request2.body != null) {
         const processBodyChunk = async function* (bytes) {
           if (isCancelled(fetchParams)) {
             return;
@@ -26410,7 +26438,7 @@ var require_fetch = __commonJS({
         };
         requestBody = (async function* () {
           try {
-            for await (const bytes of request.body.stream) {
+            for await (const bytes of request2.body.stream) {
               yield* processBodyChunk(bytes);
             }
             processEndOfBody();
@@ -26517,23 +26545,23 @@ var require_fetch = __commonJS({
       }
       return response;
       function dispatch({ body }) {
-        const url = requestCurrentURL(request);
-        const agent = fetchParams.controller.dispatcher;
+        const url = requestCurrentURL(request2);
+        const agent2 = fetchParams.controller.dispatcher;
         const path2 = url.pathname + url.search;
         const hasTrailingQuestionMark = url.search.length === 0 && url.href[url.href.length - url.hash.length - 1] === "?";
         return dispatchWithProtocolPreference(body);
         function dispatchWithProtocolPreference(body2, allowH2) {
-          return new Promise((resolve2, reject) => agent.dispatch(
+          return new Promise((resolve2, reject) => agent2.dispatch(
             {
               path: hasTrailingQuestionMark ? `${path2}?` : path2,
               origin: url.origin,
-              method: request.method,
-              body: agent.isMockActive ? request.body && (request.body.source || request.body.stream) : body2,
+              method: request2.method,
+              body: agent2.isMockActive ? request2.body && (request2.body.source || request2.body.stream) : body2,
               // Preserve the serialized fetch body for MockAgent net-connect fallthroughs.
               __mockAgentBodyForDispatch: body2,
-              headers: request.headersList.entries,
+              headers: request2.headersList.entries,
               maxRedirections: 0,
-              upgrade: request.mode === "websocket" ? "websocket" : void 0,
+              upgrade: request2.mode === "websocket" ? "websocket" : void 0,
               ...allowH2 === false ? { allowH2 } : null
             },
             {
@@ -26562,9 +26590,9 @@ var require_fetch = __commonJS({
                 const headersList = new HeadersList();
                 appendHeadersListFromResponseHeaders(headersList, headers, rawHeaders);
                 const location = headersList.get("location", true);
-                const willFollow = location && request.redirect === "follow" && redirectStatusSet.has(status);
+                const willFollow = location && request2.redirect === "follow" && redirectStatusSet.has(status);
                 const decoders = [];
-                if (request.method !== "HEAD" && request.method !== "CONNECT" && !nullBodyStatus.includes(status) && !willFollow) {
+                if (request2.method !== "HEAD" && request2.method !== "CONNECT" && !nullBodyStatus.includes(status) && !willFollow) {
                   const contentEncoding = headersList.get("content-encoding", true);
                   const codings = contentEncoding ? contentEncoding.toLowerCase().split(",") : [];
                   const maxContentEncodings = 5;
@@ -26642,7 +26670,7 @@ var require_fetch = __commonJS({
                 if (this.abort) {
                   fetchParams.controller.off("terminated", this.abort);
                 }
-                if (request.mode === "websocket" && allowH2 !== false && error?.code === "UND_ERR_INFO" && error?.message === "HTTP/2: Extended CONNECT protocol not supported by server") {
+                if (request2.mode === "websocket" && allowH2 !== false && error?.code === "UND_ERR_INFO" && error?.message === "HTTP/2: Extended CONNECT protocol not supported by server") {
                   resolve2(dispatchWithProtocolPreference(body2, false));
                   return;
                 }
@@ -26740,31 +26768,31 @@ var require_cache3 = __commonJS({
         webidl.util.markAsUncloneable(this);
         this.#relevantRequestResponseList = arguments[1];
       }
-      async match(request, options = {}) {
+      async match(request2, options = {}) {
         webidl.brandCheck(this, webidl.is.Cache);
         const prefix = "Cache.match";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        request = webidl.converters.RequestInfo(request);
+        request2 = webidl.converters.RequestInfo(request2);
         options = webidl.converters.CacheQueryOptions(options, prefix, "options");
-        const p = this.#internalMatchAll(request, options, 1);
+        const p = this.#internalMatchAll(request2, options, 1);
         if (p.length === 0) {
           return;
         }
         return p[0];
       }
-      async matchAll(request = void 0, options = {}) {
+      async matchAll(request2 = void 0, options = {}) {
         webidl.brandCheck(this, webidl.is.Cache);
         const prefix = "Cache.matchAll";
-        if (request !== void 0) request = webidl.converters.RequestInfo(request);
+        if (request2 !== void 0) request2 = webidl.converters.RequestInfo(request2);
         options = webidl.converters.CacheQueryOptions(options, prefix, "options");
-        return this.#internalMatchAll(request, options);
+        return this.#internalMatchAll(request2, options);
       }
-      async add(request) {
+      async add(request2) {
         webidl.brandCheck(this, webidl.is.Cache);
         const prefix = "Cache.add";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        request = webidl.converters.RequestInfo(request);
-        const requests2 = [request];
+        request2 = webidl.converters.RequestInfo(request2);
+        const requests2 = [request2];
         const responseArrayPromise = this.addAll(requests2);
         return await responseArrayPromise;
       }
@@ -26774,19 +26802,19 @@ var require_cache3 = __commonJS({
         webidl.argumentLengthCheck(arguments, 1, prefix);
         const responsePromises = [];
         const requestList = [];
-        for (let request of requests2) {
-          if (request === void 0) {
+        for (let request2 of requests2) {
+          if (request2 === void 0) {
             throw webidl.errors.conversionFailed({
               prefix,
               argument: "Argument 1",
               types: ["undefined is not allowed"]
             });
           }
-          request = webidl.converters.RequestInfo(request);
-          if (typeof request === "string") {
+          request2 = webidl.converters.RequestInfo(request2);
+          if (typeof request2 === "string") {
             continue;
           }
-          const r = getRequestState(request);
+          const r = getRequestState(request2);
           if (!urlIsHttpHttpsScheme(r.url) || r.method !== "GET") {
             throw webidl.errors.exception({
               header: prefix,
@@ -26795,8 +26823,8 @@ var require_cache3 = __commonJS({
           }
         }
         const fetchControllers = [];
-        for (const request of requests2) {
-          const r = getRequestState(new Request2(request));
+        for (const request2 of requests2) {
+          const r = getRequestState(new Request2(request2));
           if (!urlIsHttpHttpsScheme(r.url)) {
             throw webidl.errors.exception({
               header: prefix,
@@ -26876,17 +26904,17 @@ var require_cache3 = __commonJS({
         });
         return cacheJobPromise.promise;
       }
-      async put(request, response) {
+      async put(request2, response) {
         webidl.brandCheck(this, webidl.is.Cache);
         const prefix = "Cache.put";
         webidl.argumentLengthCheck(arguments, 2, prefix);
-        request = webidl.converters.RequestInfo(request);
+        request2 = webidl.converters.RequestInfo(request2);
         response = webidl.converters.Response(response, prefix, "response");
         let innerRequest = null;
-        if (webidl.is.Request(request)) {
-          innerRequest = getRequestState(request);
+        if (webidl.is.Request(request2)) {
+          innerRequest = getRequestState(request2);
         } else {
-          innerRequest = getRequestState(new Request2(request));
+          innerRequest = getRequestState(new Request2(request2));
         }
         if (!urlIsHttpHttpsScheme(innerRequest.url) || innerRequest.method !== "GET") {
           throw webidl.errors.exception({
@@ -26957,21 +26985,21 @@ var require_cache3 = __commonJS({
         });
         return cacheJobPromise.promise;
       }
-      async delete(request, options = {}) {
+      async delete(request2, options = {}) {
         webidl.brandCheck(this, webidl.is.Cache);
         const prefix = "Cache.delete";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        request = webidl.converters.RequestInfo(request);
+        request2 = webidl.converters.RequestInfo(request2);
         options = webidl.converters.CacheQueryOptions(options, prefix, "options");
         let r = null;
-        if (webidl.is.Request(request)) {
-          r = getRequestState(request);
+        if (webidl.is.Request(request2)) {
+          r = getRequestState(request2);
           if (r.method !== "GET" && !options.ignoreMethod) {
             return false;
           }
         } else {
-          assert(typeof request === "string");
-          r = getRequestState(new Request2(request));
+          assert(typeof request2 === "string");
+          r = getRequestState(new Request2(request2));
         }
         const operations = [];
         const operation = {
@@ -27003,25 +27031,25 @@ var require_cache3 = __commonJS({
        * @param {import('../../../types/cache').CacheQueryOptions} options
        * @returns {Promise<readonly Request[]>}
        */
-      async keys(request = void 0, options = {}) {
+      async keys(request2 = void 0, options = {}) {
         webidl.brandCheck(this, webidl.is.Cache);
         const prefix = "Cache.keys";
-        if (request !== void 0) request = webidl.converters.RequestInfo(request);
+        if (request2 !== void 0) request2 = webidl.converters.RequestInfo(request2);
         options = webidl.converters.CacheQueryOptions(options, prefix, "options");
         let r = null;
-        if (request !== void 0) {
-          if (webidl.is.Request(request)) {
-            r = getRequestState(request);
+        if (request2 !== void 0) {
+          if (webidl.is.Request(request2)) {
+            r = getRequestState(request2);
             if (r.method !== "GET" && !options.ignoreMethod) {
               return [];
             }
-          } else if (typeof request === "string") {
-            r = getRequestState(new Request2(request));
+          } else if (typeof request2 === "string") {
+            r = getRequestState(new Request2(request2));
           }
         }
         const promise = Promise.withResolvers();
         const requests2 = [];
-        if (request === void 0) {
+        if (request2 === void 0) {
           for (const requestResponse of this.#relevantRequestResponseList) {
             requests2.push(requestResponse[0]);
           }
@@ -27033,9 +27061,9 @@ var require_cache3 = __commonJS({
         }
         queueMicrotask(() => {
           const requestList = [];
-          for (const request2 of requests2) {
+          for (const request3 of requests2) {
             const requestObject = fromInnerRequest(
-              request2,
+              request3,
               void 0,
               new AbortController().signal,
               "immutable"
@@ -27154,9 +27182,9 @@ var require_cache3 = __commonJS({
        * @param {import('../../../types/cache').CacheQueryOptions | undefined} options
        * @returns {boolean}
        */
-      #requestMatchesCachedItem(requestQuery, request, response = null, options) {
+      #requestMatchesCachedItem(requestQuery, request2, response = null, options) {
         const queryURL = new URL(requestQuery.url);
-        const cachedURL = new URL(request.url);
+        const cachedURL = new URL(request2.url);
         if (options?.ignoreSearch) {
           cachedURL.search = "";
           queryURL.search = "";
@@ -27172,7 +27200,7 @@ var require_cache3 = __commonJS({
           if (fieldValue === "*") {
             return false;
           }
-          const requestValue = request.headersList.get(fieldValue);
+          const requestValue = request2.headersList.get(fieldValue);
           const queryValue = requestQuery.headersList.get(fieldValue);
           if (requestValue !== queryValue) {
             return false;
@@ -27180,20 +27208,20 @@ var require_cache3 = __commonJS({
         }
         return true;
       }
-      #internalMatchAll(request, options, maxResponses = Infinity) {
+      #internalMatchAll(request2, options, maxResponses = Infinity) {
         let r = null;
-        if (request !== void 0) {
-          if (webidl.is.Request(request)) {
-            r = getRequestState(request);
+        if (request2 !== void 0) {
+          if (webidl.is.Request(request2)) {
+            r = getRequestState(request2);
             if (r.method !== "GET" && !options.ignoreMethod) {
               return [];
             }
-          } else if (typeof request === "string") {
-            r = getRequestState(new Request2(request));
+          } else if (typeof request2 === "string") {
+            r = getRequestState(new Request2(request2));
           }
         }
         const responses = [];
-        if (request === void 0) {
+        if (request2 === void 0) {
           for (const requestResponse of this.#relevantRequestResponseList) {
             responses.push(requestResponse[1]);
           }
@@ -27290,21 +27318,21 @@ var require_cachestorage = __commonJS({
         }
         webidl.util.markAsUncloneable(this);
       }
-      async match(request, options = {}) {
+      async match(request2, options = {}) {
         webidl.brandCheck(this, webidl.is.CacheStorage);
         webidl.argumentLengthCheck(arguments, 1, "CacheStorage.match");
-        request = webidl.converters.RequestInfo(request);
+        request2 = webidl.converters.RequestInfo(request2);
         options = webidl.converters.MultiCacheQueryOptions(options);
         if (options.cacheName != null) {
           if (this.#caches.has(options.cacheName)) {
             const cacheList = this.#caches.get(options.cacheName);
             const cache4 = new Cache(kConstruct, cacheList);
-            return await cache4.match(request, options);
+            return await cache4.match(request2, options);
           }
         } else {
           for (const cacheList of this.#caches.values()) {
             const cache4 = new Cache(kConstruct, cacheList);
-            const response = await cache4.match(request, options);
+            const response = await cache4.match(request2, options);
             if (response !== void 0) {
               return response;
             }
@@ -28527,7 +28555,7 @@ var require_connection = __commonJS({
     function establishWebSocketConnection(url, protocols, client, handler, options) {
       const requestURL = url;
       requestURL.protocol = url.protocol === "ws:" ? "http:" : "https:";
-      const request = makeRequest({
+      const request2 = makeRequest({
         urlList: [requestURL],
         client,
         serviceWorkers: "none",
@@ -28540,18 +28568,18 @@ var require_connection = __commonJS({
       });
       if (options.headers) {
         const headersList = getHeadersList(new Headers2(options.headers));
-        request.headersList = headersList;
+        request2.headersList = headersList;
       }
       const keyValue = crypto2.randomBytes(16).toString("base64");
-      request.headersList.append("sec-websocket-key", keyValue, true);
-      request.headersList.append("sec-websocket-version", "13", true);
+      request2.headersList.append("sec-websocket-key", keyValue, true);
+      request2.headersList.append("sec-websocket-version", "13", true);
       for (const protocol of protocols) {
-        request.headersList.append("sec-websocket-protocol", protocol, true);
+        request2.headersList.append("sec-websocket-protocol", protocol, true);
       }
       const permessageDeflate = "permessage-deflate; client_max_window_bits";
-      request.headersList.append("sec-websocket-extensions", permessageDeflate, true);
+      request2.headersList.append("sec-websocket-extensions", permessageDeflate, true);
       const controller = fetching({
-        request,
+        request: request2,
         useParallelQueue: true,
         dispatcher: options.dispatcher,
         processResponse(response) {
@@ -28600,7 +28628,7 @@ var require_connection = __commonJS({
           }
           const secProtocol = response.headersList.get("Sec-WebSocket-Protocol");
           if (secProtocol !== null) {
-            const requestProtocols = getDecodeSplit("sec-websocket-protocol", request.headersList);
+            const requestProtocols = getDecodeSplit("sec-websocket-protocol", request2.headersList);
             if (requestProtocols === null || !requestProtocols.includes(secProtocol)) {
               failHandshake(handler, response, 1002, "Protocol was not set in the opening handshake.");
               return;
@@ -28684,8 +28712,8 @@ var require_permessage_deflate = __commonJS({
     var { isValidClientWindowBits } = require_util5();
     var { MessageSizeExceededError } = require_errors();
     var tail = Buffer.from([0, 0, 255, 255]);
-    var kBuffer = Symbol("kBuffer");
-    var kLength = Symbol("kLength");
+    var kBuffer = /* @__PURE__ */ Symbol("kBuffer");
+    var kLength = /* @__PURE__ */ Symbol("kLength");
     var PerMessageDeflate = class {
       /** @type {import('node:zlib').InflateRaw} */
       #inflate;
@@ -29246,8 +29274,8 @@ var require_websocket = __commonJS({
     var { SendQueue } = require_sender();
     var { WebsocketFrameSend } = require_frame();
     var { channels } = require_diagnostics();
-    var kRef = Symbol.for("nodejs.ref");
-    var kUnref = Symbol.for("nodejs.unref");
+    var kRef = /* @__PURE__ */ Symbol.for("nodejs.ref");
+    var kUnref = /* @__PURE__ */ Symbol.for("nodejs.unref");
     var ping;
     function getSocketAddress(socket) {
       if (typeof socket?.address === "function") {
@@ -30653,12 +30681,12 @@ var require_eventsource = __commonJS({
           corsAttributeState = USE_CREDENTIALS;
           this.#withCredentials = true;
         }
-        const request = createPotentialCORSRequest(urlRecord, "", corsAttributeState);
-        request.client = environmentSettingsObject.settingsObject;
-        request.headersList.set("Accept", "text/event-stream");
-        request.cache = "no-store";
-        request.initiator = "other";
-        this.#request = request;
+        const request2 = createPotentialCORSRequest(urlRecord, "", corsAttributeState);
+        request2.client = environmentSettingsObject.settingsObject;
+        request2.headersList.set("Accept", "text/event-stream");
+        request2.cache = "no-store";
+        request2.initiator = "other";
+        this.#request = request2;
         this.#connect();
       }
       /**
@@ -30691,10 +30719,10 @@ var require_eventsource = __commonJS({
       #connect() {
         if (this.#readyState === CLOSED) return;
         this.#readyState = CONNECTING;
-        const request = cloneRequest(this.#request);
-        request.urlList = [...this.#request.urlList];
+        const request2 = cloneRequest(this.#request);
+        request2.urlList = [...this.#request.urlList];
         const fetchParams = {
-          request,
+          request: request2,
           dispatcher: this.#dispatcher
         };
         const processEventSourceEndOfBody = (response) => {
@@ -30915,7 +30943,7 @@ var require_undici = __commonJS({
     var Pool2 = require_pool();
     var BalancedPool = require_balanced_pool();
     var RoundRobinPool = require_round_robin_pool();
-    var Agent2 = require_agent();
+    var Agent3 = require_agent();
     var Dispatcher1Wrapper2 = require_dispatcher1_wrapper();
     var ProxyAgent2 = require_proxy_agent();
     var Socks5ProxyAgent = require_socks5_proxy_agent();
@@ -30943,7 +30971,7 @@ var require_undici = __commonJS({
     module.exports.Pool = Pool2;
     module.exports.BalancedPool = BalancedPool;
     module.exports.RoundRobinPool = RoundRobinPool;
-    module.exports.Agent = Agent2;
+    module.exports.Agent = Agent3;
     module.exports.Dispatcher1Wrapper = Dispatcher1Wrapper2;
     module.exports.ProxyAgent = ProxyAgent2;
     module.exports.Socks5ProxyAgent = Socks5ProxyAgent;
@@ -31001,8 +31029,8 @@ var require_undici = __commonJS({
           }
           url = util.parseURL(url);
         }
-        const { agent, dispatcher = getGlobalDispatcher(), ...restOpts } = opts;
-        if (agent) {
+        const { agent: agent2, dispatcher = getGlobalDispatcher(), ...restOpts } = opts;
+        if (agent2) {
           throw new InvalidArgumentError("unsupported opts.agent. Did you mean opts.client?");
         }
         return fn.call(dispatcher, {
@@ -31103,9 +31131,47 @@ ${captureLines}` : capture.stack;
   }
 });
 
+// vendor/channel-pack/src/open-browser.ts
+var open_browser_exports = {};
+__export(open_browser_exports, {
+  openBrowser: () => openBrowser
+});
+import { spawn } from "node:child_process";
+function openBrowser(url) {
+  const warn = (error) => {
+    console.error("[channel-pack] failed to open browser; open manually:", url, error);
+  };
+  const win = process.platform === "win32";
+  if (win) {
+    const args = ["/c", "start", '""', `"${url}"`];
+    try {
+      const child = spawn("cmd", args, { detached: true, stdio: "ignore", windowsVerbatimArguments: true });
+      child.on("error", warn);
+      child.unref();
+      return;
+    } catch (error) {
+      warn(error);
+      return;
+    }
+  }
+  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+  try {
+    const child = spawn(cmd, [url], { detached: true, stdio: "ignore" });
+    child.on("error", warn);
+    child.unref();
+  } catch (error) {
+    warn(error);
+  }
+}
+var init_open_browser = __esm({
+  "vendor/channel-pack/src/open-browser.ts"() {
+    "use strict";
+  }
+});
+
 // vendor/channel-pack/src/index.ts
-import { credentialRef as credentialRef14 } from "@deepseek-ai/dsh-credentials";
-import { LlmError as LlmError20 } from "@deepseek-ai/dsh-llm";
+import { credentialRef as credentialRef15 } from "@deepseek-ai/dsh-credentials";
+import { LlmError as LlmError21 } from "@deepseek-ai/dsh-llm";
 import Schema2 from "@deepseek-ai/schemastery";
 
 // vendor/channel-pack/src/model-queue.ts
@@ -31884,10 +31950,10 @@ var TOKEN_LEDGER_HISTORY_MAX_DAYS = 90;
 // vendor/channel-pack/src/queue-rotation.ts
 var requests = new AsyncLocalStorage();
 function reportQueueSlot(slot2) {
-  const request = requests.getStore();
-  if (request?.provider !== "opencode") return;
-  request.slot = slot2;
-  request.tried.add(slot2.id);
+  const request2 = requests.getStore();
+  if (request2?.provider !== "opencode") return;
+  request2.slot = slot2;
+  request2.tried.add(slot2.id);
 }
 function wait(ms, signal) {
   signal?.throwIfAborted();
@@ -31907,14 +31973,14 @@ function wait(ms, signal) {
 }
 function withQueueAccountRotation(provider, options, create, timing = {}) {
   const now = timing.now ?? Date.now;
-  const sleep4 = timing.sleep ?? wait;
+  const sleep5 = timing.sleep ?? wait;
   const active = () => {
-    const request = requests.getStore();
-    return request?.owner === options ? request : void 0;
+    const request2 = requests.getStore();
+    return request2?.owner === options ? request2 : void 0;
   };
-  const remember = (request, account) => {
-    request.account = account;
-    request.tried.add(account.entry.id);
+  const remember = (request2, account) => {
+    request2.account = account;
+    request2.tried.add(account.entry.id);
     reportLedgerAccount(provider, account.entry.id);
   };
   const scoped = { ...options };
@@ -31924,11 +31990,11 @@ function withQueueAccountRotation(provider, options, create, timing = {}) {
       get(target, prop) {
         if (prop === "getAvailableAccount") {
           return async (id, model, excluded) => {
-            const request = active();
-            const relevant = request !== void 0 && id === provider && model === request.model;
-            const skipped = relevant ? /* @__PURE__ */ new Set([...request.tried, ...excluded ?? []]) : excluded;
+            const request2 = active();
+            const relevant = request2 !== void 0 && id === provider && model === request2.model;
+            const skipped = relevant ? /* @__PURE__ */ new Set([...request2.tried, ...excluded ?? []]) : excluded;
             const account = await target.getAvailableAccount(id, model, skipped);
-            if (account !== null && relevant) remember(request, account);
+            if (account !== null && relevant) remember(request2, account);
             return account;
           };
         }
@@ -31938,44 +32004,44 @@ function withQueueAccountRotation(provider, options, create, timing = {}) {
     });
     if (options.nextAccount !== void 0) {
       scoped.nextAccount = async (model, tried) => {
-        const request = active();
-        const relevant = request !== void 0 && model === request.model;
-        const next = await options.nextAccount(model, relevant ? /* @__PURE__ */ new Set([...tried, ...request.tried]) : tried);
+        const request2 = active();
+        const relevant = request2 !== void 0 && model === request2.model;
+        const next = await options.nextAccount(model, relevant ? /* @__PURE__ */ new Set([...tried, ...request2.tried]) : tried);
         if (next !== void 0 && relevant) {
           const entry = pool.listAccountsByProvider(provider).find((account) => account.id === next.accountId);
-          if (entry !== void 0) remember(request, { entry, credential: next.credential });
+          if (entry !== void 0) remember(request2, { entry, credential: next.credential });
         }
         return next;
       };
     }
     if (options.resolveCredential !== void 0) {
       scoped.resolveCredential = async (model) => {
-        const request = active();
-        if (request?.account !== void 0) {
-          const others = new Set(pool.listAccountsByProvider(provider).filter((account) => account.id !== request.account.entry.id).map((account) => account.id));
+        const request2 = active();
+        if (request2?.account !== void 0) {
+          const others = new Set(pool.listAccountsByProvider(provider).filter((account) => account.id !== request2.account.entry.id).map((account) => account.id));
           if (options.nextAccount !== void 0) {
-            const next2 = await options.nextAccount(request.model, others) ?? await options.nextAccount(request.model, request.tried);
+            const next2 = await options.nextAccount(request2.model, others) ?? await options.nextAccount(request2.model, request2.tried);
             if (next2 === void 0) {
               throw new LlmError2(`${provider}: \u5F53\u524D\u8D26\u53F7\u4E0D\u53EF\u7528\u6216\u65E0\u6CD5\u786E\u8BA4\u4F59\u989D\uFF0C\u4E14\u6CA1\u6709\u7B26\u5408\u6E20\u9053\u7B56\u7565\u7684\u5907\u7528\u8D26\u53F7`, "QUEUE");
             }
-            const entry = pool.listAccountsByProvider(provider).find((account) => account.id === next2.accountId && account.enabled && !((account.modelRateLimits?.[request.model] ?? 0) > Date.now()));
+            const entry = pool.listAccountsByProvider(provider).find((account) => account.id === next2.accountId && account.enabled && !((account.modelRateLimits?.[request2.model] ?? 0) > Date.now()));
             if (entry === void 0) throw new LlmError2(`${provider}: \u5F53\u524D\u8BF7\u6C42\u7684\u8D26\u53F7\u5DF2\u79FB\u9664\u3001\u505C\u7528\u6216\u53D7\u9650`, "QUEUE");
-            remember(request, { entry, credential: next2.credential });
+            remember(request2, { entry, credential: next2.credential });
             return next2.credential;
           }
-          const next = await pool.getAvailableAccount(provider, request.model, others) ?? await pool.getAvailableAccount(provider, request.model, request.tried);
+          const next = await pool.getAvailableAccount(provider, request2.model, others) ?? await pool.getAvailableAccount(provider, request2.model, request2.tried);
           if (next === null) throw new LlmError2(`${provider}: \u5F53\u524D\u8D26\u53F7\u4E0D\u53EF\u7528\uFF0C\u4E14\u6CA1\u6709\u53EF\u7528\u7684\u5907\u7528\u8D26\u53F7`, "QUEUE");
-          remember(request, next);
+          remember(request2, next);
           return next.credential;
         }
         const credential = await options.resolveCredential(model);
-        if (request !== void 0 && credential !== null && typeof credential === "object") {
+        if (request2 !== void 0 && credential !== null && typeof credential === "object") {
           const field = provider === "zcode" ? "zcode_jwt" : "access_token";
           const token = credential[field];
           if (typeof token === "string" && token.length > 0) {
             const id = await pool.findAccountIdByIdentityField(provider, field, token).catch(() => "");
             const entry = pool.listAccountsByProvider(provider).find((account) => account.id === id && account.enabled);
-            if (entry !== void 0) remember(request, { entry, credential });
+            if (entry !== void 0) remember(request2, { entry, credential });
           }
         }
         return credential;
@@ -31987,10 +32053,10 @@ function withQueueAccountRotation(provider, options, create, timing = {}) {
   }
   if (options.refresh !== void 0) {
     scoped.refresh = async (accountId, reason) => {
-      const request = active();
-      const id = accountId ?? request?.account?.entry.id;
-      if (request !== void 0) {
-        const budget = reason === "auth" ? request.authRefreshes : request.credentialRefreshes;
+      const request2 = active();
+      const id = accountId ?? request2?.account?.entry.id;
+      if (request2 !== void 0) {
+        const budget = reason === "auth" ? request2.authRefreshes : request2.credentialRefreshes;
         if (budget.has(id)) throw new LlmError2(`${provider}: \u5F53\u524D\u8D26\u53F7\u5DF2\u5C1D\u8BD5${reason === "auth" ? "\u8BA4\u8BC1\u7EED\u671F" : "\u51ED\u636E\u5237\u65B0"}\uFF0C\u505C\u6B62\u91CD\u590D\u5237\u65B0`, "AUTH");
         budget.add(id);
       }
@@ -31999,17 +32065,17 @@ function withQueueAccountRotation(provider, options, create, timing = {}) {
   }
   if (options.identitySlots !== void 0) {
     scoped.identitySlots = async () => {
-      const request = active();
-      const slots = await options.identitySlots(request?.model);
-      if (request?.slot === void 0) return slots;
-      const current = slots.find((slot2) => slot2.id === request.slot.id);
-      return [...current === void 0 ? [] : [current], ...slots.filter((slot2) => !request.tried.has(slot2.id))];
+      const request2 = active();
+      const slots = await options.identitySlots(request2?.model);
+      if (request2?.slot === void 0) return slots;
+      const current = slots.find((slot2) => slot2.id === request2.slot.id);
+      return [...current === void 0 ? [] : [current], ...slots.filter((slot2) => !request2.tried.has(slot2.id))];
     };
   }
   const adapter = create(scoped);
   const stream = async function* (input, open) {
     const { model, signal } = input;
-    const request = { owner: options, provider, model, tried: /* @__PURE__ */ new Set(), credentialRefreshes: /* @__PURE__ */ new Set(), authRefreshes: /* @__PURE__ */ new Set() };
+    const request2 = { owner: options, provider, model, tried: /* @__PURE__ */ new Set(), credentialRefreshes: /* @__PURE__ */ new Set(), authRefreshes: /* @__PURE__ */ new Set() };
     const deadline = now() + 30 * 6e4;
     let attempts = 0, queued = 0, since;
     let delivered = false;
@@ -32019,7 +32085,7 @@ function withQueueAccountRotation(provider, options, create, timing = {}) {
       const iterator = open()[Symbol.asyncIterator]();
       try {
         for (; ; ) {
-          const step = await requests.run(request, () => iterator.next());
+          const step = await requests.run(request2, () => iterator.next());
           if (step.done) return;
           delivered = true;
           yield step.value;
@@ -32036,26 +32102,26 @@ function withQueueAccountRotation(provider, options, create, timing = {}) {
           queued = 0;
           since = now();
           if (scoped.nextAccount !== void 0) {
-            const next = await requests.run(request, () => scoped.nextAccount(model, request.tried));
+            const next = await requests.run(request2, () => scoped.nextAccount(model, request2.tried));
             if (next !== void 0) continue;
           } else if (pool !== void 0) {
-            const next = await pool.getAvailableAccount(provider, model, request.tried);
+            const next = await pool.getAvailableAccount(provider, model, request2.tried);
             if (next !== null) {
-              remember(request, next);
+              remember(request2, next);
               continue;
             }
-          } else if (options.identitySlots !== void 0 && request.slot !== void 0) {
-            const next = pickSlot(await options.identitySlots(model), model, request.tried);
+          } else if (options.identitySlots !== void 0 && request2.slot !== void 0) {
+            const next = pickSlot(await options.identitySlots(model), model, request2.tried);
             if (next !== void 0) {
-              request.slot = next;
-              request.tried.add(next.id);
+              request2.slot = next;
+              request2.tried.add(next.id);
               continue;
             }
           }
         }
-        await sleep4(Math.min(Math.max(100, error.retryAfterMs ?? 1e3), QUEUE_MAX_DELAY_MS, deadline - now()), signal);
+        await sleep5(Math.min(Math.max(100, error.retryAfterMs ?? 1e3), QUEUE_MAX_DELAY_MS, deadline - now()), signal);
       } finally {
-        await requests.run(request, () => iterator.return?.());
+        await requests.run(request2, () => iterator.return?.());
       }
     }
   };
@@ -32190,6 +32256,7 @@ var SettingsStore = class {
   constructor(scope) {
     this.scope = scope;
   }
+  scope;
   kind = "settings";
   load() {
     const value = this.scope.get();
@@ -32302,6 +32369,9 @@ var FileStore = class {
     this.path = path2;
     this.logger = logger2;
   }
+  home;
+  path;
+  logger;
   kind = "file";
   load() {
     try {
@@ -32425,6 +32495,8 @@ var FileLockStore = class {
     this.path = path2;
     this.logger = logger2;
   }
+  path;
+  logger;
   kind = "file";
   load() {
     try {
@@ -32481,6 +32553,7 @@ var AccountPool = class {
       this.ctx.logger?.warn?.("[channel-pack] \u65E0\u53EF\u7528\u6301\u4E45\u5316\u540E\u7AEF\uFF0C\u8D26\u53F7\u5217\u8868\u4E0E\u6A21\u578B\u9ED1\u540D\u5355\u4EC5\u5B58\u5728\u4E8E\u5185\u5B58\u4E2D");
     }
   }
+  ctx;
   /** 持久化后端；两个后端都不可用时是仅内存实现。 */
   store;
   /**
@@ -33604,6 +33677,66 @@ function jwtExpiresAtMs(token) {
   }
 }
 
+// vendor/channel-pack/src/domestic-direct.ts
+var import_undici = __toESM(require_undici(), 1);
+import { lookup as defaultLookup } from "node:dns";
+var DOMESTIC_HOST = /(^|\.)(tencent\.com|codebuddy\.cn|qoder\.com\.cn|trae\.cn|trae\.com\.cn|huaweicloud\.com|sensenova\.cn|bigmodel\.cn|volces\.com|stepfun\.com|modelbest\.cn)$/i;
+var DOH_TIMEOUT_MS = 8e3;
+var DOH_ENDPOINT = "https://223.5.5.5/resolve";
+function isDomesticHost(hostname) {
+  return DOMESTIC_HOST.test(hostname);
+}
+function isDomesticUrl(input) {
+  try {
+    return isDomesticHost(new URL(String(input)).hostname);
+  } catch {
+    return false;
+  }
+}
+async function resolveOverDoh(hostname) {
+  const url = `${DOH_ENDPOINT}?name=${encodeURIComponent(hostname)}&type=A`;
+  const response = await (0, import_undici.fetch)(url, {
+    headers: { accept: "application/dns-json" },
+    signal: AbortSignal.timeout(DOH_TIMEOUT_MS)
+  });
+  if (!response.ok) throw new Error(`DoH responded ${response.status}`);
+  const payload = await response.json();
+  const address = (payload.Answer ?? []).find((row) => row.type === 1)?.data;
+  if (address === void 0 || address === "") throw new Error(`DoH returned no A record for ${hostname}`);
+  return address;
+}
+function domesticLookup(hostname, options, callback) {
+  const done = typeof options === "function" ? options : callback;
+  const opts = typeof options === "function" ? {} : options;
+  const fallback = () => defaultLookup(hostname, opts, done);
+  if (!isDomesticHost(hostname)) {
+    fallback();
+    return;
+  }
+  resolveOverDoh(hostname).then((address) => {
+    if (opts.all === true || opts.verbatim === true) done(null, [{ address, family: 4 }]);
+    else done(null, address, 4);
+  }).catch(fallback);
+}
+var agent;
+function domesticDispatcher() {
+  agent ??= new import_undici.Agent({ connect: { lookup: domesticLookup } });
+  return agent;
+}
+function domesticDirectEnabled() {
+  const flag = (process.env.OFM_DOMESTIC_DIRECT ?? "").trim().toLowerCase();
+  return !(flag === "0" || flag === "off" || flag === "false");
+}
+function createDomesticFetch(fallback) {
+  if (fallback !== void 0) return fallback;
+  return ((input, init) => {
+    const explicit = init?.dispatcher;
+    const domestic = explicit === void 0 && domesticDirectEnabled() && isDomesticUrl(input instanceof Request ? input.url : String(input));
+    if (!domestic) return globalThis.fetch(input, init);
+    return (0, import_undici.fetch)(input, { ...init, dispatcher: domesticDispatcher() });
+  });
+}
+
 // vendor/channel-pack/src/lobsterai.ts
 var LOBSTERAI_EXCHANGE_PATH = "/api/auth/exchange";
 var LOBSTERAI_REFRESH_PATH = "/api/auth/refresh";
@@ -33804,6 +33937,7 @@ var LobsteraiClientVersionResolver = class {
   constructor(options = {}) {
     this.options = options;
   }
+  options;
   cached;
   cachedAt = 0;
   /**
@@ -33821,7 +33955,7 @@ var LobsteraiClientVersionResolver = class {
     if (this.cached !== void 0 && now - this.cachedAt < ttl) {
       return { version: this.cached, source: "cache" };
     }
-    const fetched = this.options.fetcher ?? fetch;
+    const fetched = this.options.fetcher ?? createDomesticFetch();
     try {
       const response = await fetched(product.clientVersionApi, {
         method: "GET",
@@ -34489,6 +34623,8 @@ var FileDeadModelStore = class {
     this.path = path2;
     this.logger = logger2;
   }
+  path;
+  logger;
   kind = "file";
   load() {
     try {
@@ -34697,7 +34833,7 @@ var FALLBACK_IMAGE_PRICING = Object.freeze({
 });
 
 // vendor/channel-pack/src/openai-gateway/channel.ts
-var GATEWAY_CHANNEL_MARK = Symbol("dsh.openai-gateway.channel");
+var GATEWAY_CHANNEL_MARK = /* @__PURE__ */ Symbol("dsh.openai-gateway.channel");
 function markGatewayChannel(options) {
   try {
     if (typeof options === "object" && options !== null) {
@@ -35064,6 +35200,8 @@ var LobsteraiStreamError = class extends LlmError4 {
     this.kind = kind;
     this.detail = detail;
   }
+  kind;
+  detail;
 };
 function buildLobsteraiFailure(input) {
   const { kind, status, text, model, fromStream, exhausted } = input;
@@ -35126,6 +35264,7 @@ var LobsteraiAdapter = class extends LlmAdapter {
       (this.product.fallbackModels ?? []).map((model) => [model.id, model])
     );
   }
+  options;
   product;
   fetchImpl;
   /** 动态模型缓存（首次 listModels 成功后填充）。 */
@@ -35819,7 +35958,7 @@ function parseQoderTokenPayload(value) {
   }
   const source = value;
   const accessToken = readString(source, ["token", "device_token", "access_token"]) ?? "";
-  const refreshToken = readString(source, ["refresh_token", "refreshToken"]);
+  const refreshToken2 = readString(source, ["refresh_token", "refreshToken"]);
   const expiresAt = readTimestamp(source.expires_at ?? source.expiresAt);
   const refreshTokenExpiresAt = readTimestamp(
     source.refresh_token_expires_at ?? source.refreshTokenExpiresAt
@@ -35828,7 +35967,7 @@ function parseQoderTokenPayload(value) {
   const userName = readString(source, ["user_name", "userName"]);
   return {
     accessToken,
-    ...refreshToken === void 0 ? {} : { refreshToken },
+    ...refreshToken2 === void 0 ? {} : { refreshToken: refreshToken2 },
     ...expiresAt === void 0 ? {} : { expiresAt },
     ...refreshTokenExpiresAt === void 0 ? {} : { refreshTokenExpiresAt },
     ...uid === void 0 ? {} : { uid },
@@ -35882,7 +36021,7 @@ function applyQoderRefresh(credential, payload) {
   }
   return next;
 }
-async function fetchQoderUserNickname(credential, product, fetcher = fetch) {
+async function fetchQoderUserNickname(credential, product, fetcher = createDomesticFetch()) {
   try {
     const response = await fetcher(`${product.openApiBase}${QODER_USERINFO_PATH}`, {
       method: "GET",
@@ -36013,7 +36152,7 @@ async function createGlue() {
     }
     return cachedView;
   };
-  const readString6 = (ptr, len) => decoder.decode(heap().subarray(ptr >>> 0, (ptr >>> 0) + len));
+  const readString7 = (ptr, len) => decoder.decode(heap().subarray(ptr >>> 0, (ptr >>> 0) + len));
   const objects = new Array(1024).fill(void 0);
   objects.push(void 0, null, true, false);
   let firstFree = objects.length;
@@ -36052,7 +36191,7 @@ async function createGlue() {
       len = v.getInt32(stack + 4, true);
       const isError = v.getInt32(stack + 12, true);
       if (isError) throw takeObject(v.getInt32(stack + 8, true));
-      return readString6(ptr, len);
+      return readString7(ptr, len);
     } finally {
       exports.__wbindgen_add_to_stack_pointer(16);
       if (ptr) exports.__wbindgen_export4(ptr, len, 1);
@@ -36082,7 +36221,7 @@ async function createGlue() {
     __wbindgen_object_drop_ref: (a) => takeObject(a),
     __wbindgen_object_clone_ref: (a) => pushObject(heapObject(a)),
     __wbindgen_cast_0000000000000001: (a, e) => pushObject(heap().subarray(a >>> 0, (a >>> 0) + e)),
-    __wbindgen_cast_0000000000000002: (a, e) => pushObject(readString6(a, e)),
+    __wbindgen_cast_0000000000000002: (a, e) => pushObject(readString7(a, e)),
     __wbg_set_08463b1df38a7e29: (a, e, t) => pushObject(heapObject(a).set(heapObject(e), heapObject(t))),
     // ⚠️ 这两个签名**方向相反**：一个写 wasm 内存，一个调 JS 对象。
     // 写反会得到 Rust panic `unreachable`。
@@ -36120,9 +36259,9 @@ async function createGlue() {
     __wbg_static_accessor_SELF_24f78b6d23f286ea: () => globalThis.self === void 0 ? 0 : pushObject(globalThis.self),
     __wbg_static_accessor_WINDOW_59fd959c540fe405: () => globalThis.window === void 0 ? 0 : pushObject(globalThis.window),
     __wbg___wbindgen_throw_81fc77679af83bc6: (p, l) => {
-      throw new Error(readString6(p, l));
+      throw new Error(readString7(p, l));
     },
-    __wbg_Error_2e59b1b37a9a34c3: (p, l) => pushObject(new Error(readString6(p, l))),
+    __wbg_Error_2e59b1b37a9a34c3: (p, l) => pushObject(new Error(readString7(p, l))),
     __wbg___wbindgen_is_object_40c5a80572e8f9d3: (id) => {
       const v = heapObject(id);
       return typeof v === "object" && v !== null;
@@ -36137,7 +36276,7 @@ async function createGlue() {
     exports,
     heap,
     view,
-    readString: readString6,
+    readString: readString7,
     writeString,
     lastLength: () => lastLength,
     heapObject,
@@ -36169,6 +36308,10 @@ var QoderEncryptedInfer = class _QoderEncryptedInfer {
     this.metadata = metadata;
     this.host = host;
   }
+  g;
+  context;
+  metadata;
+  host;
   /** 创建客户端（会调 WASM 构造 `QoderContext`）。 */
   static async create(options) {
     const g = await getGlue();
@@ -37366,6 +37509,7 @@ var QoderAdapter = class extends LlmAdapter2 {
       (this.product.fallbackModels ?? []).map((model) => [model.id, model])
     );
   }
+  options;
   product;
   fetchImpl;
   /** 产品级兜底模型索引（`product.fallbackModels` 的 id → 条目）。 */
@@ -37866,14 +38010,14 @@ var QoderAdapter = class extends LlmAdapter2 {
     );
   }
   /** 发送一次**加密**推理请求（`agent_chat_generation`）。 */
-  async sendEncrypted(request, options) {
-    const headers = new Headers(request.headers);
+  async sendEncrypted(request2, options) {
+    const headers = new Headers(request2.headers);
     headers.set("Accept", "text/event-stream");
     try {
-      return await this.fetchImpl(request.url, {
+      return await this.fetchImpl(request2.url, {
         method: "POST",
         headers,
-        body: request.body,
+        body: request2.body,
         signal: options.signal
       });
     } catch (error) {
@@ -38188,11 +38332,11 @@ function parseTraeExchangeResponse(data) {
   if (typeof result !== "object" || result === null) return void 0;
   const r = result;
   const accessToken = readStringField2(r, "Token") || readStringField2(r, "token") || readStringField2(r, "accessToken");
-  const refreshToken = readStringField2(r, "RefreshToken") || readStringField2(r, "refreshToken");
+  const refreshToken2 = readStringField2(r, "RefreshToken") || readStringField2(r, "refreshToken");
   if (accessToken.length === 0) return void 0;
   return {
     accessToken,
-    refreshToken,
+    refreshToken: refreshToken2,
     tokenExpireAt: readNumberField2(r, "TokenExpireAt") ?? readNumberField2(r, "tokenExpireAt") ?? 0,
     tokenExpireDuration: readNumberField2(r, "TokenExpireDuration") ?? readNumberField2(r, "tokenExpireDuration") ?? 0,
     refreshExpireAt: readNumberField2(r, "RefreshExpireAt") ?? readNumberField2(r, "refreshExpireAt") ?? 0
@@ -39003,6 +39147,7 @@ var TraeAdapter = class extends LlmAdapter3 {
       (this.product.fallbackModels ?? []).map((model) => [model.id, model])
     );
   }
+  options;
   product;
   fetchImpl;
   /** 动态模型缓存。 */
@@ -39872,7 +40017,7 @@ function parseClineTokenPayload(value) {
   const envelope = value;
   const inner = typeof envelope.data === "object" && envelope.data !== null && !Array.isArray(envelope.data) ? envelope.data : envelope;
   const accessToken = readString2(inner, ["accessToken", "access_token"]) ?? "";
-  const refreshToken = readString2(inner, ["refreshToken", "refresh_token"]);
+  const refreshToken2 = readString2(inner, ["refreshToken", "refresh_token"]);
   const expiresAt = parseClineTimestamp(inner.expiresAt ?? inner.expires_at ?? inner.expire_time);
   const userInfo = typeof inner.userInfo === "object" && inner.userInfo !== null && !Array.isArray(inner.userInfo) ? inner.userInfo : void 0;
   const accountId = userInfo === void 0 ? readString2(inner, ["accountId", "account_id"]) : readString2(userInfo, ["clineUserId", "accountId"]) ?? readString2(inner, ["accountId", "account_id"]);
@@ -39882,7 +40027,7 @@ function parseClineTokenPayload(value) {
   const displayName = [firstName, lastName].filter((part) => part !== void 0).join(" ").trim();
   return {
     accessToken,
-    ...refreshToken === void 0 ? {} : { refreshToken },
+    ...refreshToken2 === void 0 ? {} : { refreshToken: refreshToken2 },
     ...expiresAt === void 0 ? {} : { expiresAt },
     ...accountId === void 0 ? {} : { accountId },
     ...email === void 0 ? {} : { email },
@@ -40112,7 +40257,7 @@ function mergeClineModels(product, remote) {
   return out;
 }
 async function fetchClineRemoteModels(product, options = {}) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const warnings = [];
   const recommendedPromise = (async () => {
     try {
@@ -40322,7 +40467,7 @@ function applyModelsDevCatalog(models, dev) {
   return out;
 }
 function makeClineModelsDevLoader(options = {}) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const cache4 = new TtlCache({
     ttlMs: options.ttlMs ?? CLINE_MODELS_DEV_TTL_MS,
     ...options.now === void 0 ? {} : { now: options.now },
@@ -40452,6 +40597,7 @@ var ClineAdapter = class extends LlmAdapter4 {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.loadModelsDev = options.loadModelsDev ?? makeClineModelsDevLoader({ fetcher: this.fetchImpl });
   }
+  options;
   product;
   fetchImpl;
   /** 远端模型目录缓存（首次成功后填充）。 */
@@ -40969,8 +41115,3271 @@ function registerClineLlm(ctx, options) {
   return adapter;
 }
 
+// vendor/channel-pack/src/buddy-adapter.ts
+import { gzipSync } from "node:zlib";
+import {
+  attributionHeaders,
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  isContextWindowExceededError,
+  LlmAdapter as LlmAdapter5,
+  LlmError as LlmError10,
+  ReasoningEffortId as ReasoningEffortId5
+} from "@deepseek-ai/dsh-llm";
+import { ToolCallId as ToolCallId4 } from "@deepseek-ai/dsh-llm";
+
+// vendor/channel-pack/src/buddy.ts
+var AUTH_STATE_PATH = "/v2/plugin/auth/state";
+var AUTH_TOKEN_PATH = "/v2/plugin/auth/token";
+var LOGIN_ACCOUNT_PATH = "/v2/plugin/login/account";
+var AUTH_REFRESH_PATH = "/v2/plugin/auth/token/refresh";
+var CONFIG_PATH = "/v3/config";
+var LOGIN_TIMEOUT_MS = 5 * 60 * 1e3;
+var POLL_INTERVAL_MS = 1e3;
+var STATE_REQUEST_TIMEOUT_MS = 1e4;
+var REQUEST_TIMEOUT_MS = 6e4;
+var CODE_TOKEN_NOT_READY = 11217;
+var CODE_ACCOUNT_NOT_READY = 12151;
+var HTTP_HEADER_DOMAIN = "X-Domain";
+var HTTP_HEADER_ENTERPRISE_ID = "X-Enterprise-Id";
+var HTTP_HEADER_TENANT_ID = "X-Tenant-Id";
+var HTTP_HEADER_NO_AUTHORIZATION = "X-No-Authorization";
+var HTTP_HEADER_NO_USER_ID = "X-No-User-Id";
+var HTTP_HEADER_NO_ENTERPRISE_ID = "X-No-Enterprise-Id";
+var HTTP_HEADER_NO_DEPARTMENT_INFO = "X-No-Department-Info";
+var HTTP_HEADER_REFRESH_TOKEN = "X-Refresh-Token";
+var HTTP_HEADER_AUTH_REFRESH_SOURCE = "X-Auth-Refresh-Source";
+var HTTP_HEADER_PRODUCT = "X-Product";
+var HTTP_HEADER_PRODUCT_CODE = "X-Product-Code";
+var BUDDY_USER_AGENT = "CodeBuddyIDE/1.106.1";
+var BUDDY_DEPLOYMENT_TYPE = "SaaS";
+var AUTH_REFRESH_SOURCE = "ide-main";
+var API_DOMAIN = "copilot.tencent.com";
+function credentialExpiresAtMs2(credential) {
+  const raw = credential.expires_at;
+  if (typeof raw === "string" && raw.length > 0) {
+    if (/^\d+$/.test(raw)) {
+      const value = Number(raw);
+      return value > 1e12 ? value : value * 1e3;
+    }
+    const parsed = Date.parse(raw);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return jwtExpiresAtMs2(credential.access_token);
+}
+function jwtExpiresAtMs2(token) {
+  if (typeof token !== "string" || token.length === 0) return void 0;
+  const parts = token.split(".");
+  if (parts.length < 2) return void 0;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp * 1e3 : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function jwtNickname(token) {
+  if (typeof token !== "string" || token.length === 0) return "";
+  const parts = token.split(".");
+  if (parts.length < 2) return "";
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    const nickname = payload.nickname ?? payload.preferred_username ?? payload.name;
+    return typeof nickname === "string" ? stripControlChars(nickname) : "";
+  } catch {
+    return "";
+  }
+}
+function isExpired(credential) {
+  const expiresAt = credentialExpiresAtMs2(credential);
+  return expiresAt === void 0 ? false : Date.now() >= expiresAt;
+}
+function isRefreshable(credential) {
+  return credential.refresh_token.length > 0;
+}
+function credentialRequestHeaders(credential) {
+  const headers = {
+    [HTTP_HEADER_DOMAIN]: credential.domain || API_DOMAIN,
+    "User-Agent": BUDDY_USER_AGENT
+  };
+  if (credential.enterprise_id !== void 0 && credential.enterprise_id.length > 0) {
+    headers[HTTP_HEADER_ENTERPRISE_ID] = credential.enterprise_id;
+    headers[HTTP_HEADER_TENANT_ID] = credential.enterprise_id;
+  }
+  return headers;
+}
+function credentialAuthHeaders(credential) {
+  return {
+    ...credentialRequestHeaders(credential),
+    Authorization: `Bearer ${credential.access_token}`
+  };
+}
+function readStringField4(data, key) {
+  const value = data[key];
+  if (typeof value === "string") return stripControlChars(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+function stripControlChars(value) {
+  return value.replace(/[\u0000-\u001F\u007F]+/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+function readNumberField4(data, key) {
+  const value = data[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) return Number(value);
+  return void 0;
+}
+function absoluteExpiryMs(record, absoluteKey, relativeKey, accessToken) {
+  const absolute = readStringField4(record, absoluteKey);
+  if (absolute.length > 0) {
+    const asNumber = /^\d+$/.test(absolute) ? Number(absolute) : Date.parse(absolute);
+    if (Number.isFinite(asNumber)) {
+      const ms = asNumber > 1e12 ? asNumber : asNumber * 1e3;
+      return String(ms);
+    }
+    return absolute;
+  }
+  const relativeSeconds = readNumberField4(record, relativeKey);
+  if (relativeSeconds === void 0) {
+    return absoluteKey === "expiresAt" ? "" : "";
+  }
+  const baseMs = jwtIssuedAtMs(accessToken) ?? Date.now();
+  return String(baseMs + relativeSeconds * 1e3);
+}
+function jwtIssuedAtMs(token) {
+  if (typeof token !== "string" || token.length === 0) return void 0;
+  const parts = token.split(".");
+  if (parts.length < 2) return void 0;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return typeof payload.iat === "number" && Number.isFinite(payload.iat) ? payload.iat * 1e3 : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function parseTokenData(data) {
+  const record = typeof data === "object" && data !== null ? data : {};
+  const tokenType = readStringField4(record, "tokenType");
+  const accessToken = readStringField4(record, "accessToken");
+  return {
+    accessToken,
+    refreshToken: readStringField4(record, "refreshToken"),
+    expiresAt: absoluteExpiryMs(record, "expiresAt", "expiresIn", accessToken),
+    refreshExpiresAt: absoluteExpiryMs(record, "refreshExpiresAt", "refreshExpiresIn", accessToken),
+    tokenType: tokenType.length > 0 ? tokenType : "Bearer",
+    scope: readStringField4(record, "scope"),
+    domain: readStringField4(record, "domain")
+  };
+}
+function parseAccountData(data) {
+  const record = typeof data === "object" && data !== null ? data : {};
+  const accountType = readStringField4(record, "type");
+  return {
+    uid: readStringField4(record, "uid"),
+    nickname: readStringField4(record, "nickname"),
+    enterpriseId: readStringField4(record, "enterpriseId"),
+    accountType: accountType.length > 0 ? accountType : "personal"
+  };
+}
+function buildCredential(token, account) {
+  const nickname = account.nickname.length > 0 ? account.nickname : jwtNickname(token.accessToken);
+  return {
+    access_token: token.accessToken,
+    refresh_token: token.refreshToken,
+    expires_at: token.expiresAt,
+    refresh_expires_at: token.refreshExpiresAt,
+    token_type: token.tokenType,
+    scope: token.scope,
+    domain: token.domain,
+    user_id: account.uid.length > 0 ? account.uid : jwtSubject(token.accessToken),
+    nickname,
+    enterprise_id: account.enterpriseId,
+    account_type: account.accountType
+  };
+}
+function jwtSubject(token) {
+  if (typeof token !== "string" || token.length === 0) return "";
+  const parts = token.split(".");
+  if (parts.length < 2) return "";
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return typeof payload.sub === "string" ? payload.sub : "";
+  } catch {
+    return "";
+  }
+}
+var MODEL_DISPLAY_NAMES = {
+  "deepseek-v4-flash": "DeepSeek V4 Flash",
+  "deepseek-v4-pro": "DeepSeek V4 Pro",
+  "hy4-preview": "Hy4 Preview",
+  "hy4-preview-x": "Hy4 Preview X",
+  "hy3": "Hy3",
+  "hy3-x": "Hy3 X",
+  "glm-5.3": "GLM-5.3",
+  "glm-5.3-flash": "GLM-5.3 Flash",
+  "glm-5.2": "GLM-5.2",
+  "glm-5.1": "GLM-5.1",
+  "glm-5v-turbo": "GLM-5V Turbo",
+  "kimi-k3-1": "Kimi K3-1",
+  "kimi-k2.7": "Kimi K2.7",
+  "kimi-k2.6": "Kimi K2.6",
+  "minimax-m3": "MiniMax M3"
+};
+function displayNameForModel(id) {
+  return MODEL_DISPLAY_NAMES[id] ?? id;
+}
+function normalizeCreditsRate(value) {
+  return normalizeRate(value, /^(?:x(\d+(?:\.\d+)?))\b/i, /^(\d+(?:\.\d+)?)x\b/i);
+}
+function normalizeDiscountedRate(value) {
+  return normalizeRate(value, /^(?:x(\d+(?:\.\d+)?))\b/i, /^(\d+(?:\.\d+)?)x\b/i);
+}
+function normalizeRate(value, prefixed, suffixed) {
+  if (typeof value !== "string") return void 0;
+  const text = value.trim();
+  const head = text.split(/\s+/)[0] ?? "";
+  const match = prefixed.exec(head) ?? suffixed.exec(head);
+  return match?.[1] !== void 0 ? `x${match[1]}` : void 0;
+}
+function parseHHMM(value) {
+  if (typeof value !== "string") return void 0;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (m === null) return void 0;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  return h < 24 && min < 60 ? h * 60 + min : void 0;
+}
+function zonedMinutes(now, timeZone) {
+  const zone = typeof timeZone === "string" && timeZone.length > 0 ? timeZone : "Asia/Shanghai";
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(now);
+    const h = Number(parts.find((p) => p.type === "hour")?.value);
+    const m = Number(parts.find((p) => p.type === "minute")?.value);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function hasTimeWindow(schedule) {
+  return Array.isArray(schedule.daily) && schedule.daily.length > 0 || schedule.validFrom !== void 0 || schedule.validUntil !== void 0;
+}
+function promotionActiveNow2(item, now) {
+  const raw = item.schedule;
+  if (typeof raw !== "object" || raw === null) return true;
+  const schedule = raw;
+  const from = typeof schedule.validFrom === "string" ? Date.parse(schedule.validFrom) : Number.NaN;
+  const until = typeof schedule.validUntil === "string" ? Date.parse(schedule.validUntil) : Number.NaN;
+  if (Number.isFinite(from) && now.getTime() < from) return false;
+  if (Number.isFinite(until) && now.getTime() >= until) return false;
+  if (!Array.isArray(schedule.daily) || schedule.daily.length === 0) return true;
+  const minutes = zonedMinutes(now, schedule.timezone);
+  if (minutes === void 0) return true;
+  return schedule.daily.some((slot2) => {
+    if (typeof slot2 !== "object" || slot2 === null) return false;
+    const start = parseHHMM(slot2.start);
+    const end = parseHHMM(slot2.end);
+    if (start === void 0 || end === void 0) return false;
+    return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+  });
+}
+function parsePromotions(record, now = /* @__PURE__ */ new Date()) {
+  const result = /* @__PURE__ */ new Map();
+  const chosen = /* @__PURE__ */ new Map();
+  const promotions = record.modelPromotions;
+  if (!Array.isArray(promotions)) return result;
+  const sorted = [...promotions].sort((a, b) => priorityOf(a) - priorityOf(b));
+  for (const item of sorted) {
+    if (typeof item !== "object" || item === null) continue;
+    const promotion = item;
+    if (promotion.enabled === false) continue;
+    if (!promotionActiveNow2(promotion, now)) continue;
+    const discount = promotion.discount;
+    if (typeof discount !== "object" || discount === null) continue;
+    const detail = discount;
+    const factor = typeof detail.factor === "number" ? detail.factor : void 0;
+    const rawSchedule = promotion.schedule;
+    const windowed = typeof rawSchedule === "object" && rawSchedule !== null && hasTimeWindow(rawSchedule);
+    let rate;
+    if (factor === 0) {
+      if (!windowed) continue;
+      rate = "\u514D\u8D39";
+    } else {
+      rate = normalizeDiscountedRate(detail.discountedCredits);
+      if (rate === "x0") continue;
+    }
+    if (rate === void 0) continue;
+    const modelIds = promotion.modelIds;
+    if (!Array.isArray(modelIds)) continue;
+    const priority = priorityOf(promotion);
+    for (const id of modelIds) {
+      if (typeof id !== "string" || id.length === 0) continue;
+      const previous = chosen.get(id);
+      if (previous !== void 0 && previous > priority) continue;
+      chosen.set(id, priority);
+      result.set(id, rate);
+    }
+  }
+  return result;
+}
+function priorityOf(item) {
+  if (typeof item !== "object" || item === null) return 0;
+  const priority = item.priority;
+  return typeof priority === "number" && Number.isFinite(priority) ? priority : 0;
+}
+function formatCreditsRate(rate, discounted) {
+  if (rate === void 0) return discounted;
+  return discounted !== void 0 ? `${rate}\u2192${discounted}` : rate;
+}
+function parseModelsFromConfig(body) {
+  if (typeof body !== "object" || body === null) return [];
+  const data = body.data;
+  if (typeof data !== "object" || data === null) return [];
+  const record = data;
+  const metaById = /* @__PURE__ */ new Map();
+  if (Array.isArray(record.models)) {
+    for (const model of record.models) {
+      if (typeof model !== "object" || model === null) continue;
+      const entry = model;
+      if (typeof entry.id === "string") metaById.set(entry.id, entry);
+    }
+  }
+  const promotions = parsePromotions(record);
+  const agentReferencedIds = /* @__PURE__ */ new Set();
+  if (Array.isArray(record.agents)) {
+    for (const agent2 of record.agents) {
+      if (typeof agent2 !== "object" || agent2 === null) continue;
+      const models = agent2.models;
+      if (!Array.isArray(models)) continue;
+      for (const model of models) if (typeof model === "string") agentReferencedIds.add(model);
+    }
+  }
+  const parsed = [];
+  const seen = /* @__PURE__ */ new Set();
+  const push = (id) => {
+    if (isAutoSelectAlias(id) || seen.has(id) || !isChatModel(id, metaById.get(id))) return;
+    seen.add(id);
+    const meta = metaById.get(id);
+    const remoteName = typeof meta?.name === "string" && meta.name.length > 0 ? meta.name : void 0;
+    const rate = normalizeCreditsRate(meta?.credits);
+    const discounted = promotions.get(id);
+    parsed.push({
+      id,
+      name: remoteName ?? displayNameForModel(id),
+      ...parseModelMeta(meta),
+      ...rate !== void 0 ? { creditsRate: rate } : {},
+      ...discounted !== void 0 ? { discountedCreditsRate: discounted } : {},
+      ...agentReferencedIds.has(id) ? { agentReferenced: true } : {}
+    });
+  };
+  for (const agentName of PREFERRED_AGENT_NAMES) {
+    let found = false;
+    const agents = record.agents;
+    if (!Array.isArray(agents)) break;
+    for (const agent2 of agents) {
+      if (typeof agent2 !== "object" || agent2 === null) continue;
+      const agentRecord = agent2;
+      if (agentRecord.name !== agentName) continue;
+      if (Array.isArray(agentRecord.models)) {
+        for (const model of agentRecord.models) {
+          if (typeof model === "string") push(model);
+        }
+      }
+      found = true;
+      break;
+    }
+    if (found) break;
+  }
+  for (const id of metaById.keys()) push(id);
+  for (const id of trialModelIds(record)) {
+    if (isAutoSelectAlias(id) || seen.has(id)) continue;
+    seen.add(id);
+    const meta = metaById.get(id);
+    const rate = normalizeCreditsRate(meta?.credits);
+    const discounted = promotions.get(id);
+    parsed.push({
+      id,
+      name: displayNameForModel(id),
+      ...parseModelMeta(meta),
+      ...rate !== void 0 ? { creditsRate: rate } : {},
+      ...discounted !== void 0 ? { discountedCreditsRate: discounted } : {},
+      // 试用横幅本身就是「服务端推荐可用」的信号，与 agent 引用同义。
+      agentReferenced: true
+    });
+  }
+  return parsed;
+}
+var PREFERRED_AGENT_NAMES = ["cli", "craft"];
+function trialModelIds(data) {
+  const features = data.productFeaturesConfig;
+  if (typeof features !== "object" || features === null) return [];
+  const banner = features.ModelTrialBanner;
+  if (typeof banner !== "object" || banner === null) return [];
+  const banners = banner.banners;
+  if (!Array.isArray(banners)) return [];
+  const ids = [];
+  for (const item of banners) {
+    if (typeof item !== "object" || item === null) continue;
+    const target = item.targetModelId;
+    if (typeof target === "string" && target.length > 0) ids.push(target);
+  }
+  return ids;
+}
+function isAutoSelectAlias(id) {
+  return id === "auto" || id === "default";
+}
+function isChatModel(id, meta) {
+  if (id.startsWith("nes-") || id.startsWith("completion-") || id.startsWith("codewise-")) return false;
+  if (meta?.supportsExtra === true) return false;
+  const maxOutput = meta?.maxOutputTokens;
+  if (typeof maxOutput === "number" && maxOutput > 0 && maxOutput <= 256) return false;
+  const tags = meta?.tags;
+  if (Array.isArray(tags) && tags.some((tag) => tag === "text-to-image")) return false;
+  return true;
+}
+function parseModelMeta(record) {
+  if (record === void 0) return {};
+  const meta = {};
+  const limit = record.maxInputTokens;
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) meta.contextWindow = limit;
+  const maxOutput = record.maxOutputTokens;
+  if (typeof maxOutput === "number" && Number.isFinite(maxOutput) && maxOutput > 0) {
+    meta.maxOutputTokens = maxOutput;
+  }
+  if (typeof record.supportsImages === "boolean") meta.supportsImages = record.supportsImages;
+  const reasoning = record.reasoning;
+  if (typeof reasoning === "object" && reasoning !== null) {
+    const fields = reasoning;
+    if (Array.isArray(fields.supportedEfforts)) {
+      const efforts = fields.supportedEfforts.filter((e) => typeof e === "string" && e.length > 0);
+      if (efforts.length > 0) meta.reasoningEfforts = efforts;
+    }
+    if (typeof fields.defaultEffort === "string" && fields.defaultEffort.length > 0) {
+      meta.defaultReasoningEffort = fields.defaultEffort;
+    }
+  }
+  return meta;
+}
+
+// vendor/channel-pack/src/product.ts
+var WORKBUDDY_UA_INTL = "WorkBuddy/5.5.2 WorkBuddy AI/5.5.2 CLI/5.5.2";
+var WORKBUDDY_UA_CN = "WorkBuddy/5.5.2 WorkBuddy/5.5.2 CLI/5.5.2";
+var CODEBUDDY_FALLBACK_MODELS = [
+  {
+    id: "hy4-preview",
+    name: "Hy4 preview",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    id: "hy3",
+    name: "Hy3",
+    contextWindow: 192e3,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    id: "hy3-x",
+    name: "Hy3",
+    contextWindow: 192e3,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    // maxOutputTokens 实测（2026-09-19）：scoped 端点 128000、/v3/config 131072。
+    // 取 **128000**（两个端点的较小者）：它是服务端真正接受的额度，131072 是
+    // /v3/config 的声明值。取小者避免因端点差异被上游拒绝；远端可用时仍以
+    // 远端下发值为准，本字段只在远端缺失时补位。
+    id: "deepseek-v4.1-flash",
+    name: "Deepseek-V4.1-Flash",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "deepseek-v4-pro",
+    name: "Deepseek-V4-Pro",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "xhigh"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    // 2026-09 补录：远端 /v3/config 与 scoped 端点均返回该模型，且实测能看图
+    // （纯红图问答答出「红色」）。它不在 craft/cli agent 白名单里，但可正常调用，
+    // 也是适配器 DEFAULT_MODEL 的取值。
+    //
+    // 档位沿用适配器静态表 REASONING_EFFORTS 的既有取值 [low,high,max]（该表有
+    // 实测依据：三档会显著改变返回的 reasoning_content 长度）。注意上游
+    // /v3/config 声明的是 [low,high,xhigh]，与本表不一致；实测服务端对 low /
+    // medium / high / xhigh / max 一律返回 200（不报非法参数），无法据此判定
+    // 哪一组才真实生效，故不擅自改动既有行为，仅记录该分歧待后续验证。
+    id: "deepseek-v4-flash",
+    name: "Deepseek-V4-Flash",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 5e4
+  },
+  {
+    id: "glm-5.3",
+    name: "GLM-5.3",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    id: "glm-5.3-flash",
+    name: "GLM-5.3-Flash",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 32e3
+  },
+  {
+    id: "glm-5.2",
+    name: "GLM-5.2",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["high", "xhigh"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    // supportsImages 为 true 有实测依据：纯红图问答答出「红色」。
+    // 注意 scoped 端点（/console/enterprises/personal/models）对它返回
+    // supportsImages=false，与 /v3/config、IDE 缓存、wb2api 清单三处矛盾；
+    // 实测以「能看到图」为准，故保留 true（远端若下发 true 则两者一致，
+    // 只有 scoped 端点先命中时才会被它的 false 覆盖，见 buddy-adapter 的
+    // supportsImagesFor 修正）。
+    id: "glm-5.1",
+    name: "GLM-5.1",
+    contextWindow: 2e5,
+    supportsImages: true,
+    reasoningEfforts: ["medium"],
+    maxOutputTokens: 48e3
+  },
+  {
+    id: "glm-5v-turbo",
+    name: "GLM-5V-Turbo",
+    contextWindow: 2e5,
+    supportsImages: true,
+    reasoningEfforts: ["medium"],
+    maxOutputTokens: 64e3
+  },
+  {
+    id: "kimi-k3-1",
+    name: "Kimi-K3-1",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["medium"],
+    maxOutputTokens: 32e3
+  },
+  {
+    // 2026-09 补录：旧注释曾把它列为「service info not found」而排除，但实测
+    // 可正常调用且能看图（纯红图问答答出「红色」），远端两端点也都在下发。
+    id: "kimi-k2.8-preview",
+    name: "Kimi-K2.8-Preview",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    id: "kimi-k2.7",
+    name: "Kimi-K2.7",
+    contextWindow: 256e3,
+    supportsImages: true,
+    reasoningEfforts: ["medium"],
+    maxOutputTokens: 32e3
+  },
+  {
+    id: "kimi-k2.6",
+    name: "Kimi-K2.6",
+    contextWindow: 256e3,
+    supportsImages: true,
+    reasoningEfforts: ["medium"],
+    maxOutputTokens: 32e3
+  },
+  {
+    id: "minimax-m3",
+    name: "MiniMax-M3",
+    contextWindow: 512e3,
+    supportsImages: true,
+    reasoningEfforts: ["medium"],
+    maxOutputTokens: 64e3
+  }
+];
+var CODEBUDDY = {
+  id: "buddy",
+  platform: "ide",
+  endpoint: "https://copilot.tencent.com",
+  apiDomain: "copilot.tencent.com",
+  displayName: "CodeBuddy (\u817E\u8BAF)",
+  productCode: "codebuddy",
+  userAgent: "CodeBuddyIDE/1.106.1",
+  // 中国版只有一条产品线，无需按模型分档：全部模型沿用 IDE UA。
+  userAgentByModelFamily: [],
+  attributionName: "CodeBuddy",
+  clientVersion: "1.106.1",
+  cliVersion: "2.137.1",
+  defaultCredentialRef: "BUDDY_ACCESS_TOKEN",
+  appendSessionParams: false,
+  fallbackModels: CODEBUDDY_FALLBACK_MODELS
+};
+var WORKBUDDY_FALLBACK_MODELS = [
+  // 注：以下 maxOutputTokens 全部来自 2026-09-19 对国际版 `/v3/config` 的实测
+  // （`node scripts/dump-max-output.mjs`）。该值就是用户在 IDE 里实际拿到的
+  // 单次输出额度，远端不可用时由本表顶替。远端未下发的模型保持 undefined。
+  { id: "default-model", name: "Auto", contextWindow: 176e3, supportsImages: true, maxOutputTokens: 24e3 },
+  { id: "fast-model", name: "Fast", contextWindow: 2e5, supportsImages: true, reasoningEfforts: ["medium"], maxOutputTokens: 32e3 },
+  { id: "balanced-model", name: "Balanced", contextWindow: 256e3, supportsImages: true, reasoningEfforts: ["medium"], maxOutputTokens: 32e3 },
+  { id: "primary-model", name: "Primary", contextWindow: 272e3, supportsImages: true, reasoningEfforts: ["high"], maxOutputTokens: 72e3 },
+  { id: "deep-model", name: "Deep", contextWindow: 176e3, supportsImages: true, maxOutputTokens: 24e3 },
+  {
+    id: "hy4-preview-f",
+    name: "Hy4 preview",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    // 2026-09 补录：/v3/config 的 cli agent 白名单里有它，但兜底表原先漏了，
+    // 于是被 reconcileWithFallback 丢弃、模型选择器里看不到。实测能看图。
+    id: "hy4-preview",
+    name: "Hy4 preview",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  {
+    id: "hy3",
+    name: "Hy3",
+    contextWindow: 192e3,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 64e3
+  },
+  { id: "deepseek-v4.1-flash", name: "Deepseek-V4.1-Flash", contextWindow: 1e6, supportsImages: true, reasoningEfforts: ["high"], defaultReasoningEffort: "high", maxOutputTokens: 128e3 },
+  {
+    // 2026-09 补录：新加坡区的同代模型（-sg 后缀），远端下发且实测能看图。
+    id: "deepseek-v4.1-flash-sg",
+    name: "Deepseek-V4.1-Flash",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["high"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "gpt-6-astra",
+    name: "GPT-6-Astra",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "gpt-5.6-sol",
+    name: "GPT-5.6-Sol",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "gpt-5.6-terra",
+    name: "GPT-5.6-Terra",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "gpt-5.6-luna",
+    name: "GPT-5.6-Luna",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "gpt-5.5",
+    name: "GPT-5.5",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 128e3
+  },
+  {
+    id: "gpt-5.4",
+    name: "GPT-5.4",
+    contextWindow: 272e3,
+    supportsImages: true,
+    reasoningEfforts: ["low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 72e3
+  },
+  // gpt-5.3-codex：远端未下发 maxOutputTokens，故不填（保持 undefined，
+  // 交由网关默认），不臆造数值。
+  { id: "gpt-5.3-codex", name: "GPT-5.3-Codex", contextWindow: 272e3, supportsImages: true, reasoningEfforts: ["medium"] },
+  { id: "gemini-3.5-flash", name: "Gemini-3.5-Flash", contextWindow: 1e6, supportsImages: true, reasoningEfforts: ["medium"], maxOutputTokens: 65536 },
+  {
+    id: "glm-5.3",
+    name: "GLM-5.3",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 48e3
+  },
+  {
+    id: "glm-5.2",
+    name: "GLM-5.2",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["high", "xhigh"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 48e3
+  },
+  { id: "kimi-k3", name: "Kimi-K3", contextWindow: 1e6, supportsImages: true, reasoningEfforts: ["medium"], maxOutputTokens: 32e3 },
+  {
+    // 2026-09 补录：远端 /v3/config 的 cli agent 白名单里有它，兜底表原先漏了。
+    id: "kimi-k2.8-preview",
+    name: "Kimi-K2.8-Preview",
+    contextWindow: 1e6,
+    supportsImages: true,
+    reasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "high",
+    maxOutputTokens: 32e3
+  },
+  { id: "kimi-k2.6", name: "Kimi-K2.6", contextWindow: 256e3, supportsImages: true, reasoningEfforts: ["medium"], maxOutputTokens: 32e3 }
+];
+var WORKBUDDY = {
+  id: "workbuddy",
+  platform: "workbuddy-ai",
+  endpoint: "https://www.workbuddy.ai",
+  apiDomain: "www.workbuddy.ai",
+  displayName: "WorkBuddy (\u56FD\u9645\u7248)",
+  productCode: "workbuddy",
+  // 默认档：国际版产品形态（无按模型命中时使用）。
+  userAgent: WORKBUDDY_UA_INTL,
+  userAgentByModelFamily: [
+    // 国际版独有模型线（GPT / Gemini / Claude 系）→ 国际版形态。
+    { match: "gpt-", ua: WORKBUDDY_UA_INTL },
+    { match: "gemini-", ua: WORKBUDDY_UA_INTL },
+    { match: "claude-", ua: WORKBUDDY_UA_INTL },
+    // 国内系模型（glm / hy / kimi / minimax）→ 国内客户端形态。
+    { match: "glm-", ua: WORKBUDDY_UA_CN },
+    { match: "hy", ua: WORKBUDDY_UA_CN },
+    { match: "kimi-", ua: WORKBUDDY_UA_CN },
+    { match: "minimax-", ua: WORKBUDDY_UA_CN }
+  ],
+  attributionName: "WorkBuddy",
+  clientVersion: "5.5.2",
+  cliVersion: "5.5.2",
+  defaultCredentialRef: "WORKBUDDY_ACCESS_TOKEN",
+  appendSessionParams: true,
+  pluginVersion: "5.5.2",
+  fallbackModels: WORKBUDDY_FALLBACK_MODELS
+};
+function resolveUserAgent(product, model) {
+  for (const rule of product.userAgentByModelFamily ?? []) {
+    if (model.startsWith(rule.match)) return rule.ua;
+  }
+  return product.userAgent;
+}
+
+// vendor/channel-pack/src/buddy-adapter.ts
+function isDeepSeekModel(model) {
+  return /^deepseek/i.test(model.trim());
+}
+var DEFAULT_MODELS = [
+  "deepseek-v4-flash",
+  "deepseek-v4-pro",
+  "hy4-preview",
+  "hy4-preview-x",
+  "hy3",
+  "hy3-x",
+  "glm-5.3",
+  "glm-5.3-flash",
+  "glm-5.2",
+  "glm-5.1",
+  "glm-5v-turbo",
+  "kimi-k3-1",
+  "kimi-k2.7",
+  "kimi-k2.6",
+  "minimax-m3"
+];
+var CONTEXT_WINDOWS = /* @__PURE__ */ new Map([
+  ["deepseek-v4-flash", 1e6],
+  ["deepseek-v4-pro", 1e6],
+  ["hy4-preview", 1e6],
+  ["hy4-preview-x", 1e6],
+  ["hy3", 192e3],
+  ["hy3-x", 192e3],
+  ["glm-5.3", 1e6],
+  ["glm-5.3-flash", 1e6],
+  ["glm-5.2", 1e6],
+  ["glm-5.1", 2e5],
+  ["glm-5v-turbo", 2e5],
+  ["kimi-k3-1", 1e6],
+  ["kimi-k2.7", 256e3],
+  ["kimi-k2.6", 256e3],
+  ["minimax-m3", 512e3]
+]);
+var IMAGE_MODELS = /* @__PURE__ */ new Set([
+  "deepseek-v4-flash",
+  "deepseek-v4.1-flash",
+  "deepseek-v4.1-flash-sg",
+  "deepseek-v4-pro",
+  "hy4-preview",
+  "hy4-preview-f",
+  "hy4-preview-x",
+  "hy3",
+  "hy3-x",
+  "glm-5.3",
+  "glm-5.3-flash",
+  "glm-5.2",
+  "glm-5.1",
+  "glm-5v-turbo",
+  "kimi-k3",
+  "kimi-k3-1",
+  "kimi-k2.8-preview",
+  "kimi-k2.7",
+  "kimi-k2.6",
+  "minimax-m3"
+]);
+var REASONING_EFFORTS = /* @__PURE__ */ new Map([
+  ["deepseek-v4-flash", ["low", "high", "max"]],
+  ["deepseek-v4.1-flash", ["low", "high", "max"]],
+  ["deepseek-v4-pro", ["low", "high", "xhigh"]],
+  ["hy4-preview", ["high"]],
+  ["hy4-preview-x", ["high"]],
+  ["hy3", ["low", "high"]],
+  ["hy3-x", ["low", "high"]],
+  ["glm-5.3", ["low", "high", "max"]],
+  ["glm-5.3-flash", ["low", "high", "max"]],
+  ["glm-5.2", ["high", "xhigh"]]
+]);
+var EFFORT_NAMES2 = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "XHigh",
+  max: "Max"
+};
+function contentToText5(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((block) => typeof block === "object" && block !== null && block.type === "text").map((block) => String(block.text)).join("");
+}
+var TOOL_RESULT_IMAGE_TEXT4 = "Attached image(s) from tool result:";
+function serializeMessages3(messages, imageUrls) {
+  const wire = [];
+  let pendingToolImages = [];
+  const flushToolImages = () => {
+    if (pendingToolImages.length === 0) return;
+    wire.push({
+      role: "user",
+      content: [{ type: "text", text: TOOL_RESULT_IMAGE_TEXT4 }, ...pendingToolImages]
+    });
+    pendingToolImages = [];
+  };
+  const normalized = normalizeHarnessMessages(messages);
+  const { keepCallIds, keepResultIds } = resolveToolPairing(normalized);
+  for (const message of normalized) {
+    if (message.role === "assistant") {
+      const content2 = stripCourseLeakFromHistoryContent(
+        message.role,
+        Array.isArray(message.content) ? message.content : []
+      );
+      const toolCallBlocks = content2.filter((block) => typeof block === "object" && block !== null && block.type === "tool-call").filter((block) => keepCallIds.has(String(block.id)));
+      const toolCalls = toolCallBlocks.map((block) => ({
+        id: String(block.id),
+        type: "function",
+        function: { name: String(block.name), arguments: normalizeToolArguments(String(block.arguments)) }
+      }));
+      const reasoning = content2.filter((block) => typeof block === "object" && block !== null && block.type === "reasoning").map((block) => String(block.text)).join("");
+      const text2 = contentToText5(content2);
+      if (text2.trim().length === 0 && toolCalls.length === 0) continue;
+      flushToolImages();
+      wire.push({
+        role: "assistant",
+        // 正文为空且有工具调用时 content 必须为 null（对齐 openai_chat.rs）。
+        content: text2.length === 0 && toolCalls.length > 0 ? null : text2,
+        reasoning_content: reasoning,
+        ...toolCalls.length > 0 ? { tool_calls: toolCalls } : {}
+      });
+      continue;
+    }
+    if (message.role === "system") {
+      flushToolImages();
+      wire.push({ role: "system", content: contentToText5(message.content) });
+      continue;
+    }
+    const content = Array.isArray(message.content) ? message.content : [];
+    const toolResults = content.filter((block) => typeof block === "object" && block !== null && block.type === "tool-result");
+    const text = contentToText5(message.content);
+    const regular = content.filter((block) => !(typeof block === "object" && block !== null && block.type === "tool-result"));
+    const regularImageUrls = imageUrls;
+    const parts = regularImageUrls === void 0 ? void 0 : userContentParts4(regular, regularImageUrls);
+    if (parts !== void 0) {
+      flushToolImages();
+      wire.push({ role: "user", content: parts });
+    } else if (text.trim().length > 0) {
+      flushToolImages();
+      wire.push({ role: "user", content: text });
+    }
+    for (const result of toolResults) {
+      if (!keepResultIds.has(String(result.toolCallId))) continue;
+      let resultText = "(no output)";
+      if (regularImageUrls !== void 0 && Array.isArray(result.content)) {
+        const resultParts = userContentParts4(result.content, regularImageUrls);
+        if (resultParts !== void 0) {
+          pendingToolImages.push(...resultParts.filter((part) => part.type !== "text"));
+          const joined = resultParts.filter((part) => part.type === "text").map((part) => String(part.text)).join("");
+          if (joined.length > 0) resultText = joined;
+        } else {
+          resultText = contentToText5(result.content) || "(no output)";
+        }
+      } else {
+        resultText = contentToText5(result.content) || "(no output)";
+      }
+      wire.push({
+        role: "tool",
+        tool_call_id: String(result.toolCallId),
+        content: resultText
+      });
+    }
+  }
+  flushToolImages();
+  return wire;
+}
+function errorMessage4(error) {
+  if (error instanceof Error) return error.message;
+  try {
+    return String(error);
+  } catch {
+    return "unknown error";
+  }
+}
+function isContentRejection(body) {
+  if (body.length === 0) return false;
+  try {
+    const data = JSON.parse(body);
+    if (data?.code === 11128 || data?.code === "11128") return false;
+    if (data?.code === 11140 || data?.code === "11140") return true;
+  } catch {
+  }
+  return /request illegal/i.test(body) || /安全审核|safety review/i.test(body);
+}
+var BUDDY_POLICY_BLOCK_COOLDOWN_MS = 30 * 6e4;
+function contentRejectionError(productId, status, body, rotated) {
+  const scope = rotated ? `\u5168\u90E8\u8D26\u53F7\u5747\u88AB\u670D\u52A1\u7AEF\u5B89\u5168\u7B56\u7565\u62E6\u622A\uFF08HTTP ${status}\uFF0C\u5DF2\u9010\u4E2A\u6362\u53F7\u91CD\u8BD5\uFF09` : `\u5F53\u524D\u8D26\u53F7\u88AB\u670D\u52A1\u7AEF\u5B89\u5168\u7B56\u7565\u62E6\u622A\uFF08HTTP ${status}\uFF0C\u6D41\u5185\u9519\u8BEF\u5E27\u4E0B\u53D1\uFF09`;
+  return new LlmError10(
+    `${productId}: ${scope}\u3002\u8BE5\u62E6\u622A\u6309\u8D26\u53F7\u751F\u6548\uFF08\u540C\u4E00\u8BF7\u6C42\u5728\u5176\u4ED6\u8D26\u53F7\u53EF\u6B63\u5E38\u8FD4\u56DE\uFF09\uFF0C\u8BF7\u5728 Channel Pack \u505C\u7528\u6216\u66F4\u6362\u88AB\u62E6\u8D26\u53F7\uFF1A${errorDetail4(body)}`,
+    "PERMISSION_DENIED",
+    { status }
+  );
+}
+function policyBlockResetAtMs(nowMs) {
+  return nowMs + BUDDY_POLICY_BLOCK_COOLDOWN_MS;
+}
+async function markPolicyBlockedAccount(pool, productId, accountId, modelId) {
+  if (pool === void 0 || accountId.length === 0 || modelId.length === 0) return;
+  try {
+    await pool.updateModelRateLimit(accountId, modelId, policyBlockResetAtMs(Date.now()));
+  } catch (error) {
+    console.warn(`[${productId}] \u5B89\u5168\u7B56\u7565\u62E6\u622A\u7684\u51B7\u5374\u6807\u8BB0\u5199\u5165\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u672C\u6B21\u8BF7\u6C42\uFF09:`, error);
+  }
+}
+function errorDetail4(body) {
+  try {
+    const data = JSON.parse(body);
+    const error = typeof data.error === "object" && data.error !== null ? data.error : void 0;
+    const display = typeof data.displayMsg === "object" && data.displayMsg !== null ? data.displayMsg : void 0;
+    const localized = typeof display?.zh === "string" ? display.zh : typeof display?.en === "string" ? display.en : void 0;
+    const parts = [
+      // 本地化文案最可读，排在最前。
+      localized,
+      typeof error?.code === "string" ? error.code : void 0,
+      typeof error?.type === "string" ? error.type : void 0,
+      typeof error?.message === "string" ? error.message : void 0,
+      // 腾讯系用 `msg` 而非 `message`。
+      typeof data.msg === "string" ? data.msg : void 0,
+      typeof data.message === "string" ? data.message : void 0
+    ].filter((value) => value !== void 0);
+    if (parts.length > 0) return parts.join(" ");
+  } catch {
+  }
+  return body;
+}
+var GATEWAY_PROMPT_TOO_LONG = /\bprompt\s+is\s+too\s+long\b[\s\S]{0,40}?\b\d[\d,]*\s+tokens?\s*>/i;
+function httpErrorCode4(status, body) {
+  if (status === 401 || status === 403) return "AUTH";
+  if (status === 429) return "RATE_LIMIT";
+  if (status === 400) {
+    if (isContextWindowExceededError(body) || GATEWAY_PROMPT_TOO_LONG.test(body)) {
+      return CONTEXT_WINDOW_EXCEEDED_CODE;
+    }
+    return "INVALID_REQUEST";
+  }
+  if (status >= 500) return "SERVER";
+  return `HTTP_${status}`;
+}
+function resolveFirstTokenTimeoutMs5() {
+  return Number.parseInt(process.env.DSH_BUDDY_SSE_FIRST_TOKEN_TIMEOUT_MS ?? "", 10) || 12e4;
+}
+function resolveChunkTimeoutMs5() {
+  return Number.parseInt(process.env.DSH_BUDDY_SSE_CHUNK_TIMEOUT_MS ?? "", 10) || 12e4;
+}
+var BUDDY_SATURATION_MAX_RETRIES = 2;
+var BUDDY_SATURATION_BASE_DELAY_MS = 2e3;
+function buddySaturationDelayMs(attempt) {
+  const raw = process.env.DSH_BUDDY_SATURATION_DELAY_MS;
+  const base = raw === void 0 || raw === "" ? BUDDY_SATURATION_BASE_DELAY_MS : Number(raw);
+  const resolved = Number.isFinite(base) && base >= 0 ? base : BUDDY_SATURATION_BASE_DELAY_MS;
+  return resolved * (attempt + 1);
+}
+function sleepMs(ms) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve2) => {
+    setTimeout(resolve2, ms);
+  });
+}
+var COMPRESS_BODY_THRESHOLD = 256 * 1024;
+var TRANSPORT_RETRIES = 2;
+var RETRY_BASE_MS = 400;
+var MODEL_SATURATION_BUSINESS_CODE = 14003;
+var MODEL_SATURATION_PATTERN = /模型繁忙|请求量饱和|model\s+busy|currently\s+saturated/i;
+function isModelSaturationError(status, body) {
+  if (typeof status === "number" && status < 400) return false;
+  if (body.length === 0) return false;
+  try {
+    const code = JSON.parse(body).code;
+    if (code === MODEL_SATURATION_BUSINESS_CODE || code === String(MODEL_SATURATION_BUSINESS_CODE)) return true;
+  } catch {
+  }
+  return MODEL_SATURATION_PATTERN.test(body);
+}
+function isTransportError4(error) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  if (message.includes("terminated")) return true;
+  if (error.name.startsWith("UND_ERR_")) return true;
+  if (message.includes("fetch failed")) return true;
+  if (message.includes("econnreset") || message.includes("epipe") || message.includes("socket hang up")) return true;
+  return false;
+}
+function userContentParts4(content, imageUrls) {
+  const parts = [];
+  let hasImage = false;
+  for (const raw of content) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const block = raw;
+    if (block.type === "text") {
+      const text = String(block.text ?? "");
+      if (text.length > 0) parts.push({ type: "text", text });
+      continue;
+    }
+    if (block.type === "image") {
+      hasImage = true;
+      const url = block.attachment?.attachmentId === void 0 ? void 0 : imageUrls.get(String(block.attachment.attachmentId));
+      parts.push(url === void 0 ? { type: "text", text: "[image unavailable]" } : { type: "image_url", image_url: { url } });
+      continue;
+    }
+    if (block.type === "tool-result" && Array.isArray(block.content)) {
+      const inner = userContentParts4(block.content, imageUrls);
+      if (inner !== void 0) {
+        hasImage = true;
+        parts.push(...inner);
+      } else {
+        const text = contentToText5(block.content);
+        if (text.length > 0) parts.push({ type: "text", text });
+      }
+    }
+  }
+  return hasImage && parts.length > 0 ? parts : void 0;
+}
+function collectImages4(content, refs) {
+  for (const raw of content) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const block = raw;
+    if (block.type === "image" && typeof block.attachment?.attachmentId === "string") {
+      refs.set(block.attachment.attachmentId, block.attachment);
+      continue;
+    }
+    if (block.type === "tool-result" && Array.isArray(block.content)) collectImages4(block.content, refs);
+  }
+}
+var BuddyAdapter = class _BuddyAdapter extends LlmAdapter5 {
+  constructor(options) {
+    super();
+    this.options = options;
+    this.product = options.product ?? CODEBUDDY;
+    this.fetchImpl = options.fetchImpl ?? createDomesticFetch();
+    this.sessionId = options.sessionId ?? crypto.randomUUID().replace(/-/g, "");
+    const fallback = this.product.fallbackModels ?? [];
+    this.productFallbackIndex = new Map(fallback.map((model) => [model.id, model]));
+    this.productFallbackContextWindows = new Map(
+      fallback.filter((model) => model.contextWindow !== void 0).map((model) => [model.id, model.contextWindow])
+    );
+  }
+  options;
+  /** 本适配器所属的产品配置（默认 CodeBuddy）。 */
+  product;
+  fetchImpl;
+  /**
+   * 前缀缓存会话标识（prompt_cache_key）。同一会话内所有请求复用同一 key，
+   * 服务端据此把相同前缀的 KV 缓存跨请求复用；缺失时缓存命中恒为 0。
+   */
+  sessionId;
+  /** 动态模型缓存（首次 listModels 成功后填充）。 */
+  remoteModels;
+  /**
+   * 目录加载闸门：并发去重 + 失败/空结果冷却。
+   * 依据见 `src/remote-catalog-gate.ts`（首屏「加载模型巨长」的实测归因）。
+   */
+  catalogGate = new RemoteCatalogGate();
+  /** 远端下发的模型元数据（id → 能力），listModels/resolveModel/stream 共用。 */
+  remoteMeta = /* @__PURE__ */ new Map();
+  /** 远端下发的模型上下文窗口（/v3/config data.models[].maxInputTokens）。 */
+  remoteContextWindows = /* @__PURE__ */ new Map();
+  /**
+   * 产品级兜底模型索引（`product.fallbackModels` 的 id → 条目）。
+   * 远端缺失时补位；构造时一次性建立，只读。
+   */
+  productFallbackIndex;
+  /** 产品级兜底上下文窗口（构造时从 fallbackModels 提取）。 */
+  productFallbackContextWindows;
+  /**
+   * 该模型此刻是否**免费**（消耗 0 积分）。
+   *
+   * ## 为什么需要它
+   *
+   * `pickBuddyCredential`（`src/index.ts`）只问「锁没锁 + 有没有临期积分」，
+   * 从不问「这个模型要不要钱」。于是免费模型也会被「锁定永久积分 + 无临期积分」
+   * 这道门拦下，报出「没有可用账号……已锁定永久积分，而所有账号的『N 天内到期』
+   * 积分都已用尽」，而它**一分积分都不需要** —— 用户看到的是
+   * 「账号明明有余额却失败」的矛盾错误（真实报障）。
+   *
+   * 免费模型既不消耗临时积分也不消耗永久积分，故它与「锁定」要保护的
+   * 目标（别把永久积分烧掉）无关，不该受该门约束。
+   *
+   * ## 判据（任一成立即免费，与展示层口径一致）
+   *
+   * 1. `creditsRate === 'x0'` —— 服务端 `credits: "0x"` / `"x0"`；
+   * 2. `discountedCreditsRate === 'x0'` —— 促销价打到 0；
+   * 3. 两者 === `'免费'` —— 促销 `factor: 0` 时 `parsePromotions` 直接写入的
+   *    **中文串**（不是 `x0`，这条最容易漏，见 `src/buddy.ts` 的 `rate = '免费'`）。
+   *
+   * ⚠️ **只在确定免费时返回 true**：字段缺失、解析失败、未知模型一律 false。
+   * 把付费模型误判成免费会绕开锁定，**真烧掉永久积分且不可撤回** ——
+   * 因此这里取「保守方向」：宁可让免费模型多走一次余额门，
+   * 也不放过任何无法确认的情形。
+   *
+   * ⚠️ 远端目录是懒加载的（`ensureRemoteModels()`），必须先 await：
+   * 调用点虽在 `prepareCall` 之后（目录通常已就绪），但「直接进会话」等路径
+   * 可能尚未拉取，漏掉这一步补丁会**静默失效**（退回被拦截的行为）。
+   *
+   * @param modelId - 模型 id。
+   * @returns true 仅当能确认该模型消耗 0 积分。
+   */
+  async isFreeModel(modelId) {
+    if (typeof modelId !== "string" || modelId.length === 0) return false;
+    await this.ensureRemoteModels();
+    const meta = this.remoteMeta.get(modelId);
+    if (meta === void 0) return false;
+    const isZeroRate = (rate) => rate === "x0" || rate === "\u514D\u8D39";
+    return isZeroRate(meta.creditsRate) || isZeroRate(meta.discountedCreditsRate);
+  }
+  /**
+   * 描述本适配器拥有的 provider 路由。
+   *
+   * DSH 会强制校验 `info.id === provider` 且 `info.name` 为非空字符串；
+   * 模型设置页还会用该 id 计算 `deriveKeyRef(provider)`（内部调用
+   * `provider.toUpperCase()`）。因此这里对入参做防御性归一化：
+   * 一旦 `provider` 不是字符串（例如上游传入了 undefined），
+   * 直接回退到本适配器所属产品的 id，避免
+   * `undefined.toUpperCase is not a function` 在客户端炸开。
+   *
+   * 展示名同样来自产品配置：CodeBuddy 为 'CodeBuddy (腾讯)'，
+   * WorkBuddy 为 'WorkBuddy'。
+   */
+  providerInfo(provider) {
+    const id = typeof provider === "string" && provider.length > 0 ? provider : this.product.id;
+    return { id, name: this.product.displayName };
+  }
+  /**
+   * 模型列表：优先使用 /v3/config 动态拉取的远端列表，否则回退静态默认。
+   * 动态拉取失败时静默回退（与 Rust fetch_models 的 Vec::new() 语义一致）。
+   */
+  /**
+   * 懒加载远端模型目录（仅拉取一次）。listModels 与 resolveModel 共用：
+   * resolveModel 可能先于 listModels 被调用（如直接进入会话），此时同样
+   * 触发一次远端拉取，保证 /v3/config 的 maxInputTokens 能生效。
+   */
+  /**
+   * 按产品的像素预算派生一张图片的**请求版本**。
+   *
+   * 判据与回退都在共享的 `projectRequestImage` 里（raccoon 用的是同一份 ——
+   * 两个适配器各写一遍正是本仓库反复出缺陷的形态）。返回 `undefined`
+   * 表示本次发原图，四种正常情形见该函数的注释。
+   *
+   * ⚠️ 预算取 `product.imagePixelBudget`，未配置时用
+   * `DEFAULT_IMAGE_PIXEL_BUDGET`（640,000 px ≈ 1,037 视觉 token）。
+   */
+  async projectRequestImage(ref) {
+    return projectRequestImage(ref, {
+      readImageRequest: this.options.readImageRequest,
+      pixelBudget: this.product.imagePixelBudget
+    });
+  }
+  async ensureRemoteModels() {
+    const fetchRemote = this.options.fetchRemoteModels;
+    if (this.remoteModels !== void 0 || fetchRemote === void 0) return;
+    await this.catalogGate.run(async () => {
+      const models = await fetchRemote();
+      if (models.length === 0) return false;
+      const reconciled = this.reconcileWithFallback(models);
+      this.remoteModels = reconciled;
+      this.remoteMeta = new Map(reconciled.map((model) => [model.id, model]));
+      this.remoteContextWindows = new Map(
+        reconciled.filter((model) => model.contextWindow !== void 0).map((model) => [model.id, model.contextWindow])
+      );
+      return true;
+    });
+  }
+  /**
+   * 用产品兜底表校正远端结果。
+   *
+   * 为什么需要校正：服务端按**认证上下文**决定返回哪些模型，插件的 CLI
+   * token 拿到的集合可能是残缺甚至错的 —— 实测 WorkBuddy 国际版的 CLI token
+   * 只拿到 13 个内部别名（含实际不可用的 `o4-mini`），而 IDE 用的是 20 个
+   * （含全部 GPT 系列）。此时若直接采信远端，模型选择器会缺掉用户真正要用的模型。
+   *
+   * 有产品兜底表时以它为准：
+   * - 只保留兜底表里声明的 id（远端多出来的别名/内部模型被丢弃）；
+   * - 兜底表声明但远端缺失的模型补进来（用兜底表的元数据）；
+   * - ⚠️ **例外：被 agent 引用的模型即使不在兜底表也保留**（见下）。
+   *
+   * ⚠️ **为什么需要那个例外**：两个端点下发的 id 集合**不同**，而兜底表是
+   * 编译期快照、只覆盖其中一套。实测（2026-09-21）`hy4-preview-f`
+   * —— 新用户限时免费变体 —— **只由 `/v3/config` 下发**，且被
+   * `craft`/`ask`/`plan` 三个 agent 引用（即服务端声明「对话里可选」），
+   * 但**不在兜底表**里。白名单重建会把它丢掉，于是用户看不到那个免费变体，
+   * 而 IDE 里能看到（用户报障「hy4 preview 现在 ide 是免费我们还是 0.29」）。
+   *
+   * 判据用 `agentReferenced`（服务端自己的「可选」信号）而非猜测 id 后缀 ——
+   * 后缀规则不统一（`-f` / `-x` / `-sg` / `-ioa` 含义各异），猜错会放进
+   * 不可用的模型。未标记的内部别名（如 `default`）不会被误留。
+   */
+  reconcileWithFallback(models) {
+    const fallback = this.product.fallbackModels;
+    if (fallback === void 0 || fallback.length === 0) return [...models];
+    const remoteById = new Map(models.map((model) => [model.id, model]));
+    const reconciled = fallback.map((entry) => {
+      const remote = remoteById.get(entry.id);
+      return {
+        id: entry.id,
+        name: remote?.name ?? entry.name,
+        ...entry.contextWindow !== void 0 || remote?.contextWindow !== void 0 ? { contextWindow: remote?.contextWindow ?? entry.contextWindow } : {},
+        // 输出上限同样「远端优先、兜底补位」：远端不下发时兜底表给保守值，
+        // 两边都没有则留 undefined（不编造，见 resolveModel 的说明）。
+        ...entry.maxOutputTokens !== void 0 || remote?.maxOutputTokens !== void 0 ? { maxOutputTokens: remote?.maxOutputTokens ?? entry.maxOutputTokens } : {},
+        ...entry.supportsImages !== void 0 || remote?.supportsImages !== void 0 ? { supportsImages: remote?.supportsImages ?? entry.supportsImages } : {},
+        ...entry.reasoningEfforts !== void 0 || remote?.reasoningEfforts !== void 0 ? { reasoningEfforts: [...remote?.reasoningEfforts ?? entry.reasoningEfforts ?? []] } : {},
+        ...entry.defaultReasoningEffort !== void 0 || remote?.defaultReasoningEffort !== void 0 ? { defaultReasoningEffort: remote?.defaultReasoningEffort ?? entry.defaultReasoningEffort } : {},
+        // 计费倍率只可能来自远端（兜底表是编译期快照，价格会变，不写死）。
+        // 注意本函数是**白名单式重建**：不在这里显式搬运的字段会被静默丢弃，
+        // 新增远端字段时必须同步加一行，否则 listModels 看不到它。
+        ...remote?.creditsRate !== void 0 ? { creditsRate: remote.creditsRate } : {},
+        ...remote?.discountedCreditsRate !== void 0 ? { discountedCreditsRate: remote.discountedCreditsRate } : {}
+      };
+    });
+    const known = new Set(reconciled.map((model) => model.id));
+    for (const model of models) {
+      if (model.agentReferenced !== true || known.has(model.id)) continue;
+      known.add(model.id);
+      reconciled.push({ ...model });
+    }
+    return reconciled;
+  }
+  /**
+   * 远端能力字段被实测证伪、需要强制覆盖为「支持图片」的模型。
+   *
+   * 为什么需要它：上游两个模型端点对同一模型的能力声明会互相矛盾。
+   * 实测 `glm-5.1`（2026-09）：
+   * - scoped 端点 `/console/enterprises/personal/models` → `supportsImages: false`
+   * - `/v3/config` → `supportsImages: true`
+   * - 真实请求（纯红图 + 问颜色）→ 答出「红色」，**确实能看到图片**
+   *
+   * 由于 `fetchModels` 优先采用 scoped 端点，若不覆盖，`glm-5.1` 会被判成
+   * 纯文本，用户贴图时直接吃 host 的 `MODEL_DOES_NOT_SUPPORT_IMAGES` 拒绝
+   * （前端文案「当前模型不支持图片」），而图片根本到不了上游。
+   *
+   * 为什么用显式白名单而不是「兜底表 true 优先」这类通用规则：通用规则会让
+   * 兜底表永久压过远端，一旦某模型真的下线或能力变更，用户会被放行后被上游
+   * 400 拒绝 —— 错误更晚、更难懂。白名单只覆盖已实测确认的个案，新增条目
+   * 必须先有真实请求证据。
+   */
+  static IMAGE_CAPABILITY_OVERRIDES = /* @__PURE__ */ new Set([
+    // scoped 端点误报 false，实测能看图。
+    "glm-5.1"
+  ]);
+  /**
+   * 模型接受的输入模态：远端 supportsImages 优先，静态表兜底；
+   * {@link IMAGE_CAPABILITY_OVERRIDES} 中的模型强制为支持图片。
+   */
+  inputModalitiesFor(model) {
+    const supportsImages = _BuddyAdapter.IMAGE_CAPABILITY_OVERRIDES.has(model) || (this.remoteMeta.get(model)?.supportsImages ?? this.productFallbackMeta.get(model)?.supportsImages ?? IMAGE_MODELS.has(model));
+    return supportsImages ? ["text", "image"] : ["text"];
+  }
+  /** 模型可选的思考等级：远端 supportedEfforts 优先，产品兜底表次之，通用静态表最后。 */
+  effortsFor(model) {
+    return this.remoteMeta.get(model)?.reasoningEfforts ?? this.productFallbackMeta.get(model)?.reasoningEfforts ?? REASONING_EFFORTS.get(model) ?? [];
+  }
+  /**
+   * 模型声明的默认思考等级（远端 `reasoning.defaultEffort` 优先，产品兜底表次之）。
+   *
+   * 用途：composer 未选档位时补 `reasoning_effort`（deepseek 系不带档位 = 不思考）。
+   * 若声明值不在该模型的支持档内（远端数据不一致）则视为未声明，由调用方回退。
+   */
+  defaultEffortFor(model) {
+    const declared = this.remoteMeta.get(model)?.defaultReasoningEffort ?? this.productFallbackMeta.get(model)?.defaultReasoningEffort;
+    return declared !== void 0 && this.effortsFor(model).includes(declared) ? declared : void 0;
+  }
+  /**
+   * 产品级兜底模型目录（`product.fallbackModels`）。
+   *
+   * 用于远端不可用或远端未覆盖到该模型时。与 `remoteMeta` 分开存放，
+   * 使远端一旦可用就自动优先，而产品兜底只在缺失时补位。
+   */
+  get productFallbackMeta() {
+    return this.productFallbackIndex;
+  }
+  /**
+   * 完整模型目录（**不应用用户黑名单**），含最终展示名（倍率 + 同名消歧）。
+   *
+   * 设置页（Channel Pack「显示列表」）必须把**被关闭的**模型也渲染出来，否则用户
+   * 无法重新打开；而 `listModels` 会按黑名单过滤掉它们，RPC 层只能凭黑名单的
+   * key（裸 id）补回 —— 那条路径拿不到展示名，只能退化成裸 id，**倍率随之丢失**
+   * （用户报障：「关闭的就没有显示倍率」）。
+   *
+   * ⚠️ 同名消歧必须基于**未过滤**的全量集合：`displayNameFor(model, source)`
+   * 而非 `listed`。用过滤后的集合会让「关掉其中一个同名模型」改变另一个的
+   * 变体标记，名字随开关跳变。
+   */
+  listAllModels() {
+    const source = this.remoteModels ?? this.staticFallbackModels();
+    return source.map((model) => ({ id: model.id, name: displayNameFor2(model, source) }));
+  }
+  async listModels(_provider) {
+    if (!await providerCatalogVisible(this.options.accountPool, this.product.id)) return [];
+    await this.ensureRemoteModels();
+    const source = this.remoteModels ?? this.staticFallbackModels();
+    const disabled = this.options.accountPool?.disabledModelsFor(this.product.id);
+    const listed = disabled === void 0 || disabled.size === 0 ? source : source.filter((model) => !disabled.has(model.id));
+    return listed.map((model) => ({
+      provider: this.product.id,
+      id: model.id,
+      name: displayNameFor2(model, listed),
+      inputModalities: this.inputModalitiesFor(model.id)
+    }));
+  }
+  /**
+   * 静态兜底模型目录：优先用产品自带的 `fallbackModels`，否则用通用默认表。
+   *
+   * 产品兜底表存在的原因：模型池由服务端按认证上下文下发，插件的 CLI
+   * token 未必能取到完整集合（实测 WorkBuddy 国际版经 CLI token 只能拿到
+   * 13 个别名，拿不到 GPT 系列）。产品兜底表提供该产品权威的完整清单。
+   */
+  staticFallbackModels() {
+    const productModels = this.product.fallbackModels;
+    if (productModels !== void 0 && productModels.length > 0) {
+      return productModels.map((model) => ({ id: model.id, name: model.name }));
+    }
+    return DEFAULT_MODELS.map((id) => ({ id, name: id }));
+  }
+  async resolveModel(provider, model, _signal) {
+    await this.ensureRemoteModels();
+    const contextWindow = this.remoteContextWindows.get(model) ?? this.productFallbackContextWindows.get(model) ?? CONTEXT_WINDOWS.get(model);
+    const resolved = {
+      provider,
+      id: model,
+      name: this.remoteMeta.get(model)?.name ?? this.productFallbackIndex.get(model)?.name ?? model,
+      inputModalities: this.inputModalitiesFor(model)
+    };
+    if (contextWindow !== void 0) resolved.context = { contextWindow };
+    const maxOutputTokens = positiveMaxTokens(
+      this.remoteMeta.get(model)?.maxOutputTokens ?? this.productFallbackMeta.get(model)?.maxOutputTokens
+    );
+    if (maxOutputTokens !== void 0) resolved.defaultMaxTokens = maxOutputTokens;
+    const efforts = this.effortsFor(model);
+    if (efforts.length > 0) {
+      const remoteDefault = this.remoteMeta.get(model)?.defaultReasoningEffort ?? this.productFallbackIndex.get(model)?.defaultReasoningEffort;
+      resolved.reasoning = {
+        efforts: efforts.map((id) => ({
+          id: ReasoningEffortId5(id),
+          name: EFFORT_NAMES2[id] ?? id
+        })),
+        ...remoteDefault !== void 0 && efforts.includes(remoteDefault) ? { defaultEffort: ReasoningEffortId5(remoteDefault) } : {}
+      };
+    }
+    return resolved;
+  }
+  /**
+   * 兼容 0.1.1-rc.2：新版 LlmRuntime.prepareCall() 会调用
+   * `registration.adapter.prepareCall(...)`，而本仓库链接的 dsh-llm 副本
+   * （0.1.0-rc.6）的 LlmAdapter 基类尚未提供该方法，缺少时会在每轮请求
+   * 开始时抛 `registration.adapter.prepareCall is not a function`。这里把
+   * 模型解析与分发绑定到同一个适配器实例（与 CodeArtsAdapter 同款 shim）。
+   */
+  async prepareCall(provider, model, signal) {
+    return {
+      model: await this.resolveModel(provider, model, signal),
+      stream: (options) => this.stream(options)
+    };
+  }
+  async *stream(options) {
+    let credential = await this.options.resolveCredential(options.model);
+    if (credential === void 0 || isCredentialExpired(credential)) {
+      await this.options.refresh();
+      credential = await this.options.resolveCredential(options.model);
+    }
+    if (credential === void 0 || credential.access_token.length === 0) {
+      throw new LlmError10(
+        // ⚠️ 文案里**不能**再提 `/buddy-login` —— 该斜杠命令已随单凭据模式一并移除
+        // （AGENTS.md「不注册任何斜杠命令」），入口在 Channel Pack 设置页。
+        `${this.product.id}: no usable credential; log in from the Channel Pack panel first`,
+        "MISSING_CREDENTIAL"
+      );
+    }
+    let currentAccountId = "";
+    if (this.options.accountPool && credential) {
+      try {
+        currentAccountId = await this.options.accountPool.findAccountIdByCredential(
+          this.product.id,
+          credential.access_token
+        );
+        if (currentAccountId === "") {
+          console.warn(`[${this.product.id}] \u5F53\u524D\u51ED\u636E\u672A\u5339\u914D\u5230\u8D26\u53F7\u6C60\u6761\u76EE\uFF0C\u9650\u6D41\u8BB0\u5F55\u5C06\u88AB\u8DF3\u8FC7`);
+        }
+        if (currentAccountId !== "") reportLedgerAccount(this.product.id, currentAccountId);
+      } catch (error) {
+        console.warn(`[${this.product.id}] \u8D26\u53F7\u5339\u914D\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u672C\u6B21\u8BF7\u6C42\uFF09:`, error);
+      }
+    }
+    await this.ensureRemoteModels();
+    const imageRefs = /* @__PURE__ */ new Map();
+    for (const message of options.messages) {
+      if (Array.isArray(message.content)) collectImages4(message.content, imageRefs);
+    }
+    let imageUrls;
+    if (imageRefs.size > 0) {
+      if (!this.inputModalitiesFor(options.model).includes("image")) {
+        throw new LlmError10(`${this.product.id}: model "${options.model}" does not accept image input.`, "UNSUPPORTED_CONTENT");
+      }
+      if (this.options.readImage === void 0) {
+        throw new LlmError10(`${this.product.id}: image input requires the attachment service.`, "UNSUPPORTED_CONTENT");
+      }
+      imageUrls = /* @__PURE__ */ new Map();
+      for (const [id, ref] of imageRefs) {
+        const projected = await this.projectRequestImage(ref);
+        if (projected !== void 0) {
+          imageUrls.set(id, `data:${projected.mediaType};base64,${Buffer.from(projected.data).toString("base64")}`);
+          continue;
+        }
+        let image;
+        try {
+          image = await this.options.readImage(ref);
+        } catch (error) {
+          throw new LlmError10(
+            `${this.product.id}: \u8BFB\u53D6\u56FE\u7247\u9644\u4EF6\u5931\u8D25\uFF08${id}\uFF09\uFF1A${errorMessage4(error)}`,
+            "UNSUPPORTED_CONTENT",
+            { cause: error }
+          );
+        }
+        if (image === void 0) {
+          throw new LlmError10(
+            `${this.product.id}: \u56FE\u7247\u9644\u4EF6\u8BFB\u53D6\u4E0D\u5230\u5185\u5BB9\uFF08${id}\uFF09\uFF1B\u9644\u4EF6\u670D\u52A1\u53EF\u80FD\u672A\u5C31\u7EEA\uFF0C\u6216\u8BE5\u5BF9\u8C61\u5DF2\u4E0D\u5B58\u5728\u3002`,
+            "UNSUPPORTED_CONTENT"
+          );
+        }
+        imageUrls.set(id, `data:${image.mediaType};base64,${Buffer.from(image.data).toString("base64")}`);
+      }
+    }
+    const messages = serializeMessages3(options.messages, imageUrls);
+    if (options.system !== void 0 && options.system.length > 0) {
+      messages.unshift({ role: "system", content: options.system });
+    }
+    if (this.product.id === "workbuddy" && (messages.length === 0 || messages[0].role !== "system")) {
+      messages.unshift({ role: "system", content: "You are a helpful assistant." });
+    }
+    const tools = options.tools?.map((tool) => ({
+      type: "function",
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      }
+    }));
+    const bodyObj = {
+      model: options.model,
+      messages,
+      stream: true,
+      // prompt_cache_key 让服务端启用前缀缓存并在 usage 中返回缓存命中，
+      // 缺少该字段时命中恒为 0（与 codearts 同款修复，见 llm-adapter.ts）。
+      // 实证（2026 实测 deepseek-v4-flash，同一段 8k token 前缀）：
+      //   不带该字段 → prompt_tokens=8027, prompt_cache_hit_tokens=0,    credit=0.34
+      //   带该字段   → prompt_tokens=8027, prompt_cache_hit_tokens=7808, credit=0.02
+      // 仅此一个字段的差异，费用差约 17 倍。同 key 重复请求稳定命中同一前缀。
+      prompt_cache_key: this.sessionId
+    };
+    if (tools !== void 0 && tools.length > 0) bodyObj.tools = tools;
+    if (options.temperature !== void 0) bodyObj.temperature = options.temperature;
+    if (options.stop !== void 0 && options.stop.length > 0) bodyObj.stop = options.stop;
+    const maxTokens = positiveMaxTokens(
+      options.maxTokens ?? this.remoteMeta.get(options.model)?.maxOutputTokens ?? this.productFallbackMeta.get(options.model)?.maxOutputTokens
+    );
+    if (maxTokens !== void 0) bodyObj.max_tokens = maxTokens;
+    const deepseek = isDeepSeekModel(options.model);
+    if (deepseek) {
+      bodyObj.thinking = { type: "enabled" };
+    }
+    const efforts = this.effortsFor(options.model);
+    if (options.reasoningEffort !== void 0 && efforts.includes(options.reasoningEffort)) {
+      bodyObj.reasoning_effort = options.reasoningEffort;
+    } else if (deepseek && efforts.length > 0) {
+      bodyObj.reasoning_effort = this.defaultEffortFor(options.model) ?? (efforts.includes("high") ? "high" : efforts[0]);
+    }
+    const body = JSON.stringify(bodyObj);
+    let response = await this.send(credential, body, options);
+    if (!response.ok && (response.status === 401 || response.status === 403)) {
+      const rejectedBody = await response.clone().text().catch(() => "");
+      const contentRejected = isContentRejection(rejectedBody);
+      if (contentRejected) {
+        console.warn(
+          `[${this.product.id}] \u8D26\u53F7 ${currentAccountId || "(current)"} \u88AB\u5B89\u5168\u7B56\u7565\u62E6\u622A\uFF08HTTP ${response.status}\uFF0Ccode 11140\uFF09\uFF0C\u7EE7\u7EED\u6362\u53F7\uFF1A${errorDetail4(rejectedBody).slice(0, 200)}`
+        );
+        await markPolicyBlockedAccount(
+          this.options.accountPool,
+          this.product.id,
+          currentAccountId,
+          options.model
+        );
+      }
+      const authStatus = response.status;
+      const triedAuth = /* @__PURE__ */ new Set();
+      if (currentAccountId !== "") triedAuth.add(currentAccountId);
+      let refreshedCredential;
+      try {
+        await this.options.refresh();
+        refreshedCredential = await this.options.resolveCredential(options.model);
+      } catch (error) {
+        console.warn(`[${this.product.id}] \u5237\u65B0\u5F53\u524D\u8D26\u53F7\u51ED\u636E\u5931\u8D25\uFF0C\u6539\u7528\u6362\u53F7\u91CD\u8BD5\uFF1A${String(error)}`);
+      }
+      if (refreshedCredential !== void 0 && refreshedCredential.access_token.length > 0) {
+        credential = refreshedCredential;
+        response = await this.send(credential, body, options);
+        if (response.ok) {
+          yield* this.consumeSse(response, options, currentAccountId);
+          return;
+        }
+      }
+      let rotated = false;
+      let sawContentRejection = contentRejected;
+      let rejectionStatus = contentRejected ? authStatus : 0;
+      let rejectionBody = contentRejected ? rejectedBody : "";
+      if ((response.status === 401 || response.status === 403) && this.options.accountPool !== void 0) {
+        for (; ; ) {
+          const next = await this.options.accountPool.getAvailableAccount(
+            this.product.id,
+            options.model,
+            triedAuth
+          );
+          if (!next || triedAuth.has(next.entry.id)) break;
+          triedAuth.add(next.entry.id);
+          rotated = true;
+          credential = next.credential;
+          currentAccountId = next.entry.id;
+          response = await this.send(credential, body, options);
+          if (response.ok) {
+            yield* this.consumeSse(response, options, currentAccountId);
+            return;
+          }
+          const rotatedBody = await response.clone().text().catch(() => "");
+          if (isContentRejection(rotatedBody)) {
+            sawContentRejection = true;
+            rejectionStatus = response.status;
+            rejectionBody = rotatedBody;
+            await markPolicyBlockedAccount(
+              this.options.accountPool,
+              this.product.id,
+              currentAccountId,
+              options.model
+            );
+          }
+          if (response.status !== 401 && response.status !== 403) break;
+        }
+      }
+      if (refreshedCredential === void 0 && !rotated) {
+        if (sawContentRejection) {
+          throw contentRejectionError(
+            this.product.id,
+            rejectionStatus === 0 ? authStatus : rejectionStatus,
+            rejectionBody.length === 0 ? rejectedBody : rejectionBody,
+            true
+          );
+        }
+        throw new LlmError10(`${this.product.id}: credential expired and refresh failed`, "AUTH", { status: authStatus });
+      }
+      if (response.status === 401 || response.status === 403) {
+        const detail = await response.text().catch(() => "");
+        if (sawContentRejection || isContentRejection(detail)) {
+          throw contentRejectionError(
+            this.product.id,
+            rejectionStatus === 0 ? authStatus : rejectionStatus,
+            rejectionBody.length === 0 ? detail : rejectionBody,
+            true
+          );
+        }
+        throw new LlmError10(
+          `${this.product.id}: \u6240\u6709\u8D26\u53F7\u5747\u88AB\u62D2\u7EDD\uFF08HTTP ${authStatus}${authStatus === 401 ? "\uFF0C\u8BF7\u5728 Channel Pack \u91CD\u65B0\u767B\u5F55" : ""}\uFF09\uFF1A${errorDetail4(detail)}`,
+          httpErrorCode4(authStatus, detail),
+          { status: authStatus }
+        );
+      }
+    }
+    if (!response.ok) {
+      let errorText = await response.text().catch(() => "");
+      if (isModelSaturationError(response.status, errorText)) {
+        for (let attempt = 0; attempt < BUDDY_SATURATION_MAX_RETRIES; attempt += 1) {
+          const waitMs = buddySaturationDelayMs(attempt);
+          console.warn(
+            `[${this.product.id}] \u6A21\u578B ${options.model} \u8BF7\u6C42\u91CF\u9971\u548C\uFF08\u4E0A\u6E38 14003 model busy\uFF09\uFF0C${waitMs}ms \u540E**\u5728\u672C\u8D26\u53F7**\u91CD\u8BD5\uFF08\u7B2C ${attempt + 1}/${BUDDY_SATURATION_MAX_RETRIES} \u6B21\uFF09\u2014\u2014 \u4E0D\u6362\u53F7\u3001\u4E0D\u5199\u9650\u6D41\u6807\u8BB0\uFF1A\u9971\u548C\u662F\u6A21\u578B\u7EA7\uFF0C\u6C60\u91CC\u5176\u5B83\u8D26\u53F7\u4F1A\u649E\u540C\u4E00\u5835\u5899`
+          );
+          await sleepMs(waitMs);
+          response = await this.send(credential, body, options);
+          if (response.ok) {
+            yield* this.consumeSse(response, options, currentAccountId);
+            return;
+          }
+          errorText = await response.text().catch(() => "");
+          if (!isModelSaturationError(response.status, errorText)) break;
+        }
+        if (isModelSaturationError(response.status, errorText)) {
+          throw new LlmError10(
+            `${this.product.id}: \u6A21\u578B ${options.model} \u5F53\u524D\u8BF7\u6C42\u91CF\u9971\u548C\uFF08\u4E0A\u6E38 14003 model busy\uFF0C\u62A5\u6587\u539F\u6587\uFF1A\u300C\u6A21\u578B\u7E41\u5FD9\uFF0C\u8BF7\u6362\u6A21\u578B\u6216\u7A0D\u540E\u91CD\u8BD5\u300D\uFF09\uFF0C\u5DF2\u91CD\u8BD5 ${BUDDY_SATURATION_MAX_RETRIES} \u6B21\u4ECD\u672A\u901A\u8FC7\u3002\u6B64\u4E3A\u8BE5**\u6A21\u578B**\u6574\u4F53\u7E41\u5FD9\uFF0C\u5E76\u975E\u8D26\u53F7\u989D\u5EA6\u95EE\u9898 \u2014\u2014 \u6362\u8D26\u53F7\u65E0\u6548\uFF0C\u8BF7\u6539\u7528\u5176\u5B83\u6A21\u578B\uFF0C\u6216\u7A0D\u540E\u91CD\u8BD5\uFF08\u65E0\u9700\u91CD\u65B0\u767B\u5F55\uFF09\u3002`,
+            "RATE_LIMIT",
+            { status: response.status }
+          );
+        }
+      }
+      if (this.options.accountPool && isRateLimited(errorText, response.status)) {
+        const tried = /* @__PURE__ */ new Set();
+        if (currentAccountId) tried.add(currentAccountId);
+        let sawContentRejection = false;
+        let contentRejectionStatus = 0;
+        let contentRejectionBody = "";
+        const rateLimitMarked = /* @__PURE__ */ new Set();
+        for (; ; ) {
+          if (currentAccountId !== "" && isRateLimited(errorText, response.status) && !rateLimitMarked.has(currentAccountId)) {
+            rateLimitMarked.add(currentAccountId);
+            const parsed = parseRateLimitError(errorText, options.model, response.status);
+            await this.options.accountPool.updateModelRateLimit(
+              currentAccountId,
+              parsed?.modelId ?? options.model,
+              parsed?.resetTimeMs ?? Date.now() + RATE_LIMIT_FALLBACK_MS
+            );
+          }
+          const next = await this.options.accountPool.getAvailableAccount(
+            this.product.id,
+            options.model,
+            tried
+          );
+          if (!next || tried.has(next.entry.id)) break;
+          tried.add(next.entry.id);
+          credential = next.credential;
+          currentAccountId = next.entry.id;
+          response = await this.send(credential, body, options);
+          if (response.ok) {
+            yield* this.consumeSse(response, options, currentAccountId);
+            return;
+          }
+          errorText = await response.text().catch(() => "");
+          if (isContentRejection(errorText)) {
+            sawContentRejection = true;
+            contentRejectionStatus = response.status;
+            contentRejectionBody = errorText;
+            console.warn(
+              `[${this.product.id}] \u8D26\u53F7 ${currentAccountId || "(current)"} \u88AB\u5B89\u5168\u7B56\u7565\u62E6\u622A\uFF08HTTP ${response.status}\uFF0Ccode 11140\uFF09\uFF0C\u7EE7\u7EED\u6362\u53F7\uFF1A${errorDetail4(errorText).slice(0, 200)}`
+            );
+            await markPolicyBlockedAccount(
+              this.options.accountPool,
+              this.product.id,
+              currentAccountId,
+              options.model
+            );
+            continue;
+          }
+          if (response.status === 401 || response.status === 403) continue;
+          if (!isRateLimited(errorText, response.status)) {
+            throw new LlmError10(`${this.product.id}: ${errorDetail4(errorText)}`, httpErrorCode4(response.status, errorText), { status: response.status });
+          }
+        }
+        if (sawContentRejection) {
+          throw contentRejectionError(
+            this.product.id,
+            contentRejectionStatus || 403,
+            contentRejectionBody,
+            true
+          );
+        }
+        throw new LlmError10(`${this.product.id}: \u6A21\u578B ${options.model} \u6240\u6709\u8D26\u53F7\u5747\u53D7\u9650\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5`, "QUOTA_EXCEEDED");
+      }
+      throw new LlmError10(`${this.product.id}: ${errorDetail4(errorText)}`, httpErrorCode4(response.status, errorText), { status: response.status });
+    }
+    yield* this.consumeSse(response, options, currentAccountId);
+  }
+  /** 发起一次 chat 请求；网络失败映射为可重试的 TRANSPORT 错误。 */
+  async send(credential, body, options) {
+    const headers = new Headers(attributionHeaders());
+    headers.set("Authorization", `Bearer ${credential.access_token}`);
+    headers.set("Accept", "text/event-stream");
+    headers.set("Content-Type", "application/json");
+    headers.set(HTTP_HEADER_DOMAIN, this.product.apiDomain || credential.domain || "");
+    headers.set(HTTP_HEADER_PRODUCT_CODE, this.product.productCode);
+    headers.set("X-Agent-Purpose", "conversation");
+    headers.set("X-IDE-Name", this.product.attributionName);
+    headers.set("X-IDE-Type", this.product.attributionName);
+    headers.set("X-IDE-Version", this.product.clientVersion);
+    headers.set(HTTP_HEADER_PRODUCT, this.product.attributionName);
+    headers.set("User-Agent", resolveUserAgent(this.product, options.model));
+    if (this.product.id === "workbuddy") {
+      headers.set("X-Conversation-ID", this.sessionId);
+      headers.set("X-Conversation-Message-ID", crypto.randomUUID());
+      headers.set("X-Conversation-Request-ID", crypto.randomUUID());
+    }
+    const url = `${this.product.endpoint}/v2/chat/completions`;
+    let payload = body;
+    let payloadHeaders = headers;
+    if (Buffer.byteLength(body) >= COMPRESS_BODY_THRESHOLD) {
+      try {
+        const compressed = gzipSync(Buffer.from(body, "utf8"));
+        if (compressed.byteLength < Buffer.byteLength(body)) {
+          payload = compressed;
+          payloadHeaders = new Headers(headers);
+          payloadHeaders.set("Content-Encoding", "gzip");
+          payloadHeaders.set("Content-Length", String(compressed.byteLength));
+        }
+      } catch {
+      }
+    }
+    let lastError;
+    for (let attempt = 0; attempt <= TRANSPORT_RETRIES; attempt++) {
+      try {
+        return await this.fetchImpl(url, {
+          method: "POST",
+          headers: payloadHeaders,
+          body: payload,
+          signal: options.signal
+        });
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+        if (!isTransportError4(error)) throw error;
+        lastError = error;
+        if (attempt === TRANSPORT_RETRIES) break;
+        await new Promise((resolve2) => setTimeout(resolve2, RETRY_BASE_MS * 2 ** attempt + Math.random() * 250));
+      }
+    }
+    throw new LlmError10(`${this.product.id}: transport error: ${errorMessage4(lastError)}`, "TRANSPORT", { cause: lastError });
+  }
+  /**
+   * 消费 SSE 响应并产出 StreamChunk。
+   *
+   * CodeBuddy 返回标准 OpenAI SSE：`delta.content` 为正文、
+   * `delta.reasoning_content` 为思考、`delta.tool_calls` 为工具调用。
+   * 流式工具调用仅首个分片携带真实 id（chatcmpl-tool-xxx），后续参数分片
+   * 只有 index——按 index 缓存 id 保证同一工具的所有分片 id 一致。
+   */
+  async *consumeSse(response, options, policyBlockedAccountId) {
+    if (!response.body) throw new LlmError10(`${this.product.id}: empty model response body`, "EMPTY_RESPONSE");
+    const blocks = [];
+    let nextIndex = 0;
+    const loopGuard = isReasoningLoopGuardEnabled() ? createReasoningLoopDetector() : void 0;
+    let loopDetected = false;
+    const proseLoopGuard = isReasoningLoopGuardEnabled() ? createReasoningLoopDetector() : void 0;
+    let proseLoopDetected = false;
+    const suppressor = createBlankReasoningSuppressor();
+    const proseSuppressor = createBlankReasoningSuppressor();
+    const toolCalls = /* @__PURE__ */ new Map();
+    const toolOrder = [];
+    const toolIds = /* @__PURE__ */ new Map();
+    let buffer = "";
+    let streamEnded = false;
+    let finishReason2;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let firstTokenReceived = false;
+    try {
+      for (; ; ) {
+        if (streamEnded) break;
+        let result;
+        try {
+          const timeoutMs = firstTokenReceived ? resolveChunkTimeoutMs5() : resolveFirstTokenTimeoutMs5();
+          const phase = firstTokenReceived ? "chunk" : "first-token";
+          result = await readWithIdleTimeout(reader, timeoutMs, "buddy", options.signal, phase);
+          if (!result.done) firstTokenReceived = true;
+        } catch (error) {
+          if (options.signal?.aborted) throw error;
+          if (error instanceof LlmError10) throw error;
+          if (isTransportError4(error)) {
+            throw new LlmError10(`${this.product.id}: sse transport error: ${errorMessage4(error)}`, "TRANSPORT", { cause: error });
+          }
+          throw error;
+        }
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+        let newline;
+        while ((newline = buffer.indexOf("\n")) !== -1) {
+          const line2 = buffer.slice(0, newline).trim();
+          buffer = buffer.slice(newline + 1);
+          if (!line2.startsWith("data:")) continue;
+          const payload = line2.slice(5).trim();
+          if (payload === "[DONE]") {
+            streamEnded = true;
+            break;
+          }
+          let data;
+          try {
+            data = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          if (data.choices === void 0 && (data.code === 11128 || data.code === "11128")) {
+            throw new LlmError10(
+              `${this.product.id}: code=11128 ${errorDetail4(payload)}`,
+              "INVALID_REQUEST",
+              { status: response.status }
+            );
+          }
+          if (data.choices === void 0 && isContentRejection(payload)) {
+            await markPolicyBlockedAccount(
+              this.options.accountPool,
+              this.product.id,
+              policyBlockedAccountId,
+              options.model
+            );
+            throw contentRejectionError(this.product.id, 200, payload, false);
+          }
+          if (data.error !== void 0) {
+            throw new LlmError10(`${this.product.id}: ${data.error.message ?? "unknown error"}`, "SERVER");
+          }
+          const choice = data.choices?.[0];
+          const delta = choice?.delta;
+          if (typeof choice?.finish_reason === "string") {
+            finishReason2 = choice.finish_reason;
+          }
+          const textDelta = delta?.content ? proseSuppressor.feed(delta.content) : void 0;
+          if (textDelta !== void 0) {
+            let block = blocks.find((candidate) => candidate.kind === "text");
+            if (block === void 0) {
+              block = { index: nextIndex++, kind: "text", text: "" };
+              blocks.push(block);
+              yield { type: "block-start", index: block.index, blockType: "text" };
+            }
+            if (proseLoopGuard !== void 0) {
+              if (proseLoopGuard.observe(textDelta)) proseLoopDetected = true;
+            }
+            if (!proseLoopDetected) {
+              block.text += textDelta;
+              yield { type: "text-delta", index: block.index, text: textDelta };
+            }
+          }
+          if (delta?.reasoning_content) {
+            if (loopGuard !== void 0) {
+              if (loopGuard.observe(delta.reasoning_content)) loopDetected = true;
+            }
+            if (!loopDetected) {
+              const emit = suppressor.feed(delta.reasoning_content);
+              if (emit !== void 0) {
+                let block = blocks.find((candidate) => candidate.kind === "reasoning");
+                if (block === void 0) {
+                  block = { index: nextIndex++, kind: "reasoning", text: "" };
+                  blocks.push(block);
+                  yield { type: "block-start", index: block.index, blockType: "reasoning" };
+                }
+                block.text = suppressor.text();
+                yield { type: "reasoning-delta", index: block.index, text: emit };
+              }
+            }
+          }
+          for (const call of delta?.tool_calls ?? []) {
+            const wireIndex = call.index ?? 0;
+            if (typeof call.id === "string" && call.id.length > 0) {
+              toolIds.set(wireIndex, call.id);
+            }
+            const callId = toolIds.get(wireIndex) ?? `call_${wireIndex}`;
+            let block = toolCalls.get(wireIndex);
+            if (block === void 0) {
+              block = { index: nextIndex++, text: "", callId, announced: false };
+              toolCalls.set(wireIndex, block);
+            }
+            block.callId = callId;
+            if (typeof call.function?.name === "string" && call.function.name.length > 0) {
+              block.name = call.function.name;
+            }
+            const fragment = call.function?.arguments ?? "";
+            block.text += fragment;
+            if (!block.announced) {
+              if (!hasUsableToolName(block.name)) continue;
+              block.announced = true;
+              toolOrder.push(block.index);
+              yield { type: "block-start", index: block.index, blockType: "tool-call" };
+              yield {
+                type: "tool-call-delta",
+                index: block.index,
+                id: ToolCallId4(callId),
+                name: block.name,
+                argumentsDelta: block.text
+              };
+              continue;
+            }
+            yield {
+              type: "tool-call-delta",
+              index: block.index,
+              id: ToolCallId4(callId),
+              ...block.name !== void 0 ? { name: block.name } : {},
+              argumentsDelta: fragment
+            };
+          }
+          if (data.usage) {
+            const promptTokens = data.usage.prompt_tokens ?? 0;
+            const cachedTokens = data.usage.prompt_tokens_details?.cached_tokens ?? data.usage.prompt_cache_hit_tokens ?? 0;
+            const cacheWriteTokens = data.usage.prompt_tokens_details?.cache_write_tokens;
+            const reasoningTokens = data.usage.completion_tokens_details?.reasoning_tokens;
+            yield {
+              type: "usage",
+              usage: {
+                // 与 codearts 一致：inputTokens 只计**未命中缓存**的部分，
+                // 命中部分单列 cacheReadTokens，否则缓存命中率显示会偏大。
+                inputTokens: cachedTokens > 0 ? promptTokens - cachedTokens : promptTokens,
+                outputTokens: data.usage.completion_tokens ?? 0,
+                ...cachedTokens > 0 ? { cacheReadTokens: cachedTokens } : {},
+                ...cacheWriteTokens !== void 0 && cacheWriteTokens > 0 ? { cacheWriteTokens } : {},
+                ...reasoningTokens !== void 0 && reasoningTokens > 0 ? { reasoningTokens } : {}
+              }
+            };
+          }
+        }
+        if (loopDetected) {
+          await reader.cancel().catch(() => {
+          });
+          break;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    let blockCount = 0;
+    let emittedProse = "";
+    const textBlock = blocks.find((block) => block.kind === "text");
+    for (const index of toolOrder) {
+      const block = [...toolCalls.values()].find((candidate) => candidate.index === index);
+      if (!hasUsableToolName(block.name)) continue;
+      blockCount += 1;
+      yield {
+        type: "block-end",
+        index,
+        block: {
+          type: "tool-call",
+          id: ToolCallId4(block.callId ?? ""),
+          name: block.name,
+          // 仅把"无参数工具下发的空分片"补成 {}；**残缺参数保持原样**，
+          // 由 max-tokens 判定触发重试。切勿把残缺 JSON 也补成 {}——那会
+          // 伪造出合法外观，让 harness 报 `missing required property` 而
+          // 非重试，掩盖真正的分片丢失。
+          arguments: isTruncatedArguments(block.text) ? block.text : normalizeToolArguments(block.text)
+        }
+      };
+    }
+    if (textBlock !== void 0) {
+      let textOut = textBlock.text;
+      {
+        const split = splitThinkTaggedContent(textBlock.text);
+        if (split !== void 0) {
+          if (split.reasoning !== "") {
+            const existing = blocks.find((candidate) => candidate.kind === "reasoning");
+            if (existing === void 0) {
+              blocks.push({ index: nextIndex++, kind: "reasoning", text: split.reasoning });
+            } else {
+              existing.text += split.reasoning;
+            }
+            suppressor.feed(split.reasoning);
+          }
+          textOut = split.text;
+        }
+      }
+      textOut = stripBareThinkCloseTagIfEnabled(textOut);
+      const truncated = proseLoopDetected && proseLoopGuard?.cutAt !== void 0 ? textOut.slice(0, proseLoopGuard.cutAt) : textOut;
+      const cleaned = stripCourseLeakIfEnabled(truncated);
+      if (cleaned.trim() !== "") {
+        blockCount += 1;
+        emittedProse = cleaned;
+        yield { type: "block-end", index: textBlock.index, block: { type: "text", text: cleaned } };
+      } else {
+        yield { type: "block-end", index: textBlock.index, block: { type: "text", text: "" } };
+      }
+    }
+    const reasoningBlock = blocks.find((block) => block.kind === "reasoning");
+    if (reasoningBlock !== void 0 && reasoningBlock.text.trim() !== "") {
+      const suppressedReasoning = suppressor.text();
+      const reasoningText = loopDetected && loopGuard?.cutAt !== void 0 ? suppressedReasoning.slice(0, loopGuard.cutAt) : suppressedReasoning;
+      const cleanedReasoning = stripCourseLeakIfEnabled(reasoningText);
+      if (cleanedReasoning !== "") {
+        blockCount += 1;
+        yield { type: "block-end", index: reasoningBlock.index, block: { type: "reasoning", text: cleanedReasoning } };
+      }
+    }
+    const argsTruncated = [...toolCalls.values()].some((block) => isTruncatedArguments(block.text));
+    const droppedUnnamedCalls = [...toolCalls.values()].some((block) => !block.announced);
+    const proseCutByStopString = finishReason2 === "stop" && toolOrder.length === 0 && isProseTruncatedByStopString(emittedProse);
+    const reasoningLoopIsSoleOutput = loopDetected && emittedProse === "" && toolOrder.length === 0;
+    const reason = reasoningLoopIsSoleOutput ? { kind: "error", failure: reasoningLoopFailure(
+      loopGuard?.diagnostics,
+      options.maxTokens,
+      "reasoning"
+    ) } : loopDetected ? { kind: "max-tokens" } : finishReason2 === "length" || finishReason2 === void 0 && toolOrder.length > 0 || argsTruncated || proseCutByStopString || droppedUnnamedCalls && toolOrder.length === 0 ? { kind: "max-tokens" } : finishReason2 === "tool_calls" || toolOrder.length > 0 ? { kind: "tool-calls" } : { kind: "stop" };
+    yield { type: "finish", reason: resolveEmptyResponseReason(reason, blockCount) };
+  }
+};
+function isCredentialExpired(credential) {
+  const expiresAt = credentialExpiresAtMs2(credential);
+  return expiresAt === void 0 ? false : Date.now() >= expiresAt;
+}
+function displayNameFor2(model, all) {
+  const suffix = displaySuffix(model, all);
+  return suffix.length > 0 ? `${model.name} \xB7 ${suffix}` : model.name;
+}
+function displaySuffix(model, all) {
+  const parts = [];
+  const rate = formatCreditsRate(model.creditsRate, model.discountedCreditsRate);
+  if (rate !== void 0) parts.push(rate);
+  const variant = variantLabelFor(model, all);
+  if (variant.length > 0) parts.push(variant);
+  return parts.join(" ");
+}
+function variantLabelFor(model, all) {
+  const group = all.filter((candidate) => candidate.name === model.name);
+  if (group.length <= 1) return "";
+  const prefix = commonPrefix(group.map((candidate) => candidate.id));
+  const variant = model.id.slice(prefix.length).replace(/^-+/, "");
+  return variant.toUpperCase();
+}
+function commonPrefix(values) {
+  if (values.length === 0) return "";
+  let prefix = values[0];
+  for (const value of values.slice(1)) {
+    let i = 0;
+    while (i < prefix.length && i < value.length && prefix[i] === value[i]) i++;
+    prefix = prefix.slice(0, i);
+    if (prefix.length === 0) break;
+  }
+  return prefix;
+}
+function positiveMaxTokens(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
+}
+function registerBuddyLlm(ctx, options) {
+  const product = options.product ?? CODEBUDDY;
+  const adapter = new BuddyAdapter(options);
+  registerAdapterIdempotent(ctx.llm, [product.id], adapter);
+  return adapter;
+}
+
+// vendor/channel-pack/src/buddy-auth.ts
+import { Service } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef2 } from "@deepseek-ai/dsh-credentials";
+
+// vendor/channel-pack/src/buddy-oauth.ts
+function responseCode(body) {
+  if (typeof body !== "object" || body === null) return 0;
+  const code = body.code;
+  return typeof code === "number" ? code : 0;
+}
+function responseMessage(body) {
+  if (typeof body !== "object" || body === null) return "";
+  const message = body.message;
+  return typeof message === "string" ? message : "";
+}
+function responseData(body) {
+  if (typeof body !== "object" || body === null) return void 0;
+  const data = body.data;
+  return data === null ? void 0 : data;
+}
+async function request(method, url, headers, options) {
+  const signal = options.signal === void 0 ? AbortSignal.timeout(options.timeoutMs) : AbortSignal.any([AbortSignal.timeout(options.timeoutMs), options.signal]);
+  let response;
+  try {
+    response = await options.fetcher(url, { method, headers, signal });
+  } catch (error) {
+    throw new Error(`CodeBuddy ${method} ${url} network error: ${String(error)}`);
+  }
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  return { status: response.status, body };
+}
+async function fetchAuthState(fetcher = createDomesticFetch(), signal, product = CODEBUDDY) {
+  const url = `${product.endpoint}${AUTH_STATE_PATH}?platform=${product.platform}`;
+  const headers = {
+    [HTTP_HEADER_DOMAIN]: product.apiDomain,
+    [HTTP_HEADER_NO_AUTHORIZATION]: "true",
+    [HTTP_HEADER_NO_USER_ID]: "true",
+    [HTTP_HEADER_NO_ENTERPRISE_ID]: "true",
+    [HTTP_HEADER_NO_DEPARTMENT_INFO]: "true",
+    "User-Agent": product.userAgent
+  };
+  const { status, body } = await request("POST", url, headers, {
+    fetcher,
+    timeoutMs: STATE_REQUEST_TIMEOUT_MS,
+    ...signal !== void 0 ? { signal } : {}
+  });
+  if (status !== 200) {
+    throw new Error(`auth/state HTTP ${status}: ${responseMessage(body)}`);
+  }
+  const data = responseData(body);
+  if (typeof data !== "object" || data === null) {
+    throw new Error(`auth/state \u54CD\u5E94\u7F3A\u5C11 data \u5B57\u6BB5: ${JSON.stringify(body)}`);
+  }
+  const record = data;
+  const state = typeof record.state === "string" ? record.state : "";
+  const authUrl = typeof record.authUrl === "string" ? record.authUrl : "";
+  if (state.length === 0) throw new Error("auth/state \u54CD\u5E94\u7F3A\u5C11 state \u5B57\u6BB5");
+  if (authUrl.length === 0) throw new Error("auth/state \u54CD\u5E94\u7F3A\u5C11 authUrl \u5B57\u6BB5");
+  return { state, authUrl };
+}
+async function loopGetToken(state, options = {}) {
+  const fetcher = options.fetcher ?? createDomesticFetch();
+  const product = options.product ?? CODEBUDDY;
+  const url = `${product.endpoint}${AUTH_TOKEN_PATH}?state=${encodeURIComponent(state)}`;
+  const headers = {
+    [HTTP_HEADER_NO_AUTHORIZATION]: "true",
+    "User-Agent": product.userAgent
+  };
+  const deadline = Date.now() + (options.timeoutMs ?? LOGIN_TIMEOUT_MS);
+  const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
+  for (; ; ) {
+    if (Date.now() >= deadline) throw new Error("\u83B7\u53D6 token \u8D85\u65F6\uFF085 \u5206\u949F\uFF09");
+    if (options.signal?.aborted) throw new Error("\u767B\u5F55\u5DF2\u53D6\u6D88");
+    await sleep(interval);
+    let result;
+    try {
+      result = await request("GET", url, headers, {
+        fetcher,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        ...options.signal !== void 0 ? { signal: options.signal } : {}
+      });
+    } catch {
+      continue;
+    }
+    const { status, body } = result;
+    if (status === 200) {
+      const data = responseData(body);
+      if (data !== void 0) return parseTokenData(data);
+      continue;
+    }
+    const code = responseCode(body);
+    if (code === CODE_TOKEN_NOT_READY) continue;
+    throw new Error(`auth/token HTTP ${status} code=${code}: ${responseMessage(body)}`);
+  }
+}
+async function getAccount(state, token, options = {}) {
+  const fetcher = options.fetcher ?? createDomesticFetch();
+  const product = options.product ?? CODEBUDDY;
+  const url = `${product.endpoint}${LOGIN_ACCOUNT_PATH}?state=${encodeURIComponent(state)}`;
+  const headers = {
+    // ⚠️ `||` 而非裸 `token.domain`：token 由 `parseTokenData` → `readStringField`
+    // 产出，该函数在字段缺失/类型不符时返回**空串**（不是 `undefined`），裸用会
+    // 让 X-Domain 以空值发出。这与 `buddy-adapter.ts` 的 chat 头、`buddy.ts` 的
+    // `credentialRequestHeaders` 是同一形态（PR!19 修了那两处，这是第三处）。
+    //
+    // 兜底取 `product.apiDomain` 而非常量 `API_DOMAIN`：本请求的 URL 是
+    // `` `${product.endpoint}${LOGIN_ACCOUNT_PATH}` ``，X-Domain 必须与产品端点一致。
+    //
+    // ⚠️ **非空时仍以服务端下发的 `token.domain` 为准**（故不写成产品优先）：
+    // 这里是登录流程，该值是服务端**本次刚下发**的权威值，不是跨产品迁移后
+    // 会过期的历史快照 —— 与 adapter 那处的方向差异是有意的，差异只在「兜底值
+    // 取谁」，判据一致（空串必回退）。回归用例见 `tests/unit/buddy-oauth.spec.ts`
+    // 的「token.domain 为空串时…」与「token.domain 非空时…」两条。
+    [HTTP_HEADER_DOMAIN]: token.domain || product.apiDomain,
+    Authorization: `Bearer ${token.accessToken}`,
+    [HTTP_HEADER_NO_USER_ID]: "true",
+    [HTTP_HEADER_NO_ENTERPRISE_ID]: "true",
+    "User-Agent": (options.product ?? CODEBUDDY).userAgent
+  };
+  const deadline = Date.now() + (options.timeoutMs ?? LOGIN_TIMEOUT_MS);
+  const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
+  for (; ; ) {
+    if (Date.now() >= deadline) throw new Error("\u83B7\u53D6\u8D26\u6237\u4FE1\u606F\u8D85\u65F6\uFF085 \u5206\u949F\uFF09");
+    if (options.signal?.aborted) throw new Error("\u767B\u5F55\u5DF2\u53D6\u6D88");
+    await sleep(interval);
+    let result;
+    try {
+      result = await request("GET", url, headers, {
+        fetcher,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        ...options.signal !== void 0 ? { signal: options.signal } : {}
+      });
+    } catch {
+      continue;
+    }
+    const { status, body } = result;
+    if (status === 200) {
+      const data = responseData(body);
+      if (data !== void 0) return parseAccountData(data);
+      continue;
+    }
+    const code = responseCode(body);
+    if (code === CODE_ACCOUNT_NOT_READY) continue;
+    throw new Error(`login/account HTTP ${status} code=${code}: ${responseMessage(body)}`);
+  }
+}
+async function refreshToken(credential, fetcher = createDomesticFetch(), signal, product = CODEBUDDY) {
+  if (!isRefreshable(credential)) {
+    throw new RefreshTokenExpiredError("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+  }
+  const url = `${product.endpoint}${AUTH_REFRESH_PATH}`;
+  const headers = {
+    ...credentialRequestHeaders(credential),
+    // credentialRequestHeaders 走的是 CodeBuddy 的 UA/域名常量，这里按产品覆盖，
+    // 否则 WorkBuddy 续期时会以 CodeBuddy 的身份标识发请求。
+    [HTTP_HEADER_DOMAIN]: product.apiDomain,
+    "User-Agent": product.userAgent,
+    Authorization: `Bearer ${credential.access_token}`,
+    [HTTP_HEADER_REFRESH_TOKEN]: credential.refresh_token,
+    [HTTP_HEADER_AUTH_REFRESH_SOURCE]: AUTH_REFRESH_SOURCE
+  };
+  const { status, body } = await request("POST", url, headers, {
+    fetcher,
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    ...signal !== void 0 ? { signal } : {}
+  });
+  if (status !== 200) {
+    const code = responseCode(body);
+    const message = responseMessage(body);
+    const expired = status === 401 || status === 403 || code === 401 || code === 403 || message.includes("expired") || message.includes("invalid");
+    if (expired) {
+      throw new RefreshTokenExpiredError(message.length > 0 ? message : `HTTP ${status}`);
+    }
+    throw new Error(`\u5237\u65B0 token HTTP ${status} code=${code}: ${message}`);
+  }
+  const data = responseData(body);
+  if (data === void 0) throw new Error("\u5237\u65B0 token \u54CD\u5E94\u7F3A\u5C11 data \u5B57\u6BB5");
+  return parseTokenData(data);
+}
+var RefreshTokenExpiredError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RefreshTokenExpiredError";
+  }
+};
+async function fetchModels(credential, fetcher = createDomesticFetch(), signal, product = CODEBUDDY) {
+  if (credential.access_token.length === 0) return [];
+  const headers = {
+    ...credentialAuthHeaders(credential),
+    // credentialAuthHeaders 内置 CodeBuddy 的 UA/域名，这里按产品覆盖。
+    [HTTP_HEADER_DOMAIN]: product.apiDomain,
+    "User-Agent": product.userAgent,
+    // X-Product 是**部署类型**（SaaS），CodeBuddy 与 WorkBuddy 共用同一取值，
+    // 故保持常量；随产品变化的是 X-Product-Code。
+    [HTTP_HEADER_PRODUCT]: BUDDY_DEPLOYMENT_TYPE,
+    [HTTP_HEADER_PRODUCT_CODE]: product.productCode
+  };
+  const scoped = await requestScopedModels(credential, headers, fetcher, signal, product);
+  if (scoped !== void 0) {
+    const config = await requestConfig(headers, fetcher, signal, product);
+    const merged = mergeRemoteModels(scoped, config.models);
+    return config.promotions.size === 0 ? merged : applyPromotions(merged, config.promotions);
+  }
+  const url = `${product.endpoint}${CONFIG_PATH}`;
+  try {
+    const { status, body } = await request("GET", url, headers, {
+      fetcher,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      ...signal !== void 0 ? { signal } : {}
+    });
+    if (status !== 200) return [];
+    return parseModelsFromConfig(body);
+  } catch {
+    return [];
+  }
+}
+function mergeRemoteModels(primary, extra) {
+  const known = new Set(primary.map((model) => model.id));
+  return [...primary, ...extra.filter((model) => !known.has(model.id))];
+}
+async function requestConfig(headers, fetcher, signal, product) {
+  const empty = { models: [], promotions: /* @__PURE__ */ new Map() };
+  try {
+    const { status, body } = await request("GET", `${product.endpoint}${CONFIG_PATH}`, headers, {
+      fetcher,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      ...signal !== void 0 ? { signal } : {}
+    });
+    if (status !== 200 || typeof body !== "object" || body === null) return empty;
+    const data = body.data;
+    if (typeof data !== "object" || data === null) return empty;
+    return {
+      models: parseModelsFromConfig(body),
+      promotions: parsePromotions(data)
+    };
+  } catch {
+    return empty;
+  }
+}
+function applyPromotions(models, promotions) {
+  return models.map((model) => {
+    const discounted = promotions.get(model.id);
+    return discounted === void 0 ? model : { ...model, discountedCreditsRate: discounted };
+  });
+}
+var ENTERPRISE_MODELS_SCOPE = "personal";
+async function requestScopedModels(credential, headers, fetcher, signal, product) {
+  const url = `${product.endpoint}/console/enterprises/${ENTERPRISE_MODELS_SCOPE}/models`;
+  try {
+    const { status, body } = await request("GET", url, headers, {
+      fetcher,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      ...signal !== void 0 ? { signal } : {}
+    });
+    if (status !== 200) return void 0;
+    const models = parseModelsFromConfig(body);
+    return models.length > 0 ? models : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve2) => {
+    setTimeout(resolve2, ms).unref?.();
+  });
+}
+async function defaultOpenBrowser(url) {
+  const { openBrowser: openBrowser2 } = await Promise.resolve().then(() => (init_open_browser(), open_browser_exports));
+  openBrowser2(url);
+}
+function decorateLoginUrl(authUrl, product) {
+  if (!product.appendSessionParams) return authUrl;
+  try {
+    const url = new URL(authUrl);
+    if (product.pluginVersion !== void 0 && product.pluginVersion.length > 0) {
+      url.searchParams.set("version", product.pluginVersion);
+    }
+    url.searchParams.set("loginSessionId", crypto.randomUUID());
+    return url.toString();
+  } catch {
+    return authUrl;
+  }
+}
+async function runBuddyLoginFlow(options = {}) {
+  const fetcher = options.fetcher ?? createDomesticFetch();
+  const open = options.openBrowser ?? defaultOpenBrowser;
+  const product = options.product ?? CODEBUDDY;
+  let state;
+  let authUrl;
+  if (options.state) {
+    state = options.state;
+    authUrl = "";
+  } else {
+    const result = await fetchAuthState(fetcher, void 0, product);
+    state = result.state;
+    authUrl = result.authUrl;
+    const decorated = decorateLoginUrl(authUrl, product);
+    await open(decorated);
+    authUrl = decorated;
+  }
+  const pollOptions = {
+    fetcher,
+    ...options.timeoutMs !== void 0 ? { timeoutMs: options.timeoutMs } : {},
+    ...options.pollIntervalMs !== void 0 ? { pollIntervalMs: options.pollIntervalMs } : {},
+    // 轮询 token / 账户两步同样带产品身份标识，否则 WorkBuddy 登录会以
+    // CodeBuddy 的 UA 发请求。
+    product
+  };
+  const token = await loopGetToken(state, pollOptions);
+  const account = await getAccount(state, token, pollOptions);
+  const credential = buildCredential(token, account);
+  return {
+    access: JSON.stringify(credential),
+    // 对齐 Rust 的 expires_at_ms(...).unwrap_or(0)：无法解析时报告 0。
+    expires: credentialExpiresAtMs2(credential) ?? 0,
+    loginUrl: authUrl,
+    refreshable: isRefreshable(credential)
+  };
+}
+
+// vendor/channel-pack/src/refresh.ts
+var REFRESH_LEAD_MS = 36e5;
+var REFRESH_RETRY_MS = 6e5;
+var REFRESH_ABNORMAL_NETWORK_RETRY_MS = 6e4;
+function isAbnormalNetworkError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /fetch failed|ENOTFOUND|ECONNREFUSED|proxy|unresolved host|getaddrinfo/i.test(message);
+}
+function isRefreshTokenExpired(error) {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "RefreshTokenExpiredError") return true;
+  return /refresh[_ ]?token/i.test(error.message);
+}
+function computeFirstRefreshDelayMs(expiresAtMs, nowMs = Date.now()) {
+  if (!Number.isFinite(expiresAtMs)) return 0;
+  const leadTrigger = nowMs + REFRESH_LEAD_MS;
+  if (leadTrigger >= expiresAtMs) return 0;
+  const trigger = new Date(leadTrigger);
+  trigger.setSeconds(Math.floor(60 * Math.random()));
+  const delay = trigger.getTime() - nowMs;
+  return delay > 0 ? delay : 0;
+}
+var RefreshScheduler = class {
+  constructor(refresh, onError = () => {
+  }) {
+    this.refresh = refresh;
+    this.onError = onError;
+  }
+  refresh;
+  onError;
+  timer;
+  pending = false;
+  /** 调度代号：stop()/arm() 都会推进它，用于让在途 run() 放弃失败后的重试武装。 */
+  generation = 0;
+  /** 为在 `expiresAtMs` 过期的凭据安排下次刷新；`nowMs` 仅供测试注入。 */
+  arm(expiresAtMs, nowMs = Date.now()) {
+    this.generation++;
+    if (this.timer !== void 0) {
+      clearTimeout(this.timer);
+      this.timer = void 0;
+    }
+    const delay = computeFirstRefreshDelayMs(expiresAtMs, nowMs);
+    this.timer = setTimeout(() => {
+      void this.run();
+    }, delay);
+    this.timer.unref?.();
+  }
+  /** 取消任何待处理的刷新（并让在途 run() 失败后不再重试）。 */
+  stop() {
+    this.generation++;
+    if (this.timer !== void 0) {
+      clearTimeout(this.timer);
+      this.timer = void 0;
+    }
+  }
+  /** 立即执行一次刷新（供启动时已处于到期窗口内的凭据使用）。 */
+  async refreshOnce() {
+    this.stop();
+    await this.run();
+  }
+  async run() {
+    if (this.pending) return;
+    this.pending = true;
+    const generation = this.generation;
+    try {
+      await this.refresh();
+    } catch (error) {
+      this.onError(error);
+      if (generation !== this.generation) {
+        return;
+      }
+      if (isRefreshTokenExpired(error)) {
+        return;
+      }
+      if (this.timer !== void 0) {
+        clearTimeout(this.timer);
+      }
+      const retry = isAbnormalNetworkError(error) ? REFRESH_ABNORMAL_NETWORK_RETRY_MS : REFRESH_RETRY_MS;
+      this.timer = setTimeout(() => {
+        void this.run();
+      }, retry);
+      this.timer.unref?.();
+    } finally {
+      this.pending = false;
+    }
+  }
+};
+
+// vendor/channel-pack/src/expiry-sync.ts
+var EXPIRY_TOLERANCE_MS = 1e3;
+function shouldRefreshNow(expiresAtMs, nowMs = Date.now()) {
+  if (expiresAtMs === void 0 || !Number.isFinite(expiresAtMs)) return true;
+  return expiresAtMs - nowMs <= REFRESH_LEAD_MS;
+}
+async function syncAccountExpiry(params) {
+  const { pool, provider, credential, accessors, accountId, current, tag } = params;
+  if (pool === void 0) return;
+  try {
+    let id = accountId;
+    if (id === void 0 || id.length === 0) {
+      id = await pool.findAccountIdByCredential(provider, accessors.identityOf(credential));
+    }
+    if (id === void 0 || id.length === 0) return;
+    const expiresAt = accessors.expiresAtOf(credential);
+    const refreshable = accessors.refreshableOf?.(credential);
+    if (expiresAt === void 0 && refreshable === void 0) return;
+    const expiryChanged = expiresAt !== void 0 && (current?.expiresAt === void 0 || Math.abs(current.expiresAt - expiresAt) > EXPIRY_TOLERANCE_MS);
+    const refreshableChanged = refreshable !== void 0 && (current === void 0 || current.refreshable !== refreshable);
+    if (!expiryChanged && !refreshableChanged) return;
+    await pool.updateAccount(id, {
+      ...expiresAt === void 0 ? {} : { expiresAt },
+      ...refreshable === void 0 ? {} : { refreshable }
+    });
+  } catch (error) {
+    params.warn?.(
+      `${tag} \u51ED\u636E\u5904\u7406\u6210\u529F\u4F46\u56DE\u5199\u8D26\u53F7\u6C60\u7684\u6709\u6548\u671F\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u4F7F\u7528\uFF09\uFF1A${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+async function refreshAccountWithReconcile(params) {
+  const { pool, provider, tag, accountId, credential, accessors, current, refresh, save } = params;
+  const expiresAt = accessors.expiresAtOf(credential);
+  if (!shouldRefreshNow(expiresAt)) {
+    await syncAccountExpiry({
+      pool,
+      provider,
+      credential,
+      accessors,
+      accountId,
+      current,
+      tag,
+      warn: params.warn
+    });
+    return false;
+  }
+  const refreshed = await refresh(credential);
+  if (refreshed === void 0) {
+    throw new Error(`${tag} \u7EED\u671F\u54CD\u5E94\u7F3A\u5C11\u8BBF\u95EE\u4EE4\u724C\uFF0C\u51ED\u636E\u672A\u66F4\u65B0`);
+  }
+  await save(refreshed);
+  await syncAccountExpiry({
+    pool,
+    provider,
+    credential: refreshed,
+    accessors,
+    accountId,
+    current,
+    tag,
+    warn: params.warn
+  });
+  params.info?.(`${tag} \u8D26\u53F7 ${accountId} \u5DF2\u7EED\u671F`);
+  return true;
+}
+
+// vendor/channel-pack/src/buddy-auth.ts
+var BUDDY_EXPIRY_ACCESSORS = {
+  expiresAtOf: credentialExpiresAtMs2,
+  refreshableOf: isRefreshable,
+  identityOf: (credential) => credential.access_token ?? ""
+};
+var BUDDY_CREDENTIAL_REF = "BUDDY_ACCESS_TOKEN";
+function parseCredential(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null && typeof parsed.access_token === "string" ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
+var BuddyAuth = class extends Service {
+  constructor(ctx, options = {}) {
+    const product = options.product ?? CODEBUDDY;
+    super(ctx, options.serviceName ?? `${product.id}Auth`);
+    this.options = options;
+    this.product = product;
+    this.credentialRefName = this.product.defaultCredentialRef;
+  }
+  options;
+  /** 本实例所属的产品配置（CodeBuddy 或 WorkBuddy）。 */
+  product;
+  /**
+   * 本实例默认读写的凭据 ref 名称。
+   * CodeBuddy 为 `BUDDY_ACCESS_TOKEN`，WorkBuddy 为 `WORKBUDDY_ACCESS_TOKEN`；
+   * 两个产品各自读写自己的 ref，凭据互不可见。
+   */
+  credentialRefName;
+  scheduler = new RefreshScheduler(
+    () => this.refresh(),
+    (error) => {
+      if (error instanceof RefreshTokenExpiredError) {
+        this.markRefreshTokenInvalid();
+        return;
+      }
+      this.lastRefreshError = error instanceof Error ? error.message : String(error);
+    }
+  );
+  /** refresh_token 已被后端判定失效；登录/刷新成功时重置。 */
+  refreshTokenInvalid = false;
+  lastRefreshError;
+  /** 登录会话是否仍处于活跃状态；logout()/stop() 置 false，防止在途刷新回写已登出凭据。 */
+  active = true;
+  /** 标记 refresh_token 已失效：停止重试，并向 status() 暴露 refreshable: false 与重新登录提示。 */
+  markRefreshTokenInvalid() {
+    this.refreshTokenInvalid = true;
+    this.lastRefreshError = "refresh_token \u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55";
+  }
+  /** 运行登录流程并持久化凭据。 */
+  async login(flowOptions = {}) {
+    this.active = true;
+    const ref = flowOptions.refName ? credentialRef2(flowOptions.refName) : credentialRef2(this.credentialRefName);
+    const flow = await runBuddyLoginFlow({
+      ...this.options.fetcher !== void 0 ? { fetcher: this.options.fetcher } : {},
+      ...flowOptions,
+      // 产品配置决定 auth/state 的 platform 与登录 URL 附加参数：调用方显式传入优先，
+      // 否则用本实例的产品（WorkBuddy 实例不会退回 CodeBuddy）。
+      product: flowOptions.product ?? this.product
+    });
+    await this.ctx.credentials.set(ref, flow.access);
+    this.refreshTokenInvalid = false;
+    this.lastRefreshError = void 0;
+    this.scheduleRefresh();
+    const credential = parseCredential(flow.access);
+    if (flowOptions.accountId && flowOptions.pool) {
+      await flowOptions.pool.addAccount({
+        id: flowOptions.accountId,
+        provider: this.product.id,
+        nickname: flowOptions.accountId,
+        enabled: true,
+        credentialRef: flowOptions.refName ?? this.credentialRefName,
+        createdAt: Date.now(),
+        expiresAt: credential ? credentialExpiresAtMs2(credential) : void 0,
+        refreshable: Boolean(credential) && isRefreshable(credential)
+      });
+    }
+    return {
+      access: flow.access,
+      expires: flow.expires,
+      ref,
+      loginUrl: flow.loginUrl,
+      refreshable: Boolean(credential) && isRefreshable(credential)
+    };
+  }
+  /**
+   * 保存凭据并注册到账号池（供后台登录流程使用）。
+   * 账号池已预先创建占位条目时，只做凭据写入和更新。
+   */
+  async saveCredential(credentialJson, refName, accountId, pool) {
+    this.active = true;
+    const ref = credentialRef2(refName);
+    await this.ctx.credentials.set(ref, credentialJson);
+    this.refreshTokenInvalid = false;
+    this.lastRefreshError = void 0;
+    this.scheduleRefresh();
+    const credential = parseCredential(credentialJson);
+    if (accountId && pool) {
+      await pool.updateAccount(accountId, {
+        nickname: credential?.nickname ?? accountId,
+        expiresAt: credential ? credentialExpiresAtMs2(credential) : void 0,
+        refreshable: Boolean(credential) && isRefreshable(credential)
+      });
+    }
+  }
+  /** 报告凭据是否已配置、过期时间、是否可刷新以及最近刷新错误。 */
+  async status() {
+    const ref = credentialRef2(this.credentialRefName);
+    const info = await this.ctx.credentials.describe(ref);
+    if (!info.configured) return { configured: false, refreshable: false };
+    let expiresAt;
+    let refreshable = false;
+    const resolved = await this.ctx.credentials.resolve(ref);
+    if (resolved) {
+      const credential = parseCredential(resolved.value);
+      if (credential) {
+        expiresAt = credentialExpiresAtMs2(credential);
+        refreshable = isRefreshable(credential) && !this.refreshTokenInvalid;
+      }
+    }
+    return {
+      configured: true,
+      source: info.source,
+      expiresAt,
+      refreshable,
+      ...this.lastRefreshError === void 0 ? {} : { refreshError: this.lastRefreshError }
+    };
+  }
+  /** 静默续期：refresh_token 换取；无 refresh_token 时明确报错（由命令提示重新登录）。 */
+  async refresh() {
+    const ref = credentialRef2(this.credentialRefName);
+    const resolved = await this.ctx.credentials.resolve(ref);
+    if (!resolved) throw new Error("\u672A\u914D\u7F6E\u51ED\u636E\uFF0C\u8BF7\u5148\u767B\u5F55");
+    const credential = parseCredential(resolved.value);
+    if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
+    if (!isRefreshable(credential)) {
+      throw new RefreshTokenExpiredError("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+    }
+    try {
+      const refreshed = await this.refreshCredential(credential);
+      if (!this.active) return;
+      await this.ctx.credentials.set(ref, JSON.stringify(refreshed));
+      this.refreshTokenInvalid = false;
+      this.lastRefreshError = void 0;
+      this.scheduleRefresh();
+    } catch (error) {
+      if (error instanceof RefreshTokenExpiredError) this.markRefreshTokenInvalid();
+      throw error;
+    }
+  }
+  /**
+   * 用给定凭据换新令牌并合并字段（不触碰存储、调度器与错误状态）。
+   *
+   * 抽出来供 {@link refresh} 与 {@link refreshAccountCredential} 共用，
+   * 避免两处各写一遍「换 token → 合并字段」而逐渐分叉。
+   */
+  async refreshCredential(credential) {
+    const token = await refreshToken(credential, this.fetchImpl, void 0, this.product);
+    return {
+      ...credential,
+      access_token: token.accessToken,
+      refresh_token: token.refreshToken,
+      expires_at: token.expiresAt,
+      refresh_expires_at: token.refreshExpiresAt,
+      token_type: token.tokenType,
+      scope: token.scope,
+      // 后端未返回 domain 时保留原值。
+      ...token.domain.length > 0 ? { domain: token.domain } : {}
+    };
+  }
+  /**
+   * 按凭据 ref 续期**指定账号**的凭据。
+   *
+   * 与 {@link refresh} 的区别（这是修复既有缺陷的关键）：
+   * - `refresh()` 读写的是本实例的**默认单凭据 ref**（如 `BUDDY_ACCESS_TOKEN`），
+   *   而 Channel Pack 的账号卡片对应的是 `BUDDY_ACCOUNT_XXX` ——
+   *   用 `refresh()` 去刷账号池里的账号，实际刷的是另一个凭据；
+   * - 本方法也**不触碰** `refreshTokenInvalid` / `lastRefreshError` / 调度器：
+   *   那些状态属于「单凭据路径」，被多账号操作污染会让 UI 显示错误的失效提示。
+   *
+   * ⚠️ **必须回写账号池的 `expiresAt`**（issue !IKIRTT）：UI 卡片读的是池值，
+   * 只更新凭据会让「已过期」的红字在续期成功后依然挂着，用户无处自救。
+   */
+  async refreshAccountCredential(refName, pool, accountId) {
+    const ref = credentialRef2(refName);
+    const resolved = await this.ctx.credentials.resolve(ref);
+    if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
+    const credential = parseCredential(resolved.value);
+    if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
+    if (!isRefreshable(credential)) {
+      throw new RefreshTokenExpiredError("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+    }
+    const refreshed = await this.refreshCredential(credential);
+    await this.ctx.credentials.set(ref, JSON.stringify(refreshed));
+    await syncAccountExpiry({
+      pool,
+      provider: this.product.id,
+      credential: refreshed,
+      accessors: BUDDY_EXPIRY_ACCESSORS,
+      accountId,
+      tag: `[${this.product.id}]`,
+      warn: (message) => this.ctx.logger?.warn?.(message)
+    });
+  }
+  /**
+   * 批量续期本产品的所有账号。
+   *
+   * **包含已停用账号**（只按 `refreshable` 过滤）。
+   *
+   * 为什么不能跳过停用账号（真实缺陷）：停用只应影响「账号池的自动选号」，
+   * 不该让凭据烂掉。早期实现有 `if (!entry.enabled ...) continue`，于是停用
+   * 一段时间后 refresh_token 过期，用户重新启用时拿到的是一个死凭据 ——
+   * 表现为「账号显示凭证过期」且**无法自动恢复**，只能重新登录。
+   * 更糟的是停用账号仍会出现在 Channel Pack 里并参与积分领取，于是点「一键领取」
+   * 时用过期凭据打腾讯接口，服务端回 HTML 错误页 → 前端报
+   * `Unexpected token '<'`。续期不该依赖「是否参与自动选号」。
+   *
+   * 单账号失败不影响其他账号，但失败**必须留日志**：静默的实现会让账号
+   * 在 UI 上永远显示「可续期」却刷不动，用户与开发者都拿不到线索。
+   *
+   * ⚠️ **lead-time 过滤**（issue !IKIRTT）：距过期不足 1 小时才发续期请求，
+   * 跳过的账号只做有效期对账。详见 `refreshAccountWithReconcile`。
+   */
+  async refreshAll(pool) {
+    const accounts = await pool.listAccounts(this.product.id);
+    for (const entry of accounts) {
+      if (!entry.refreshable) continue;
+      try {
+        const ref = credentialRef2(entry.credentialRef);
+        const resolved = await this.ctx.credentials.resolve(ref);
+        if (!resolved) {
+          await pool.updateAccount(entry.id, { refreshable: false });
+          continue;
+        }
+        const credential = parseCredential(resolved.value);
+        if (!credential || !isRefreshable(credential)) {
+          await pool.updateAccount(entry.id, { refreshable: false });
+          continue;
+        }
+        await refreshAccountWithReconcile({
+          pool,
+          provider: this.product.id,
+          tag: `[${this.product.id}]`,
+          accountId: entry.id,
+          credential,
+          accessors: BUDDY_EXPIRY_ACCESSORS,
+          current: entry,
+          refresh: (c) => this.refreshCredential(c),
+          save: (c) => this.ctx.credentials.set(ref, JSON.stringify(c)),
+          warn: (message) => this.ctx.logger?.warn?.(message)
+        });
+      } catch (error) {
+        if (error instanceof RefreshTokenExpiredError) {
+          try {
+            await pool.updateAccount(entry.id, { refreshable: false });
+          } catch {
+          }
+          this.ctx.logger?.warn?.(
+            `[${this.product.id}] \u8D26\u53F7 ${entry.id} \u7684 refresh_token \u5DF2\u5931\u6548\uFF0C\u5DF2\u6807\u8BB0\u4E3A\u4E0D\u53EF\u7EED\u671F\uFF08\u9700\u91CD\u65B0\u767B\u5F55\uFF09`
+          );
+        } else {
+          this.ctx.logger?.warn?.(
+            `[${this.product.id}] \u8D26\u53F7 ${entry.id} \u7EED\u671F\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    }
+  }
+  /** 移除已存储的凭据并停止任何待处理的刷新。 */
+  async logout() {
+    this.active = false;
+    this.scheduler.stop();
+    await this.ctx.credentials.unset(credentialRef2(this.credentialRefName));
+  }
+  /** 停止刷新调度（不清理凭据）。 */
+  stop() {
+    this.active = false;
+    this.scheduler.stop();
+  }
+  /** 启动时若已有可刷新凭据则安排续期（由 apply 调用）。 */
+  scheduleRefresh() {
+    void this.ctx.credentials.resolve(credentialRef2(this.credentialRefName)).then((resolved) => {
+      if (!resolved) return;
+      const credential = parseCredential(resolved.value);
+      if (!credential || !isRefreshable(credential)) return;
+      const expiresAt = credentialExpiresAtMs2(credential);
+      if (expiresAt !== void 0) this.scheduler.arm(expiresAt);
+    });
+  }
+  /** 从存储重载凭据，返回是否已过期（供 UI 判断是否需要提示重新登录）。 */
+  async checkExpired() {
+    const resolved = await this.ctx.credentials.resolve(credentialRef2(this.credentialRefName));
+    if (!resolved) return true;
+    const credential = parseCredential(resolved.value);
+    return credential === void 0 ? true : isExpired(credential);
+  }
+  /**
+   * GET /v3/config → 获取远端模型列表（craft agent 的 models）。
+   * 失败或未登录时返回空数组（调用方回退到内置列表）。
+   *
+   * 优先使用账号池中的可用账号；无账号池或池为空时回退到固定凭据 ref。
+   *
+   * **关键**：两处调用都必须把 `this.product` 传给 `fetchModels`，否则
+   * WorkBuddy 实例（Task 7 的 `fetchRemoteModels: () => workbuddy.fetchModels(pool)`）
+   * 会以 `X-Product-Code: codebuddy` + CodeBuddy 的 UA 请求 /v3/config，
+   * 即携带另一个产品的身份标识。
+   */
+  async fetchModels(pool) {
+    if (pool) {
+      const available2 = await pool.getAvailableAccount(this.product.id, "");
+      if (available2) return fetchModels(available2.credential, this.fetchImpl, void 0, this.product);
+    }
+    const resolved = await this.ctx.credentials.resolve(credentialRef2(this.credentialRefName));
+    if (!resolved) return [];
+    const credential = parseCredential(resolved.value);
+    if (!credential) return [];
+    return fetchModels(credential, this.fetchImpl, void 0, this.product);
+  }
+  /** 注入的 fetch（测试用）；默认为全局 fetch。 */
+  get fetchImpl() {
+    return this.options.fetcher ?? createDomesticFetch();
+  }
+};
+function createPoolRefresh(pool, productId, auth) {
+  return async () => {
+    const available2 = await pool.getAvailableAccount(productId, "");
+    if (available2) {
+      await auth.refreshAccountCredential(available2.entry.credentialRef, pool, available2.entry.id);
+    } else {
+      await auth.refresh();
+    }
+  };
+}
+
+// vendor/channel-pack/src/buddy-balance-rank.ts
+var BUDDY_EXPIRING_WINDOW_DAYS = 15;
+var BUDDY_EXPIRING_WINDOW_MS = BUDDY_EXPIRING_WINDOW_DAYS * 24 * 60 * 60 * 1e3;
+var DSH_BUDDY_EXPIRING_WINDOW_DAYS = "DSH_BUDDY_EXPIRING_WINDOW_DAYS";
+function buddyExpiringWindowDays(env = process.env) {
+  const raw = env[DSH_BUDDY_EXPIRING_WINDOW_DAYS];
+  if (typeof raw !== "string" || raw.trim().length === 0) return BUDDY_EXPIRING_WINDOW_DAYS;
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed) || parsed < 0) return BUDDY_EXPIRING_WINDOW_DAYS;
+  return parsed;
+}
+var BUDDY_BALANCE_TIER = Object.freeze({
+  /** 有 15 天内到期的积分 —— 优先消耗（再不用就作废）。 */
+  expiring: 0,
+  /** 只剩永久积分（≥ 15 天后到期）。 */
+  permanent: 1,
+  /** 无余额 / 查询失败。 */
+  none: 2
+});
+function splitBuddyCreditsByExpiry(balance, now = Date.now(), windowMs = BUDDY_EXPIRING_WINDOW_MS) {
+  if (balance === null || balance === void 0) return void 0;
+  let expiring = 0;
+  let permanent = 0;
+  for (const pkg of balance.packages) {
+    if (pkg.active !== true) continue;
+    const remaining = positiveOrZero(pkg.remaining);
+    if (remaining <= 0) continue;
+    const endTime = pkg.deductionEndTime;
+    const known = typeof endTime === "number" && Number.isFinite(endTime) && endTime > 0;
+    if (known && endTime - now < windowMs) expiring += remaining;
+    else permanent += remaining;
+  }
+  return { expiring, permanent };
+}
+function buddyBalanceTier(balance, options = {}) {
+  if (positiveOrZero(balance.expiringBalance) > 0) return BUDDY_BALANCE_TIER.expiring;
+  if (options.allowPermanent === false) return BUDDY_BALANCE_TIER.none;
+  if (positiveOrZero(balance.permanentBalance) > 0) return BUDDY_BALANCE_TIER.permanent;
+  return BUDDY_BALANCE_TIER.none;
+}
+function buddyTierUsable(tier) {
+  return tier !== BUDDY_BALANCE_TIER.none;
+}
+function positiveOrZero(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function rankBuddyAccountsByBalance(accounts, options = {}) {
+  return accounts.map((account, index) => ({ account, index, tier: buddyBalanceTier(account, options) })).sort((a, b) => a.tier - b.tier || a.index - b.index).map((entry) => entry.account);
+}
+
+// vendor/channel-pack/src/buddy-credits.ts
+var USER_RESOURCE_PATH = "/v2/billing/meter/get-user-resource";
+var REQUEST_TIMEOUT_MS2 = 3e4;
+function checkinHeaders(credential, product) {
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${credential.access_token}`);
+  headers.set("Accept", "application/json");
+  headers.set("Content-Type", "application/json");
+  headers.set(HTTP_HEADER_DOMAIN, product.apiDomain || credential.domain || "");
+  headers.set(HTTP_HEADER_PRODUCT, BUDDY_DEPLOYMENT_TYPE);
+  headers.set(HTTP_HEADER_PRODUCT_CODE, product.productCode);
+  if (credential.user_id !== void 0 && credential.user_id.length > 0) {
+    headers.set("X-User-Id", credential.user_id);
+  }
+  if (credential.enterprise_id !== void 0 && credential.enterprise_id.length > 0) {
+    headers.set("X-Enterprise-Id", credential.enterprise_id);
+    headers.set("X-Tenant-Id", credential.enterprise_id);
+  }
+  headers.set("User-Agent", product.userAgent);
+  return headers;
+}
+function readNumber(source, key) {
+  const value = source[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function readString3(source, key) {
+  const value = source[key];
+  return typeof value === "string" ? value : "";
+}
+var UNPARSABLE_RESPONSE_MESSAGE = "\u8BF7\u6C42\u5931\u8D25\u6216\u54CD\u5E94\u65E0\u6CD5\u89E3\u6790";
+async function postJson(path2, credential, product, fetcher) {
+  try {
+    const response = await fetcher(`${product.endpoint}${path2}`, {
+      method: "POST",
+      headers: checkinHeaders(credential, product),
+      body: "{}",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS2)
+    });
+    const text = await response.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return { ok: false, message: describeNonJsonResponse(response.status, text) };
+    }
+    if (typeof parsed !== "object" || parsed === null) {
+      return { ok: false, message: UNPARSABLE_RESPONSE_MESSAGE };
+    }
+    return { ok: true, body: parsed };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+function describeNonJsonResponse(status, text) {
+  if (status === 401 || status === 403) {
+    return `\u51ED\u636E\u5DF2\u5931\u6548\uFF08HTTP ${status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\u8BE5\u8D26\u53F7`;
+  }
+  const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
+  return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
+}
+function readPreciseNumber(source, baseKey) {
+  const precise = source[`${baseKey}Precise`];
+  if (typeof precise === "string") {
+    const parsed = Number.parseFloat(precise);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (typeof precise === "number" && Number.isFinite(precise)) return precise;
+  return readNumber(source, baseKey);
+}
+var PACKAGE_STATUS_EXPIRED = 3;
+function parseCreditPackage(entry) {
+  const name2 = readString3(entry, "PackageName") || readString3(entry, "SubProductName") || readString3(entry, "PackageCode");
+  const unit = readString3(entry, "CapacityUnit") || readString3(entry, "OriginUnit");
+  const status = entry.Status;
+  const expiredTime = readString3(entry, "ExpiredTime");
+  const deductionEndTime = readNumber(entry, "DeductionEndTime");
+  const expiredAt = expiredTime.length > 0 ? Date.parse(expiredTime.replace(" ", "T")) : Number.NaN;
+  const active = status !== PACKAGE_STATUS_EXPIRED && !(Number.isFinite(expiredAt) && Date.now() >= expiredAt) && !(deductionEndTime > 0 && Date.now() >= deductionEndTime);
+  return {
+    name: name2,
+    unit,
+    remaining: readPreciseNumber(entry, "CycleCapacityRemain"),
+    total: readPreciseNumber(entry, "CycleCapacitySize"),
+    used: readPreciseNumber(entry, "CycleCapacityUsed"),
+    active,
+    cycleStartTime: readString3(entry, "CycleStartTime"),
+    cycleEndTime: readString3(entry, "CycleEndTime"),
+    expiredTime,
+    ...deductionEndTime > 0 ? { deductionEndTime } : {}
+  };
+}
+async function fetchCreditBalance(credential, product, fetcher = createDomesticFetch()) {
+  const result = await postJson(USER_RESOURCE_PATH, credential, product, fetcher);
+  if (!result.ok) return null;
+  const body = result.body;
+  if (body.code !== 0) return null;
+  const outer = body.data;
+  if (typeof outer !== "object" || outer === null) return null;
+  const response = outer.Response;
+  if (typeof response !== "object" || response === null) return null;
+  const inner = response.Data;
+  if (typeof inner !== "object" || inner === null) return null;
+  const accounts = inner.Accounts;
+  if (!Array.isArray(accounts)) return null;
+  const packages = [];
+  for (const item of accounts) {
+    if (typeof item !== "object" || item === null) continue;
+    packages.push(parseCreditPackage(item));
+  }
+  const total = roundCredits(
+    packages.reduce((sum, pkg) => sum + (pkg.active ? pkg.remaining : 0), 0)
+  );
+  const expiredTotal = roundCredits(
+    packages.reduce((sum, pkg) => sum + (pkg.active ? 0 : pkg.remaining), 0)
+  );
+  return { total, packages, expiredTotal };
+}
+function roundCredits(value) {
+  return Math.round(value * 100) / 100;
+}
+
+// vendor/channel-pack/src/buddy-balance-selector.ts
+var BUDDY_BALANCE_CACHE_TTL_MS = 6e4;
+var BUDDY_BALANCE_ERROR_CACHE_TTL_MS = 5e3;
+var BuddyBalanceSelector = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  cache = /* @__PURE__ */ new Map();
+  /** 清空缓存（凭据变化、手动刷新余额、领取积分后调用）。 */
+  invalidate(accountId) {
+    if (accountId === void 0) this.cache.clear();
+    else this.cache.delete(accountId);
+  }
+  /**
+   * 当前生效的「临时积分」窗口（毫秒）。
+   *
+   * ⚠️ **每次调用都重新解析环境变量**，不能缓存：窗口可被用户随时改，
+   * 而提示文案与选号判据必须取同一个值 —— 缓存会让两者在不同时刻分裂。
+   */
+  windowMs() {
+    return this.deps.windowMs ?? buddyExpiringWindowDays() * 24 * 60 * 60 * 1e3;
+  }
+  /**
+   * 查一个账号的余额分类（**缓存原料、每次现算**）。
+   *
+   * ⚠️ TTL 只用于抑制**网络请求**，绝不能拿来冻结分类：「临时 / 永久」是
+   * **当前时刻的函数** —— 一笔距到期 15.2 天的余额，什么都没人操作，
+   * 过 30 分钟就成了临时积分。所以这里缓存的是 `get-user-resource` 的原始
+   * `CreditBalance`，命中缓存也重新分桶（并重新读一次窗口 env）。
+   * 宿主是长期开着的，时间只会向前流动。
+   *
+   * ⚠️ **查询失败不抛错**：返回 `ok: false` 的条目，由分档逻辑归入最后一档 ——
+   * 让「一个号查不到」不至于让整个选号失败（凭据过期是最常见的失败原因，
+   * 此时应继续用别的号，而不是把错误抛给用户）。
+   *
+   * ⚠️ **失败结果的 TTL 短一个数量级**（与 Loomy 那份同一修复，见
+   * `BUDDY_BALANCE_ERROR_CACHE_TTL_MS`）：把一次抖动缓存满 60 秒，会让
+   * 「查不到」伪装成「额度用尽」整整一分钟。
+   */
+  async balanceOf(account) {
+    const now = this.deps.now?.() ?? Date.now();
+    const cached2 = this.cache.get(account.id);
+    if (cached2 !== void 0) {
+      const ttl = cached2.source.ok ? this.deps.ttlMs ?? BUDDY_BALANCE_CACHE_TTL_MS : this.deps.errorTtlMs ?? BUDDY_BALANCE_ERROR_CACHE_TTL_MS;
+      if (now - cached2.at < ttl) {
+        return this.classify(account.id, cached2.source, now);
+      }
+    }
+    const source = await this.fetchSource(account);
+    this.cache.set(account.id, { at: now, source });
+    return this.classify(account.id, source, now);
+  }
+  /**
+   * 把原料按**当前时刻**分成两桶并定档。
+   *
+   * 单独成函数就是为了「原料只查一次、分类随时间重算」这件事结构上无法被绕过。
+   */
+  classify(id, source, now) {
+    if (source.ok !== true) return failedEntry(id, source.error);
+    const windowMs = this.windowMs();
+    const split = splitBuddyCreditsByExpiry(source.balance, now, windowMs);
+    if (split === void 0) return failedEntry(id, "\u4F59\u989D\u54CD\u5E94\u65E0\u6CD5\u89E3\u6790\u51FA\u79EF\u5206\u6C60");
+    const entry = {
+      id,
+      ok: true,
+      expiringBalance: split.expiring,
+      permanentBalance: split.permanent,
+      split
+    };
+    entry.tier = buddyBalanceTier(entry, { now, windowMs });
+    return entry;
+  }
+  /** 发一次请求取原料（不做任何分类）。 */
+  async fetchSource(account) {
+    let credential;
+    try {
+      credential = await this.deps.resolveCredential(account.credentialRef);
+    } catch (error) {
+      return { ok: false, error: `\u8BFB\u53D6\u51ED\u636E\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}` };
+    }
+    if (credential === void 0) {
+      return { ok: false, error: "\u51ED\u636E\u672A\u914D\u7F6E\u6216\u5DF2\u5931\u6548" };
+    }
+    let balance;
+    try {
+      balance = await (this.deps.fetchBalance ?? ((cred, product) => fetchCreditBalance(cred, product, this.deps.fetcher ?? createDomesticFetch())))(
+        credential,
+        this.deps.product
+      );
+    } catch (error) {
+      return { ok: false, error: `\u4F59\u989D\u67E5\u8BE2\u5F02\u5E38\uFF1A${error instanceof Error ? error.message : String(error)}` };
+    }
+    if (balance === null) {
+      return { ok: false, error: "\u4F59\u989D\u67E5\u8BE2\u5931\u8D25\uFF08\u51ED\u636E\u5931\u6548\u6216\u54CD\u5E94\u5F02\u5E38\uFF09" };
+    }
+    return { ok: true, balance };
+  }
+  /**
+   * 从候选账号中按「快到期优先」选一个。
+   *
+   * 排序规则见 `rankBuddyAccountsByBalance`：
+   * 有快到期积分 → 只剩永久 → 无余额/查不到。**档内保持传入顺序**（= 手动顺序）。
+   *
+   * ⚠️ **锁定永久积分时（`allowPermanent: false`）**：只剩永久积分的账号落入
+   * `none` 档（不可用）。若**全部候选都不可用**，返回 `ok: false` 并带上原因 ——
+   * 调用方据此报明确错误，而不是硬着头皮消耗永久积分。
+   *
+   * ⚠️ **解锁时不改变既有行为**：所有候选余额都是 0 仍返回第一个候选，
+   * 让上游去报真正的失败原因（凭据、限流、余额），错误信息更准确。
+   *
+   * @param candidates - 已按 `enabled` 与模型限流过滤过的候选（顺序即手动优先级）。
+   * @param options - `allowPermanent` 为 false 时禁止消耗永久积分。
+   */
+  async select(candidates, options = {}) {
+    if (candidates.length === 0) {
+      return { ok: false, reason: { kind: "exhausted" } };
+    }
+    const balances = await Promise.all(candidates.map((c) => this.balanceOf(c)));
+    const byId = new Map(candidates.map((c, i) => [c.id, { account: c, balance: balances[i] }]));
+    const ranked = rankBuddyAccountsByBalance(balances, options);
+    const first = ranked[0];
+    if (first === void 0) {
+      return { ok: false, reason: noAccountReason(balances) };
+    }
+    if (options.allowPermanent === false && !buddyTierUsable(buddyBalanceTier(first, options))) {
+      return { ok: false, reason: noAccountReason(balances) };
+    }
+    const picked = byId.get(first.id);
+    if (picked === void 0) return { ok: false, reason: { kind: "exhausted" } };
+    return { ok: true, account: picked.account, balance: picked.balance };
+  }
+};
+function noAccountReason(balances) {
+  const errors = balances.filter((b) => !b.ok).map((b) => b.error ?? "\u672A\u77E5\u539F\u56E0");
+  return errors.length > 0 ? { kind: "unknown", errors } : { kind: "exhausted" };
+}
+function failedEntry(id, error) {
+  return { id, ok: false, error };
+}
+async function pickBuddyAccount(selector, candidates, options) {
+  const tried = /* @__PURE__ */ new Set();
+  const allowPermanent = options.allowPermanent !== false;
+  let reason;
+  for (let remaining = candidates; remaining.length > 0; ) {
+    const picked = await selector.select(
+      remaining,
+      { ...options.tierOptions, allowPermanent }
+    );
+    if (!picked.ok) {
+      reason = picked.reason;
+      break;
+    }
+    const credential = await options.resolveCredential(picked.account.credentialRef);
+    if (credential !== void 0) {
+      return { kind: "account", account: picked.account, balance: picked.balance, credential, tried };
+    }
+    tried.add(picked.account.id);
+    remaining = remaining.filter((c) => c.id !== picked.account.id);
+  }
+  return { kind: allowPermanent ? "exhausted" : "locked", tried, ...reason ? { reason } : {} };
+}
+
 // vendor/channel-pack/src/loomy-adapter.ts
-import { LlmAdapter as LlmAdapter5, LlmError as LlmError10, ReasoningEffortId as ReasoningEffortId5 } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter as LlmAdapter6, LlmError as LlmError11, ReasoningEffortId as ReasoningEffortId6 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/loomy.ts
 var LOOMY_API_BASE = "https://loomyad.xunfei.cn/api/v1";
@@ -41023,14 +44432,14 @@ function isLoomyChatModel(entry) {
   const id = typeof record.id === "string" ? record.id.trim() : "";
   return id.length > 0 && record.type === "chat";
 }
-function credentialExpiresAtMs2(credential) {
+function credentialExpiresAtMs3(credential) {
   const raw = credential.expires_at;
   if (typeof raw !== "string" || raw.trim().length === 0) return void 0;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : void 0;
 }
 function isLoomyExpired(credential) {
-  const expiresAt = credentialExpiresAtMs2(credential);
+  const expiresAt = credentialExpiresAtMs3(credential);
   return expiresAt !== void 0 && expiresAt <= Date.now();
 }
 function loomyChatHeaders(token) {
@@ -41138,7 +44547,7 @@ function fallbackToRemote(model) {
     ...model.defaultEffort !== void 0 ? { defaultEffort: model.defaultEffort } : {}
   };
 }
-var LoomyAdapter = class extends LlmAdapter5 {
+var LoomyAdapter = class extends LlmAdapter6 {
   constructor(options) {
     super();
     this.options = options;
@@ -41146,6 +44555,7 @@ var LoomyAdapter = class extends LlmAdapter5 {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.fallbackIndex = new Map(this.product.fallbackModels.map((model) => [model.id, model]));
   }
+  options;
   product;
   fetchImpl;
   /** 兜底模型索引（id → 条目）。 */
@@ -41250,11 +44660,11 @@ var LoomyAdapter = class extends LlmAdapter5 {
     const hasDefault = efforts.includes(defaultEffort);
     return {
       efforts: efforts.map((id) => ({
-        id: ReasoningEffortId5(id),
+        id: ReasoningEffortId6(id),
         // 未登记的中文名回退到 id 本身（新档位上线时不至于空白）。
         name: LOOMY_EFFORT_NAMES[id] ?? id
       })),
-      ...hasDefault ? { defaultEffort: ReasoningEffortId5(defaultEffort) } : {}
+      ...hasDefault ? { defaultEffort: ReasoningEffortId6(defaultEffort) } : {}
     };
   }
   async prepareCall(provider, model, signal) {
@@ -41273,10 +44683,10 @@ var LoomyAdapter = class extends LlmAdapter5 {
     let imageUrls;
     if (imageRefs.size > 0) {
       if (!this.inputModalitiesFor(entry).includes("image")) {
-        throw new LlmError10(`loomy: \u6A21\u578B "${options.model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`, "UNSUPPORTED_CONTENT");
+        throw new LlmError11(`loomy: \u6A21\u578B "${options.model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`, "UNSUPPORTED_CONTENT");
       }
       if (this.options.readImage === void 0) {
-        throw new LlmError10("loomy: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1", "UNSUPPORTED_CONTENT");
+        throw new LlmError11("loomy: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1", "UNSUPPORTED_CONTENT");
       }
       imageUrls = /* @__PURE__ */ new Map();
       for (const [id, ref] of imageRefs) {
@@ -41291,7 +44701,7 @@ var LoomyAdapter = class extends LlmAdapter5 {
       credential = await this.options.refresh(accountId || void 0) ?? await this.options.resolveCredential(options.model);
     }
     if (credential === void 0 || credential.access_token.length === 0) {
-      throw new LlmError10("loomy: no usable credential; log in first", "MISSING_CREDENTIAL");
+      throw new LlmError11("loomy: no usable credential; log in first", "MISSING_CREDENTIAL");
     }
     const messages = serializeMessages2(options.messages, imageUrls);
     const wireMessages = options.system !== void 0 && options.system.length > 0 ? [{ role: "system", content: options.system }, ...messages] : messages;
@@ -41328,7 +44738,7 @@ var LoomyAdapter = class extends LlmAdapter5 {
       } catch (error) {
         if (options.signal?.aborted) throw error;
         if (isTransportError2(error)) {
-          throw new LlmError10(
+          throw new LlmError11(
             `loomy: transport error: ${error instanceof Error ? error.message : String(error)}`,
             "TRANSPORT",
             { cause: error }
@@ -41347,7 +44757,7 @@ var LoomyAdapter = class extends LlmAdapter5 {
           await response.body?.cancel();
           credential = await this.options.refresh(accountId || void 0, "auth") ?? await this.options.resolveCredential(options.model);
           if (credential === void 0 || credential.access_token.length === 0) {
-            throw new LlmError10("loomy: credential expired and refresh failed", "AUTH", { status: response.status });
+            throw new LlmError11("loomy: credential expired and refresh failed", "AUTH", { status: response.status });
           }
           response = await send(credential.access_token);
         }
@@ -41358,7 +44768,7 @@ var LoomyAdapter = class extends LlmAdapter5 {
             quota ||= isLoomyQuotaError(JSON.parse(errorText));
           } catch {
           }
-          throw new LlmError10(
+          throw new LlmError11(
             `loomy: ${errorDetail2(errorText)}`,
             quota ? "QUOTA_EXCEEDED" : httpErrorCode2(response.status),
             { status: response.status }
@@ -41366,8 +44776,8 @@ var LoomyAdapter = class extends LlmAdapter5 {
         }
         for await (const chunk of consumeOpenAiSse(response, { signal: options.signal }, {
           label: "loomy",
-          firstTokenTimeoutMs: resolveFirstTokenTimeoutMs5(),
-          chunkTimeoutMs: resolveChunkTimeoutMs5(),
+          firstTokenTimeoutMs: resolveFirstTokenTimeoutMs6(),
+          chunkTimeoutMs: resolveChunkTimeoutMs6(),
           isQuotaError: isLoomyQuotaError,
           ...options.maxTokens === void 0 ? {} : { maxTokens: options.maxTokens }
         })) {
@@ -41376,7 +44786,7 @@ var LoomyAdapter = class extends LlmAdapter5 {
         }
         return;
       } catch (error) {
-        if (options.signal?.aborted || !(error instanceof LlmError10) || error.code !== "QUOTA_EXCEEDED") throw error;
+        if (options.signal?.aborted || !(error instanceof LlmError11) || error.code !== "QUOTA_EXCEEDED") throw error;
         if (accountId) {
           await this.options.accountPool?.updateModelRateLimit(accountId, options.model, nextUtc8DayStartMs());
         }
@@ -41394,11 +44804,11 @@ function isLoomyQuotaError(data) {
   const error = typeof data.error === "object" && data.error !== null ? data.error : data;
   return String(error.code ?? data.code) === "402" || /积分不足|余额不足|insufficient[_\s]+(?:points|balance|credits)/i.test(String(error.message ?? error.msg ?? ""));
 }
-function resolveFirstTokenTimeoutMs5() {
+function resolveFirstTokenTimeoutMs6() {
   const raw = Number(process.env.DSH_LOOMY_FIRST_TOKEN_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 12e4;
 }
-function resolveChunkTimeoutMs5() {
+function resolveChunkTimeoutMs6() {
   const raw = Number(process.env.DSH_LOOMY_CHUNK_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 12e4;
 }
@@ -41410,7 +44820,7 @@ function registerLoomyLlm(ctx, options) {
 }
 
 // vendor/channel-pack/src/raccoon-adapter.ts
-import { LlmAdapter as LlmAdapter6, LlmError as LlmError11, ReasoningEffortId as ReasoningEffortId6 } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter as LlmAdapter7, LlmError as LlmError12, ReasoningEffortId as ReasoningEffortId7 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/raccoon.ts
 import { createCipheriv, randomBytes as randomBytes4 } from "node:crypto";
@@ -41605,13 +45015,13 @@ function raccoonThinkingExtraBody(effort) {
 }
 function raccoonReasoningInfo() {
   const efforts = RACCOON_REASONING_EFFORTS.map((id) => ({
-    id: ReasoningEffortId6(id),
+    id: ReasoningEffortId7(id),
     name: RACCOON_EFFORT_NAMES[id] ?? id
   }));
-  const defaultEffort = RACCOON_REASONING_EFFORTS.includes(RACCOON_DEFAULT_EFFORT) ? ReasoningEffortId6(RACCOON_DEFAULT_EFFORT) : ReasoningEffortId6(RACCOON_REASONING_EFFORTS[0] ?? RACCOON_EFFORT_ON);
+  const defaultEffort = RACCOON_REASONING_EFFORTS.includes(RACCOON_DEFAULT_EFFORT) ? ReasoningEffortId7(RACCOON_DEFAULT_EFFORT) : ReasoningEffortId7(RACCOON_REASONING_EFFORTS[0] ?? RACCOON_EFFORT_ON);
   return { efforts, defaultEffort };
 }
-function positiveMaxTokens(value) {
+function positiveMaxTokens2(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
 }
 function fallbackToRemote2(model) {
@@ -41624,7 +45034,7 @@ function fallbackToRemote2(model) {
     supportsImage: model.supportsImage
   };
 }
-var RaccoonAdapter = class extends LlmAdapter6 {
+var RaccoonAdapter = class extends LlmAdapter7 {
   constructor(options) {
     super();
     this.options = options;
@@ -41632,6 +45042,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.fallbackIndex = new Map(this.product.fallbackModels.map((model) => [model.id, model]));
   }
+  options;
   product;
   fetchImpl;
   /** 兜底模型索引（id → 条目）。 */
@@ -41715,7 +45126,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
     if (contextWindow !== void 0 && contextWindow > 0) {
       resolved.context = { contextWindow };
     }
-    const maxTokens = positiveMaxTokens(entry?.maxTokens ?? fallback?.maxTokens);
+    const maxTokens = positiveMaxTokens2(entry?.maxTokens ?? fallback?.maxTokens);
     if (maxTokens !== void 0) resolved.defaultMaxTokens = maxTokens;
     resolved.reasoning = raccoonReasoningInfo();
     return resolved;
@@ -41741,10 +45152,10 @@ var RaccoonAdapter = class extends LlmAdapter6 {
     let imageUrls;
     if (imageRefs.size > 0) {
       if (!this.inputModalitiesFor(entry).includes("image")) {
-        throw new LlmError11(`raccoon: \u6A21\u578B "${options.model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`, "UNSUPPORTED_CONTENT");
+        throw new LlmError12(`raccoon: \u6A21\u578B "${options.model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`, "UNSUPPORTED_CONTENT");
       }
       if (this.options.readImage === void 0) {
-        throw new LlmError11("raccoon: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1", "UNSUPPORTED_CONTENT");
+        throw new LlmError12("raccoon: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1", "UNSUPPORTED_CONTENT");
       }
       imageUrls = /* @__PURE__ */ new Map();
       const readImage = this.options.readImage;
@@ -41765,7 +45176,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
       credential = await this.options.refresh(accountId || void 0) ?? await this.options.resolveCredential(options.model);
     }
     if (credential === void 0 || credential.access_token.length === 0) {
-      throw new LlmError11("raccoon: no usable credential; log in first", "MISSING_CREDENTIAL");
+      throw new LlmError12("raccoon: no usable credential; log in first", "MISSING_CREDENTIAL");
     }
     const messages = serializeMessages2(options.messages, imageUrls);
     const wireMessages = options.system !== void 0 && options.system.length > 0 ? [{ role: "system", content: options.system }, ...messages] : messages;
@@ -41815,7 +45226,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
       } catch (error) {
         if (options.signal?.aborted) throw error;
         if (isTransportError2(error)) {
-          throw new LlmError11(
+          throw new LlmError12(
             `raccoon: transport error: ${error instanceof Error ? error.message : String(error)}`,
             "TRANSPORT",
             { cause: error }
@@ -41834,7 +45245,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
           await response.body?.cancel();
           const refreshed = await this.options.refresh(accountId || void 0, "auth") ?? await this.options.resolveCredential(options.model);
           if (refreshed === void 0 || refreshed.access_token.length === 0) {
-            throw new LlmError11("raccoon: credential expired and refresh failed", "AUTH", { status: response.status });
+            throw new LlmError12("raccoon: credential expired and refresh failed", "AUTH", { status: response.status });
           }
           credential = refreshed;
           response = await send();
@@ -41846,7 +45257,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
             quota ||= isQuotaError(JSON.parse(errorText));
           } catch {
           }
-          throw new LlmError11(
+          throw new LlmError12(
             `raccoon: ${errorDetail2(errorText)}`,
             quota ? "QUOTA_EXCEEDED" : httpErrorCode2(response.status),
             { status: response.status }
@@ -41854,8 +45265,8 @@ var RaccoonAdapter = class extends LlmAdapter6 {
         }
         for await (const chunk of consumeOpenAiSse(response, { signal: options.signal }, {
           label: "raccoon",
-          firstTokenTimeoutMs: resolveFirstTokenTimeoutMs6(),
-          chunkTimeoutMs: resolveChunkTimeoutMs6(),
+          firstTokenTimeoutMs: resolveFirstTokenTimeoutMs7(),
+          chunkTimeoutMs: resolveChunkTimeoutMs7(),
           isQuotaError,
           ...options.maxTokens === void 0 ? {} : { maxTokens: options.maxTokens }
         })) {
@@ -41864,7 +45275,7 @@ var RaccoonAdapter = class extends LlmAdapter6 {
         }
         return;
       } catch (error) {
-        if (options.signal?.aborted || !(error instanceof LlmError11) || error.code !== "QUOTA_EXCEEDED") throw error;
+        if (options.signal?.aborted || !(error instanceof LlmError12) || error.code !== "QUOTA_EXCEEDED") throw error;
         if (accountId) {
           await this.options.accountPool?.updateModelRateLimit(accountId, options.model, nextUtc8DayStartMs());
         }
@@ -41880,11 +45291,11 @@ var RaccoonAdapter = class extends LlmAdapter6 {
     }
   }
 };
-function resolveFirstTokenTimeoutMs6() {
+function resolveFirstTokenTimeoutMs7() {
   const raw = Number(process.env.DSH_RACCOON_FIRST_TOKEN_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 12e4;
 }
-function resolveChunkTimeoutMs6() {
+function resolveChunkTimeoutMs7() {
   const raw = Number(process.env.DSH_RACCOON_CHUNK_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 12e4;
 }
@@ -41896,8 +45307,8 @@ function registerRaccoonLlm(ctx, options) {
 }
 
 // vendor/channel-pack/src/lobsterai-auth.ts
-import { Service } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef2 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service2 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef3 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/lobsterai-oauth.ts
 import { createServer } from "node:http";
@@ -41914,7 +45325,7 @@ function buildLobsteraiLoginUrl(port, state, product) {
   });
   return `${product.portalBase}/portal#/login?${query.toString()}`;
 }
-async function exchangeLobsteraiAuthCode(code, session, clientVersion, product, fetcher = fetch, signal) {
+async function exchangeLobsteraiAuthCode(code, session, clientVersion, product, fetcher = createDomesticFetch(), signal) {
   const body = {
     authCode: code,
     firstKeyfrom: session.firstKeyfrom,
@@ -41963,12 +45374,12 @@ function toLoginFlowResult(credential, loginUrl) {
     refreshable: isLobsteraiRefreshable(credential)
   };
 }
-async function defaultOpenBrowser(url) {
+async function defaultOpenBrowser2(url) {
   const { openBrowser: openBrowser2 } = await Promise.resolve().then(() => (init_open_browser(), open_browser_exports));
   openBrowser2(url);
 }
 async function startLobsteraiLoginFlow(options) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const { product, clientVersion } = options;
   const session = createLobsteraiLoginSession();
   const state = randomUUID2();
@@ -41980,8 +45391,8 @@ async function startLobsteraiLoginFlow(options) {
   });
   result.catch(() => {
   });
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? "/", `http://127.0.0.1:${request.socket.localPort}`);
+  const server = createServer((request2, response) => {
+    const url = new URL(request2.url ?? "/", `http://127.0.0.1:${request2.socket.localPort}`);
     if (!url.pathname.startsWith(LOBSTERAI_CALLBACK_PATH)) {
       response.writeHead(404).end("Not found");
       return;
@@ -41994,7 +45405,7 @@ async function startLobsteraiLoginFlow(options) {
     }
     void exchangeLobsteraiAuthCode(code, session, clientVersion, product, fetcher, options.signal).then((credential) => {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end("<html><body><h2>\u767B\u5F55\u6210\u529F\uFF0C\u53EF\u4EE5\u5173\u95ED\u6B64\u7A97\u53E3\u4E86</h2></body></html>");
-      const port2 = request.socket.localPort ?? 0;
+      const port2 = request2.socket.localPort ?? 0;
       resolveResult(toLoginFlowResult(credential, buildLobsteraiLoginUrl(port2, state, product)));
     }).catch((error) => {
       response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }).end("\u767B\u5F55\u6362\u53D6\u51ED\u636E\u5931\u8D25");
@@ -42026,7 +45437,7 @@ async function startLobsteraiLoginFlow(options) {
   return { loginUrl, result: resultWithTimeout, close };
 }
 async function runLobsteraiLoginFlow(options) {
-  const open = options.openBrowser ?? defaultOpenBrowser;
+  const open = options.openBrowser ?? defaultOpenBrowser2;
   const started = await startLobsteraiLoginFlow(options);
   try {
     await open(started.loginUrl);
@@ -42050,171 +45461,19 @@ function listenOnRandomPort(server) {
   });
 }
 
-// vendor/channel-pack/src/refresh.ts
-var REFRESH_LEAD_MS = 36e5;
-var REFRESH_RETRY_MS = 6e5;
-var REFRESH_ABNORMAL_NETWORK_RETRY_MS = 6e4;
-function isAbnormalNetworkError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /fetch failed|ENOTFOUND|ECONNREFUSED|proxy|unresolved host|getaddrinfo/i.test(message);
-}
-function isRefreshTokenExpired(error) {
-  if (!(error instanceof Error)) return false;
-  if (error.name === "RefreshTokenExpiredError") return true;
-  return /refresh[_ ]?token/i.test(error.message);
-}
-function computeFirstRefreshDelayMs(expiresAtMs, nowMs = Date.now()) {
-  if (!Number.isFinite(expiresAtMs)) return 0;
-  const leadTrigger = nowMs + REFRESH_LEAD_MS;
-  if (leadTrigger >= expiresAtMs) return 0;
-  const trigger = new Date(leadTrigger);
-  trigger.setSeconds(Math.floor(60 * Math.random()));
-  const delay = trigger.getTime() - nowMs;
-  return delay > 0 ? delay : 0;
-}
-var RefreshScheduler = class {
-  constructor(refresh, onError = () => {
-  }) {
-    this.refresh = refresh;
-    this.onError = onError;
-  }
-  timer;
-  pending = false;
-  /** 调度代号：stop()/arm() 都会推进它，用于让在途 run() 放弃失败后的重试武装。 */
-  generation = 0;
-  /** 为在 `expiresAtMs` 过期的凭据安排下次刷新；`nowMs` 仅供测试注入。 */
-  arm(expiresAtMs, nowMs = Date.now()) {
-    this.generation++;
-    if (this.timer !== void 0) {
-      clearTimeout(this.timer);
-      this.timer = void 0;
-    }
-    const delay = computeFirstRefreshDelayMs(expiresAtMs, nowMs);
-    this.timer = setTimeout(() => {
-      void this.run();
-    }, delay);
-    this.timer.unref?.();
-  }
-  /** 取消任何待处理的刷新（并让在途 run() 失败后不再重试）。 */
-  stop() {
-    this.generation++;
-    if (this.timer !== void 0) {
-      clearTimeout(this.timer);
-      this.timer = void 0;
-    }
-  }
-  /** 立即执行一次刷新（供启动时已处于到期窗口内的凭据使用）。 */
-  async refreshOnce() {
-    this.stop();
-    await this.run();
-  }
-  async run() {
-    if (this.pending) return;
-    this.pending = true;
-    const generation = this.generation;
-    try {
-      await this.refresh();
-    } catch (error) {
-      this.onError(error);
-      if (generation !== this.generation) {
-        return;
-      }
-      if (isRefreshTokenExpired(error)) {
-        return;
-      }
-      if (this.timer !== void 0) {
-        clearTimeout(this.timer);
-      }
-      const retry = isAbnormalNetworkError(error) ? REFRESH_ABNORMAL_NETWORK_RETRY_MS : REFRESH_RETRY_MS;
-      this.timer = setTimeout(() => {
-        void this.run();
-      }, retry);
-      this.timer.unref?.();
-    } finally {
-      this.pending = false;
-    }
-  }
-};
-
-// vendor/channel-pack/src/expiry-sync.ts
-var EXPIRY_TOLERANCE_MS = 1e3;
-function shouldRefreshNow(expiresAtMs, nowMs = Date.now()) {
-  if (expiresAtMs === void 0 || !Number.isFinite(expiresAtMs)) return true;
-  return expiresAtMs - nowMs <= REFRESH_LEAD_MS;
-}
-async function syncAccountExpiry(params) {
-  const { pool, provider, credential, accessors, accountId, current, tag } = params;
-  if (pool === void 0) return;
-  try {
-    let id = accountId;
-    if (id === void 0 || id.length === 0) {
-      id = await pool.findAccountIdByCredential(provider, accessors.identityOf(credential));
-    }
-    if (id === void 0 || id.length === 0) return;
-    const expiresAt = accessors.expiresAtOf(credential);
-    const refreshable = accessors.refreshableOf?.(credential);
-    if (expiresAt === void 0 && refreshable === void 0) return;
-    const expiryChanged = expiresAt !== void 0 && (current?.expiresAt === void 0 || Math.abs(current.expiresAt - expiresAt) > EXPIRY_TOLERANCE_MS);
-    const refreshableChanged = refreshable !== void 0 && (current === void 0 || current.refreshable !== refreshable);
-    if (!expiryChanged && !refreshableChanged) return;
-    await pool.updateAccount(id, {
-      ...expiresAt === void 0 ? {} : { expiresAt },
-      ...refreshable === void 0 ? {} : { refreshable }
-    });
-  } catch (error) {
-    params.warn?.(
-      `${tag} \u51ED\u636E\u5904\u7406\u6210\u529F\u4F46\u56DE\u5199\u8D26\u53F7\u6C60\u7684\u6709\u6548\u671F\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u4F7F\u7528\uFF09\uFF1A${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-async function refreshAccountWithReconcile(params) {
-  const { pool, provider, tag, accountId, credential, accessors, current, refresh, save } = params;
-  const expiresAt = accessors.expiresAtOf(credential);
-  if (!shouldRefreshNow(expiresAt)) {
-    await syncAccountExpiry({
-      pool,
-      provider,
-      credential,
-      accessors,
-      accountId,
-      current,
-      tag,
-      warn: params.warn
-    });
-    return false;
-  }
-  const refreshed = await refresh(credential);
-  if (refreshed === void 0) {
-    throw new Error(`${tag} \u7EED\u671F\u54CD\u5E94\u7F3A\u5C11\u8BBF\u95EE\u4EE4\u724C\uFF0C\u51ED\u636E\u672A\u66F4\u65B0`);
-  }
-  await save(refreshed);
-  await syncAccountExpiry({
-    pool,
-    provider,
-    credential: refreshed,
-    accessors,
-    accountId,
-    current,
-    tag,
-    warn: params.warn
-  });
-  params.info?.(`${tag} \u8D26\u53F7 ${accountId} \u5DF2\u7EED\u671F`);
-  return true;
-}
-
 // vendor/channel-pack/src/lobsterai-auth.ts
 var LOBSTERAI_EXPIRY_ACCESSORS = {
   expiresAtOf: lobsteraiCredentialExpiresAtMs,
   refreshableOf: isLobsteraiRefreshable,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var RefreshTokenExpiredError = class extends Error {
+var RefreshTokenExpiredError2 = class extends Error {
   constructor(message) {
     super(message);
     this.name = "RefreshTokenExpiredError";
   }
 };
-function parseCredential(value) {
+function parseCredential2(value) {
   try {
     const parsed = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && typeof parsed.access_token === "string" ? parsed : void 0;
@@ -42222,7 +45481,7 @@ function parseCredential(value) {
     return void 0;
   }
 }
-var LobsteraiAuth = class extends Service {
+var LobsteraiAuth = class extends Service2 {
   constructor(ctx, options = {}) {
     const product = options.product ?? LOBSTERAI;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -42233,6 +45492,7 @@ var LobsteraiAuth = class extends Service {
       ...this.options.fetcher === void 0 ? {} : { fetcher: this.options.fetcher }
     });
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /**
@@ -42242,7 +45502,7 @@ var LobsteraiAuth = class extends Service {
   scheduler = new RefreshScheduler(
     () => this.refresh(),
     (error) => {
-      if (error instanceof RefreshTokenExpiredError) {
+      if (error instanceof RefreshTokenExpiredError2) {
         this.markRefreshTokenInvalid();
         return;
       }
@@ -42258,7 +45518,7 @@ var LobsteraiAuth = class extends Service {
   versionResolver;
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   get fetchImpl() {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? createDomesticFetch();
   }
   /**
    * 解析客户端版本号（带缓存与兜底）。
@@ -42317,12 +45577,12 @@ var LobsteraiAuth = class extends Service {
    * 两条路径的差别只在「何时返回 loginUrl」，落库逻辑必须完全一致。
    */
   async persistLogin(flow, flowOptions = {}) {
-    const ref = flowOptions.refName ? credentialRef2(flowOptions.refName) : credentialRef2(this.credentialRefName);
+    const ref = flowOptions.refName ? credentialRef3(flowOptions.refName) : credentialRef3(this.credentialRefName);
     await this.ctx.credentials.set(ref, flow.access);
     this.refreshTokenInvalid = false;
     this.lastRefreshError = void 0;
     this.scheduleRefresh();
-    const credential = parseCredential(flow.access);
+    const credential = parseCredential2(flow.access);
     if (flowOptions.accountId !== void 0 && flowOptions.pool !== void 0) {
       await flowOptions.pool.addAccount({
         id: flowOptions.accountId,
@@ -42353,7 +45613,7 @@ var LobsteraiAuth = class extends Service {
    */
   async loginWithCode(code, session, options = {}) {
     this.active = true;
-    const ref = options.refName ? credentialRef2(options.refName) : credentialRef2(this.credentialRefName);
+    const ref = options.refName ? credentialRef3(options.refName) : credentialRef3(this.credentialRefName);
     const clientVersion = await this.resolveClientVersion();
     const credential = await exchangeLobsteraiAuthCode(
       code,
@@ -42390,14 +45650,14 @@ var LobsteraiAuth = class extends Service {
   }
   /** 报告凭据是否已配置、过期时间、是否可刷新以及最近刷新错误。 */
   async status() {
-    const ref = credentialRef2(this.credentialRefName);
+    const ref = credentialRef3(this.credentialRefName);
     const info = await this.ctx.credentials.describe(ref);
     if (!info.configured) return { configured: false, refreshable: false };
     let expiresAt;
     let refreshable = false;
     const resolved = await this.ctx.credentials.resolve(ref);
     if (resolved) {
-      const credential = parseCredential(resolved.value);
+      const credential = parseCredential2(resolved.value);
       if (credential) {
         expiresAt = lobsteraiCredentialExpiresAtMs(credential);
         refreshable = isLobsteraiRefreshable(credential) && !this.refreshTokenInvalid;
@@ -42420,13 +45680,13 @@ var LobsteraiAuth = class extends Service {
    * - 其余错误（网络抖动、5xx、429）→ 抛普通 Error，走调度器的可重试路径。
    */
   async refresh() {
-    const ref = credentialRef2(this.credentialRefName);
+    const ref = credentialRef3(this.credentialRefName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u672A\u914D\u7F6E\u51ED\u636E\uFF0C\u8BF7\u5148\u767B\u5F55");
-    const credential = parseCredential(resolved.value);
+    const credential = parseCredential2(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isLobsteraiRefreshable(credential)) {
-      throw new RefreshTokenExpiredError("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError2("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
       const refreshed = await this.refreshCredential(credential);
@@ -42436,7 +45696,7 @@ var LobsteraiAuth = class extends Service {
       this.lastRefreshError = void 0;
       this.scheduleRefresh();
     } catch (error) {
-      if (error instanceof RefreshTokenExpiredError) this.markRefreshTokenInvalid();
+      if (error instanceof RefreshTokenExpiredError2) this.markRefreshTokenInvalid();
       throw error;
     }
   }
@@ -42457,13 +45717,13 @@ var LobsteraiAuth = class extends Service {
    *   否则只能按凭据内容反查（代价高，且反查会跳过已停用账号）。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef2(refName);
+    const ref = credentialRef3(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
-    const credential = parseCredential(resolved.value);
+    const credential = parseCredential2(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isLobsteraiRefreshable(credential)) {
-      throw new RefreshTokenExpiredError("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError2("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     const refreshed = await this.refreshCredential(credential);
     await this.ctx.credentials.set(ref, JSON.stringify(refreshed));
@@ -42511,9 +45771,9 @@ var LobsteraiAuth = class extends Service {
     }
     for (const entry of entries) {
       try {
-        const resolved = await this.ctx.credentials.resolve(credentialRef2(entry.credentialRef));
+        const resolved = await this.ctx.credentials.resolve(credentialRef3(entry.credentialRef));
         if (!resolved) continue;
-        const credential = parseCredential(resolved.value);
+        const credential = parseCredential2(resolved.value);
         if (credential === void 0) continue;
         const target = lobsteraiDisplayNickname(credential, entry.id);
         if (target !== entry.nickname) {
@@ -42559,13 +45819,13 @@ var LobsteraiAuth = class extends Service {
     if (!envelope.ok) {
       const kind = classifyLobsteraiError(response.status, rawText);
       if (response.status === 401 || response.status === 403 || isLobsteraiTerminalError(kind)) {
-        throw new RefreshTokenExpiredError(envelope.message);
+        throw new RefreshTokenExpiredError2(envelope.message);
       }
       throw new Error(`LobsterAI \u7EED\u671F\u5931\u8D25\uFF1A${envelope.message}`);
     }
     const payload = parseLobsteraiTokenPayload(envelope.data);
     if (payload.accessToken.length === 0) {
-      throw new RefreshTokenExpiredError("\u7EED\u671F\u54CD\u5E94\u7F3A\u5C11 accessToken\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError2("\u7EED\u671F\u54CD\u5E94\u7F3A\u5C11 accessToken\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     return applyLobsteraiRefresh(credential, payload);
   }
@@ -42583,13 +45843,13 @@ var LobsteraiAuth = class extends Service {
     for (const entry of accounts) {
       if (!entry.refreshable) continue;
       try {
-        const ref = credentialRef2(entry.credentialRef);
+        const ref = credentialRef3(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
         }
-        const credential = parseCredential(resolved.value);
+        const credential = parseCredential2(resolved.value);
         if (!credential || !isLobsteraiRefreshable(credential)) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
@@ -42607,7 +45867,7 @@ var LobsteraiAuth = class extends Service {
           warn: (message) => this.ctx.logger?.warn?.(message)
         });
       } catch (error) {
-        if (error instanceof RefreshTokenExpiredError) {
+        if (error instanceof RefreshTokenExpiredError2) {
           try {
             await pool.updateAccount(entry.id, { refreshable: false });
           } catch {
@@ -42627,7 +45887,7 @@ var LobsteraiAuth = class extends Service {
   async logout() {
     this.active = false;
     this.scheduler.stop();
-    await this.ctx.credentials.unset(credentialRef2(this.credentialRefName));
+    await this.ctx.credentials.unset(credentialRef3(this.credentialRefName));
   }
   /** 停止刷新调度（不清理凭据）。 */
   stop() {
@@ -42636,9 +45896,9 @@ var LobsteraiAuth = class extends Service {
   }
   /** 启动时若已有可刷新凭据则安排续期（由 apply 调用）。 */
   scheduleRefresh() {
-    void this.ctx.credentials.resolve(credentialRef2(this.credentialRefName)).then((resolved) => {
+    void this.ctx.credentials.resolve(credentialRef3(this.credentialRefName)).then((resolved) => {
       if (!resolved) return;
-      const credential = parseCredential(resolved.value);
+      const credential = parseCredential2(resolved.value);
       if (!credential || !isLobsteraiRefreshable(credential)) return;
       const expiresAt = lobsteraiCredentialExpiresAtMs(credential);
       if (expiresAt !== void 0) this.scheduler.arm(expiresAt);
@@ -42646,9 +45906,9 @@ var LobsteraiAuth = class extends Service {
   }
   /** 从存储重载凭据，返回是否已过期（供 UI 判断是否需要提示重新登录）。 */
   async checkExpired() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef2(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef3(this.credentialRefName));
     if (!resolved) return true;
-    const credential = parseCredential(resolved.value);
+    const credential = parseCredential2(resolved.value);
     return credential === void 0 ? true : isLobsteraiExpired(credential);
   }
   /**
@@ -42658,9 +45918,9 @@ var LobsteraiAuth = class extends Service {
    * 按账号 id 解析，不受 `enabled` 限制）。
    */
   async resolveStoredCredential() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef2(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef3(this.credentialRefName));
     if (!resolved) return void 0;
-    return parseCredential(resolved.value);
+    return parseCredential2(resolved.value);
   }
   /**
    * `GET /api/models/available` → 远端模型列表。
@@ -42696,11 +45956,11 @@ var LobsteraiAuth = class extends Service {
 };
 
 // vendor/channel-pack/src/qoder-auth.ts
-import { Service as Service2 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef3 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service3 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef4 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/qoder-oauth.ts
-function sleep(ms, signal) {
+function sleep2(ms, signal) {
   return new Promise((resolve2, reject) => {
     if (signal?.aborted === true) {
       reject(new Error("\u767B\u5F55\u5DF2\u53D6\u6D88"));
@@ -42722,7 +45982,7 @@ function isAborted2(signal) {
   return signal?.aborted === true;
 }
 async function pollQoderDeviceToken(session, options) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const pollUrl = buildQoderPollUrl(session, options.product);
   const interval = options.pollIntervalMs ?? QODER_POLL_INTERVAL_MS;
   const deadline = Date.now() + (options.timeoutMs ?? QODER_LOGIN_TIMEOUT_MS);
@@ -42737,7 +45997,7 @@ async function pollQoderDeviceToken(session, options) {
       });
       failures = 0;
       if (response.status === 404) {
-        await sleep(interval, options.signal);
+        await sleep2(interval, options.signal);
         continue;
       }
       if (!response.ok) {
@@ -42745,7 +46005,7 @@ async function pollQoderDeviceToken(session, options) {
       }
       const payload = parseQoderTokenPayload(await response.json());
       if (payload.accessToken.length > 0) return payload;
-      await sleep(interval, options.signal);
+      await sleep2(interval, options.signal);
     } catch (error) {
       if (isAborted2(options.signal)) throw new Error("\u767B\u5F55\u5DF2\u53D6\u6D88");
       if (error instanceof Error && error.message.startsWith(SERVER_ERROR_PREFIX)) throw error;
@@ -42755,7 +46015,7 @@ async function pollQoderDeviceToken(session, options) {
           `\u65E0\u6CD5\u8FDE\u63A5 Qoder \u767B\u5F55\u670D\u52A1\uFF08\u8FDE\u7EED ${failures} \u6B21\u5931\u8D25\uFF09\uFF1A${error instanceof Error ? error.message : String(error)}`
         );
       }
-      await sleep(interval, options.signal);
+      await sleep2(interval, options.signal);
     }
   }
   throw new Error("\u767B\u5F55\u7B49\u5F85\u5DF2\u8D85\u65F6\uFF0C\u8BF7\u91CD\u65B0\u53D1\u8D77\u767B\u5F55");
@@ -42771,7 +46031,7 @@ function toLoginFlowResult2(credential, loginUrl, machineId) {
     machineId
   };
 }
-async function defaultOpenBrowser2(url) {
+async function defaultOpenBrowser3(url) {
   const { openBrowser: openBrowser2 } = await Promise.resolve().then(() => (init_open_browser(), open_browser_exports));
   openBrowser2(url);
 }
@@ -42799,7 +46059,7 @@ async function startQoderLoginFlow(options) {
   return { loginUrl, result, close };
 }
 async function runQoderLoginFlow(options) {
-  const open = options.openBrowser ?? defaultOpenBrowser2;
+  const open = options.openBrowser ?? defaultOpenBrowser3;
   const started = await startQoderLoginFlow(options);
   try {
     await open(started.loginUrl);
@@ -42815,13 +46075,13 @@ var QODER_EXPIRY_ACCESSORS = {
   refreshableOf: isQoderRefreshable,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var RefreshTokenExpiredError2 = class extends Error {
+var RefreshTokenExpiredError3 = class extends Error {
   constructor(message) {
     super(message);
     this.name = "RefreshTokenExpiredError";
   }
 };
-function parseCredential2(value) {
+function parseCredential3(value) {
   try {
     const parsed = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && typeof parsed.access_token === "string" ? parsed : void 0;
@@ -42829,7 +46089,7 @@ function parseCredential2(value) {
     return void 0;
   }
 }
-var QoderAuth = class extends Service2 {
+var QoderAuth = class extends Service3 {
   constructor(ctx, options = {}) {
     const product = options.product ?? QODER;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -42837,6 +46097,7 @@ var QoderAuth = class extends Service2 {
     this.product = product;
     this.credentialRefName = this.product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称（`QODER_ACCESS_TOKEN`）。 */
@@ -42844,7 +46105,7 @@ var QoderAuth = class extends Service2 {
   scheduler = new RefreshScheduler(
     () => this.refresh(),
     (error) => {
-      if (error instanceof RefreshTokenExpiredError2) {
+      if (error instanceof RefreshTokenExpiredError3) {
         this.markRefreshTokenInvalid();
         return;
       }
@@ -42858,7 +46119,7 @@ var QoderAuth = class extends Service2 {
   active = true;
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   get fetchImpl() {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? createDomesticFetch();
   }
   /** 标记 refresh_token 已失效：停止重试，并向 status() 暴露 refreshable: false。 */
   markRefreshTokenInvalid() {
@@ -42904,12 +46165,12 @@ var QoderAuth = class extends Service2 {
    * 两条路径的差别只在「何时返回 loginUrl」，落库逻辑必须完全一致。
    */
   async persistLogin(flow, flowOptions = {}) {
-    const ref = flowOptions.refName ? credentialRef3(flowOptions.refName) : credentialRef3(this.credentialRefName);
+    const ref = flowOptions.refName ? credentialRef4(flowOptions.refName) : credentialRef4(this.credentialRefName);
     await this.ctx.credentials.set(ref, flow.access);
     this.refreshTokenInvalid = false;
     this.lastRefreshError = void 0;
     this.scheduleRefresh();
-    const credential = parseCredential2(flow.access);
+    const credential = parseCredential3(flow.access);
     if (flowOptions.accountId !== void 0 && flowOptions.pool !== void 0) {
       await flowOptions.pool.addAccount({
         id: flowOptions.accountId,
@@ -42932,14 +46193,14 @@ var QoderAuth = class extends Service2 {
   }
   /** 报告凭据是否已配置、过期时间、是否可刷新以及最近刷新错误。 */
   async status() {
-    const ref = credentialRef3(this.credentialRefName);
+    const ref = credentialRef4(this.credentialRefName);
     const info = await this.ctx.credentials.describe(ref);
     if (!info.configured) return { configured: false, refreshable: false };
     let expiresAt;
     let refreshable = false;
     const resolved = await this.ctx.credentials.resolve(ref);
     if (resolved) {
-      const credential = parseCredential2(resolved.value);
+      const credential = parseCredential3(resolved.value);
       if (credential) {
         expiresAt = qoderCredentialExpiresAtMs(credential);
         refreshable = isQoderRefreshable(credential) && !this.refreshTokenInvalid;
@@ -42962,13 +46223,13 @@ var QoderAuth = class extends Service2 {
    * - 其余错误（网络抖动、5xx、429）→ 抛普通 Error，走调度器的可重试路径。
    */
   async refresh() {
-    const ref = credentialRef3(this.credentialRefName);
+    const ref = credentialRef4(this.credentialRefName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u672A\u914D\u7F6E\u51ED\u636E\uFF0C\u8BF7\u5148\u767B\u5F55");
-    const credential = parseCredential2(resolved.value);
+    const credential = parseCredential3(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isQoderRefreshable(credential)) {
-      throw new RefreshTokenExpiredError2("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError3("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
       const refreshed = await this.refreshCredential(credential);
@@ -42978,7 +46239,7 @@ var QoderAuth = class extends Service2 {
       this.lastRefreshError = void 0;
       this.scheduleRefresh();
     } catch (error) {
-      if (error instanceof RefreshTokenExpiredError2) this.markRefreshTokenInvalid();
+      if (error instanceof RefreshTokenExpiredError3) this.markRefreshTokenInvalid();
       throw error;
     }
   }
@@ -42999,13 +46260,13 @@ var QoderAuth = class extends Service2 {
    *   否则只能按凭据内容反查（代价高，且反查会跳过已停用账号）。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef3(refName);
+    const ref = credentialRef4(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
-    const credential = parseCredential2(resolved.value);
+    const credential = parseCredential3(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isQoderRefreshable(credential)) {
-      throw new RefreshTokenExpiredError2("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError3("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     const refreshed = await this.refreshCredential(credential);
     await this.ctx.credentials.set(ref, JSON.stringify(refreshed));
@@ -43042,7 +46303,7 @@ var QoderAuth = class extends Service2 {
       throw new Error(`Qoder \u7EED\u671F\u7F51\u7EDC\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
     }
     if (response.status === 401 || response.status === 403) {
-      throw new RefreshTokenExpiredError2(`Qoder \u7EED\u671F\u88AB\u62D2\u7EDD\uFF08HTTP ${response.status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55`);
+      throw new RefreshTokenExpiredError3(`Qoder \u7EED\u671F\u88AB\u62D2\u7EDD\uFF08HTTP ${response.status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55`);
     }
     let parsed;
     try {
@@ -43056,7 +46317,7 @@ var QoderAuth = class extends Service2 {
     }
     const payload = parseQoderTokenPayload(parsed);
     if (payload.accessToken.length === 0) {
-      throw new RefreshTokenExpiredError2("\u7EED\u671F\u54CD\u5E94\u7F3A\u5C11\u8BBF\u95EE\u4EE4\u724C\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError3("\u7EED\u671F\u54CD\u5E94\u7F3A\u5C11\u8BBF\u95EE\u4EE4\u724C\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     return applyQoderRefresh(credential, payload);
   }
@@ -43074,13 +46335,13 @@ var QoderAuth = class extends Service2 {
     for (const entry of accounts) {
       if (!entry.refreshable) continue;
       try {
-        const ref = credentialRef3(entry.credentialRef);
+        const ref = credentialRef4(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
         }
-        const credential = parseCredential2(resolved.value);
+        const credential = parseCredential3(resolved.value);
         if (!credential || !isQoderRefreshable(credential)) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
@@ -43099,7 +46360,7 @@ var QoderAuth = class extends Service2 {
           warn: (message) => this.ctx.logger?.warn?.(message)
         });
       } catch (error) {
-        if (error instanceof RefreshTokenExpiredError2) {
+        if (error instanceof RefreshTokenExpiredError3) {
           try {
             await pool.updateAccount(entry.id, { refreshable: false });
           } catch {
@@ -43119,7 +46380,7 @@ var QoderAuth = class extends Service2 {
   async logout() {
     this.active = false;
     this.scheduler.stop();
-    await this.ctx.credentials.unset(credentialRef3(this.credentialRefName));
+    await this.ctx.credentials.unset(credentialRef4(this.credentialRefName));
   }
   /** 停止刷新调度（不清理凭据）。 */
   stop() {
@@ -43128,9 +46389,9 @@ var QoderAuth = class extends Service2 {
   }
   /** 启动时若已有可刷新凭据则安排续期（由 apply 调用）。 */
   scheduleRefresh() {
-    void this.ctx.credentials.resolve(credentialRef3(this.credentialRefName)).then((resolved) => {
+    void this.ctx.credentials.resolve(credentialRef4(this.credentialRefName)).then((resolved) => {
       if (!resolved) return;
-      const credential = parseCredential2(resolved.value);
+      const credential = parseCredential3(resolved.value);
       if (!credential || !isQoderRefreshable(credential)) return;
       const expiresAt = qoderCredentialExpiresAtMs(credential);
       if (expiresAt !== void 0) this.scheduler.arm(expiresAt);
@@ -43138,9 +46399,9 @@ var QoderAuth = class extends Service2 {
   }
   /** 从存储重载凭据，返回是否已过期（供 UI 判断是否需要提示重新登录）。 */
   async checkExpired() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef3(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef4(this.credentialRefName));
     if (!resolved) return true;
-    const credential = parseCredential2(resolved.value);
+    const credential = parseCredential3(resolved.value);
     return credential === void 0 ? true : isQoderExpired(credential);
   }
   /**
@@ -43149,15 +46410,15 @@ var QoderAuth = class extends Service2 {
    * 供 e2e 探针与 `account-probe` 使用。
    */
   async resolveStoredCredential() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef3(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef4(this.credentialRefName));
     if (!resolved) return void 0;
-    return parseCredential2(resolved.value);
+    return parseCredential3(resolved.value);
   }
 };
 
 // vendor/channel-pack/src/trae-auth.ts
-import { Service as Service3 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef4 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service4 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef5 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/trae-oauth.ts
 import { createServer as createServer2 } from "node:http";
@@ -43239,13 +46500,13 @@ function parseTraeCallbackDetailed(rawUrl) {
   }
   const userInfo = parseJsonParam(query.get("userInfo"));
   const userJwt = parseJsonParam(query.get("userJwt"));
-  let refreshToken = query.get("refreshToken") ?? "";
+  let refreshToken2 = query.get("refreshToken") ?? "";
   const uid = jsonString(userInfo, "UserID");
   const nicknameRaw = jsonString(userInfo, "ScreenName");
   const enterpriseId = jsonString(userInfo, "TenantID");
   const jwtToken = jsonString(userJwt, "Token");
   const jwtRefresh = jsonString(userJwt, "RefreshToken");
-  if (refreshToken.length === 0) refreshToken = jwtRefresh;
+  if (refreshToken2.length === 0) refreshToken2 = jwtRefresh;
   const authCodeInfo = parseJsonParam(query.get("authCodeInfo"));
   const authCodeCandidates = [
     query.get("code") ?? "",
@@ -43258,9 +46519,9 @@ function parseTraeCallbackDetailed(rawUrl) {
   ];
   const authCode = authCodeCandidates.find((candidate) => candidate.trim().length > 0)?.trim() ?? "";
   const info = {
-    refreshToken,
+    refreshToken: refreshToken2,
     // 仅在「无 refreshToken」时才用 userJwt.Token 兜底（login.sh:186-195）。
-    accessToken: refreshToken.length === 0 ? jwtToken : "",
+    accessToken: refreshToken2.length === 0 ? jwtToken : "",
     uid,
     nickname: fixNicknameMojibake(nicknameRaw, uid),
     enterpriseId
@@ -43282,7 +46543,7 @@ function parseTraeCallbackDetailed(rawUrl) {
   }
   return { ok: true, info };
 }
-async function exchangeTraeCallback(callback, session, product, fetcher = fetch, nowMs = Date.now()) {
+async function exchangeTraeCallback(callback, session, product, fetcher = createDomesticFetch(), nowMs = Date.now()) {
   let exchange;
   if (callback.refreshToken.length > 0) {
     const exchangeBody = {
@@ -43542,13 +46803,13 @@ var TRAE_EXPIRY_ACCESSORS = {
   refreshableOf: isTraeRefreshable,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var RefreshTokenExpiredError3 = class extends Error {
+var RefreshTokenExpiredError4 = class extends Error {
   constructor(message) {
     super(message);
     this.name = "RefreshTokenExpiredError";
   }
 };
-function parseCredential3(value) {
+function parseCredential4(value) {
   try {
     const parsed = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && typeof parsed.access_token === "string" ? parsed : void 0;
@@ -43556,7 +46817,7 @@ function parseCredential3(value) {
     return void 0;
   }
 }
-var TraeAuth = class _TraeAuth extends Service3 {
+var TraeAuth = class _TraeAuth extends Service4 {
   constructor(ctx, options = {}) {
     const product = options.product ?? TRAE;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -43564,6 +46825,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
     this.product = product;
     this.credentialRefName = this.product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称（`TRAE_ACCESS_TOKEN`）。 */
@@ -43571,7 +46833,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
   scheduler = new RefreshScheduler(
     () => this.refresh(),
     (error) => {
-      if (error instanceof RefreshTokenExpiredError3) {
+      if (error instanceof RefreshTokenExpiredError4) {
         this.markRefreshTokenInvalid();
         return;
       }
@@ -43603,7 +46865,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
   static MODELS_CACHE_TTL_MS = 3e4;
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   get fetchImpl() {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? createDomesticFetch();
   }
   /** 标记 refresh_token 已失效：停止重试，并向 status() 暴露 refreshable: false 与重新登录提示。 */
   markRefreshTokenInvalid() {
@@ -43641,13 +46903,13 @@ var TraeAuth = class _TraeAuth extends Service3 {
    * 持久化一次登录结果。
    */
   async persistLogin(flow, flowOptions = {}) {
-    const ref = flowOptions.refName ? credentialRef4(flowOptions.refName) : credentialRef4(this.credentialRefName);
+    const ref = flowOptions.refName ? credentialRef5(flowOptions.refName) : credentialRef5(this.credentialRefName);
     await this.ctx.credentials.set(ref, flow.access);
     this.refreshTokenInvalid = false;
     this.lastRefreshError = void 0;
     this.modelsCache = void 0;
     this.scheduleRefresh();
-    const credential = parseCredential3(flow.access);
+    const credential = parseCredential4(flow.access);
     if (flowOptions.accountId !== void 0 && flowOptions.pool !== void 0) {
       await flowOptions.pool.addAccount({
         id: flowOptions.accountId,
@@ -43673,14 +46935,14 @@ var TraeAuth = class _TraeAuth extends Service3 {
   }
   /** 报告凭据状态。 */
   async status() {
-    const ref = credentialRef4(this.credentialRefName);
+    const ref = credentialRef5(this.credentialRefName);
     const info = await this.ctx.credentials.describe(ref);
     if (!info.configured) return { configured: false, refreshable: false };
     let expiresAt;
     let refreshable = false;
     const resolved = await this.ctx.credentials.resolve(ref);
     if (resolved) {
-      const credential = parseCredential3(resolved.value);
+      const credential = parseCredential4(resolved.value);
       if (credential) {
         expiresAt = traeCredentialExpiresAtMs(credential);
         refreshable = isTraeRefreshable(credential) && !this.refreshTokenInvalid;
@@ -43702,13 +46964,13 @@ var TraeAuth = class _TraeAuth extends Service3 {
    * - 其余错误（网络抖动、5xx、429）→ 抛普通 Error，走可重试路径
    */
   async refresh() {
-    const ref = credentialRef4(this.credentialRefName);
+    const ref = credentialRef5(this.credentialRefName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u672A\u914D\u7F6E\u51ED\u636E\uFF0C\u8BF7\u5148\u767B\u5F55");
-    const credential = parseCredential3(resolved.value);
+    const credential = parseCredential4(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isTraeRefreshable(credential)) {
-      throw new RefreshTokenExpiredError3("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError4("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
       const refreshed = await this.refreshCredential(credential);
@@ -43718,7 +46980,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
       this.lastRefreshError = void 0;
       this.scheduleRefresh();
     } catch (error) {
-      if (error instanceof RefreshTokenExpiredError3) this.markRefreshTokenInvalid();
+      if (error instanceof RefreshTokenExpiredError4) this.markRefreshTokenInvalid();
       throw error;
     }
   }
@@ -43740,13 +47002,13 @@ var TraeAuth = class _TraeAuth extends Service3 {
    *   否则只能按凭据内容反查（代价高，且反查会跳过已停用账号）。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef4(refName);
+    const ref = credentialRef5(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
-    const credential = parseCredential3(resolved.value);
+    const credential = parseCredential4(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isTraeRefreshable(credential)) {
-      throw new RefreshTokenExpiredError3("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError4("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     const refreshed = await this.refreshCredential(credential);
     await this.ctx.credentials.set(ref, JSON.stringify(refreshed));
@@ -43797,7 +47059,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
       const kind = classifyTraeError(response.status, text);
       const noTokenInSuccessResponse = response.ok && parsed !== void 0;
       if (response.status === 401 || response.status === 403 || isTraeTerminalError(kind) || noTokenInSuccessResponse) {
-        throw new RefreshTokenExpiredError3("TRAE refresh_token \u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+        throw new RefreshTokenExpiredError4("TRAE refresh_token \u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
       }
       throw new Error(`TRAE \u7EED\u671F\u5931\u8D25\uFF08HTTP ${response.status}\uFF09\uFF1A${text.slice(0, 200)}`);
     }
@@ -43819,13 +47081,13 @@ var TraeAuth = class _TraeAuth extends Service3 {
     for (const entry of accounts) {
       if (!entry.refreshable) continue;
       try {
-        const ref = credentialRef4(entry.credentialRef);
+        const ref = credentialRef5(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
         }
-        const credential = parseCredential3(resolved.value);
+        const credential = parseCredential4(resolved.value);
         if (!credential || !isTraeRefreshable(credential)) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
@@ -43843,7 +47105,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
           warn: (message) => this.ctx.logger?.warn?.(message)
         });
       } catch (error) {
-        if (error instanceof RefreshTokenExpiredError3) {
+        if (error instanceof RefreshTokenExpiredError4) {
           try {
             await pool.updateAccount(entry.id, { refreshable: false });
           } catch {
@@ -43892,10 +47154,10 @@ var TraeAuth = class _TraeAuth extends Service3 {
     }
     for (const entry of entries) {
       try {
-        const ref = credentialRef4(entry.credentialRef);
+        const ref = credentialRef5(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) continue;
-        let credential = parseCredential3(resolved.value);
+        let credential = parseCredential4(resolved.value);
         if (credential === void 0) continue;
         if ((credential.phone === void 0 || credential.phone.length === 0) && (credential.email === void 0 || credential.email.length === 0)) {
           const info = await this.fetchUserContact(credential);
@@ -43949,7 +47211,7 @@ var TraeAuth = class _TraeAuth extends Service3 {
   async logout() {
     this.active = false;
     this.scheduler.stop();
-    await this.ctx.credentials.unset(credentialRef4(this.credentialRefName));
+    await this.ctx.credentials.unset(credentialRef5(this.credentialRefName));
     this.modelsCache = void 0;
   }
   /** 停止刷新调度（不清理凭据）。 */
@@ -43959,9 +47221,9 @@ var TraeAuth = class _TraeAuth extends Service3 {
   }
   /** 启动时若已有可刷新凭据则安排续期。 */
   scheduleRefresh() {
-    void this.ctx.credentials.resolve(credentialRef4(this.credentialRefName)).then((resolved) => {
+    void this.ctx.credentials.resolve(credentialRef5(this.credentialRefName)).then((resolved) => {
       if (!resolved) return;
-      const credential = parseCredential3(resolved.value);
+      const credential = parseCredential4(resolved.value);
       if (!credential || !isTraeRefreshable(credential)) return;
       const expiresAt = traeCredentialExpiresAtMs(credential);
       if (expiresAt !== void 0) this.scheduler.arm(expiresAt);
@@ -43969,9 +47231,9 @@ var TraeAuth = class _TraeAuth extends Service3 {
   }
   /** 从存储重载凭据，返回是否已过期。 */
   async checkExpired() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef4(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef5(this.credentialRefName));
     if (!resolved) return true;
-    const credential = parseCredential3(resolved.value);
+    const credential = parseCredential4(resolved.value);
     return credential === void 0 ? true : isTraeExpired(credential);
   }
   /**
@@ -44006,9 +47268,9 @@ var TraeAuth = class _TraeAuth extends Service3 {
       if (available2) credential = available2.credential;
     }
     if (credential === void 0) {
-      const resolved = await this.ctx.credentials.resolve(credentialRef4(this.credentialRefName));
+      const resolved = await this.ctx.credentials.resolve(credentialRef5(this.credentialRefName));
       if (!resolved) return [];
-      credential = parseCredential3(resolved.value);
+      credential = parseCredential4(resolved.value);
       if (credential === void 0) return [];
     }
     if (credential.access_token.length === 0) return [];
@@ -44070,15 +47332,15 @@ var TraeAuth = class _TraeAuth extends Service3 {
 };
 
 // vendor/channel-pack/src/cline-auth.ts
-import { Service as Service4 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef5 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service5 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef6 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/cline-oauth.ts
 var CLINE_HTTP_TIMEOUT_MS = 3e4;
 var CLINE_DEVICE_AUTH_EXPIRES_MS = 3e5;
 var CLINE_DEVICE_AUTH_INTERVAL_MS = 5e3;
 var CLINE_POLL_MAX_FAILURES = 5;
-function sleep2(ms, signal) {
+function sleep3(ms, signal) {
   return new Promise((resolve2, reject) => {
     if (signal?.aborted === true) {
       reject(new Error("\u767B\u5F55\u5DF2\u53D6\u6D88"));
@@ -44104,7 +47366,7 @@ function toMs(value, fallbackMs) {
   return Math.floor(value) * 1e3;
 }
 async function requestClineDeviceAuthorization(product, options = {}) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const response = await fetcher(`${product.workOsBase}${CLINE_DEVICE_AUTHORIZATION_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -44133,7 +47395,7 @@ async function requestClineDeviceAuthorization(product, options = {}) {
   };
 }
 async function pollClineWorkOsTokens(authorization, options) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const deadline = Date.now() + (options.timeoutMs ?? authorization.expiresInMs);
   let intervalMs = Math.max(1e3, options.pollIntervalMs ?? authorization.intervalMs);
   let failures = 0;
@@ -44154,21 +47416,21 @@ async function pollClineWorkOsTokens(authorization, options) {
       failures = 0;
       if (response.ok) {
         const accessToken = typeof payload.access_token === "string" ? payload.access_token : "";
-        const refreshToken = typeof payload.refresh_token === "string" ? payload.refresh_token : "";
-        if (accessToken.length === 0 || refreshToken.length === 0) {
+        const refreshToken2 = typeof payload.refresh_token === "string" ? payload.refresh_token : "";
+        if (accessToken.length === 0 || refreshToken2.length === 0) {
           throw new Error(`${SERVER_ERROR_PREFIX2}\uFF1AWorkOS token \u54CD\u5E94\u7F3A\u5C11\u5FC5\u8981\u5B57\u6BB5`);
         }
-        return { accessToken, refreshToken };
+        return { accessToken, refreshToken: refreshToken2 };
       }
       const errorCode = typeof payload.error === "string" ? payload.error : "";
       switch (errorCode) {
         case "authorization_pending": {
-          await sleep2(intervalMs, options.signal);
+          await sleep3(intervalMs, options.signal);
           continue;
         }
         case "slow_down": {
           intervalMs += 1e3;
-          await sleep2(intervalMs, options.signal);
+          await sleep3(intervalMs, options.signal);
           continue;
         }
         case "access_denied":
@@ -44191,13 +47453,13 @@ async function pollClineWorkOsTokens(authorization, options) {
           `\u65E0\u6CD5\u8FDE\u63A5 Cline \u767B\u5F55\u670D\u52A1\uFF08\u8FDE\u7EED ${failures} \u6B21\u5931\u8D25\uFF09\uFF1A${error instanceof Error ? error.message : String(error)}`
         );
       }
-      await sleep2(intervalMs, options.signal);
+      await sleep3(intervalMs, options.signal);
     }
   }
   throw new Error("\u767B\u5F55\u7B49\u5F85\u5DF2\u8D85\u65F6\uFF0C\u8BF7\u91CD\u65B0\u53D1\u8D77\u767B\u5F55");
 }
 async function registerClineTokens(workOsTokens, options) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const response = await fetcher(`${options.product.apiBase}${CLINE_REGISTER_PATH}`, {
     method: "POST",
     headers: {
@@ -44228,7 +47490,7 @@ function toLoginFlowResult3(credential, loginUrl, userCode) {
     ...userCode === void 0 ? {} : { userCode }
   };
 }
-async function defaultOpenBrowser3(url) {
+async function defaultOpenBrowser4(url) {
   const { openBrowser: openBrowser2 } = await Promise.resolve().then(() => (init_open_browser(), open_browser_exports));
   openBrowser2(url);
 }
@@ -44266,7 +47528,7 @@ async function startClineLoginFlow(options) {
   };
 }
 async function runClineLoginFlow(options) {
-  const open = options.openBrowser ?? defaultOpenBrowser3;
+  const open = options.openBrowser ?? defaultOpenBrowser4;
   const started = await startClineLoginFlow(options);
   try {
     await open(started.loginUrl);
@@ -44282,13 +47544,13 @@ var CLINE_EXPIRY_ACCESSORS = {
   refreshableOf: isClineRefreshable,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var RefreshTokenExpiredError4 = class extends Error {
+var RefreshTokenExpiredError5 = class extends Error {
   constructor(message) {
     super(message);
     this.name = "RefreshTokenExpiredError";
   }
 };
-function parseCredential4(value) {
+function parseCredential5(value) {
   try {
     const parsed = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && typeof parsed.access_token === "string" ? parsed : void 0;
@@ -44296,7 +47558,7 @@ function parseCredential4(value) {
     return void 0;
   }
 }
-var ClineAuth = class extends Service4 {
+var ClineAuth = class extends Service5 {
   constructor(ctx, options = {}) {
     const product = options.product ?? CLINE;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -44304,6 +47566,7 @@ var ClineAuth = class extends Service4 {
     this.product = product;
     this.credentialRefName = this.product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称（`CLINE_ACCESS_TOKEN`）。 */
@@ -44311,7 +47574,7 @@ var ClineAuth = class extends Service4 {
   scheduler = new RefreshScheduler(
     () => this.refresh(),
     (error) => {
-      if (error instanceof RefreshTokenExpiredError4) {
+      if (error instanceof RefreshTokenExpiredError5) {
         this.markRefreshTokenInvalid();
         return;
       }
@@ -44325,7 +47588,7 @@ var ClineAuth = class extends Service4 {
   active = true;
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   get fetchImpl() {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? createDomesticFetch();
   }
   /** 标记 refresh_token 已失效：停止重试，并向 status() 暴露 refreshable: false。 */
   markRefreshTokenInvalid() {
@@ -44376,12 +47639,12 @@ var ClineAuth = class extends Service4 {
    * 两条路径的差别只在「何时返回 loginUrl」，落库逻辑必须完全一致。
    */
   async persistLogin(flow, flowOptions = {}) {
-    const ref = flowOptions.refName ? credentialRef5(flowOptions.refName) : credentialRef5(this.credentialRefName);
+    const ref = flowOptions.refName ? credentialRef6(flowOptions.refName) : credentialRef6(this.credentialRefName);
     await this.ctx.credentials.set(ref, flow.access);
     this.refreshTokenInvalid = false;
     this.lastRefreshError = void 0;
     this.scheduleRefresh();
-    const credential = parseCredential4(flow.access);
+    const credential = parseCredential5(flow.access);
     if (flowOptions.accountId !== void 0 && flowOptions.pool !== void 0) {
       await flowOptions.pool.addAccount({
         id: flowOptions.accountId,
@@ -44405,14 +47668,14 @@ var ClineAuth = class extends Service4 {
   }
   /** 报告凭据是否已配置、过期时间、是否可刷新以及最近刷新错误。 */
   async status() {
-    const ref = credentialRef5(this.credentialRefName);
+    const ref = credentialRef6(this.credentialRefName);
     const info = await this.ctx.credentials.describe(ref);
     if (!info.configured) return { configured: false, refreshable: false };
     let expiresAt;
     let refreshable = false;
     const resolved = await this.ctx.credentials.resolve(ref);
     if (resolved) {
-      const credential = parseCredential4(resolved.value);
+      const credential = parseCredential5(resolved.value);
       if (credential) {
         expiresAt = clineCredentialExpiresAtMs(credential);
         refreshable = isClineRefreshable(credential) && !this.refreshTokenInvalid;
@@ -44435,13 +47698,13 @@ var ClineAuth = class extends Service4 {
    * - 其余错误（网络抖动、5xx、429）→ 抛普通 Error，走调度器的可重试路径。
    */
   async refresh() {
-    const ref = credentialRef5(this.credentialRefName);
+    const ref = credentialRef6(this.credentialRefName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u672A\u914D\u7F6E\u51ED\u636E\uFF0C\u8BF7\u5148\u767B\u5F55");
-    const credential = parseCredential4(resolved.value);
+    const credential = parseCredential5(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isClineRefreshable(credential)) {
-      throw new RefreshTokenExpiredError4("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError5("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
       const refreshed = await this.refreshCredential(credential);
@@ -44451,7 +47714,7 @@ var ClineAuth = class extends Service4 {
       this.lastRefreshError = void 0;
       this.scheduleRefresh();
     } catch (error) {
-      if (error instanceof RefreshTokenExpiredError4) this.markRefreshTokenInvalid();
+      if (error instanceof RefreshTokenExpiredError5) this.markRefreshTokenInvalid();
       throw error;
     }
   }
@@ -44477,13 +47740,13 @@ var ClineAuth = class extends Service4 {
    *   否则只能按凭据内容反查（代价高，且反查会跳过已停用账号）。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef5(refName);
+    const ref = credentialRef6(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
-    const credential = parseCredential4(resolved.value);
+    const credential = parseCredential5(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isClineRefreshable(credential)) {
-      throw new RefreshTokenExpiredError4("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError5("\u65E0 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     const refreshed = await this.refreshCredential(credential);
     await this.ctx.credentials.set(ref, JSON.stringify(refreshed));
@@ -44521,7 +47784,7 @@ var ClineAuth = class extends Service4 {
       throw new Error(`Cline \u7EED\u671F\u7F51\u7EDC\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
     }
     if (response.status === 401 || response.status === 403) {
-      throw new RefreshTokenExpiredError4(`Cline \u7EED\u671F\u88AB\u62D2\u7EDD\uFF08HTTP ${response.status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55`);
+      throw new RefreshTokenExpiredError5(`Cline \u7EED\u671F\u88AB\u62D2\u7EDD\uFF08HTTP ${response.status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55`);
     }
     let parsed;
     try {
@@ -44535,7 +47798,7 @@ var ClineAuth = class extends Service4 {
     }
     const payload = parseClineTokenPayload(parsed);
     if (payload.accessToken.length === 0) {
-      throw new RefreshTokenExpiredError4("\u7EED\u671F\u54CD\u5E94\u7F3A\u5C11\u8BBF\u95EE\u4EE4\u724C\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError5("\u7EED\u671F\u54CD\u5E94\u7F3A\u5C11\u8BBF\u95EE\u4EE4\u724C\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     return applyClineRefresh(credential, payload, this.product);
   }
@@ -44553,13 +47816,13 @@ var ClineAuth = class extends Service4 {
     for (const entry of accounts) {
       if (!entry.refreshable) continue;
       try {
-        const ref = credentialRef5(entry.credentialRef);
+        const ref = credentialRef6(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
         }
-        const credential = parseCredential4(resolved.value);
+        const credential = parseCredential5(resolved.value);
         if (!credential || !isClineRefreshable(credential)) {
           await pool.updateAccount(entry.id, { refreshable: false });
           continue;
@@ -44577,7 +47840,7 @@ var ClineAuth = class extends Service4 {
           warn: (message) => this.ctx.logger?.warn?.(message)
         });
       } catch (error) {
-        if (error instanceof RefreshTokenExpiredError4) {
+        if (error instanceof RefreshTokenExpiredError5) {
           try {
             await pool.updateAccount(entry.id, { refreshable: false });
           } catch {
@@ -44597,7 +47860,7 @@ var ClineAuth = class extends Service4 {
   async logout() {
     this.active = false;
     this.scheduler.stop();
-    await this.ctx.credentials.unset(credentialRef5(this.credentialRefName));
+    await this.ctx.credentials.unset(credentialRef6(this.credentialRefName));
   }
   /** 停止刷新调度（不清理凭据）。 */
   stop() {
@@ -44606,9 +47869,9 @@ var ClineAuth = class extends Service4 {
   }
   /** 启动时若已有可刷新凭据则安排续期（由 apply 调用）。 */
   scheduleRefresh() {
-    void this.ctx.credentials.resolve(credentialRef5(this.credentialRefName)).then((resolved) => {
+    void this.ctx.credentials.resolve(credentialRef6(this.credentialRefName)).then((resolved) => {
       if (!resolved) return;
-      const credential = parseCredential4(resolved.value);
+      const credential = parseCredential5(resolved.value);
       if (!credential || !isClineRefreshable(credential)) return;
       const expiresAt = clineCredentialExpiresAtMs(credential);
       if (expiresAt !== void 0) this.scheduler.arm(expiresAt);
@@ -44616,9 +47879,9 @@ var ClineAuth = class extends Service4 {
   }
   /** 从存储重载凭据，返回是否已过期（供 UI 判断是否需要提示重新登录）。 */
   async checkExpired() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef5(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef6(this.credentialRefName));
     if (!resolved) return true;
-    const credential = parseCredential4(resolved.value);
+    const credential = parseCredential5(resolved.value);
     return credential === void 0 ? true : isClineExpired(credential);
   }
   /**
@@ -44627,15 +47890,15 @@ var ClineAuth = class extends Service4 {
    * 供 e2e 探针与 `account-probe` 使用。
    */
   async resolveStoredCredential() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef5(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef6(this.credentialRefName));
     if (!resolved) return void 0;
-    return parseCredential4(resolved.value);
+    return parseCredential5(resolved.value);
   }
 };
 
 // vendor/channel-pack/src/loomy-auth.ts
-import { Service as Service5 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef6 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service6 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef7 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/loomy-oauth.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
@@ -44751,7 +48014,7 @@ async function postLoomyAccount(path2, body, product, fetcher) {
   }
   return envelope.data;
 }
-async function sendLoomySmsCode(phone, product, fetcher = fetch) {
+async function sendLoomySmsCode(phone, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     ccode: "86",
     phone,
@@ -44764,7 +48027,7 @@ async function sendLoomySmsCode(phone, product, fetcher = fetch) {
   }
   return msgid;
 }
-async function loginLoomyBySmsCode(phone, code, msgid, product, fetcher = fetch) {
+async function loginLoomyBySmsCode(phone, code, msgid, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     ccode: "86",
     phone,
@@ -44780,7 +48043,7 @@ async function loginLoomyBySmsCode(phone, code, msgid, product, fetcher = fetch)
   if (userid.length === 0) throw new Error("\u767B\u5F55\u54CD\u5E94\u7F3A\u5C11 userid");
   return { session, userid };
 }
-async function bindLoomyThirdAccount(code, product, fetcher = fetch) {
+async function bindLoomyThirdAccount(code, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     tcode: { code },
     type: "wx"
@@ -44800,7 +48063,7 @@ async function bindLoomyThirdAccount(code, product, fetcher = fetch) {
     ...typeof record.headpic === "string" && record.headpic.length > 0 ? { headpic: record.headpic } : {}
   };
 }
-async function bindLoomySendMsg(rcode, phone, product, fetcher = fetch) {
+async function bindLoomySendMsg(rcode, phone, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     rcode,
     phone,
@@ -44812,7 +48075,7 @@ async function bindLoomySendMsg(rcode, phone, product, fetcher = fetch) {
   if (msgid.length === 0) throw new Error("\u7ED1\u5B9A\u624B\u673A\u53F7\u54CD\u5E94\u7F3A\u5C11 msgid");
   return msgid;
 }
-async function bindLoomyCheckCode(rcode, mcode, msgid, product, fetcher = fetch) {
+async function bindLoomyCheckCode(rcode, mcode, msgid, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     rcode,
     mcode,
@@ -44828,7 +48091,7 @@ async function bindLoomyCheckCode(rcode, mcode, msgid, product, fetcher = fetch)
   if (userid.length === 0) throw new Error("\u7ED1\u5B9A\u767B\u5F55\u54CD\u5E94\u7F3A\u5C11 userid");
   return { session, userid, phone };
 }
-async function bindLoomySkip(rcode, product, fetcher = fetch) {
+async function bindLoomySkip(rcode, product, fetcher = createDomesticFetch()) {
   const body = buildLoomyAccountBody(product, {
     rcode,
     expire: LOOMY_SESSION_TTL_SECONDS
@@ -44886,7 +48149,7 @@ function extractLoomyWechatUuid(html) {
 function buildLoomyWechatQrImageUrl(uuid) {
   return `https://open.weixin.qq.com/connect/qrcode/${encodeURIComponent(uuid)}`;
 }
-async function fetchLoomyWechatUuid(state, fetcher = fetch) {
+async function fetchLoomyWechatUuid(state, fetcher = createDomesticFetch()) {
   const authUrl = buildLoomyWechatAuthUrl(state);
   let response;
   try {
@@ -44907,7 +48170,7 @@ async function fetchLoomyWechatUuid(state, fetcher = fetch) {
   }
   return uuid;
 }
-async function fetchLoomyWechatQrImage(uuid, fetcher = fetch) {
+async function fetchLoomyWechatQrImage(uuid, fetcher = createDomesticFetch()) {
   const url = buildLoomyWechatQrImageUrl(uuid);
   let response;
   try {
@@ -44934,7 +48197,7 @@ function detectImageMime(bytes) {
   if (bytes.length >= 3 && bytes[0] === 71 && bytes[1] === 73 && bytes[2] === 70) return "image/gif";
   return "";
 }
-async function pollLoomyWechatOnce(uuid, lastErrcode, fetcher = fetch) {
+async function pollLoomyWechatOnce(uuid, lastErrcode, fetcher = createDomesticFetch()) {
   const query = `uuid=${encodeURIComponent(uuid)}` + (lastErrcode.length > 0 ? `&last=${encodeURIComponent(lastErrcode)}` : "") + `&_=${Date.now()}`;
   const url = `https://long.open.weixin.qq.com/connect/l/qrconnect?${query}`;
   let body;
@@ -44968,7 +48231,7 @@ var LOOMY_WECHAT_QR_PATH = "/wechat/qr";
 var LOOMY_WECHAT_POLL_PATH = "/wechat/poll";
 var LOOMY_WECHAT_COMPLETE_PATH = "/wechat/complete";
 async function startLoomyWechatLoginFlow(options) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const product = options.product;
   const state = {
     uuid: "",
@@ -44999,8 +48262,8 @@ async function startLoomyWechatLoginFlow(options) {
     rejectResult(error);
   };
   state.uuid = await fetchLoomyWechatUuid(randomUUID5(), fetcher);
-  const server = createServer3((request, response) => {
-    void handleRequest(request, response, {
+  const server = createServer3((request2, response) => {
+    void handleRequest(request2, response, {
       state,
       product,
       fetcher,
@@ -45033,8 +48296,8 @@ async function startLoomyWechatLoginFlow(options) {
   });
   return { loginUrl, result, close };
 }
-async function handleRequest(request, response, deps) {
-  const url = new URL(request.url ?? "/", `http://127.0.0.1:${request.socket.localPort ?? 0}`);
+async function handleRequest(request2, response, deps) {
+  const url = new URL(request2.url ?? "/", `http://127.0.0.1:${request2.socket.localPort ?? 0}`);
   const { state } = deps;
   if (url.pathname === LOOMY_WECHAT_QR_PATH) {
     const qrDataUrl = await fetchLoomyWechatQrImage(state.uuid, deps.fetcher);
@@ -45073,8 +48336,8 @@ async function handleRequest(request, response, deps) {
     writeJson(response, { status: polled.status });
     return;
   }
-  if (url.pathname === LOOMY_WECHAT_COMPLETE_PATH && request.method === "POST") {
-    const body = await readJsonBody(request);
+  if (url.pathname === LOOMY_WECHAT_COMPLETE_PATH && request2.method === "POST") {
+    const body = await readJsonBody(request2);
     const action = typeof body.action === "string" ? body.action : "";
     try {
       if (action === "send_sms") {
@@ -45114,10 +48377,10 @@ function writeJson(response, payload) {
   response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
 }
-async function readJsonBody(request) {
+async function readJsonBody(request2) {
   const chunks = [];
   let total = 0;
-  for await (const chunk of request) {
+  for await (const chunk of request2) {
     const buf = chunk;
     total += buf.length;
     if (total > 64 * 1024) throw new Error("\u8BF7\u6C42\u4F53\u8FC7\u5927");
@@ -45335,11 +48598,11 @@ async function tryRequestLoomy(credential, product, path2, init, fetcher) {
   }
   return { ok: true, data: envelope.data };
 }
-function readNumber(value) {
+function readNumber2(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : void 0;
 }
-async function fetchLoomyCreditDetail(credential, product, fetcher = fetch) {
+async function fetchLoomyCreditDetail(credential, product, fetcher = createDomesticFetch()) {
   const result = await tryRequestLoomy(
     credential,
     product,
@@ -45348,17 +48611,17 @@ async function fetchLoomyCreditDetail(credential, product, fetcher = fetch) {
     fetcher
   );
   if (!result.ok) return null;
-  const permanent = readNumber(result.data?.balance);
-  const daily = readNumber(result.data?.dailyBalance);
-  const available2 = readNumber(result.data?.availableBalance);
+  const permanent = readNumber2(result.data?.balance);
+  const daily = readNumber2(result.data?.dailyBalance);
+  const available2 = readNumber2(result.data?.availableBalance);
   if (permanent === void 0) return null;
   const total = available2 ?? permanent + (daily ?? 0);
   return {
     permanent,
     daily: daily ?? 0,
     total,
-    dailyQuota: readNumber(result.data?.dailyQuota),
-    dailyConsumed: readNumber(result.data?.dailyConsumed),
+    dailyQuota: readNumber2(result.data?.dailyQuota),
+    dailyConsumed: readNumber2(result.data?.dailyConsumed),
     dailyCycleDate: typeof result.data?.dailyCycleDate === "string" ? result.data.dailyCycleDate : void 0
   };
 }
@@ -45375,7 +48638,7 @@ function makePackage(name2, remaining) {
     expiredTime: ""
   };
 }
-async function fetchLoomyCreditBalance(credential, product, fetcher = fetch) {
+async function fetchLoomyCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   const detail = await fetchLoomyCreditDetail(credential, product, fetcher);
   if (detail === null) return null;
   return {
@@ -45388,7 +48651,7 @@ async function fetchLoomyCreditBalance(credential, product, fetcher = fetch) {
     expiredTotal: 0
   };
 }
-async function claimLoomyDailyQuota(credential, product, fetcher = fetch) {
+async function claimLoomyDailyQuota(credential, product, fetcher = createDomesticFetch()) {
   const result = await tryRequestLoomy(
     credential,
     product,
@@ -45399,8 +48662,8 @@ async function claimLoomyDailyQuota(credential, product, fetcher = fetch) {
   if (!result.ok) {
     return { kind: "failed", code: -1, message: result.message };
   }
-  const dailyQuota = readNumber(result.data?.dailyQuota);
-  const dailyBalance = readNumber(result.data?.dailyBalance);
+  const dailyQuota = readNumber2(result.data?.dailyQuota);
+  const dailyBalance = readNumber2(result.data?.dailyBalance);
   const alreadyProcessed = result.data?.alreadyProcessed === true;
   if (alreadyProcessed) {
     return {
@@ -45408,7 +48671,7 @@ async function claimLoomyDailyQuota(credential, product, fetcher = fetch) {
       message: dailyQuota === void 0 ? "\u4ECA\u65E5\u989D\u5EA6\u5DF2\u521D\u59CB\u5316" : `\u4ECA\u65E5\u989D\u5EA6\u5DF2\u521D\u59CB\u5316\uFF08\u6BCF\u65E5 ${dailyBalance ?? 0}/${dailyQuota}\uFF09`
     };
   }
-  const dailyConsumed = readNumber(result.data?.dailyConsumed);
+  const dailyConsumed = readNumber2(result.data?.dailyConsumed);
   const granted = dailyQuota !== void 0 && dailyConsumed !== void 0 ? Math.max(0, dailyQuota - dailyConsumed) : dailyQuota ?? 0;
   return { kind: "claimed", credit: granted, streakDays: 0, isStreakDay: false };
 }
@@ -45479,7 +48742,7 @@ async function requestLoomy(credential, product, path2, init, fetcher) {
   }
   return envelope.data;
 }
-async function fetchLoomyOnboardingTasks(credential, product, fetcher = fetch) {
+async function fetchLoomyOnboardingTasks(credential, product, fetcher = createDomesticFetch()) {
   const data = await requestLoomy(
     credential,
     product,
@@ -45494,7 +48757,7 @@ async function fetchLoomyOnboardingTasks(credential, product, fetcher = fetch) {
     total: Number.isFinite(Number(data?.total)) ? Number(data?.total) : LOOMY_ONBOARDING_TOTAL
   };
 }
-async function completeLoomyTask(credential, key, product, fetcher = fetch) {
+async function completeLoomyTask(credential, key, product, fetcher = createDomesticFetch()) {
   if (!(key in LOOMY_TASK_POINTS)) {
     throw new Error(`loomy: \u672A\u77E5\u7684 task key: ${key}`);
   }
@@ -45510,7 +48773,7 @@ async function completeLoomyTask(credential, key, product, fetcher = fetch) {
     balance: Number.isFinite(Number(data?.balance)) ? Number(data?.balance) : 0
   };
 }
-async function claimAllLoomyOnboardingTasks(credential, product, fetcher = fetch) {
+async function claimAllLoomyOnboardingTasks(credential, product, fetcher = createDomesticFetch()) {
   const state = await fetchLoomyOnboardingTasks(credential, product, fetcher);
   const claimed = [];
   const skipped = [];
@@ -45534,16 +48797,16 @@ async function claimAllLoomyOnboardingTasks(credential, product, fetcher = fetch
 
 // vendor/channel-pack/src/loomy-auth.ts
 var LOOMY_EXPIRY_ACCESSORS = {
-  expiresAtOf: credentialExpiresAtMs2,
+  expiresAtOf: credentialExpiresAtMs3,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var RefreshTokenExpiredError5 = class extends Error {
+var RefreshTokenExpiredError6 = class extends Error {
   constructor(message) {
     super(message);
     this.name = "RefreshTokenExpiredError";
   }
 };
-function parseCredential5(value) {
+function parseCredential6(value) {
   try {
     const parsed = JSON.parse(value);
     return typeof parsed === "object" && parsed !== null && typeof parsed.access_token === "string" ? parsed : void 0;
@@ -45551,7 +48814,7 @@ function parseCredential5(value) {
     return void 0;
   }
 }
-var LoomyAuth = class extends Service5 {
+var LoomyAuth = class extends Service6 {
   constructor(ctx, options = {}) {
     const product = options.product ?? LOOMY;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -45559,6 +48822,7 @@ var LoomyAuth = class extends Service5 {
     this.product = product;
     this.credentialRefName = this.product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称（`LOOMY_ACCESS_TOKEN`）。 */
@@ -45581,7 +48845,7 @@ var LoomyAuth = class extends Service5 {
   active = true;
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   get fetchImpl() {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? createDomesticFetch();
   }
   /**
    * 下发短信验证码。
@@ -45623,7 +48887,7 @@ var LoomyAuth = class extends Service5 {
       login.nickname
     );
     const refName = flowOptions.refName ?? this.credentialRefName;
-    const ref = credentialRef6(refName);
+    const ref = credentialRef7(refName);
     await this.ctx.credentials.set(ref, JSON.stringify(credential));
     this.lastRefreshError = void 0;
     try {
@@ -45635,7 +48899,7 @@ var LoomyAuth = class extends Service5 {
     }
     return {
       access: JSON.stringify(credential),
-      expires: credentialExpiresAtMs2(credential) ?? 0,
+      expires: credentialExpiresAtMs3(credential) ?? 0,
       ref,
       refreshable: false
     };
@@ -45650,7 +48914,7 @@ var LoomyAuth = class extends Service5 {
     const result = await loginLoomyBySmsCode(phone, code, msgid, this.product, this.fetchImpl);
     const credential = this.buildCredential(result.session, result.userid, phone);
     const refName = flowOptions.refName ?? this.credentialRefName;
-    const ref = credentialRef6(refName);
+    const ref = credentialRef7(refName);
     await this.ctx.credentials.set(ref, JSON.stringify(credential));
     this.lastRefreshError = void 0;
     try {
@@ -45662,7 +48926,7 @@ var LoomyAuth = class extends Service5 {
     }
     return {
       access: JSON.stringify(credential),
-      expires: credentialExpiresAtMs2(credential) ?? 0,
+      expires: credentialExpiresAtMs3(credential) ?? 0,
       ref,
       // ⚠️ 恒 false：Loomy 无续期机制。
       refreshable: false
@@ -45685,14 +48949,14 @@ var LoomyAuth = class extends Service5 {
   }
   /** 解析当前单凭据（默认 ref）。 */
   async resolveDefaultCredential() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef6(this.credentialRefName));
-    return resolved === void 0 ? void 0 : parseCredential5(resolved.value);
+    const resolved = await this.ctx.credentials.resolve(credentialRef7(this.credentialRefName));
+    return resolved === void 0 ? void 0 : parseCredential6(resolved.value);
   }
   /** 只读登录状态。 */
   async status() {
     const credential = await this.resolveDefaultCredential();
     if (credential === void 0) return { configured: false, refreshable: false };
-    const expiresAt = credentialExpiresAtMs2(credential);
+    const expiresAt = credentialExpiresAtMs3(credential);
     return {
       configured: true,
       source: this.credentialRefName,
@@ -45712,7 +48976,7 @@ var LoomyAuth = class extends Service5 {
    */
   async refresh() {
     const credential = await this.resolveDefaultCredential();
-    if (credential === void 0) throw new RefreshTokenExpiredError5("\u51ED\u636E\u672A\u914D\u7F6E\uFF0C\u8BF7\u5148\u767B\u5F55");
+    if (credential === void 0) throw new RefreshTokenExpiredError6("\u51ED\u636E\u672A\u914D\u7F6E\uFF0C\u8BF7\u5148\u767B\u5F55");
     await this.probeCredential(credential);
     this.lastRefreshError = void 0;
   }
@@ -45732,10 +48996,10 @@ var LoomyAuth = class extends Service5 {
    * 只回写 `expiresAt`，见 `LOOMY_EXPIRY_ACCESSORS` 的说明。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef6(refName);
+    const ref = credentialRef7(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
-    const credential = parseCredential5(resolved.value);
+    const credential = parseCredential6(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     await this.probeCredential(credential);
     await syncAccountExpiry({
@@ -45779,7 +49043,7 @@ var LoomyAuth = class extends Service5 {
     const envelope = parseLoomyEnvelope(parsed);
     if (envelope.ok) return;
     if (envelope.code === LOOMY_AUTH_ERROR_CODE) {
-      throw new RefreshTokenExpiredError5(`Loomy \u51ED\u8BC1\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\uFF08${envelope.message}\uFF09`);
+      throw new RefreshTokenExpiredError6(`Loomy \u51ED\u8BC1\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\uFF08${envelope.message}\uFF09`);
     }
     throw new Error(`Loomy \u51ED\u636E\u63A2\u6D4B\u5931\u8D25\uFF1A${envelope.message}`);
   }
@@ -45797,12 +49061,12 @@ var LoomyAuth = class extends Service5 {
   async refreshAll(pool) {
     const accounts = await pool.listAccounts(this.product.id);
     for (const entry of accounts) {
-      const ref = credentialRef6(entry.credentialRef);
+      const ref = credentialRef7(entry.credentialRef);
       let credential;
       try {
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) continue;
-        credential = parseCredential5(resolved.value);
+        credential = parseCredential6(resolved.value);
       } catch {
         continue;
       }
@@ -45823,7 +49087,7 @@ var LoomyAuth = class extends Service5 {
       try {
         await this.probeCredential(credential);
       } catch (error) {
-        if (error instanceof RefreshTokenExpiredError5) {
+        if (error instanceof RefreshTokenExpiredError6) {
           this.ctx.logger?.warn?.(
             `[loomy] \u8D26\u53F7 ${entry.id} \u7684\u51ED\u8BC1\u5DF2\u5931\u6548\uFF08Loomy \u65E0\u7EED\u671F\u7AEF\u70B9\uFF0C\u9700\u91CD\u65B0\u767B\u5F55\uFF09`
           );
@@ -45838,7 +49102,7 @@ var LoomyAuth = class extends Service5 {
   /** 登出：清除默认单凭据。 */
   async logout() {
     this.active = false;
-    await this.ctx.credentials.unset(credentialRef6(this.credentialRefName));
+    await this.ctx.credentials.unset(credentialRef7(this.credentialRefName));
     this.lastRefreshError = void 0;
   }
   /**
@@ -45886,8 +49150,8 @@ var LoomyAuth = class extends Service5 {
 };
 
 // vendor/channel-pack/src/raccoon-auth.ts
-import { Service as Service6 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef7 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service7 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef8 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/raccoon-credits.ts
 var RACCOON_LOGIN_REWARD_POINTS = 3e3;
@@ -45899,7 +49163,7 @@ function parseEnvelope(payload, status) {
   const data = typeof record.data === "object" && record.data !== null && !Array.isArray(record.data) ? record.data : void 0;
   return { ok: code === 0, code, message, data };
 }
-function readNumber2(value) {
+function readNumber3(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : void 0;
 }
 async function requestJson(url, credential, product, init, fetcher) {
@@ -45937,7 +49201,7 @@ function makePackage2(name2, remaining) {
     expiredTime: ""
   };
 }
-async function fetchRaccoonCreditBalance(product, credential, fetcher = fetch) {
+async function fetchRaccoonCreditBalance(product, credential, fetcher = createDomesticFetch()) {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_POINTS_PREFIX}/balance`,
     credential,
@@ -45946,13 +49210,13 @@ async function fetchRaccoonCreditBalance(product, credential, fetcher = fetch) {
     fetcher
   );
   if (!envelope.ok || envelope.data === void 0) return null;
-  const available2 = readNumber2(envelope.data.available_points);
+  const available2 = readNumber3(envelope.data.available_points);
   if (available2 === void 0) return null;
   const packages = [];
-  const reward = readNumber2(envelope.data.reward_points);
-  const daily = readNumber2(envelope.data.daily_points);
-  const topup = readNumber2(envelope.data.topup_points);
-  const monthly = readNumber2(envelope.data.monthly_points);
+  const reward = readNumber3(envelope.data.reward_points);
+  const daily = readNumber3(envelope.data.daily_points);
+  const topup = readNumber3(envelope.data.topup_points);
+  const monthly = readNumber3(envelope.data.monthly_points);
   if (reward !== void 0) packages.push(makePackage2("\u5956\u52B1\u79EF\u5206", reward));
   if (daily !== void 0) packages.push(makePackage2("\u6BCF\u65E5\u79EF\u5206", daily));
   if (monthly !== void 0 && monthly > 0) packages.push(makePackage2("\u4F1A\u5458\u79EF\u5206", monthly));
@@ -45964,7 +49228,7 @@ async function fetchRaccoonCreditBalance(product, credential, fetcher = fetch) {
     expiredTotal: 0
   };
 }
-async function claimRaccoonLoginReward(product, credential, fetcher = fetch) {
+async function claimRaccoonLoginReward(product, credential, fetcher = createDomesticFetch()) {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_DESKTOP_PREFIX}/login/points/grant`,
     credential,
@@ -45986,10 +49250,10 @@ async function claimRaccoonLoginReward(product, credential, fetcher = fetch) {
     };
   }
   const popup = typeof envelope.data.popup === "object" && envelope.data.popup !== null ? envelope.data.popup : void 0;
-  const points = readNumber2(popup?.points) ?? RACCOON_LOGIN_REWARD_POINTS;
+  const points = readNumber3(popup?.points) ?? RACCOON_LOGIN_REWARD_POINTS;
   return { kind: "claimed", credit: points, streakDays: 0, isStreakDay: false };
 }
-async function fetchRaccoonOnboardingStatus(product, credential, fetcher = fetch) {
+async function fetchRaccoonOnboardingStatus(product, credential, fetcher = createDomesticFetch()) {
   const envelope = await requestJson(
     `${product.apiBase}${RACCOON_POINTS_PREFIX}/bills?paging.limit=50&paging.offset=0`,
     credential,
@@ -46009,7 +49273,7 @@ async function fetchRaccoonOnboardingStatus(product, credential, fetcher = fetch
     if (item.biz_type !== "reward_grant") continue;
     if (item.event_name !== RACCOON_LOGIN_REWARD_EVENT_NAME) continue;
     claimed = true;
-    const billPoints = readNumber2(item.points);
+    const billPoints = readNumber3(item.points);
     if (billPoints !== void 0 && billPoints > 0) points = billPoints;
     break;
   }
@@ -46031,7 +49295,7 @@ function envelopeError(envelope, fallback) {
   const text = parts.length > 0 ? parts.join(": ") : fallback;
   return new Error(`raccoon: ${text}`);
 }
-async function postJson(url, body, fetcher, headers = {}) {
+async function postJson2(url, body, fetcher, headers = {}) {
   let response;
   try {
     response = await fetcher(url, {
@@ -46060,10 +49324,10 @@ function buildQrImageUrl(product, code) {
   const params = new URLSearchParams({ code, appname: "\u5546\u6C64\u5C0F\u6D63\u718A\u5B98\u7F51" });
   return `${product.apiBase}/login/mp?${params.toString()}`;
 }
-async function pollRaccoonQrLogin(product, code, fetcher = fetch) {
+async function pollRaccoonQrLogin(product, code, fetcher = createDomesticFetch()) {
   let envelope;
   try {
-    const result = await postJson(
+    const result = await postJson2(
       `${product.apiBase}${product.authApiPrefix}/login_with_qrcode_code`,
       { qrcode_code: code },
       fetcher
@@ -46082,20 +49346,20 @@ async function pollRaccoonQrLogin(product, code, fetcher = fetch) {
   }
   if (status === RACCOON_QR_STATUS.success) {
     const accessToken = typeof envelope.data.access_token === "string" ? envelope.data.access_token : "";
-    const refreshToken = typeof envelope.data.refresh_token === "string" ? envelope.data.refresh_token : "";
+    const refreshToken2 = typeof envelope.data.refresh_token === "string" ? envelope.data.refresh_token : "";
     if (accessToken.length === 0) return { status: "pending" };
     const expMs = decodeJwtExpMs(accessToken);
     return {
       status: "success",
       accessToken,
-      refreshToken,
+      refreshToken: refreshToken2,
       ...expMs !== void 0 ? { expiresAt: String(expMs) } : {}
     };
   }
   return { status: "pending" };
 }
-async function sendRaccoonSmsCode(product, phone, captchaParam, fetcher = fetch) {
-  const { envelope } = await postJson(
+async function sendRaccoonSmsCode(product, phone, captchaParam, fetcher = createDomesticFetch()) {
+  const { envelope } = await postJson2(
     `${product.apiBase}${product.authApiPrefix}/send_sms`,
     {
       captcha_param: captchaParam,
@@ -46111,8 +49375,8 @@ async function sendRaccoonSmsCode(product, phone, captchaParam, fetcher = fetch)
     throw envelopeError(envelope, "\u4E0B\u53D1\u77ED\u4FE1\u9A8C\u8BC1\u7801\u5931\u8D25");
   }
 }
-async function loginRaccoonWithSmsCode(product, phone, smsCode, fetcher = fetch) {
-  const { envelope } = await postJson(
+async function loginRaccoonWithSmsCode(product, phone, smsCode, fetcher = createDomesticFetch()) {
+  const { envelope } = await postJson2(
     `${product.apiBase}${product.authApiPrefix}/login_with_sms`,
     {
       nation_code: "86",
@@ -46127,7 +49391,7 @@ async function loginRaccoonWithSmsCode(product, phone, smsCode, fetcher = fetch)
 function credentialFromEnvelope(envelope) {
   const data = envelope.data ?? {};
   const accessToken = typeof data.access_token === "string" ? data.access_token : "";
-  const refreshToken = typeof data.refresh_token === "string" ? data.refresh_token : "";
+  const refreshToken2 = typeof data.refresh_token === "string" ? data.refresh_token : "";
   if (accessToken.length === 0) {
     throw new Error("raccoon: \u767B\u5F55\u54CD\u5E94\u7F3A\u5C11 access_token");
   }
@@ -46135,13 +49399,13 @@ function credentialFromEnvelope(envelope) {
   const officeIdentity = typeof data.office_identity === "string" ? data.office_identity : "";
   return {
     access_token: accessToken,
-    refresh_token: refreshToken,
+    refresh_token: refreshToken2,
     ...expMs !== void 0 ? { expires_at: String(expMs) } : {},
     ...officeIdentity.length > 0 ? { office_identity: officeIdentity } : {}
   };
 }
-async function refreshRaccoonCredential(product, credential, fetcher = fetch) {
-  const { envelope, status } = await postJson(
+async function refreshRaccoonCredential(product, credential, fetcher = createDomesticFetch()) {
+  const { envelope, status } = await postJson2(
     `${product.apiBase}${product.authApiPrefix}/refresh`,
     { refresh_token: credential.refresh_token },
     fetcher
@@ -46164,7 +49428,7 @@ async function refreshRaccoonCredential(product, credential, fetcher = fetch) {
     ...expMs !== void 0 ? { expires_at: String(expMs) } : {}
   };
 }
-async function fetchRaccoonUserInfo(product, credential, fetcher = fetch) {
+async function fetchRaccoonUserInfo(product, credential, fetcher = createDomesticFetch()) {
   try {
     const response = await fetcher(`${product.apiBase}${product.authApiPrefix}/user_info`, {
       method: "GET",
@@ -46580,7 +49844,7 @@ var RACCOON_LOGIN_PAGE_PATHS = {
 };
 async function startRaccoonLoginFlow(options = {}) {
   const product = options.product ?? RACCOON;
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const state = {
     qrCode: generateQrCode(),
     phone: "",
@@ -46605,8 +49869,8 @@ async function startRaccoonLoginFlow(options = {}) {
     settled = true;
     rejectResult(error);
   };
-  const server = createServer4((request, response) => {
-    void handleRequest2(request, response, { state, product, fetcher, settleOk }).catch(
+  const server = createServer4((request2, response) => {
+    void handleRequest2(request2, response, { state, product, fetcher, settleOk }).catch(
       (error) => {
         try {
           response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }).end(`\u5185\u90E8\u9519\u8BEF\uFF1A${error instanceof Error ? error.message : String(error)}`);
@@ -46643,8 +49907,8 @@ async function startRaccoonLoginFlow(options = {}) {
   });
   return { loginUrl, result, close };
 }
-async function handleRequest2(request, response, deps) {
-  const url = new URL(request.url ?? "/", `http://127.0.0.1:${request.socket.localPort ?? 0}`);
+async function handleRequest2(request2, response, deps) {
+  const url = new URL(request2.url ?? "/", `http://127.0.0.1:${request2.socket.localPort ?? 0}`);
   const { state, product } = deps;
   if (url.pathname === RACCOON_LOGIN_PAGE_PATHS.login) {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -46675,8 +49939,8 @@ async function handleRequest2(request, response, deps) {
     });
     return;
   }
-  if (url.pathname === RACCOON_LOGIN_PAGE_PATHS.smsSend && request.method === "POST") {
-    const body = await readJsonBody2(request);
+  if (url.pathname === RACCOON_LOGIN_PAGE_PATHS.smsSend && request2.method === "POST") {
+    const body = await readJsonBody2(request2);
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     const captchaParam = typeof body.captchaParam === "string" ? body.captchaParam : "";
     if (!/^1[3-9]\d{9}$/.test(phone)) {
@@ -46696,8 +49960,8 @@ async function handleRequest2(request, response, deps) {
     }
     return;
   }
-  if (url.pathname === RACCOON_LOGIN_PAGE_PATHS.smsVerify && request.method === "POST") {
-    const body = await readJsonBody2(request);
+  if (url.pathname === RACCOON_LOGIN_PAGE_PATHS.smsVerify && request2.method === "POST") {
+    const body = await readJsonBody2(request2);
     const smsCode = typeof body.smsCode === "string" ? body.smsCode.trim() : "";
     if (state.phone.length === 0) {
       response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
@@ -46727,10 +49991,10 @@ function writeJson2(response, payload) {
   response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
 }
-async function readJsonBody2(request) {
+async function readJsonBody2(request2) {
   const chunks = [];
   let total = 0;
-  for await (const chunk of request) {
+  for await (const chunk of request2) {
     const buf = chunk;
     total += buf.length;
     if (total > 64 * 1024) throw new Error("\u8BF7\u6C42\u4F53\u8FC7\u5927");
@@ -46984,7 +50248,7 @@ var RACCOON_EXPIRY_ACCESSORS = {
   refreshableOf: isRaccoonRefreshable,
   identityOf: (credential) => credential.access_token ?? ""
 };
-var RefreshTokenExpiredError6 = class extends Error {
+var RefreshTokenExpiredError7 = class extends Error {
   constructor(message) {
     super(message);
     this.name = "RefreshTokenExpiredError";
@@ -47034,7 +50298,7 @@ function normalizeRemoteModel(entry) {
     supportsImage: raccoonSupportsImage(id, tags)
   };
 }
-var RaccoonAuth = class extends Service6 {
+var RaccoonAuth = class extends Service7 {
   constructor(ctx, options = {}) {
     const product = options.product ?? RACCOON;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -47042,6 +50306,7 @@ var RaccoonAuth = class extends Service6 {
     this.product = product;
     this.credentialRefName = this.product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称。 */
@@ -47050,7 +50315,7 @@ var RaccoonAuth = class extends Service6 {
   lastRefreshError;
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   get fetchImpl() {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? createDomesticFetch();
   }
   /**
    * 启动登录（微信扫码 + 短信双路径）。
@@ -47087,7 +50352,7 @@ var RaccoonAuth = class extends Service6 {
         ...info.phone !== void 0 && credential.phone === void 0 ? { phone: info.phone } : {}
       };
     }
-    const ref = credentialRef7(refName);
+    const ref = credentialRef8(refName);
     await this.ctx.credentials.set(ref, JSON.stringify(enriched));
     this.lastRefreshError = void 0;
     try {
@@ -47120,7 +50385,7 @@ var RaccoonAuth = class extends Service6 {
   /** 解析默认 ref 的凭据。 */
   async resolveDefaultCredential() {
     try {
-      const resolved = await this.ctx.credentials.resolve(credentialRef7(this.credentialRefName));
+      const resolved = await this.ctx.credentials.resolve(credentialRef8(this.credentialRefName));
       return resolved === void 0 ? void 0 : parseRaccoonCredential(resolved.value);
     } catch {
       return void 0;
@@ -47133,18 +50398,18 @@ var RaccoonAuth = class extends Service6 {
    */
   async refresh() {
     const credential = await this.resolveDefaultCredential();
-    if (credential === void 0) throw new RefreshTokenExpiredError6("\u51ED\u636E\u672A\u914D\u7F6E\uFF0C\u8BF7\u5148\u767B\u5F55");
+    if (credential === void 0) throw new RefreshTokenExpiredError7("\u51ED\u636E\u672A\u914D\u7F6E\uFF0C\u8BF7\u5148\u767B\u5F55");
     if (!isRaccoonRefreshable(credential)) {
-      throw new RefreshTokenExpiredError6("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError7("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
       const next = await refreshRaccoonCredential(this.product, credential, this.fetchImpl);
-      await this.ctx.credentials.set(credentialRef7(this.credentialRefName), JSON.stringify(next));
+      await this.ctx.credentials.set(credentialRef8(this.credentialRefName), JSON.stringify(next));
       this.lastRefreshError = void 0;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.lastRefreshError = message;
-      if (message.includes("\u91CD\u65B0\u767B\u5F55")) throw new RefreshTokenExpiredError6(message);
+      if (message.includes("\u91CD\u65B0\u767B\u5F55")) throw new RefreshTokenExpiredError7(message);
       throw error;
     }
   }
@@ -47168,13 +50433,13 @@ var RaccoonAuth = class extends Service6 {
    *   逐个解析凭据比对，代价高且需要账号池具备凭据访问能力）。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef7(refName);
+    const ref = credentialRef8(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
     const credential = parseRaccoonCredential(resolved.value);
     if (!credential) throw new Error("\u51ED\u636E\u89E3\u6790\u5931\u8D25");
     if (!isRaccoonRefreshable(credential)) {
-      throw new RefreshTokenExpiredError6("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+      throw new RefreshTokenExpiredError7("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
       const next = await refreshRaccoonCredential(this.product, credential, this.fetchImpl);
@@ -47190,7 +50455,7 @@ var RaccoonAuth = class extends Service6 {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("\u91CD\u65B0\u767B\u5F55")) throw new RefreshTokenExpiredError6(message);
+      if (message.includes("\u91CD\u65B0\u767B\u5F55")) throw new RefreshTokenExpiredError7(message);
       throw error;
     }
   }
@@ -47214,7 +50479,7 @@ var RaccoonAuth = class extends Service6 {
     const accounts = await pool.listAccounts(this.product.id);
     for (const entry of accounts) {
       if (!entry.refreshable) continue;
-      const resolved = await this.ctx.credentials.resolve(credentialRef7(entry.credentialRef));
+      const resolved = await this.ctx.credentials.resolve(credentialRef8(entry.credentialRef));
       if (!resolved) continue;
       const credential = parseRaccoonCredential(resolved.value);
       if (credential === void 0) continue;
@@ -47237,7 +50502,7 @@ var RaccoonAuth = class extends Service6 {
       try {
         await this.refreshAccountCredential(entry.credentialRef, pool, entry.id);
       } catch (error) {
-        if (error instanceof RefreshTokenExpiredError6) {
+        if (error instanceof RefreshTokenExpiredError7) {
           this.ctx.logger?.warn?.(`[raccoon] \u8D26\u53F7 ${entry.id} \u7684 refresh_token \u5DF2\u5931\u6548\uFF0C\u9700\u91CD\u65B0\u767B\u5F55`);
         } else {
           this.ctx.logger?.warn?.(
@@ -47249,7 +50514,7 @@ var RaccoonAuth = class extends Service6 {
   }
   /** 登出：清除默认单凭据。 */
   async logout() {
-    await this.ctx.credentials.unset(credentialRef7(this.credentialRefName));
+    await this.ctx.credentials.unset(credentialRef8(this.credentialRefName));
     this.lastRefreshError = void 0;
   }
   /**
@@ -47343,7 +50608,7 @@ var RaccoonAuth = class extends Service6 {
     }
     for (const entry of entries) {
       try {
-        const ref = credentialRef7(entry.credentialRef);
+        const ref = credentialRef8(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) continue;
         const credential = parseRaccoonCredential(resolved.value);
@@ -47437,6 +50702,7 @@ var LoomyBalanceSelector = class {
   constructor(deps) {
     this.deps = deps;
   }
+  deps;
   cache = /* @__PURE__ */ new Map();
   /** 清空缓存（凭据变化、手动刷新余额后调用）。 */
   invalidate(accountId) {
@@ -47482,7 +50748,7 @@ var LoomyBalanceSelector = class {
     const detail = await fetchLoomyCreditDetail(
       credential,
       this.deps.product,
-      this.deps.fetcher ?? fetch
+      this.deps.fetcher ?? createDomesticFetch()
     );
     if (detail === null) {
       return { id: account.id, ok: false, error: "\u4F59\u989D\u67E5\u8BE2\u5931\u8D25\uFF08\u51ED\u636E\u5931\u6548\u6216\u54CD\u5E94\u5F02\u5E38\uFF09" };
@@ -47543,7 +50809,7 @@ var LoomyBalanceSelector = class {
 };
 
 // vendor/channel-pack/src/zcode-auth.ts
-import { Service as Service7 } from "@deepseek-ai/cordis";
+import { Service as Service8 } from "@deepseek-ai/cordis";
 
 // vendor/channel-pack/src/zcode.ts
 var PHONE_RE = /^1[3-9]\d{9}$/;
@@ -47833,6 +51099,7 @@ var CdpConnection = class {
       else slot2.resolve(message.result);
     });
   }
+  ws;
   nextId = 0;
   pending = /* @__PURE__ */ new Map();
   /** 发送一条 CDP 命令并等结果。 */
@@ -47881,7 +51148,7 @@ try {
   };
 } catch (error) { /* \u5185\u6838\u65E0 WebGL \u65F6\u5FFD\u7565 */ }
 `;
-var sleep3 = (ms) => new Promise((resolve2) => {
+var sleep4 = (ms) => new Promise((resolve2) => {
   const timer = setTimeout(resolve2, ms);
   timer.unref?.();
 });
@@ -48166,6 +51433,7 @@ var ZcodeCaptchaBrowser = class {
     this.options = options;
     this.log = options.log;
   }
+  options;
   child;
   browserWs;
   browserCdp;
@@ -48293,7 +51561,7 @@ var ZcodeCaptchaBrowser = class {
         }
       } catch {
       }
-      await sleep3(300);
+      await sleep4(300);
     }
     if (debuggerUrl === void 0) {
       this.kill();
@@ -48422,7 +51690,7 @@ var ZcodeCaptchaBrowser = class {
         lastError = error instanceof Error ? error : new Error(String(error));
         this.discardPage(page);
         if (attempt < attempts) {
-          await sleep3(300);
+          await sleep4(300);
         }
       } finally {
         if (this.reusablePage === page) this.releasePage(page);
@@ -48499,7 +51767,7 @@ var ZcodeCaptchaBrowser = class {
           `zcode: captcha \u9875\u9762\u88AB\u5360\u7528\u8D85\u8FC7 ${waitTimeoutMs}ms\uFF08\u7591\u4F3C\u4E0A\u4E00\u6B21 mint \u672A\u5F52\u8FD8\uFF09`
         );
       }
-      await sleep3(50);
+      await sleep4(50);
     }
     this.pageBusy = true;
     const idleReuseMs = this.options.idleReuseMs ?? Number.POSITIVE_INFINITY;
@@ -48565,7 +51833,7 @@ var ZcodeCaptchaBrowser = class {
       await cdp.send("Runtime.enable");
       await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: STEALTH_PATCH });
       await cdp.send("Page.navigate", { url: resolveCaptchaPageOrigin(this.options) });
-      await sleep3(this.options.navigationWaitMs ?? 1500);
+      await sleep4(this.options.navigationWaitMs ?? 1500);
       const page = { targetId, ws, cdp, lastUsedAt: Date.now() };
       this.reusablePage = page;
       return page;
@@ -49254,8 +52522,8 @@ var CarrierPageServer = class {
   /** 真绑一次端口。成功 ⇒ 记下 server 并回 true；`EADDRINUSE` 之类 ⇒ 回 false（换候选）。 */
   tryListen(port) {
     return new Promise((resolve2) => {
-      const server = createHttpServer((request, response) => {
-        this.handle(request, response);
+      const server = createHttpServer((request2, response) => {
+        this.handle(request2, response);
       });
       const settle = (ok) => {
         resolve2(ok);
@@ -49284,14 +52552,14 @@ var CarrierPageServer = class {
    * ⚠ 判**路径**而不是「路径含 carrier」：`/api/channel-pack/captcha-carrier`（插件自己那条
    * 旧路由）在这个服务上必须 404，否则两处语义会悄悄合并成一条。
    */
-  handle(request, response) {
-    const path2 = (request.url ?? "").split("?")[0];
+  handle(request2, response) {
+    const path2 = (request2.url ?? "").split("?")[0];
     if (path2 !== CARRIER_PAGE_ROUTE) {
       response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       response.end("not found");
       return;
     }
-    if (request.method !== "GET") {
+    if (request2.method !== "GET") {
       response.writeHead(405, { "content-type": "text/plain; charset=utf-8", allow: "GET" });
       response.end("method not allowed");
       return;
@@ -49448,6 +52716,7 @@ var ZcodeLoginError = class extends Error {
     this.kind = kind;
     this.name = "ZcodeLoginError";
   }
+  kind;
 };
 function generateFlowSecret() {
   return randomBytes6(32).toString("hex");
@@ -50191,7 +53460,7 @@ async function withTimeout(work, ms) {
     if (timer !== void 0) clearTimeout(timer);
   }
 }
-var ZcodeAuth = class extends Service7 {
+var ZcodeAuth = class extends Service8 {
   product;
   fetchImpl;
   /** 注入的账号池（测试用；生产走 ctx.get）。 */
@@ -51628,7 +54897,7 @@ function emptyCheckinStatus(active, actionRequired = false) {
 }
 
 // vendor/channel-pack/src/zcode-adapter.ts
-import { EMPTY_RESPONSE_CODE as EMPTY_RESPONSE_CODE2, LlmAdapter as LlmAdapter7, LlmError as LlmError13, ReasoningEffortId as ReasoningEffortId7 } from "@deepseek-ai/dsh-llm";
+import { EMPTY_RESPONSE_CODE as EMPTY_RESPONSE_CODE2, LlmAdapter as LlmAdapter8, LlmError as LlmError14, ReasoningEffortId as ReasoningEffortId8 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/zcode-identity.ts
 var OFFICIAL_CLI_PREFIX = "You are ZCode, an interactive coding agent";
@@ -51719,7 +54988,7 @@ function withContextPrefix(messages, now = /* @__PURE__ */ new Date()) {
 }
 
 // vendor/channel-pack/src/zcode-anthropic.ts
-import { LlmError as LlmError12, ToolCallId as ToolCallId4 } from "@deepseek-ai/dsh-llm";
+import { LlmError as LlmError13, ToolCallId as ToolCallId5 } from "@deepseek-ai/dsh-llm";
 function parseToolArguments(raw) {
   if (raw === void 0 || raw === null) return {};
   if (typeof raw === "object") return raw;
@@ -51948,7 +55217,7 @@ async function* consumeAnthropicSse(body, options) {
       const error = payload.error;
       const message = typeof error === "object" && error !== null ? error.message : void 0;
       const type2 = typeof error === "object" && error !== null ? error.type : void 0;
-      throw new LlmError12(
+      throw new LlmError13(
         `${options.label}: ${typeof message === "string" ? message : JSON.stringify(payload).slice(0, 300)}`,
         // overloaded 是暂时性的，值得重试；其余按服务端错误处理。
         type2 === "overloaded_error" ? "RATE_LIMIT" : "SERVER"
@@ -52014,7 +55283,7 @@ async function* consumeAnthropicSse(body, options) {
         yield {
           type: "tool-call-delta",
           index,
-          id: ToolCallId4(block.callId),
+          id: ToolCallId5(block.callId),
           ...block.name.length > 0 ? { name: block.name } : {},
           argumentsDelta: partial
         };
@@ -52043,7 +55312,7 @@ async function* consumeAnthropicSse(body, options) {
     }
   }
   if (!sawAny) {
-    throw new LlmError12(
+    throw new LlmError13(
       `${options.label}: \u6A21\u578B\u8FD4\u56DE\u4E86\u7A7A\u54CD\u5E94\uFF08\u65E0\u4EFB\u4F55 text / thinking / tool \u5185\u5BB9\uFF09`,
       "EMPTY_RESPONSE"
     );
@@ -52066,7 +55335,7 @@ async function* consumeAnthropicSse(body, options) {
       index: block.index,
       block: {
         type: "tool-call",
-        id: ToolCallId4(block.callId),
+        id: ToolCallId5(block.callId),
         name: block.name,
         arguments: args
       }
@@ -52229,7 +55498,7 @@ function fallbackToRemote3(model) {
     ...model.defaultReasoningLevel !== void 0 ? { defaultReasoningLevel: model.defaultReasoningLevel } : {}
   };
 }
-function positiveMaxTokens2(value) {
+function positiveMaxTokens3(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : void 0;
 }
 var ZCODE_STREAM_IDLE_RETRY_STEP_MS = 3e4;
@@ -52243,7 +55512,7 @@ function resolveRequestTimeoutMs(product) {
   const raw = Number(process.env.DSH_ZCODE_REQUEST_TIMEOUT_MS);
   return Number.isFinite(raw) ? raw : product.requestTimeoutMs;
 }
-var ZcodeAdapter = class extends LlmAdapter7 {
+var ZcodeAdapter = class extends LlmAdapter8 {
   constructor(options) {
     super();
     this.options = options;
@@ -52257,6 +55526,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
     this.sleepImpl = options.sleep ?? defaultAdapterSleep;
     this.nowImpl = options.now ?? (() => Date.now());
   }
+  options;
   product;
   fetchImpl;
   /** 兜底模型索引（id → 条目）。 */
@@ -52370,7 +55640,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
     if (contextWindow !== void 0 && contextWindow > 0) {
       resolved.context = { contextWindow };
     }
-    const maxTokens = positiveMaxTokens2(entry?.maxTokens ?? fallback?.maxTokens);
+    const maxTokens = positiveMaxTokens3(entry?.maxTokens ?? fallback?.maxTokens);
     if (maxTokens !== void 0) resolved.defaultMaxTokens = maxTokens;
     const levels = entry?.reasoningLevels ?? fallback?.reasoningLevels;
     if (levels !== void 0 && levels.length > 0) {
@@ -52387,8 +55657,8 @@ var ZcodeAdapter = class extends LlmAdapter7 {
          *
          * ⚠ `ReasoningEffortId` 是 branded 类型，必须用构造函数（同 qoder 的写法）。
          */
-        efforts: levels.map((id) => ({ id: ReasoningEffortId7(id), name: reasoningEffortLabel(id) })),
-        ...defaultLevel !== void 0 && levels.includes(defaultLevel) ? { defaultEffort: ReasoningEffortId7(defaultLevel) } : {}
+        efforts: levels.map((id) => ({ id: ReasoningEffortId8(id), name: reasoningEffortLabel(id) })),
+        ...defaultLevel !== void 0 && levels.includes(defaultLevel) ? { defaultEffort: ReasoningEffortId8(defaultLevel) } : {}
       };
     }
     return resolved;
@@ -52505,13 +55775,13 @@ var ZcodeAdapter = class extends LlmAdapter7 {
       const all = await this.loadModels();
       const entry = all.find((item) => item.id === options.model);
       if (!this.inputModalitiesFor(entry).includes("image")) {
-        throw new LlmError13(
+        throw new LlmError14(
           `zcode: \u6A21\u578B "${options.model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`,
           "UNSUPPORTED_CONTENT"
         );
       }
       if (this.options.readImage === void 0) {
-        throw new LlmError13(
+        throw new LlmError14(
           "zcode: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1\uFF08\u5BBF\u4E3B\u672A\u63D0\u4F9B attachments.readImage\uFF09",
           "UNSUPPORTED_CONTENT"
         );
@@ -52569,7 +55839,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
       }
     }
     const timedOut = () => controller.signal.aborted && options.signal?.aborted !== true;
-    const timeoutError = (cause) => new LlmError13(
+    const timeoutError = (cause) => new LlmError14(
       `zcode: \u8BF7\u6C42\u8D85\u65F6\uFF08${timeoutMs}ms \u5185\u672A\u5B8C\u6210\uFF09\u2014\u2014 \u4E0A\u6E38\u53EF\u80FD\u957F\u65F6\u95F4\u4E0D\u8FD4\u56DE\u6570\u636E`,
       "TIMEOUT",
       cause === void 0 ? void 0 : { cause }
@@ -52650,7 +55920,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
               break;
             }
           }
-          throw new LlmError13(
+          throw new LlmError14(
             `zcode: ${describeUpstreamError(response.status, text)}`,
             "QUOTA_EXCEEDED",
             { status: response.status }
@@ -52708,7 +55978,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
           shape: describeZcodeRequestShape(body.system, body.messages),
           now: Date.now()
         }) : void 0;
-        throw new LlmError13(
+        throw new LlmError14(
           `zcode: ${describeUpstreamError(response.status, text, diagnostic)}`,
           httpErrorCodeForZcode(response.status, text),
           { status: response.status }
@@ -52716,7 +55986,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
       }
       if (switchedAccount) continue;
       if (response === void 0) {
-        throw new LlmError13("zcode: \u4E0A\u6E38\u8BF7\u6C42\u672A\u53D1\u51FA\uFF08\u5185\u90E8\u72B6\u6001\u5F02\u5E38\uFF09", "SERVER");
+        throw new LlmError14("zcode: \u4E0A\u6E38\u8BF7\u6C42\u672A\u53D1\u51FA\uFF08\u5185\u90E8\u72B6\u6001\u5F02\u5E38\uFF09", "SERVER");
       }
       if (response.body === null) {
         if (quotaRound < this.product.quotaSwitchMax) {
@@ -52727,7 +55997,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
             continue;
           }
         }
-        throw new LlmError13(
+        throw new LlmError14(
           zcodeEntitlementErrorMessage(options.model, tried.size),
           "QUOTA_EXCEEDED"
         );
@@ -52755,7 +56025,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
               continue;
             }
           }
-          throw new LlmError13(
+          throw new LlmError14(
             zcodeEntitlementErrorMessage(options.model, tried.size),
             "QUOTA_EXCEEDED",
             { cause: error }
@@ -52780,7 +56050,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
       credential = await this.options.resolveCredential(options.model);
     }
     if (credential === void 0) {
-      throw new LlmError13(
+      throw new LlmError14(
         "zcode: \u6CA1\u6709\u53EF\u7528\u7684\u51ED\u636E \u2014\u2014 \u8BF7\u5728 Channel Pack \u7684 ZCode \u9762\u677F\u70B9\u300C\u6DFB\u52A0\u8D26\u53F7\u300D\u5B8C\u6210\u767B\u5F55\uFF08\u672C\u63D2\u4EF6\u53EA\u7528\u5B83\u81EA\u5DF1\u7684\u6388\u6743\u6D41\u7A0B\uFF0C\u4E0D\u4F1A\u8BFB\u53D6\u672C\u673A ZCode \u5BA2\u6237\u7AEF\u7684\u767B\u5F55\u6001\uFF09",
         "MISSING_CREDENTIAL"
       );
@@ -52820,13 +56090,13 @@ var ZcodeAdapter = class extends LlmAdapter7 {
       if (error instanceof GateAbortedError) throw error;
       if (userSignal?.aborted === true) throw error;
       if (signal.aborted) {
-        throw new LlmError13(
+        throw new LlmError14(
           `zcode: \u8BF7\u6C42\u8D85\u65F6\uFF08${timeoutMs}ms \u5185\u672A\u5B8C\u6210\uFF09\u2014\u2014 \u4E0A\u6E38\u53EF\u80FD\u957F\u65F6\u95F4\u4E0D\u8FD4\u56DE\u6570\u636E`,
           "TIMEOUT",
           { cause: error }
         );
       }
-      throw new LlmError13(
+      throw new LlmError14(
         `zcode: \u8BF7\u6C42\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`,
         "TRANSPORT",
         { cause: error }
@@ -52901,7 +56171,7 @@ var ZcodeAdapter = class extends LlmAdapter7 {
   }
 };
 function isFastEntitlementMiss(error, elapsedMs) {
-  if (!(error instanceof LlmError13)) return false;
+  if (!(error instanceof LlmError14)) return false;
   if (error.code !== EMPTY_RESPONSE_CODE2) return false;
   return elapsedMs < ZCODE_FAST_EMPTY_MS;
 }
@@ -52914,7 +56184,7 @@ async function defaultAdapterSleep(ms, signal) {
   await new Promise((resolve2, reject) => {
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new LlmError13("zcode: \u9000\u907F\u7B49\u5F85\u671F\u95F4\u8BF7\u6C42\u5DF2\u53D6\u6D88", "TRANSPORT"));
+      reject(new LlmError14("zcode: \u9000\u907F\u7B49\u5F85\u671F\u95F4\u8BF7\u6C42\u5DF2\u53D6\u6D88", "TRANSPORT"));
     };
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
@@ -53003,7 +56273,7 @@ function registerZcodeLlm(ctx, options) {
 }
 
 // vendor/channel-pack/src/channel-pack-rpc.ts
-import { credentialRef as credentialRef11 } from "@deepseek-ai/dsh-credentials";
+import { credentialRef as credentialRef12 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/openai-gateway/config.ts
 var DEFAULT_GATEWAY_HOST = "127.0.0.1";
@@ -53402,7 +56672,7 @@ function minimaxFallbackEntries(product = MINIMAX) {
 }
 
 // vendor/channel-pack/src/credits.ts
-function roundCredits(value) {
+function roundCredits2(value) {
   return Math.round(value * 100) / 100;
 }
 function normalizeCreditUnit(unit) {
@@ -53611,7 +56881,7 @@ function withTimezone(base, path2, timezoneId) {
   url.searchParams.set("timezone_id", timezoneId);
   return url.toString();
 }
-async function fetchMinimaxSigninStatus(credential, fetcher = fetch, product = MINIMAX) {
+async function fetchMinimaxSigninStatus(credential, fetcher = createDomesticFetch(), product = MINIMAX) {
   const url = withTimezone(
     product.apiHost,
     MINIMAX_SIGNIN_STATUS_PATH,
@@ -53622,7 +56892,7 @@ async function fetchMinimaxSigninStatus(credential, fetcher = fetch, product = M
   const panel = parseMinimaxSigninPanel(unwrapEnvelopeData(result.payload));
   return panel === void 0 ? null : minimaxPanelToCheckinStatus(panel);
 }
-async function claimMinimaxDailyCheckin(credential, fetcher = fetch, product = MINIMAX) {
+async function claimMinimaxDailyCheckin(credential, fetcher = createDomesticFetch(), product = MINIMAX) {
   const url = withTimezone(
     product.apiHost,
     MINIMAX_SIGNIN_CLAIM_PATH,
@@ -53650,7 +56920,7 @@ async function claimMinimaxDailyCheckin(credential, fetcher = fetch, product = M
     isStreakDay: status?.isStreakDay ?? false
   };
 }
-async function fetchMinimaxCreditBalance(credential, fetcher = fetch, product = MINIMAX) {
+async function fetchMinimaxCreditBalance(credential, fetcher = createDomesticFetch(), product = MINIMAX) {
   const url = `${product.apiHost}${MINIMAX_CREDIT_DETAILS_PATH}`;
   const result = await requestEnvelope(url, credential, { method: "GET" }, fetcher);
   if (!result.ok) return null;
@@ -53663,12 +56933,12 @@ async function fetchMinimaxCreditBalance(credential, fetcher = fetch, product = 
     const remaining = looseAmount(entry.remaining_amount);
     if (remaining !== void 0) total += remaining;
   }
-  return { total: roundCredits(total), packages: [], expiredTotal: 0 };
+  return { total: roundCredits2(total), packages: [], expiredTotal: 0 };
 }
 
 // vendor/channel-pack/src/gemini.ts
 import { randomBytes as randomBytes7 } from "node:crypto";
-import { LlmError as LlmError14, ReasoningEffortId as ReasoningEffortId8 } from "@deepseek-ai/dsh-llm";
+import { LlmError as LlmError15, ReasoningEffortId as ReasoningEffortId9 } from "@deepseek-ai/dsh-llm";
 var GEMINI_ENDPOINT_DAILY = "https://daily-cloudcode-pa.googleapis.com";
 var GEMINI_ENDPOINT_SANDBOX = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 var GEMINI_ENDPOINTS = [GEMINI_ENDPOINT_DAILY, GEMINI_ENDPOINT_SANDBOX];
@@ -53829,7 +57099,7 @@ function geminiCanonicalModelId(modelId) {
 }
 function geminiModelSpec(modelId, effort) {
   if (geminiCanonicalModelId(modelId) !== GEMINI_UPSTREAM_FLASH) {
-    throw new LlmError14(
+    throw new LlmError15(
       `gemini: \u6A21\u578B "${modelId}" \u4E0D\u5728\u672C provider \u76EE\u5F55\u4E2D\uFF08\u4EC5\u652F\u6301 ${GEMINI_UPSTREAM_FLASH}\uFF09`,
       "INVALID_REQUEST",
       // ⚠️ `status` 只落在 `LlmError.failure`（不是顶层属性），且网关的
@@ -53848,8 +57118,8 @@ function geminiModelSpec(modelId, effort) {
 function geminiReasoningInfo(entry) {
   const options = entry.effortOptions;
   if (options === void 0 || options.length === 0) return void 0;
-  const efforts = options.map((id) => ({ id: ReasoningEffortId8(id), name: geminiEffortLabel(id) }));
-  const defaultEffort = entry.defaultEffort !== void 0 && options.includes(entry.defaultEffort) ? ReasoningEffortId8(entry.defaultEffort) : void 0;
+  const efforts = options.map((id) => ({ id: ReasoningEffortId9(id), name: geminiEffortLabel(id) }));
+  const defaultEffort = entry.defaultEffort !== void 0 && options.includes(entry.defaultEffort) ? ReasoningEffortId9(entry.defaultEffort) : void 0;
   return { efforts, ...defaultEffort === void 0 ? {} : { defaultEffort } };
 }
 var GEMINI_SCHEMA_KEYS = /* @__PURE__ */ new Set([
@@ -54025,7 +57295,7 @@ function toGeminiCreditBalance(fiveHour, weekly) {
   if (packages.length === 0) return { total: 0, packages: [], expiredTotal: 0 };
   const sum = packages.reduce((acc, item) => acc + item.remaining, 0);
   return {
-    total: roundCredits(sum / packages.length),
+    total: roundCredits2(sum / packages.length),
     packages,
     expiredTotal: 0
   };
@@ -54038,7 +57308,7 @@ async function fetchGeminiCreditBalance(credential, _product = GEMINI, options =
     const cached2 = cache2.get(token);
     if (cached2 !== void 0 && now - cached2.at < GEMINI_QUOTA_CACHE_TTL_MS) return cached2.result;
   }
-  const result = await requestQuota(credential, options.fetcher ?? fetch);
+  const result = await requestQuota(credential, options.fetcher ?? createDomesticFetch());
   cache2.set(token, { at: now, result });
   return result;
 }
@@ -54309,7 +57579,7 @@ function isQoderNotActivated(campaigns, usageBody) {
   const record = usage;
   return record.addOnQuota === void 0;
 }
-async function fetchQoderUsageRaw(credential, product, fetcher = fetch) {
+async function fetchQoderUsageRaw(credential, product, fetcher = createDomesticFetch()) {
   try {
     const response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
       method: "GET",
@@ -54331,7 +57601,7 @@ async function creditsHeaders(credential, product) {
     "User-Agent": "Qoder"
   });
 }
-function readNumber3(source, key) {
+function readNumber4(source, key) {
   if (typeof source !== "object" || source === null) return void 0;
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -54341,16 +57611,16 @@ function readNumber3(source, key) {
   }
   return void 0;
 }
-function readString3(source, key) {
+function readString4(source, key) {
   if (typeof source !== "object" || source === null) return void 0;
   const value = source[key];
   return typeof value === "string" && value.length > 0 ? value : void 0;
 }
 var QODER_PLAN_PACKAGE = "\u5957\u9910\u989D\u5EA6";
 function toPackage(name2, quota, options = {}) {
-  const total = readNumber3(quota, "total");
-  const used = readNumber3(quota, "used");
-  const remainingRaw = readNumber3(quota, "remaining");
+  const total = readNumber4(quota, "total");
+  const used = readNumber4(quota, "used");
+  const remainingRaw = readNumber4(quota, "remaining");
   if (total === void 0 && used === void 0 && remainingRaw === void 0) return void 0;
   const totalValue = Math.max(0, total ?? 0);
   const usedValue = Math.max(0, used ?? 0);
@@ -54358,7 +57628,7 @@ function toPackage(name2, quota, options = {}) {
   const expMs = options.expiredTime && options.expiredTime.length > 0 ? Date.parse(options.expiredTime.replace(" ", "T")) : Number.NaN;
   return {
     name: name2,
-    unit: readString3(quota, "unit") ?? "credits",
+    unit: readString4(quota, "unit") ?? "credits",
     remaining,
     total: totalValue,
     used: usedValue,
@@ -54369,7 +57639,7 @@ function toPackage(name2, quota, options = {}) {
     ...Number.isFinite(expMs) ? { deductionEndTime: expMs } : {}
   };
 }
-async function fetchQoderCreditBalance(credential, product, fetcher = fetch) {
+async function fetchQoderCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   let response;
   try {
     response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
@@ -54401,15 +57671,15 @@ async function fetchQoderCreditBalance(credential, product, fetcher = fetch) {
   if (Array.isArray(dedicated)) {
     for (const item of dedicated) {
       const pkg = toPackage(
-        readString3(item, "name") ?? readString3(item, "id") ?? "\u4E13\u7528\u8D44\u6E90\u5305",
+        readString4(item, "name") ?? readString4(item, "id") ?? "\u4E13\u7528\u8D44\u6E90\u5305",
         item,
-        { expiredTime: readString3(item, "expiresAt") ?? readString3(item, "expires_at") ?? "" }
+        { expiredTime: readString4(item, "expiresAt") ?? readString4(item, "expires_at") ?? "" }
       );
       if (pkg !== void 0) packages.push(pkg);
     }
   }
   if (packages.length === 0) return null;
-  const total = roundCredits(packages.reduce((sum, pkg) => sum + pkg.remaining, 0));
+  const total = roundCredits2(packages.reduce((sum, pkg) => sum + pkg.remaining, 0));
   return { total, packages, expiredTotal: 0 };
 }
 function parseQoderCampaigns(body) {
@@ -54419,13 +57689,13 @@ function parseQoderCampaigns(body) {
   const campaigns = [];
   if (Array.isArray(raw)) {
     for (const item of raw) {
-      const id = readString3(item, "campaignId");
+      const id = readString4(item, "campaignId");
       if (id === void 0) continue;
       campaigns.push({
         campaignId: id,
-        ...readString3(item, "campaignKey") !== void 0 ? { campaignKey: readString3(item, "campaignKey") } : {},
-        ...readString3(item, "actionType") !== void 0 ? { actionType: readString3(item, "actionType") } : {},
-        ...readString3(item, "claimStatus") !== void 0 ? { claimStatus: readString3(item, "claimStatus") } : {},
+        ...readString4(item, "campaignKey") !== void 0 ? { campaignKey: readString4(item, "campaignKey") } : {},
+        ...readString4(item, "actionType") !== void 0 ? { actionType: readString4(item, "actionType") } : {},
+        ...readString4(item, "claimStatus") !== void 0 ? { claimStatus: readString4(item, "claimStatus") } : {},
         ...benefitAmount(item) !== void 0 ? { amount: benefitAmount(item) } : {}
       });
     }
@@ -54438,7 +57708,7 @@ function parseQoderCampaigns(body) {
 }
 function benefitAmount(item) {
   if (typeof item !== "object" || item === null) return void 0;
-  return readNumber3(item.benefit, "amount");
+  return readNumber4(item.benefit, "amount");
 }
 async function loadCampaigns(credential, product, fetcher) {
   let response;
@@ -54469,12 +57739,12 @@ function parseClaimResult(body) {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return {};
   const root = body;
   return {
-    ...readString3(root, "status") !== void 0 ? { status: readString3(root, "status") } : {},
+    ...readString4(root, "status") !== void 0 ? { status: readString4(root, "status") } : {},
     ...typeof root.replayed === "boolean" ? { replayed: root.replayed } : {},
     ...benefitAmount(root) !== void 0 ? { amount: benefitAmount(root) } : {}
   };
 }
-async function claimQoderCampaign(credential, product, campaignId, fetcher = fetch) {
+async function claimQoderCampaign(credential, product, campaignId, fetcher = createDomesticFetch()) {
   const url = `${product.openApiBase}${QODER_CAMPAIGNS_PATH}/${encodeURIComponent(campaignId)}/claim`;
   let response;
   try {
@@ -54511,7 +57781,7 @@ function describeNonJson(status, text) {
   const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
   return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
 }
-async function claimQoderDailyCheckin(credential, product, fetcher = fetch, nowMs = Date.now()) {
+async function claimQoderDailyCheckin(credential, product, fetcher = createDomesticFetch(), nowMs = Date.now()) {
   const parsed = await loadCampaigns(credential, product, fetcher);
   if (parsed === void 0) {
     return { kind: "failed", code: -1, message: "\u6D3B\u52A8\u5217\u8868\u67E5\u8BE2\u5931\u8D25" };
@@ -54548,7 +57818,7 @@ async function claimQoderDailyCheckin(credential, product, fetcher = fetch, nowM
 // vendor/channel-pack/src/cline-credits.ts
 var CLINE_CREDITS_TIMEOUT_MS = 3e4;
 var CLINE_BALANCE_SCALE = 1e5;
-function readNumber4(source, key) {
+function readNumber5(source, key) {
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -54558,7 +57828,7 @@ function readNumber4(source, key) {
   return void 0;
 }
 function toClineCreditBalance(rawBalance) {
-  const total = roundCredits(rawBalance / CLINE_BALANCE_SCALE);
+  const total = roundCredits2(rawBalance / CLINE_BALANCE_SCALE);
   const pkg = {
     name: "Cline \u8D26\u6237\u4F59\u989D",
     unit: "USD",
@@ -54583,11 +57853,11 @@ function parseClineBalanceResponse(value) {
   }
   const data = typeof record.data === "object" && record.data !== null && !Array.isArray(record.data) ? record.data : void 0;
   if (data === void 0) return { error: "\u54CD\u5E94\u7F3A\u5C11 data \u5B57\u6BB5" };
-  const rawBalance = readNumber4(data, "balance");
+  const rawBalance = readNumber5(data, "balance");
   if (rawBalance === void 0) return { error: "\u54CD\u5E94\u7F3A\u5C11 balance \u5B57\u6BB5" };
   return { rawBalance };
 }
-async function fetchClineCreditBalance(credential, product, fetcher = fetch, options = {}) {
+async function fetchClineCreditBalance(credential, product, fetcher = createDomesticFetch(), options = {}) {
   const userId = credential.account_id;
   if (typeof userId !== "string" || userId.trim().length === 0) {
     return { balance: null, error: "\u51ED\u636E\u7F3A\u5C11\u8D26\u53F7 id\uFF0C\u65E0\u6CD5\u67E5\u8BE2\u4F59\u989D" };
@@ -54629,7 +57899,7 @@ async function fetchClineCreditBalance(credential, product, fetcher = fetch, opt
 // vendor/channel-pack/src/cline-quota.ts
 var CLINE_QUOTA_TIMEOUT_MS = 3e4;
 var CLINE_USAGE_LIMITS_PATH = "/api/v1/users/me/plan/usage-limits";
-function readNumber5(source, key) {
+function readNumber6(source, key) {
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -54638,7 +57908,7 @@ function readNumber5(source, key) {
   }
   return void 0;
 }
-function readString4(source, key) {
+function readString5(source, key) {
   const value = source[key];
   if (typeof value !== "string") return void 0;
   const trimmed = value.trim();
@@ -54682,20 +57952,20 @@ function parseClineUsageLimits(value) {
   for (const item of raw) {
     if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
     const entry = item;
-    const type = readString4(entry, "type");
+    const type = readString5(entry, "type");
     if (type === void 0) continue;
     windows.push({
       type,
-      percentUsed: readNumber5(entry, "percentUsed") ?? 0,
+      percentUsed: readNumber6(entry, "percentUsed") ?? 0,
       // ⚠️ `resetsAt` 是 ISO 字符串。若网关某天回数字时间戳，也不要在这里
       // 猜单位（秒/毫秒），原样转成字符串交由展示层判定 —— 猜错会显示
       // 1970 年或 5 万年后的时间，比不显示更难排查。
-      resetsAt: readString4(entry, "resetsAt") ?? ""
+      resetsAt: readString5(entry, "resetsAt") ?? ""
     });
   }
   return { windows, error: serverError === "" ? void 0 : serverError };
 }
-async function fetchClineUsageLimits(credential, product, fetcher = fetch, options = {}) {
+async function fetchClineUsageLimits(credential, product, fetcher = createDomesticFetch(), options = {}) {
   const refusal = { ok: false, windows: [], error: "\u989D\u5EA6\u7AEF\u70B9\u4E0D\u53EF\u7528" };
   const url = `${product.apiBase}${CLINE_USAGE_LIMITS_PATH}`;
   let response;
@@ -54747,7 +58017,7 @@ var LOBSTERAI_PROFILE_SUMMARY_PATH = "/api/user/profile-summary";
 var LOBSTERAI_SLOT_PLACEMENT = "desktop_sidebar";
 var LOBSTERAI_SLOT_CONTAINER_API_VERSION = "2";
 var LOBSTERAI_SLOT_PLATFORM = "win32";
-var UNPARSABLE_RESPONSE_MESSAGE = "\u8BF7\u6C42\u5931\u8D25\u6216\u54CD\u5E94\u65E0\u6CD5\u89E3\u6790";
+var UNPARSABLE_RESPONSE_MESSAGE2 = "\u8BF7\u6C42\u5931\u8D25\u6216\u54CD\u5E94\u65E0\u6CD5\u89E3\u6790";
 async function requestJson2(url, credential, product, fetcher, init = { method: "GET" }) {
   try {
     const response = await fetcher(url, {
@@ -54761,17 +58031,17 @@ async function requestJson2(url, credential, product, fetcher, init = { method: 
     try {
       parsed = JSON.parse(text);
     } catch {
-      return { ok: false, message: describeNonJsonResponse(response.status, text) };
+      return { ok: false, message: describeNonJsonResponse2(response.status, text) };
     }
     if (typeof parsed !== "object" || parsed === null) {
-      return { ok: false, message: UNPARSABLE_RESPONSE_MESSAGE };
+      return { ok: false, message: UNPARSABLE_RESPONSE_MESSAGE2 };
     }
     return { ok: true, body: parsed };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) };
   }
 }
-function describeNonJsonResponse(status, text) {
+function describeNonJsonResponse2(status, text) {
   if (status === 401 || status === 403) {
     return `\u51ED\u636E\u5DF2\u5931\u6548\uFF08HTTP ${status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\u8BE5\u8D26\u53F7`;
   }
@@ -54781,7 +58051,7 @@ function describeNonJsonResponse(status, text) {
 function readBool(source, key) {
   return source[key] === true;
 }
-function readNumber6(source, key) {
+function readNumber7(source, key) {
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) return Number(value);
@@ -54792,7 +58062,7 @@ function readActions(source, key) {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => typeof item === "string");
 }
-async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher = fetch) {
+async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher = createDomesticFetch()) {
   const query = new URLSearchParams({
     placement: LOBSTERAI_SLOT_PLACEMENT,
     clientVersion,
@@ -54813,10 +58083,10 @@ async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fe
   return {
     slotState: typeof envelope.data.slotState === "string" ? envelope.data.slotState : "",
     activityCode,
-    configRevision: readNumber6(activity, "configRevision")
+    configRevision: readNumber7(activity, "configRevision")
   };
 }
-async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher = fetch) {
+async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher = createDomesticFetch()) {
   const query = new URLSearchParams({ configRevision: String(slot2.configRevision) });
   const url = `${product.apiBase}${LOBSTERAI_ACTIVITY_CONTEXT_PATH}/${encodeURIComponent(slot2.activityCode)}/context?${query.toString()}`;
   const result = await requestJson2(url, credential, product, fetcher);
@@ -54829,7 +58099,7 @@ async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher
     actions: readActions(envelope.data, "actions")
   };
 }
-async function claimLobsteraiDailyCheckin(credential, product, clientVersion, fetcher = fetch) {
+async function claimLobsteraiDailyCheckin(credential, product, clientVersion, fetcher = createDomesticFetch()) {
   const slot2 = await fetchLobsteraiActivitySlot(credential, product, clientVersion, fetcher);
   if (slot2 === null) {
     return { kind: "failed", code: -1, message: "\u6D3B\u52A8\u69FD\u4F4D\u67E5\u8BE2\u5931\u8D25" };
@@ -54875,7 +58145,7 @@ async function claimLobsteraiDailyCheckin(credential, product, clientVersion, fe
     ...message.length > 0 ? { delayedMessage: message } : {}
   };
 }
-async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch) {
+async function fetchLobsteraiCreditBalance(credential, product, fetcher = createDomesticFetch()) {
   const result = await requestJson2(
     `${product.apiBase}${LOBSTERAI_PROFILE_SUMMARY_PATH}`,
     credential,
@@ -54891,7 +58161,7 @@ async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch)
     for (const item of items) {
       if (typeof item !== "object" || item === null) continue;
       const record = item;
-      const remaining = readNumber6(record, "creditsRemaining");
+      const remaining = readNumber7(record, "creditsRemaining");
       const type = typeof record.type === "string" ? record.type : "";
       const label = typeof record.label === "string" ? record.label : "";
       const expiresAt = typeof record.expiresAt === "string" ? record.expiresAt : "";
@@ -54927,18 +58197,18 @@ async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch)
   for (const pkg of packages) {
     const face = faceValueByGroup.get(pkg.name);
     if (face !== void 0 && face > 0) {
-      pkg.total = roundCredits2(face);
-      if (pkg.used <= 0) pkg.used = roundCredits2(Math.max(0, face - pkg.remaining));
+      pkg.total = roundCredits3(face);
+      if (pkg.used <= 0) pkg.used = roundCredits3(Math.max(0, face - pkg.remaining));
     }
   }
-  const total = roundCredits2(Math.max(0, readNumber6(envelope.data, "totalCreditsRemaining")));
+  const total = roundCredits3(Math.max(0, readNumber7(envelope.data, "totalCreditsRemaining")));
   if (total === 0 && packages.length === 0) return null;
-  const expiredTotal = roundCredits2(
+  const expiredTotal = roundCredits3(
     packages.reduce((sum, pkg) => sum + (pkg.active ? 0 : Math.max(0, pkg.remaining)), 0)
   );
   return { total, packages, expiredTotal };
 }
-function roundCredits2(value) {
+function roundCredits3(value) {
   return Math.round(value * 100) / 100;
 }
 
@@ -54967,11 +58237,11 @@ function classifyTraeCheckinError(httpStatus, code) {
   }
   return { type: "Unknown", cooldownSecs: 0 };
 }
-function readNumber7(source, key) {
+function readNumber8(source, key) {
   const value = source[key];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
-function readString5(source, key) {
+function readString6(source, key) {
   const value = source[key];
   return typeof value === "string" ? value : "";
 }
@@ -54981,7 +58251,7 @@ function readClaimCode(body) {
   if (typeof raw === "string" && /^-?\d+$/.test(raw.trim())) return Number(raw.trim());
   return raw === void 0 ? 0 : -1;
 }
-async function postJson2(path2, credential, body, fetcher, userId) {
+async function postJson3(path2, credential, body, fetcher, userId) {
   const uid = userId ?? credential.uid;
   if (uid.length === 0) {
     return { ok: false, message: "\u7F3A\u5C11 user_id\uFF0C\u65E0\u6CD5\u6784\u9020\u8BBE\u5907\u8EAB\u4EFD", httpStatus: 0 };
@@ -55013,8 +58283,8 @@ async function postJson2(path2, credential, body, fetcher, userId) {
     return { ok: false, message: error instanceof Error ? error.message : String(error), httpStatus: 0 };
   }
 }
-async function fetchTraeCheckinStatus(credential, _product, fetcher = fetch) {
-  const result = await postJson2(TRAE_CHECKIN_STATUS_PATH, credential, "{}", fetcher, credential.uid);
+async function fetchTraeCheckinStatus(credential, _product, fetcher = createDomesticFetch()) {
+  const result = await postJson3(TRAE_CHECKIN_STATUS_PATH, credential, "{}", fetcher, credential.uid);
   if (!result.ok) return null;
   const body = result.body;
   const code = readClaimCode(body);
@@ -55022,23 +58292,23 @@ async function fetchTraeCheckinStatus(credential, _product, fetcher = fetch) {
   return {
     active: body.enable === true,
     todayCheckedIn: body.checked_in === true,
-    streakDays: readNumber7(body, "streak_days") || 0,
-    dailyCredit: readNumber7(body, "credits") || 0,
+    streakDays: readNumber8(body, "streak_days") || 0,
+    dailyCredit: readNumber8(body, "credits") || 0,
     todayCredit: 0,
     isStreakDay: false,
-    totalCredits: readNumber7(body, "total_credits") || 0,
+    totalCredits: readNumber8(body, "total_credits") || 0,
     checkinDates: [],
     activityName: "",
     themeName: "",
     endTime: ""
   };
 }
-async function claimTraeDailyCheckin(credential, product, fetcher = fetch, generation = 0, onRotate, userId, retryCount = 3) {
+async function claimTraeDailyCheckin(credential, product, fetcher = createDomesticFetch(), generation = 0, onRotate, userId, retryCount = 3) {
   const uid = userId ?? credential.uid;
   const doClaim = async () => {
     let lastError = { ok: false, httpStatus: 0, message: "", code: 0 };
     for (let attempt = 0; attempt <= Math.max(0, retryCount); attempt++) {
-      const result = await postJson2(TRAE_CHECKIN_CLAIM_PATH, credential, "{}", fetcher, uid);
+      const result = await postJson3(TRAE_CHECKIN_CLAIM_PATH, credential, "{}", fetcher, uid);
       if (result.ok) {
         const c = readClaimCode(result.body);
         return { ok: true, body: result.body, httpStatus: result.httpStatus, message: "", code: c };
@@ -55063,12 +58333,12 @@ async function claimTraeDailyCheckin(credential, product, fetcher = fetch, gener
     return {
       kind: "failed",
       code: 9074,
-      message: readString5(body, "message") || readString5(body, "msg") || "\u7B7E\u5230\u4EBA\u6570\u8FC7\u591A\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5",
+      message: readString6(body, "message") || readString6(body, "msg") || "\u7B7E\u5230\u4EBA\u6570\u8FC7\u591A\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5",
       errorType: "BusinessError",
       cooldownSecs: 300
     };
   }
-  const msg = readString5(body, "message") || readString5(body, "msg") || "";
+  const msg = readString6(body, "message") || readString6(body, "msg") || "";
   if (code === 0) {
     const status = await fetchTraeCheckinStatus(credential, product, fetcher);
     return {
@@ -55087,8 +58357,8 @@ async function claimTraeDailyCheckin(credential, product, fetcher = fetch, gener
     cooldownSecs
   };
 }
-async function fetchTraeCreditBalance(credential, _product, fetcher = fetch) {
-  const result = await postJson2(
+async function fetchTraeCreditBalance(credential, _product, fetcher = createDomesticFetch()) {
+  const result = await postJson3(
     TRAE_ENT_USAGE_PATH,
     credential,
     JSON.stringify({ require_usage: true, req_source: 2 }),
@@ -55109,16 +58379,16 @@ async function fetchTraeCreditBalance(credential, _product, fetcher = fetch) {
     if (typeof base !== "object" || base === null) continue;
     const quota = base.quota;
     if (typeof quota !== "object" || quota === null) continue;
-    const creditsLimit = readNumber7(quota, "credits_limit");
+    const creditsLimit = readNumber8(quota, "credits_limit");
     if (creditsLimit <= 0) continue;
     const usage = entry.usage;
-    const used = typeof usage === "object" && usage !== null ? readNumber7(usage, "credits_amount") : 0;
-    const expireSec = readNumber7(entry, "expire_time");
+    const used = typeof usage === "object" && usage !== null ? readNumber8(usage, "credits_amount") : 0;
+    const expireSec = readNumber8(entry, "expire_time");
     const deductionEndMs = expireSec > 0 ? expireSec * 1e3 : void 0;
     const pkg = {
       // ⚠️ 包名用 `display_desc`（实测"每月登录赠送"/"签到奖励"/"免费"），
       // 不是 `base.name` —— 后者实测为 undefined，旧代码全部回退成了"资源包"。
-      name: readString5(base, "display_desc") || readString5(entry, "display_desc") || "\u8D44\u6E90\u5305",
+      name: readString6(base, "display_desc") || readString6(entry, "display_desc") || "\u8D44\u6E90\u5305",
       unit: "credits",
       remaining: creditsLimit - used,
       total: creditsLimit,
@@ -55136,20 +58406,20 @@ async function fetchTraeCreditBalance(credential, _product, fetcher = fetch) {
 }
 
 // vendor/channel-pack/src/account-probe.ts
-import { credentialRef as credentialRef8 } from "@deepseek-ai/dsh-credentials";
-import { createUserMessage, LlmError as LlmError16 } from "@deepseek-ai/dsh-llm";
+import { credentialRef as credentialRef9 } from "@deepseek-ai/dsh-credentials";
+import { createUserMessage, LlmError as LlmError17 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/gemini-adapter.ts
 import {
-  CONTEXT_WINDOW_EXCEEDED_CODE,
-  isContextWindowExceededError,
-  LlmAdapter as LlmAdapter8,
-  LlmError as LlmError15,
-  ReasoningEffortId as ReasoningEffortId9
+  CONTEXT_WINDOW_EXCEEDED_CODE as CONTEXT_WINDOW_EXCEEDED_CODE2,
+  isContextWindowExceededError as isContextWindowExceededError2,
+  LlmAdapter as LlmAdapter9,
+  LlmError as LlmError16,
+  ReasoningEffortId as ReasoningEffortId10
 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/gemini-messages.ts
-import { ToolCallId as ToolCallId5 } from "@deepseek-ai/dsh-llm";
+import { ToolCallId as ToolCallId6 } from "@deepseek-ai/dsh-llm";
 function canonicalArgs(args) {
   if (args === void 0 || args === null) return "{}";
   if (typeof args !== "object" || Array.isArray(args)) return sortedStringify(args);
@@ -55241,17 +58511,17 @@ function translateGeminiRequest(options) {
       generation
     ) : base;
   }
-  const request = {
+  const request2 = {
     contents,
     generationConfig: buildGenerationConfig(options.spec, options.maxTokens, options.temperature),
     sessionId
   };
   const systemText = [...new Set([options.system, collectHarnessSystem(normalized)].filter((text) => typeof text === "string" && text !== ""))].join("\n\n");
   if (systemText !== "") {
-    request.systemInstruction = { role: "system", parts: [{ text: systemText }] };
+    request2.systemInstruction = { role: "system", parts: [{ text: systemText }] };
   }
   if (options.tools !== void 0 && options.tools.length > 0) {
-    request.tools = [{
+    request2.tools = [{
       functionDeclarations: options.tools.map((tool) => ({
         name: tool.name,
         description: tool.description,
@@ -55261,11 +58531,11 @@ function translateGeminiRequest(options) {
     }];
   }
   const toolConfig = buildToolConfig(options.toolChoice, options.tools);
-  if (toolConfig !== void 0) request.toolConfig = toolConfig;
+  if (toolConfig !== void 0) request2.toolConfig = toolConfig;
   return {
     model: options.spec.upstream,
     project: options.project ?? GEMINI_DEFAULT_PROJECT,
-    request,
+    request: request2,
     requestId: options.requestId,
     userAgent: "antigravity"
   };
@@ -55385,7 +58655,7 @@ async function* consumeGeminiSse(options) {
     } else {
       content = {
         type: "tool-call",
-        id: ToolCallId5(block.toolId ?? ""),
+        id: ToolCallId6(block.toolId ?? ""),
         name: block.toolName ?? "",
         arguments: block.text
       };
@@ -55442,7 +58712,7 @@ async function* consumeGeminiSse(options) {
           yield {
             type: "tool-call-delta",
             index: block.index,
-            id: ToolCallId5(block.toolId ?? ""),
+            id: ToolCallId6(block.toolId ?? ""),
             name: part.functionCall.name,
             argumentsDelta: argsJson
           };
@@ -55551,7 +58821,7 @@ async function resolveGeminiProject(options) {
     cache4?.set(identity, fromCredential);
     return { project: fromCredential };
   }
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const timeoutMs = options.timeoutMs ?? GEMINI_CREDITS_TIMEOUT_MS;
   const endpoints = options.endpoints ?? [GEMINI_ENDPOINT_SANDBOX, GEMINI_ENDPOINT_DAILY];
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -55622,14 +58892,15 @@ function isGeminiSessionOverflow(text) {
 var GEMINI_MAX_SESSION_BUMPS = 1;
 var GEMINI_TOKEN_COUNT_OVERFLOW = /\btoken\s+count\b[\s\S]{0,60}?\bexceeds?\s+the\s+maximum\b/i;
 function isGeminiContextOverflow(text) {
-  return isContextWindowExceededError(text) || GEMINI_TOKEN_COUNT_OVERFLOW.test(text);
+  return isContextWindowExceededError2(text) || GEMINI_TOKEN_COUNT_OVERFLOW.test(text);
 }
-var GeminiAdapter = class extends LlmAdapter8 {
+var GeminiAdapter = class extends LlmAdapter9 {
   constructor(options) {
     super();
     this.options = options;
     this.product = options.product ?? GEMINI;
   }
+  options;
   product;
   providerInfo(provider) {
     const id = typeof provider === "string" && provider.length > 0 ? provider : this.product.id;
@@ -55714,7 +58985,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
     }
     if (imageRefs.size === 0) return void 0;
     if (entry?.supportsImage !== true) {
-      throw new LlmError15(
+      throw new LlmError16(
         `gemini: \u6A21\u578B "${model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`,
         "UNSUPPORTED_CONTENT"
       );
@@ -55726,7 +58997,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
       if (inline === void 0) {
         const readImage = this.options.readImage;
         if (readImage === void 0) {
-          throw new LlmError15(
+          throw new LlmError16(
             "gemini: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1\uFF08readImage / readImageRequest \u5747\u672A\u63D0\u4F9B\uFF09",
             "UNSUPPORTED_CONTENT"
           );
@@ -55734,7 +59005,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
         try {
           inline = await readImage(ref);
         } catch (error) {
-          throw new LlmError15(
+          throw new LlmError16(
             "gemini: \u56FE\u7247\u9644\u4EF6\u8BFB\u53D6\u5931\u8D25\uFF1B\u9644\u4EF6\u670D\u52A1\u53EF\u80FD\u672A\u5C31\u7EEA\uFF0C\u6216\u8BE5\u5BF9\u8C61\u5DF2\u4E0D\u5B58\u5728\u3002",
             "UNSUPPORTED_CONTENT",
             { cause: error }
@@ -55742,20 +59013,20 @@ var GeminiAdapter = class extends LlmAdapter8 {
         }
       }
       if (inline === void 0) {
-        throw new LlmError15(
+        throw new LlmError16(
           "gemini: \u56FE\u7247\u9644\u4EF6\u8BFB\u53D6\u4E0D\u5230\u5185\u5BB9\uFF1B\u9644\u4EF6\u670D\u52A1\u53EF\u80FD\u672A\u5C31\u7EEA\uFF0C\u6216\u8BE5\u5BF9\u8C61\u5DF2\u4E0D\u5B58\u5728\u3002",
           "UNSUPPORTED_CONTENT"
         );
       }
       if (inline.data.byteLength > GEMINI_MAX_IMAGE_BYTES_INLINE) {
-        throw new LlmError15(
+        throw new LlmError16(
           `gemini: \u56FE\u7247\u4F53\u79EF ${inline.data.byteLength} \u5B57\u8282\u8D85\u8FC7\u4E0A\u6E38\u5185\u8054\u4E0A\u9650 ${GEMINI_MAX_IMAGE_BYTES_INLINE} \u5B57\u8282`,
           "UNSUPPORTED_CONTENT"
         );
       }
       const data = normalizeBase64(Buffer.from(inline.data).toString("base64"));
       if (data === void 0) {
-        throw new LlmError15("gemini: \u56FE\u7247\u7F16\u7801\u4E0D\u662F\u5408\u6CD5 base64", "UNSUPPORTED_CONTENT");
+        throw new LlmError16("gemini: \u56FE\u7247\u7F16\u7801\u4E0D\u662F\u5408\u6CD5 base64", "UNSUPPORTED_CONTENT");
       }
       images.set(id, { mediaType: inline.mediaType === "" ? "image/png" : inline.mediaType, data });
     }
@@ -55775,7 +59046,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
   async *stream(options) {
     const entry = this.loadModels().find((item) => item.id === geminiCanonicalModelId(options.model));
     if (entry === void 0) {
-      throw new LlmError15(
+      throw new LlmError16(
         `gemini: \u6A21\u578B "${options.model}" \u4E0D\u5728\u672C provider \u76EE\u5F55\u4E2D\uFF08\u4EC5\u652F\u6301 ${GEMINI_UPSTREAM_FLASH}\uFF09`,
         "INVALID_REQUEST",
         // 模型名写错是确定性失败：带上 404，网关才不会把它当 502 让客户端白重试。
@@ -55788,7 +59059,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
       credential = await this.options.resolveCredential(options.model);
     }
     if (credential === void 0 || credential.access_token === "") {
-      throw new LlmError15("gemini: no usable credential; log in first", "MISSING_CREDENTIAL");
+      throw new LlmError16("gemini: no usable credential; log in first", "MISSING_CREDENTIAL");
     }
     const requested = options.reasoningEffort === void 0 ? void 0 : String(options.reasoningEffort);
     const declared = entry === void 0 ? void 0 : geminiReasoningInfo(entry);
@@ -55830,7 +59101,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
             ...options.signal === void 0 ? {} : { signal: options.signal }
           });
           if (probe.error !== void 0) {
-            throw new LlmError15(
+            throw new LlmError16(
               `gemini: \u9879\u76EE\u53F7\u63A2\u6D4B\u5931\u8D25\uFF0C\u672A\u53D1\u63A8\u7406\uFF08\u4E0E\u539F\u7248\u4E00\u81F4\uFF09\u2014 ${probe.error}`,
               "SERVER"
             );
@@ -55869,9 +59140,9 @@ var GeminiAdapter = class extends LlmAdapter8 {
         const wire = marshalAlphabetical(envelope);
         const wireBytes = Buffer.byteLength(wire, "utf8");
         if (wireBytes > GEMINI_MAX_REQUEST_BODY_BYTES) {
-          throw new LlmError15(
+          throw new LlmError16(
             `gemini: \u8BF7\u6C42\u4F53 ${wireBytes} \u5B57\u8282\u8D85\u8FC7\u4E0A\u9650 ${GEMINI_MAX_REQUEST_BODY_BYTES} \u5B57\u8282`,
-            CONTEXT_WINDOW_EXCEEDED_CODE
+            CONTEXT_WINDOW_EXCEEDED_CODE2
           );
         }
         let response;
@@ -55884,8 +59155,8 @@ var GeminiAdapter = class extends LlmAdapter8 {
             signal: options.signal
           });
         } catch (error) {
-          if (error instanceof LlmError15) throw error;
-          throw new LlmError15(
+          if (error instanceof LlmError16) throw error;
+          throw new LlmError16(
             `gemini: \u8BF7\u6C42\u53D1\u9001\u5931\u8D25 \u2014 ${error instanceof Error ? error.message : String(error)}`,
             "TRANSPORT",
             { cause: error }
@@ -55894,7 +59165,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
         response = await checkQueuedResponse(response);
         if (response.ok) {
           if (response.body === null) {
-            throw new LlmError15("gemini: \u54CD\u5E94\u7F3A\u5C11 body", "EMPTY_RESPONSE");
+            throw new LlmError16("gemini: \u54CD\u5E94\u7F3A\u5C11 body", "EMPTY_RESPONSE");
           }
           const body = response.body;
           try {
@@ -55965,7 +59236,7 @@ var GeminiAdapter = class extends LlmAdapter8 {
               continue;
             }
           }
-          throw new LlmError15(
+          throw new LlmError16(
             `gemini: \u6A21\u578B ${options.model} \u7684\u6240\u6709\u8D26\u53F7\u5747\u4E0D\u53EF\u7528\uFF08\u9650\u6D41\u6216\u989D\u5EA6\u8017\u5C3D\uFF09\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5`,
             "QUOTA_EXCEEDED",
             { status }
@@ -55990,15 +59261,15 @@ var GeminiAdapter = class extends LlmAdapter8 {
     const detail = text === "" ? "" : ` \u2014 ${text.slice(0, 500)}`;
     const message = `gemini: HTTP ${status}${detail}`;
     if (status === 400 && isGeminiContextOverflow(text)) {
-      return new LlmError15(message, CONTEXT_WINDOW_EXCEEDED_CODE, { status });
+      return new LlmError16(message, CONTEXT_WINDOW_EXCEEDED_CODE2, { status });
     }
     if (status === 400 && isGeminiQuotaText(text)) {
-      return new LlmError15(message, "QUOTA_EXCEEDED", { status });
+      return new LlmError16(message, "QUOTA_EXCEEDED", { status });
     }
-    if (status === 429) return new LlmError15(message, "RATE_LIMIT", { status });
-    if (status === 403 || status === 404) return new LlmError15(message, "SERVER", { status });
-    if (status === 401) return new LlmError15(message, "AUTH", { status });
-    return new LlmError15(message, httpErrorCode2(status), { status });
+    if (status === 429) return new LlmError16(message, "RATE_LIMIT", { status });
+    if (status === 403 || status === 404) return new LlmError16(message, "SERVER", { status });
+    if (status === 401) return new LlmError16(message, "AUTH", { status });
+    return new LlmError16(message, httpErrorCode2(status), { status });
   }
 };
 function registerGeminiLlm(ctx, options) {
@@ -56017,7 +59288,7 @@ var PROBE_CANDIDATES_MAX = 4;
 var PROBE_ATTEMPT_TIMEOUT_MS = 2e4;
 var PROBE_TOTAL_BUDGET_MS = 8e4;
 function isRateLimitFailure(error) {
-  if (error instanceof LlmError16) {
+  if (error instanceof LlmError17) {
     if (error.code === "RATE_LIMIT" || error.code === "QUOTA_EXCEEDED" || error.code === "QUOTA") return true;
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -56027,7 +59298,7 @@ async function probeWithAdapter(entry, credential, modelId, timeoutMs) {
   if (!isSupportedProvider(entry.provider)) throw new Error("provider-unsupported: \u4E0D\u652F\u6301\u6B64\u6E20\u9053");
   const startedAt = Date.now();
   const signal = AbortSignal.timeout(timeoutMs);
-  const ref = credentialRef8(entry.credentialRef);
+  const ref = credentialRef9(entry.credentialRef);
   const lobsteraiProduct = lobsteraiProductById(entry.provider);
   const qoderProduct = qoderProductById(entry.provider);
   const clineProduct = clineProductById(entry.provider);
@@ -56247,7 +59518,7 @@ async function resetAllAccounts(pool, provider) {
 }
 
 // vendor/channel-pack/src/backup.ts
-import { credentialRef as credentialRef9 } from "@deepseek-ai/dsh-credentials";
+import { credentialRef as credentialRef10 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/types.ts
 var BACKUP_FORMAT = "channel-pack/backup";
@@ -56262,7 +59533,7 @@ async function exportBackup(pool, credentials) {
   const warnings = [];
   for (const entry of state.accounts) {
     try {
-      const resolved = await credentials.resolve(credentialRef9(entry.credentialRef));
+      const resolved = await credentials.resolve(credentialRef10(entry.credentialRef));
       if (resolved === void 0) {
         warnings.push(`${entry.id}: \u51ED\u636E\u672A\u914D\u7F6E`);
       } else {
@@ -56338,7 +59609,7 @@ async function importBackup(credentials, pool, raw) {
       continue;
     }
     try {
-      await credentials.set(credentialRef9(refName), value);
+      await credentials.set(credentialRef10(refName), value);
       credentialsImported++;
     } catch (error) {
       skipped.push(refName);
@@ -56363,11 +59634,11 @@ async function importBackup(credentials, pool, raw) {
 }
 
 // vendor/channel-pack/src/opencode-rpc.ts
-import { credentialRef as credentialRef10 } from "@deepseek-ai/dsh-credentials";
+import { credentialRef as credentialRef11 } from "@deepseek-ai/dsh-credentials";
 import { randomBytes as randomBytes8 } from "node:crypto";
 
 // vendor/channel-pack/src/opencode-proxy.ts
-var import_undici = __toESM(require_undici(), 1);
+var import_undici2 = __toESM(require_undici(), 1);
 import { connect as netConnect } from "node:net";
 import { URL as URL2 } from "node:url";
 var PROXY_CACHE_LIMIT = 16;
@@ -56404,11 +59675,11 @@ async function closeAllProxyDispatchers() {
   }));
 }
 function buildHttpDispatcher(url) {
-  return new import_undici.ProxyAgent({
+  return new import_undici2.ProxyAgent({
     uri: url,
     // ⚠️ `pipelining: 0` 是必需的（见模块头）；`clientFactory` 由 undici 在
     // 每次建连时调用，用它把默认 Pool 换成禁用复用的 Pool。
-    clientFactory: (origin, opts) => new import_undici.Pool(origin, { ...opts, pipelining: 0 })
+    clientFactory: (origin, opts) => new import_undici2.Pool(origin, { ...opts, pipelining: 0 })
   });
 }
 function buildSocks5Handshake(proxy) {
@@ -56513,7 +59784,7 @@ async function openSocks5Tunnel(proxy, host, port) {
   }
 }
 function buildSocksDispatcher(proxy) {
-  return new import_undici.Agent({
+  return new import_undici2.Agent({
     connect: ((opts, callback) => {
       const host = String(opts.hostname ?? opts.host ?? "");
       const port = Number(opts.port ?? 443);
@@ -56555,7 +59826,7 @@ async function handleOpencodeRpc(ctx, pool, method, payload) {
           return done({ accountId: id, existed: true });
         }
         const nickname = typeof req.nickname === "string" && req.nickname.trim().length > 0 ? req.nickname.trim() : `OpenCode ${apiKey.slice(-6)}`;
-        await ctx.credentials.set(credentialRef10(refName), JSON.stringify({
+        await ctx.credentials.set(credentialRef11(refName), JSON.stringify({
           api_key: apiKey,
           nickname,
           // 指纹在此**首次固化**，之后由池里的代次权威重算（见 index.ts 接线注释）。
@@ -56580,7 +59851,7 @@ async function handleOpencodeRpc(ctx, pool, method, payload) {
         const refName = `OPENCODE_ANON_${randomBytes8(4).toString("hex").toUpperCase()}`;
         const count2 = pool.listAccountsByProvider(OPENCODE.id).filter((a) => a.id.startsWith(`${OPENCODE.id}-anon-`)).length;
         const nickname = typeof req?.nickname === "string" && req.nickname.trim().length > 0 ? req.nickname.trim() : `\u533F\u540D\u901A\u9053 ${count2 + 1}`;
-        await ctx.credentials.set(credentialRef10(refName), JSON.stringify({
+        await ctx.credentials.set(credentialRef11(refName), JSON.stringify({
           api_key: OPENCODE.anonymousKey,
           nickname
         }));
@@ -56681,6 +59952,8 @@ var FilePreferenceStore = class {
     this.path = path2;
     this.logger = logger2;
   }
+  path;
+  logger;
   kind = "file";
   load() {
     try {
@@ -56781,6 +60054,7 @@ var BadgeRpcFailure = class extends Error {
     this.detail = detail;
     this.name = "BadgeRpcFailure";
   }
+  detail;
 };
 function createUsageBadge(deps) {
   const now = deps.now ?? (() => Date.now());
@@ -56957,6 +60231,8 @@ var FileAutoCheckinStore = class {
     this.path = path2;
     this.logger = logger2;
   }
+  path;
+  logger;
   kind = "file";
   load() {
     try {
@@ -57316,7 +60592,7 @@ async function collectCreditsStatus(accounts, product, deps) {
   for (const entry of accounts) {
     let status = null;
     try {
-      const resolved = await deps.resolve(credentialRef11(entry.credentialRef));
+      const resolved = await deps.resolve(credentialRef12(entry.credentialRef));
       if (resolved !== void 0) {
         const credential = JSON.parse(resolved.value);
         status = await fetchStatus(credential, product);
@@ -57342,7 +60618,7 @@ async function collectClaimResults(accounts, product, deps) {
   for (const entry of accounts) {
     let outcome;
     try {
-      const resolved = await deps.resolve(credentialRef11(entry.credentialRef));
+      const resolved = await deps.resolve(credentialRef12(entry.credentialRef));
       if (resolved === void 0) {
         outcome = { kind: "failed", code: -1, message: "\u51ED\u636E\u672A\u914D\u7F6E" };
       } else {
@@ -57384,7 +60660,7 @@ async function collectCreditBalances(accounts, product, deps) {
     let error;
     let extra;
     try {
-      const resolved = await deps.resolve(credentialRef11(entry.credentialRef));
+      const resolved = await deps.resolve(credentialRef12(entry.credentialRef));
       if (resolved === void 0) {
         error = "\u51ED\u636E\u672A\u914D\u7F6E";
       } else {
@@ -57543,17 +60819,17 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
     path: CHANNEL_PACK_API_PATH,
     methods: ["POST"],
     requestBody: "buffered",
-    async fetch(request) {
-      if (request.method !== "POST") {
+    async fetch(request2) {
+      if (request2.method !== "POST") {
         return new Response("method not allowed", { status: 405 });
       }
-      const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+      const contentType = request2.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
       if (contentType !== "application/json") {
         return new Response("content type must be application/json", { status: 415 });
       }
       let message;
       try {
-        message = await request.json();
+        message = await request2.json();
       } catch {
         return new Response("body is not JSON", { status: 400 });
       }
@@ -57563,7 +60839,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         return reply(rpcId, { ok: false, error: { code: "gateway/bad-request", message: "Invalid Channel Pack management request." } });
       }
       try {
-        const result = await handleMethod(call.method, call.payload, request.signal);
+        const result = await handleMethod(call.method, call.payload, request2.signal);
         return reply(rpcId, result);
       } catch (error) {
         const message2 = error instanceof Error ? error.message : String(error);
@@ -57587,8 +60863,8 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
     path: CAPTCHA_CARRIER_PATH,
     methods: ["GET"],
     requestBody: "buffered",
-    async fetch(request) {
-      if (request.method !== "GET") {
+    async fetch(request2) {
+      if (request2.method !== "GET") {
         return new Response("method not allowed", { status: 405 });
       }
       const html = buildCarrierPageHtml(await carrierCaptchaConfig());
@@ -57607,7 +60883,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
     const out = [];
     for (const account of accounts) {
       try {
-        const resolved = await ctx.credentials.resolve(credentialRef11(account.credentialRef));
+        const resolved = await ctx.credentials.resolve(credentialRef12(account.credentialRef));
         if (!resolved) {
           out.push(account);
           continue;
@@ -57669,9 +60945,9 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
     };
   }
   async function handleMethod(method, payload, signal) {
-    const request = payload !== null && typeof payload === "object" ? payload : void 0;
-    const account = typeof request?.accountId === "string" ? pool.findAccount(request.accountId) : void 0;
-    if (request?.provider !== void 0 && !isSupportedProvider(request.provider) || account !== void 0 && !isSupportedProvider(account.provider)) {
+    const request2 = payload !== null && typeof payload === "object" ? payload : void 0;
+    const account = typeof request2?.accountId === "string" ? pool.findAccount(request2.accountId) : void 0;
+    if (request2?.provider !== void 0 && !isSupportedProvider(request2.provider) || account !== void 0 && !isSupportedProvider(account.provider)) {
       return { ok: false, error: { code: "provider-unsupported", message: "\u4E0D\u652F\u6301\u6B64\u6E20\u9053\u3002" } };
     }
     if (method.startsWith("opencode.")) {
@@ -57741,7 +61017,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
               nickname = await fetchQoderUserNickname(credential, product);
               if (nickname !== void 0 && loginResult.access.length > 0) {
                 const updated = withQoderNickname(credential, nickname);
-                await ctx.credentials.set(credentialRef11(refName), JSON.stringify(updated));
+                await ctx.credentials.set(credentialRef12(refName), JSON.stringify(updated));
               }
             }
             await pool.updateAccount(id, {
@@ -58117,7 +61393,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         const accounts = await pool.listAllAccounts();
         const entry = accounts.find((a) => a.id === req.accountId);
         if (!entry) return { ok: true, value: { done: false } };
-        const ref = credentialRef11(entry.credentialRef);
+        const ref = credentialRef12(entry.credentialRef);
         const resolved = await ctx.credentials.resolve(ref);
         if (!resolved) return { ok: true, value: { done: false } };
         if (entry.provider === ZCODE.id) {
@@ -58217,7 +61493,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (account2 === void 0) {
           return { ok: false, error: { code: "bad-request", message: "\u8D26\u53F7\u4E0D\u5B58\u5728" } };
         }
-        const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+        const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
         if (!resolved) {
           return { ok: false, error: { code: "bad-request", message: "\u51ED\u636E\u672A\u914D\u7F6E" } };
         }
@@ -58311,7 +61587,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (account2 === void 0) {
           return { ok: false, error: { code: "bad-request", message: "\u8D26\u53F7\u4E0D\u5B58\u5728" } };
         }
-        const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+        const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
         if (!resolved) {
           return { ok: false, error: { code: "bad-request", message: "\u51ED\u636E\u672A\u914D\u7F6E" } };
         }
@@ -58529,7 +61805,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (req.provider === LOOMY.id) {
           const values = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             if (!resolved) {
               values.push({
                 accountId: account2.id,
@@ -58591,7 +61867,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
           const results = [];
           const outcomes = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             let accountOutcomes;
             if (!resolved) {
               accountOutcomes = [{ kind: "failed", code: -1, message: "\u51ED\u636E\u672A\u914D\u7F6E" }];
@@ -58648,7 +61924,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
           const { product } = requireQoderFamily(req.provider);
           const values = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             if (!resolved) {
               values.push({
                 accountId: account2.id,
@@ -58756,7 +62032,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (req.provider === CLINE.id) {
           const values = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             if (!resolved) {
               values.push({
                 accountId: account2.id,
@@ -58794,7 +62070,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (req.provider === LOOMY.id) {
           const values = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             if (!resolved) {
               values.push({
                 accountId: account2.id,
@@ -58830,7 +62106,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (req.provider === RACCOON.id) {
           const values = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             if (!resolved) {
               values.push({
                 accountId: account2.id,
@@ -58867,7 +62143,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         if (req.provider === ZCODE.id) {
           const values = [];
           for (const account2 of accounts) {
-            const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
             if (!resolved) {
               values.push({
                 accountId: account2.id,
@@ -58956,7 +62232,7 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
         const accounts = await pool.listAccounts(req.provider);
         const values = [];
         for (const account2 of accounts) {
-          const resolved = await ctx.credentials.resolve(credentialRef11(account2.credentialRef));
+          const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
           if (!resolved) {
             values.push({
               accountId: account2.id,
@@ -59744,7 +63020,7 @@ function loadOrCreateApiKey(home, env = process.env) {
 
 // vendor/channel-pack/src/openai-gateway/messages.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
-import { createToolResultMessage, ReasoningEffortId as ReasoningEffortId10 } from "@deepseek-ai/dsh-llm";
+import { createToolResultMessage, ReasoningEffortId as ReasoningEffortId11 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/openai-gateway/images.ts
 var DEFAULT_IMAGE_LIMITS = {
@@ -59832,6 +63108,9 @@ var OpenAiGatewayError = class extends Error {
     this.code = code;
     this.name = "OpenAiGatewayError";
   }
+  status;
+  type;
+  code;
 };
 function normalizeMaxTokens(value, provider, model) {
   if (value === void 0) return void 0;
@@ -60062,7 +63341,7 @@ async function toGenerateOptions(body, signal, reasoningEffortOverride, maxToken
     // ⚠️ 判据是 `== null`（同时排除 undefined 与 null）：`null` = 明确不下发，
     // 两者都不能写进请求。写成 `=== undefined` 会把 null 塞进
     // `ReasoningEffortId(null)`，等于又发了一个非法档位。
-    ...reasoningEffort == null ? {} : { reasoningEffort: ReasoningEffortId10(reasoningEffort) },
+    ...reasoningEffort == null ? {} : { reasoningEffort: ReasoningEffortId11(reasoningEffort) },
     signal
   };
 }
@@ -60107,7 +63386,7 @@ function findCaseInsensitiveSuggestion(requested, catalog) {
 
 // vendor/channel-pack/src/openai-gateway/responses.ts
 import { createHash as createHash6, randomUUID as randomUUID10 } from "node:crypto";
-import { ReasoningEffortId as ReasoningEffortId11 } from "@deepseek-ai/dsh-llm";
+import { ReasoningEffortId as ReasoningEffortId12 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/openai-gateway/stream.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
@@ -60641,7 +63920,7 @@ async function toResponsesGenerateOptions(body, signal, reasoningEffortOverride,
     ...tools === void 0 ? {} : { tools },
     ...maxTokens === void 0 ? {} : { maxTokens },
     ...temperature === void 0 ? {} : { temperature },
-    ...reasoningEffort == null ? {} : { reasoningEffort: ReasoningEffortId11(reasoningEffort) },
+    ...reasoningEffort == null ? {} : { reasoningEffort: ReasoningEffortId12(reasoningEffort) },
     signal
   };
 }
@@ -60772,8 +64051,8 @@ function hasContent(item) {
   return finalText(item).length > 0;
 }
 function responseJson(options) {
-  const request = options.request;
-  const effort = isObject(request.reasoning) ? request.reasoning.effort ?? null : null;
+  const request2 = options.request;
+  const effort = isObject(request2.reasoning) ? request2.reasoning.effort ?? null : null;
   return {
     id: options.id,
     object: "response",
@@ -60782,23 +64061,23 @@ function responseJson(options) {
     background: false,
     error: options.error ?? null,
     incomplete_details: options.status === "incomplete" ? { reason: "max_output_tokens" } : null,
-    instructions: typeof request.instructions === "string" ? request.instructions : null,
-    max_output_tokens: typeof request.max_output_tokens === "number" ? request.max_output_tokens : null,
+    instructions: typeof request2.instructions === "string" ? request2.instructions : null,
+    max_output_tokens: typeof request2.max_output_tokens === "number" ? request2.max_output_tokens : null,
     model: options.model,
     output: options.output,
-    parallel_tool_calls: request.parallel_tool_calls === false ? false : true,
+    parallel_tool_calls: request2.parallel_tool_calls === false ? false : true,
     previous_response_id: null,
     reasoning: { effort, summary: null },
     store: false,
-    temperature: typeof request.temperature === "number" ? request.temperature : null,
+    temperature: typeof request2.temperature === "number" ? request2.temperature : null,
     text: { format: { type: "text" } },
-    tool_choice: request.tool_choice ?? "auto",
-    tools: Array.isArray(request.tools) ? request.tools : [],
-    top_p: typeof request.top_p === "number" ? request.top_p : null,
-    truncation: typeof request.truncation === "string" ? request.truncation : "disabled",
+    tool_choice: request2.tool_choice ?? "auto",
+    tools: Array.isArray(request2.tools) ? request2.tools : [],
+    top_p: typeof request2.top_p === "number" ? request2.top_p : null,
+    truncation: typeof request2.truncation === "string" ? request2.truncation : "disabled",
     usage: options.usage,
-    user: typeof request.user === "string" ? request.user : null,
-    metadata: isObject(request.metadata) ? request.metadata : {}
+    user: typeof request2.user === "string" ? request2.user : null,
+    metadata: isObject(request2.metadata) ? request2.metadata : {}
   };
 }
 function statusOf(state) {
@@ -60824,12 +64103,12 @@ function responsesError(converted) {
   const code = converted.type === "rate_limit_exceeded" || converted.type === "rate_limit_error" ? "rate_limit_exceeded" : "server_error";
   return { code, message: converted.message, status: converted.status, dsh_code: converted.code };
 }
-async function collectResponsesResult(chunks, responseId, model, request, suggest) {
+async function collectResponsesResult(chunks, responseId, model, request2, suggest) {
   const state = {};
   const items = [];
   const open = /* @__PURE__ */ new Map();
   const closed = /* @__PURE__ */ new Set();
-  const nsMap = responsesNamespaceToolMap(request);
+  const nsMap = responsesNamespaceToolMap(request2);
   let outputIndex = 0;
   try {
     for await (const chunk of chunks) {
@@ -60871,25 +64150,25 @@ async function collectResponsesResult(chunks, responseId, model, request, sugges
   return responseJson({
     id: responseId,
     model,
-    request,
+    request: request2,
     status: statusOf(state),
     output: outputOf(items, nsMap),
     usage: state.usage === void 0 ? null : usageJson2(state.usage)
   });
 }
-async function* toResponsesSse(chunks, responseId, model, request, suggest) {
+async function* toResponsesSse(chunks, responseId, model, request2, suggest) {
   const state = {};
   const items = [];
   const open = /* @__PURE__ */ new Map();
   const closed = /* @__PURE__ */ new Set();
   let outputIndex = 0;
   let sequence = 0;
-  const nsMap = responsesNamespaceToolMap(request);
+  const nsMap = responsesNamespaceToolMap(request2);
   const emit = (type, payload) => `event: ${type}
 data: ${JSON.stringify({ type, sequence_number: sequence++, ...payload })}
 
 `;
-  const snapshot = (status, usage, error) => responseJson({ id: responseId, model, request, status, output: status === "in_progress" ? [] : outputOf(items, nsMap), usage, error });
+  const snapshot = (status, usage, error) => responseJson({ id: responseId, model, request: request2, status, output: status === "in_progress" ? [] : outputOf(items, nsMap), usage, error });
   const emitStatus = (status, usage, error) => emit(`response.${status}`, { response: snapshot(status, usage, error) });
   const openItem = (index, kind, seed) => {
     const item = newItem(index, outputIndex++, kind);
@@ -61105,24 +64384,24 @@ function jsonResponse(response, status, value) {
   });
   response.end(body);
 }
-function readJson(request, signal) {
+function readJson(request2, signal) {
   return new Promise((resolve2, reject) => {
     const chunks = [];
     let size = 0;
     const abort = () => reject(new OpenAiGatewayError("request was aborted", 499, "aborted", "aborted"));
     signal.addEventListener("abort", abort, { once: true });
-    request.on("data", (chunk) => {
+    request2.on("data", (chunk) => {
       const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       size += data.length;
       if (size > BODY_LIMIT) {
         reject(new OpenAiGatewayError("request body is too large", 413, "invalid_request_error", "request_too_large"));
-        request.destroy();
+        request2.destroy();
         return;
       }
       chunks.push(data);
     });
-    request.on("error", reject);
-    request.on("end", () => {
+    request2.on("error", reject);
+    request2.on("end", () => {
       signal.removeEventListener("abort", abort);
       try {
         const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -61134,8 +64413,8 @@ function readJson(request, signal) {
     });
   });
 }
-function authorized(request, key) {
-  const value = request.headers.authorization;
+function authorized(request2, key) {
+  const value = request2.headers.authorization;
   return typeof value === "string" && value === `Bearer ${key}`;
 }
 function getHome(options) {
@@ -61218,14 +64497,14 @@ function createOpenAiGateway(options) {
     }
     return modelIdsHint;
   };
-  const withRequest = async (request, response, run) => {
+  const withRequest = async (request2, response, run) => {
     const controller = new AbortController();
     active.add(controller);
     const abort = () => controller.abort();
     const onClose = () => {
       if (!response.writableEnded) controller.abort();
     };
-    request.once("aborted", abort);
+    request2.once("aborted", abort);
     response.once("close", onClose);
     try {
       await run(controller.signal);
@@ -61235,7 +64514,7 @@ function createOpenAiGateway(options) {
         jsonResponse(response, converted.status, converted.body);
       }
     } finally {
-      request.removeListener("aborted", abort);
+      request2.removeListener("aborted", abort);
       response.removeListener("close", onClose);
       active.delete(controller);
     }
@@ -61260,9 +64539,9 @@ function createOpenAiGateway(options) {
       `[openai-gateway] ${target}\uFF1A\u601D\u8003\u6863\u4F4D ${notice.requested} \u65E0\u6CD5\u8868\u8FBE\uFF08\u8BE5\u6A21\u578B\u6CA1\u6709\u8FD9\u4E00\u65CF\u7684\u6863\u4F4D\uFF09\uFF0C\u672C\u6B21\u4E0D\u4E0B\u53D1\u8BE5\u53C2\u6570\u3001\u6309\u6A21\u578B\u9ED8\u8BA4\u8D70`
     );
   };
-  const handleChat = async (request, response) => {
-    await withRequest(request, response, async (signal) => {
-      const body = await readJson(request, signal);
+  const handleChat = async (request2, response) => {
+    await withRequest(request2, response, async (signal) => {
+      const body = await readJson(request2, signal);
       const route = parseModelRoute(body.model);
       const modelInfo = await resolveModelInfo(route, signal);
       const reasoningEffort = normalizeReasoningEffort(
@@ -61293,9 +64572,9 @@ function createOpenAiGateway(options) {
       }
     });
   };
-  const handleResponses = async (request, response) => {
-    await withRequest(request, response, async (signal) => {
-      const body = await readJson(request, signal);
+  const handleResponses = async (request2, response) => {
+    await withRequest(request2, response, async (signal) => {
+      const body = await readJson(request2, signal);
       const route = parseModelRoute(body.model);
       const modelInfo = await resolveModelInfo(route, signal);
       const reasoningEffort = normalizeReasoningEffort(
@@ -61331,8 +64610,8 @@ function createOpenAiGateway(options) {
       }
     });
   };
-  const requestHandler = (request, response) => {
-    if (request.method === "OPTIONS") {
+  const requestHandler = (request2, response) => {
+    if (request2.method === "OPTIONS") {
       response.writeHead(204, {
         "access-control-allow-origin": "*",
         "access-control-allow-headers": "Authorization, Content-Type",
@@ -61341,25 +64620,25 @@ function createOpenAiGateway(options) {
       response.end();
       return;
     }
-    if (!authorized(request, key)) {
+    if (!authorized(request2, key)) {
       jsonResponse(response, 401, { error: { message: "Missing or invalid API key", type: "authentication_error", code: "invalid_api_key" } });
       return;
     }
-    const path2 = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-    if (path2 === "/v1/models" && request.method === "GET") {
+    const path2 = new URL(request2.url ?? "/", "http://127.0.0.1").pathname;
+    if (path2 === "/v1/models" && request2.method === "GET") {
       void handleModels(response).catch((error) => jsonResponse(response, 502, { error: { message: String(error), type: "server_error", code: "model_list_failed" } }));
       return;
     }
-    if (path2 === "/v1/reasoning-efforts" && request.method === "GET") {
+    if (path2 === "/v1/reasoning-efforts" && request2.method === "GET") {
       void handleReasoningEfforts(response).catch((error) => jsonResponse(response, 502, { error: { message: String(error), type: "server_error", code: "model_list_failed" } }));
       return;
     }
-    if ((path2 === "/v1/chat/completions" || path2 === "/v1/responses") && request.method === "POST") {
-      if (!request.headers["content-type"]?.toLowerCase().startsWith("application/json")) {
+    if ((path2 === "/v1/chat/completions" || path2 === "/v1/responses") && request2.method === "POST") {
+      if (!request2.headers["content-type"]?.toLowerCase().startsWith("application/json")) {
         jsonResponse(response, 415, { error: { message: "Content-Type must be application/json", type: "invalid_request_error", code: "invalid_content_type" } });
         return;
       }
-      void (path2 === "/v1/responses" ? handleResponses(request, response) : handleChat(request, response));
+      void (path2 === "/v1/responses" ? handleResponses(request2, response) : handleChat(request2, response));
       return;
     }
     jsonResponse(response, 404, { error: { message: "Not found", type: "invalid_request_error", code: "not_found" } });
@@ -61455,7 +64734,7 @@ function mountOpenAiGateway(ctx, pool) {
 }
 
 // vendor/channel-pack/src/loop-recovery.ts
-import { createUserMessage as createUserMessage2, LlmError as LlmError17 } from "@deepseek-ai/dsh-llm";
+import { createUserMessage as createUserMessage2, LlmError as LlmError18 } from "@deepseek-ai/dsh-llm";
 var LOOP_RESUME_PROMPT = "\u7EE7\u7EED\u672A\u5B8C\u6210\u7684\u4EFB\u52A1\u3002\u4E0A\u4E00\u8F6E\u4F60\u7684\u601D\u8003\u9677\u5165\u4E86\u91CD\u590D\uFF08\u540C\u4E00\u6BB5\u63A8\u7406\u53CD\u590D\u51FA\u73B0\uFF09\u800C\u88AB\u4E2D\u6B62 \u2014\u2014 \u8BF7\u6362\u4E00\u79CD\u601D\u8DEF\uFF0C\u4E0D\u8981\u91CD\u590D\u521A\u624D\u90A3\u6BB5\u63A8\u7406\uFF0C\u76F4\u63A5\u63A8\u8FDB\u4EFB\u52A1\u3002";
 var LOOP_RESUME_DEFAULT_MAX = 2;
 var LOOP_RESUME_MAX_LIMIT = 10;
@@ -61476,26 +64755,26 @@ function resolveLoopResumePolicy(env = process.env) {
   };
 }
 function isReasoningLoopFailure(error) {
-  if (error instanceof LlmError17) return error.code === REASONING_LOOP_CODE;
+  if (error instanceof LlmError18) return error.code === REASONING_LOOP_CODE;
   if (typeof error !== "object" || error === null) return false;
   return error.code === REASONING_LOOP_CODE;
 }
 function createLoopResumeController(options) {
   const { policy, log } = options;
-  const deliver = options.deliver ?? ((agent, message) => {
-    agent.followup(message);
+  const deliver = options.deliver ?? ((agent2, message) => {
+    agent2.followup(message);
   });
   const states = /* @__PURE__ */ new Map();
-  function stateFor(agent) {
-    const existing = states.get(agent.id);
+  function stateFor(agent2) {
+    const existing = states.get(agent2.id);
     if (existing !== void 0) return existing;
     const state = { attempts: 0, pending: false, injected: /* @__PURE__ */ new Set() };
-    states.set(agent.id, state);
+    states.set(agent2.id, state);
     return state;
   }
   return {
-    observeFailure(agent, error) {
-      const state = stateFor(agent);
+    observeFailure(agent2, error) {
+      const state = stateFor(agent2);
       if (!isReasoningLoopFailure(error)) {
         state.attempts = 0;
         state.pending = false;
@@ -61504,18 +64783,18 @@ function createLoopResumeController(options) {
       state.attempts += 1;
       state.pending = true;
     },
-    observeIdle(agent) {
-      const state = states.get(agent.id);
+    observeIdle(agent2) {
+      const state = states.get(agent2.id);
       if (state === void 0 || !state.pending) return false;
       state.pending = false;
       if (state.attempts > policy.maxResumes) {
         log.warn(
-          `[channel-pack] ${agent.id} \u8FDE\u7EED\u7B2C ${state.attempts} \u6B21\u601D\u8003\u9677\u5165\u91CD\u590D\uFF0C\u5DF2\u8FBE\u5230\u81EA\u52A8\u7EED\u8DD1\u4E0A\u9650\uFF08${policy.maxResumes} \u6B21\uFF09\uFF0C\u4E0D\u518D\u81EA\u52A8\u7EED\u8DD1 \u2014\u2014 \u5EFA\u8BAE\u964D\u4F4E\u601D\u8003\u6863\u4F4D\u6216\u66F4\u6362\u6A21\u578B\u3002`
+          `[channel-pack] ${agent2.id} \u8FDE\u7EED\u7B2C ${state.attempts} \u6B21\u601D\u8003\u9677\u5165\u91CD\u590D\uFF0C\u5DF2\u8FBE\u5230\u81EA\u52A8\u7EED\u8DD1\u4E0A\u9650\uFF08${policy.maxResumes} \u6B21\uFF09\uFF0C\u4E0D\u518D\u81EA\u52A8\u7EED\u8DD1 \u2014\u2014 \u5EFA\u8BAE\u964D\u4F4E\u601D\u8003\u6863\u4F4D\u6216\u66F4\u6362\u6A21\u578B\u3002`
         );
         return false;
       }
-      if (agent.status !== "idle") return false;
-      if (agent.inbox.hasPending === true || (agent.inbox.nextTurn?.length ?? 0) > 0 || (agent.inbox.nextStep?.length ?? 0) > 0) return false;
+      if (agent2.status !== "idle") return false;
+      if (agent2.inbox.hasPending === true || (agent2.inbox.nextTurn?.length ?? 0) > 0 || (agent2.inbox.nextStep?.length ?? 0) > 0) return false;
       let injectedId;
       try {
         const message = createUserMessage2({
@@ -61526,30 +64805,30 @@ function createLoopResumeController(options) {
         });
         injectedId = message.id;
         state.injected.add(message.id);
-        deliver(agent, message);
+        deliver(agent2, message);
       } catch (error) {
         if (injectedId !== void 0) state.injected.delete(injectedId);
-        log.warn(`[channel-pack] \u81EA\u52A8\u7EED\u8DD1\u6295\u9012\u5931\u8D25\uFF08${agent.id}\uFF09\uFF1A${String(error)}`);
+        log.warn(`[channel-pack] \u81EA\u52A8\u7EED\u8DD1\u6295\u9012\u5931\u8D25\uFF08${agent2.id}\uFF09\uFF1A${String(error)}`);
         return false;
       }
       log.info(
-        `[channel-pack] ${agent.id} \u601D\u8003\u9677\u5165\u91CD\u590D\u88AB\u4E2D\u6B62\uFF0C\u5DF2\u81EA\u52A8\u7EED\u8DD1\uFF08\u7B2C ${state.attempts}/${policy.maxResumes} \u6B21\uFF09\u3002`
+        `[channel-pack] ${agent2.id} \u601D\u8003\u9677\u5165\u91CD\u590D\u88AB\u4E2D\u6B62\uFF0C\u5DF2\u81EA\u52A8\u7EED\u8DD1\uFF08\u7B2C ${state.attempts}/${policy.maxResumes} \u6B21\uFF09\u3002`
       );
       return true;
     },
-    observeInput(agent, message) {
-      const state = states.get(agent.id);
+    observeInput(agent2, message) {
+      const state = states.get(agent2.id);
       if (state === void 0) return;
       if (state.injected.delete(message.id)) return;
       state.attempts = 0;
       state.pending = false;
     },
-    cancelPending(agent) {
-      const state = states.get(agent.id);
+    cancelPending(agent2) {
+      const state = states.get(agent2.id);
       if (state !== void 0) state.pending = false;
     },
-    forget(agent) {
-      states.delete(agent.id);
+    forget(agent2) {
+      states.delete(agent2.id);
     },
     attemptsOf(agentId) {
       return states.get(agentId)?.attempts ?? 0;
@@ -61575,70 +64854,70 @@ function installLoopResume(ctx) {
       // ⚠️ 用 `withoutInitiator()` 排队：这几行跑在别的 agent 的事件派发里
       // （`agent/status` / `agent/error`），排队动作不该继承「当时恰好是谁在
       // 运行」的发起者归属 —— 与 harness 自己的 `goal-round-driver` 同一手法。
-      deliver: (agent, message) => {
+      deliver: (agent2, message) => {
         scope.agents.withoutInitiator(() => {
-          agent.followup(message);
+          agent2.followup(message);
         });
       }
     });
-    const cancelPending = (agent) => {
-      scheduled.delete(agent);
-      if (live.get(agent.id) === agent) controller.cancelPending(agent);
+    const cancelPending = (agent2) => {
+      scheduled.delete(agent2);
+      if (live.get(agent2.id) === agent2) controller.cancelPending(agent2);
     };
     scope.effect(() => () => {
       active = false;
       scheduled.clear();
-      for (const agent of live.values()) controller.forget(agent);
+      for (const agent2 of live.values()) controller.forget(agent2);
       live.clear();
     });
-    scope.on("agent/error", ({ agent, error }) => {
-      if (!active || disposed.has(agent)) return;
-      const previous = live.get(agent.id);
-      if (previous !== void 0 && previous !== agent) {
+    scope.on("agent/error", ({ agent: agent2, error }) => {
+      if (!active || disposed.has(agent2)) return;
+      const previous = live.get(agent2.id);
+      if (previous !== void 0 && previous !== agent2) {
         cancelPending(previous);
         controller.forget(previous);
       }
-      live.set(agent.id, agent);
-      scheduled.delete(agent);
-      controller.observeFailure(agent, error);
+      live.set(agent2.id, agent2);
+      scheduled.delete(agent2);
+      controller.observeFailure(agent2, error);
     });
-    scope.on("agent/status", ({ agent, status }) => {
-      if (!active || disposed.has(agent)) return;
+    scope.on("agent/status", ({ agent: agent2, status }) => {
+      if (!active || disposed.has(agent2)) return;
       if (status !== "idle") {
-        cancelPending(agent);
+        cancelPending(agent2);
         return;
       }
-      if (live.get(agent.id) !== agent || scheduled.has(agent)) return;
-      const token = Symbol();
-      scheduled.set(agent, token);
+      if (live.get(agent2.id) !== agent2 || scheduled.has(agent2)) return;
+      const token = /* @__PURE__ */ Symbol();
+      scheduled.set(agent2, token);
       queueMicrotask(() => {
-        if (!active || ctx.fiber?.uid === null || scope.fiber?.uid === null || disposed.has(agent) || scheduled.get(agent) !== token) return;
-        scheduled.delete(agent);
-        if (live.get(agent.id) !== agent) return;
-        controller.observeIdle(agent);
+        if (!active || ctx.fiber?.uid === null || scope.fiber?.uid === null || disposed.has(agent2) || scheduled.get(agent2) !== token) return;
+        scheduled.delete(agent2);
+        if (live.get(agent2.id) !== agent2) return;
+        controller.observeIdle(agent2);
       });
     });
-    scope.on("agent/inbox/inserted", ({ agent, message }) => {
-      if (!active || disposed.has(agent) || live.get(agent.id) !== agent) return;
-      scheduled.delete(agent);
-      controller.observeInput(agent, message);
+    scope.on("agent/inbox/inserted", ({ agent: agent2, message }) => {
+      if (!active || disposed.has(agent2) || live.get(agent2.id) !== agent2) return;
+      scheduled.delete(agent2);
+      controller.observeInput(agent2, message);
     });
-    scope.on("agent/inbox/discarded", ({ agent }) => {
-      cancelPending(agent);
+    scope.on("agent/inbox/discarded", ({ agent: agent2 }) => {
+      cancelPending(agent2);
     });
     scope.on("session/event", (session, event) => {
-      const agent = live.get(session.id);
-      if (agent === void 0 || agent.session !== void 0 && agent.session !== session) return;
+      const agent2 = live.get(session.id);
+      if (agent2 === void 0 || agent2.session !== void 0 && agent2.session !== session) return;
       if (event.type === "turn/start" || event.type === "agent/inbox/spliced" && event.data.outcome === "canceled" || event.type === "turn/end" && !(event.data.reason.kind === "error" && event.data.reason.error.code === REASONING_LOOP_CODE)) {
-        cancelPending(agent);
+        cancelPending(agent2);
       }
     });
-    scope.on("agent/disposed", ({ agent }) => {
-      disposed.add(agent);
-      cancelPending(agent);
-      if (live.get(agent.id) === agent) {
-        live.delete(agent.id);
-        controller.forget(agent);
+    scope.on("agent/disposed", ({ agent: agent2 }) => {
+      disposed.add(agent2);
+      cancelPending(agent2);
+      if (live.get(agent2.id) === agent2) {
+        live.delete(agent2.id);
+        controller.forget(agent2);
       }
     });
   });
@@ -61679,6 +64958,8 @@ var FileLedgerStore = class {
     this.days = this.readFile();
     this.written = cloneDays(this.days);
   }
+  path;
+  logger;
   days = /* @__PURE__ */ new Map();
   /**
    * **已落盘基线**：上次成功写盘时各桶的快照。
@@ -61880,8 +65161,8 @@ function createTokenLedgerStore(ctx) {
 }
 
 // vendor/channel-pack/src/minimax-auth.ts
-import { Service as Service8 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef12 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service9 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef13 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/minimax-oauth.ts
 import { createHash as createHash7, randomBytes as randomBytes10 } from "node:crypto";
@@ -61920,10 +65201,10 @@ function buildMinimaxPollBody(auth, product = MINIMAX) {
     code_verifier: auth.codeVerifier
   });
 }
-function buildMinimaxRefreshBody(refreshToken, product = MINIMAX) {
+function buildMinimaxRefreshBody(refreshToken2, product = MINIMAX) {
   return new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: refreshToken,
+    refresh_token: refreshToken2,
     client_id: product.clientId,
     scope: product.scope,
     audience: product.audience
@@ -61956,11 +65237,11 @@ function parseMinimaxTokenGrant(payload, previousRefreshToken, product = MINIMAX
   }
   const record = payload;
   const accessToken = nonEmptyString3(record.access_token);
-  const refreshToken = nonEmptyString3(record.refresh_token) ?? previousRefreshToken;
+  const refreshToken2 = nonEmptyString3(record.refresh_token) ?? previousRefreshToken;
   const tokenType = nonEmptyString3(record.token_type);
   const expiresInSec = positiveNumber2(record.expires_in);
   if (accessToken === void 0) throw new Error("MiniMax \u4EE4\u724C\u54CD\u5E94\u7F3A\u5C11 access_token");
-  if (refreshToken === void 0) throw new Error("MiniMax \u4EE4\u724C\u54CD\u5E94\u7F3A\u5C11 refresh_token");
+  if (refreshToken2 === void 0) throw new Error("MiniMax \u4EE4\u724C\u54CD\u5E94\u7F3A\u5C11 refresh_token");
   if (tokenType === void 0 || tokenType.toLowerCase() !== "bearer") {
     throw new Error("MiniMax \u4EE4\u724C\u54CD\u5E94\u7684 token_type \u4E0D\u662F Bearer");
   }
@@ -61975,7 +65256,7 @@ function parseMinimaxTokenGrant(payload, previousRefreshToken, product = MINIMAX
   const accountId = decodeJwtSub(accessToken);
   return {
     access_token: accessToken,
-    refresh_token: refreshToken,
+    refresh_token: refreshToken2,
     token_type: "Bearer",
     expires_at: String(fromJwt ?? expiresAt),
     scope,
@@ -61987,7 +65268,7 @@ function createMinimaxPkce() {
   const codeChallenge = createHash7("sha256").update(codeVerifier, "ascii").digest("base64url");
   return { codeVerifier, codeChallenge };
 }
-async function startMinimaxDeviceAuthorization(fetcher = fetch, product = MINIMAX) {
+async function startMinimaxDeviceAuthorization(fetcher = createDomesticFetch(), product = MINIMAX) {
   const pkce = createMinimaxPkce();
   const response = await fetcher(`${product.accountHost}${MINIMAX_DEVICE_CODE_PATH}`, {
     method: "POST",
@@ -62006,8 +65287,8 @@ async function startMinimaxDeviceAuthorization(fetcher = fetch, product = MINIMA
   return { ...parsed, codeVerifier: pkce.codeVerifier };
 }
 async function pollMinimaxDeviceToken(auth, options = {}) {
-  const fetcher = options.fetcher ?? fetch;
-  const sleep4 = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const fetcher = options.fetcher ?? createDomesticFetch();
+  const sleep5 = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const now = options.now ?? Date.now;
   const product = options.product ?? MINIMAX;
   const deadline = now() + auth.expiresInSec * 1e3;
@@ -62028,12 +65309,12 @@ async function pollMinimaxDeviceToken(auth, options = {}) {
     const status = nonEmptyString3(record.status);
     const error = nonEmptyString3(record.error);
     if (response.ok && status === "pending") {
-      await sleep4(intervalMs);
+      await sleep5(intervalMs);
       continue;
     }
     if (response.ok && status === "slow_down") {
       intervalMs += 5e3;
-      await sleep4(intervalMs);
+      await sleep5(intervalMs);
       continue;
     }
     if (response.ok && (status === "denied" || status === "access_denied")) {
@@ -62043,12 +65324,12 @@ async function pollMinimaxDeviceToken(auth, options = {}) {
       throw new MinimaxLoginExpiredError();
     }
     if (error === "authorization_pending") {
-      await sleep4(intervalMs);
+      await sleep5(intervalMs);
       continue;
     }
     if (error === "slow_down") {
       intervalMs += 5e3;
-      await sleep4(intervalMs);
+      await sleep5(intervalMs);
       continue;
     }
     if (response.ok) return parseMinimaxTokenGrant(body, void 0, product);
@@ -62056,14 +65337,14 @@ async function pollMinimaxDeviceToken(auth, options = {}) {
   }
   throw new MinimaxLoginExpiredError();
 }
-async function refreshMinimaxCredential(refreshToken, fetcher = fetch, product = MINIMAX) {
+async function refreshMinimaxCredential(refreshToken2, fetcher = createDomesticFetch(), product = MINIMAX) {
   const response = await fetcher(`${product.accountHost}${MINIMAX_TOKEN_PATH}`, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: buildMinimaxRefreshBody(refreshToken, product),
+    body: buildMinimaxRefreshBody(refreshToken2, product),
     signal: AbortSignal.timeout(MINIMAX_OAUTH_TIMEOUT_MS)
   });
   const body = await response.json().catch(() => void 0);
@@ -62072,7 +65353,7 @@ async function refreshMinimaxCredential(refreshToken, fetcher = fetch, product =
     const error = nonEmptyString3(record.error) ?? `HTTP ${response.status}`;
     throw new Error(`MiniMax \u7EED\u671F\u5931\u8D25\uFF1A${error}`);
   }
-  return parseMinimaxTokenGrant(body, refreshToken, product);
+  return parseMinimaxTokenGrant(body, refreshToken2, product);
 }
 
 // vendor/channel-pack/src/minimax-auth.ts
@@ -62095,7 +65376,7 @@ function parseMinimaxCredential(value) {
     return void 0;
   }
 }
-var MinimaxAuth = class extends Service8 {
+var MinimaxAuth = class extends Service9 {
   constructor(ctx, options = {}) {
     const product = options.product ?? MINIMAX;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -62103,6 +65384,7 @@ var MinimaxAuth = class extends Service8 {
     this.product = product;
     this.credentialRefName = product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称。 */
@@ -62152,13 +65434,13 @@ var MinimaxAuth = class extends Service8 {
       ...credential,
       ...options.nickname === void 0 ? {} : { nickname: options.nickname }
     };
-    await this.ctx.credentials.set(credentialRef12(options.refName), JSON.stringify(payload));
+    await this.ctx.credentials.set(credentialRef13(options.refName), JSON.stringify(payload));
     this.lastRefreshError = void 0;
     return { ...credential.account_id === void 0 ? {} : { accountId: credential.account_id } };
   }
   /** 解析默认单凭据。 */
   async resolveDefaultCredential() {
-    const resolved = await this.ctx.credentials.resolve(credentialRef12(this.credentialRefName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef13(this.credentialRefName));
     if (!resolved) return void 0;
     return parseMinimaxCredential(resolved.value);
   }
@@ -62177,7 +65459,7 @@ var MinimaxAuth = class extends Service8 {
         this.fetchImpl,
         this.product
       );
-      await this.ctx.credentials.set(credentialRef12(this.credentialRefName), JSON.stringify(next));
+      await this.ctx.credentials.set(credentialRef13(this.credentialRefName), JSON.stringify(next));
       this.lastRefreshError = void 0;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -62193,7 +65475,7 @@ var MinimaxAuth = class extends Service8 {
    * 也把池值对账（见 `refreshAll` 的注释）。
    */
   async refreshAccountCredential(refName, pool, accountId) {
-    const ref = credentialRef12(refName);
+    const ref = credentialRef13(refName);
     const resolved = await this.ctx.credentials.resolve(ref);
     if (!resolved) throw new Error("\u51ED\u636E\u672A\u914D\u7F6E");
     const credential = parseMinimaxCredential(resolved.value);
@@ -62229,7 +65511,7 @@ var MinimaxAuth = class extends Service8 {
     for (const entry of accounts) {
       if (!entry.refreshable) continue;
       try {
-        const ref = credentialRef12(entry.credentialRef);
+        const ref = credentialRef13(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) {
           await pool.updateAccount(entry.id, { refreshable: false });
@@ -62404,10 +65686,10 @@ function parseMinimaxModelsPayload(payload) {
 }
 
 // vendor/channel-pack/src/minimax-adapter.ts
-import { LlmAdapter as LlmAdapter9, LlmError as LlmError18, ReasoningEffortId as ReasoningEffortId12 } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter as LlmAdapter10, LlmError as LlmError19, ReasoningEffortId as ReasoningEffortId13 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/minimax-messages.ts
-import { ToolCallId as ToolCallId6 } from "@deepseek-ai/dsh-llm";
+import { ToolCallId as ToolCallId7 } from "@deepseek-ai/dsh-llm";
 function buildMinimaxMessagesPayload(options) {
   const payload = {
     model: options.model,
@@ -62675,7 +65957,7 @@ async function* consumeMinimaxSse(options) {
         yield {
           type: "tool-call-delta",
           index,
-          id: ToolCallId6(state?.toolId ?? ""),
+          id: ToolCallId7(state?.toolId ?? ""),
           argumentsDelta: d.partial_json
         };
       }
@@ -62693,7 +65975,7 @@ async function* consumeMinimaxSse(options) {
       } else {
         block = {
           type: "tool-call",
-          id: ToolCallId6(state.toolId ?? ""),
+          id: ToolCallId7(state.toolId ?? ""),
           name: state.toolName ?? "",
           arguments: state.toolArgs
         };
@@ -62752,19 +66034,20 @@ function minimaxReasoningInfo(entry) {
     if (!ids.includes("none")) ids.push("none");
   }
   const efforts = ids.map((id) => {
-    if (id === "none") return { id: ReasoningEffortId12(id), name: "\u5173\u95ED\u601D\u8003" };
-    if (id === "on") return { id: ReasoningEffortId12(id), name: "\u5F00\u542F\u601D\u8003" };
-    return { id: ReasoningEffortId12(id), name: id };
+    if (id === "none") return { id: ReasoningEffortId13(id), name: "\u5173\u95ED\u601D\u8003" };
+    if (id === "on") return { id: ReasoningEffortId13(id), name: "\u5F00\u542F\u601D\u8003" };
+    return { id: ReasoningEffortId13(id), name: id };
   });
-  const defaultEffort = entry.defaultEffort !== void 0 && ids.includes(entry.defaultEffort) ? ReasoningEffortId12(entry.defaultEffort) : void 0;
+  const defaultEffort = entry.defaultEffort !== void 0 && ids.includes(entry.defaultEffort) ? ReasoningEffortId13(entry.defaultEffort) : void 0;
   return { efforts, ...defaultEffort === void 0 ? {} : { defaultEffort } };
 }
-var MinimaxAdapter = class extends LlmAdapter9 {
+var MinimaxAdapter = class extends LlmAdapter10 {
   constructor(options) {
     super();
     this.options = options;
     this.product = options.product ?? MINIMAX;
   }
+  options;
   product;
   remoteModels;
   /** 目录加载闸门：并发去重 + 失败/空结果冷却（见 `remote-catalog-gate.ts`）。 */
@@ -62883,7 +66166,7 @@ var MinimaxAdapter = class extends LlmAdapter9 {
       credential = await this.options.resolveCredential(options.model);
     }
     if (credential === void 0 || credential.access_token === "") {
-      throw new LlmError18("minimax: no usable credential; log in first", "MISSING_CREDENTIAL");
+      throw new LlmError19("minimax: no usable credential; log in first", "MISSING_CREDENTIAL");
     }
     const entry = (await this.loadModels()).find((item) => item.id === options.model);
     const imageRefs = /* @__PURE__ */ new Map();
@@ -62893,13 +66176,13 @@ var MinimaxAdapter = class extends LlmAdapter9 {
     let images;
     if (imageRefs.size > 0) {
       if (entry?.supportsImage !== true) {
-        throw new LlmError18(
+        throw new LlmError19(
           `minimax: \u6A21\u578B "${options.model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165`,
           "UNSUPPORTED_CONTENT"
         );
       }
       if (this.options.readImage === void 0) {
-        throw new LlmError18(
+        throw new LlmError19(
           "minimax: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1\uFF08readImage \u672A\u63D0\u4F9B\uFF09",
           "UNSUPPORTED_CONTENT"
         );
@@ -62940,14 +66223,14 @@ var MinimaxAdapter = class extends LlmAdapter9 {
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       const code = response.status === 402 ? "QUOTA_EXCEEDED" : httpErrorCode2(response.status);
-      throw new LlmError18(
+      throw new LlmError19(
         `minimax: HTTP ${response.status}${text === "" ? "" : ` \u2014 ${text.slice(0, 500)}`}`,
         code,
         { status: response.status }
       );
     }
     if (response.body === null) {
-      throw new LlmError18("minimax: \u54CD\u5E94\u7F3A\u5C11 body", "EMPTY_RESPONSE");
+      throw new LlmError19("minimax: \u54CD\u5E94\u7F3A\u5C11 body", "EMPTY_RESPONSE");
     }
     yield* consumeMinimaxSse({ body: response.body, signal: options.signal });
   }
@@ -62960,11 +66243,11 @@ function registerMinimaxLlm(ctx, options) {
 }
 
 // vendor/channel-pack/src/gemini-auth.ts
-import { Service as Service9 } from "@deepseek-ai/cordis";
-import { credentialRef as credentialRef13 } from "@deepseek-ai/dsh-credentials";
+import { Service as Service10 } from "@deepseek-ai/cordis";
+import { credentialRef as credentialRef14 } from "@deepseek-ai/dsh-credentials";
 
 // vendor/channel-pack/src/channel-fetch.ts
-var import_undici2 = __toESM(require_undici(), 1);
+var import_undici3 = __toESM(require_undici(), 1);
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
@@ -63094,7 +66377,7 @@ function createChannelFetch(options = {}) {
       if (!parsed.ok) throw new Error("\u4EE3\u7406\u5730\u5740\u65E0\u6548");
       let dispatcher = dispatchers.get(parsed.proxy.url);
       if (!dispatcher) {
-        dispatcher = options.dispatcherFor ? options.dispatcherFor(parsed.proxy) : new import_undici2.Dispatcher1Wrapper(createProxyDispatcher(parsed.proxy));
+        dispatcher = options.dispatcherFor ? options.dispatcherFor(parsed.proxy) : new import_undici3.Dispatcher1Wrapper(createProxyDispatcher(parsed.proxy));
         dispatchers.set(parsed.proxy.url, dispatcher);
       }
       return await fetchImpl(input, { ...init, dispatcher });
@@ -63179,7 +66462,7 @@ function parseGeminiTokenGrant(payload, previousRefreshToken) {
   const accessToken = typeof record.access_token === "string" ? record.access_token : "";
   if (accessToken === "") throw new Error("\u4EE4\u724C\u7AEF\u70B9\u672A\u8FD4\u56DE access_token");
   const rawRefresh = typeof record.refresh_token === "string" ? record.refresh_token : "";
-  const refreshToken = rawRefresh !== "" ? rawRefresh : previousRefreshToken;
+  const refreshToken2 = rawRefresh !== "" ? rawRefresh : previousRefreshToken;
   const rawTokenType = typeof record.token_type === "string" ? record.token_type : "";
   const expiresIn = typeof record.expires_in === "number" && Number.isFinite(record.expires_in) && record.expires_in > 0 ? Math.floor(record.expires_in) : 3600;
   const grant = {
@@ -63187,7 +66470,7 @@ function parseGeminiTokenGrant(payload, previousRefreshToken) {
     token_type: rawTokenType === "" ? "Bearer" : rawTokenType,
     expires_in: expiresIn
   };
-  if (refreshToken !== void 0 && refreshToken !== "") grant.refresh_token = refreshToken;
+  if (refreshToken2 !== void 0 && refreshToken2 !== "") grant.refresh_token = refreshToken2;
   const scope = typeof record.scope === "string" ? record.scope : "";
   if (scope !== "") grant.scope = scope;
   const idToken = typeof record.id_token === "string" ? record.id_token : "";
@@ -63222,8 +66505,8 @@ function credentialFromGeminiGrant(grant, previous = {}, nowMs = Date.now()) {
     expires_in: grant.expires_in,
     expiry: geminiExpiryFrom(grant.expires_in, nowMs)
   };
-  const refreshToken = grant.refresh_token ?? previous.refresh_token;
-  if (refreshToken !== void 0 && refreshToken !== "") credential.refresh_token = refreshToken;
+  const refreshToken2 = grant.refresh_token ?? previous.refresh_token;
+  if (refreshToken2 !== void 0 && refreshToken2 !== "") credential.refresh_token = refreshToken2;
   const scope = grant.scope ?? previous.scope;
   if (scope !== void 0 && scope !== "") credential.scope = scope;
   const identity = grant.id_token === void 0 ? {} : geminiIdentityFromIdToken(grant.id_token);
@@ -63261,7 +66544,7 @@ async function postGeminiForm(endpoint, form, fetcher, signal) {
   return parsed;
 }
 async function exchangeGeminiCode(code, redirectUri, options = {}) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const payload = await postGeminiForm(
     GEMINI_TOKEN_ENDPOINT,
     {
@@ -63276,24 +66559,24 @@ async function exchangeGeminiCode(code, redirectUri, options = {}) {
   );
   return parseGeminiTokenGrant(payload);
 }
-async function refreshGeminiCredential(refreshToken, options = {}) {
-  if (refreshToken === "") throw new Error("\u6CA1\u6709 refresh_token\uFF0C\u9700\u8981\u91CD\u65B0\u6388\u6743");
-  const fetcher = options.fetcher ?? fetch;
+async function refreshGeminiCredential(refreshToken2, options = {}) {
+  if (refreshToken2 === "") throw new Error("\u6CA1\u6709 refresh_token\uFF0C\u9700\u8981\u91CD\u65B0\u6388\u6743");
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const payload = await postGeminiForm(
     GEMINI_TOKEN_ENDPOINT,
     {
       client_id: geminiClientId(),
       client_secret: geminiClientSecret(),
-      refresh_token: refreshToken,
+      refresh_token: refreshToken2,
       grant_type: "refresh_token"
     },
     fetcher,
     options.signal
   );
-  return parseGeminiTokenGrant(payload, refreshToken);
+  return parseGeminiTokenGrant(payload, refreshToken2);
 }
 async function fetchGeminiUserInfo(accessToken, options = {}) {
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const init = { headers: { Authorization: `Bearer ${accessToken}` } };
   if (options.signal !== void 0) init.signal = options.signal;
   try {
@@ -63404,7 +66687,7 @@ async function startGeminiOAuthFlow(options = {}) {
       servers.map((server) => new Promise((resolve2) => server.close(() => resolve2())))
     );
   };
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? createDomesticFetch();
   const timeoutMs = options.timeoutMs ?? GEMINI_AUTH_FLOW_TIMEOUT_MS;
   const result = Promise.race([
     codePromise,
@@ -63446,7 +66729,7 @@ var GeminiRefreshTokenExpiredError = class extends Error {
     this.name = "RefreshTokenExpiredError";
   }
 };
-var GeminiAuth = class extends Service9 {
+var GeminiAuth = class extends Service10 {
   constructor(ctx, options = {}) {
     const product = options.product ?? GEMINI;
     super(ctx, options.serviceName ?? `${product.id}Auth`);
@@ -63454,6 +66737,7 @@ var GeminiAuth = class extends Service9 {
     this.product = product;
     this.credentialRefName = product.defaultCredentialRef;
   }
+  options;
   /** 本实例所属的产品配置。 */
   product;
   /** 本实例默认读写的凭据 ref 名称。 */
@@ -63480,7 +66764,7 @@ var GeminiAuth = class extends Service9 {
     return queue;
   }
   async readCredential(refName) {
-    const resolved = await this.ctx.credentials.resolve(credentialRef13(refName));
+    const resolved = await this.ctx.credentials.resolve(credentialRef14(refName));
     if (!resolved) return void 0;
     return parseGeminiCredential(resolved.value);
   }
@@ -63520,7 +66804,7 @@ var GeminiAuth = class extends Service9 {
    * 展示名走 `geminiAccountLabel`（邮箱优先，回退 `sub`）。
    */
   async persistLogin(credential, options) {
-    await this.ctx.credentials.set(credentialRef13(options.refName), JSON.stringify(credential));
+    await this.ctx.credentials.set(credentialRef14(options.refName), JSON.stringify(credential));
     return credential.sub === void 0 ? {} : { accountId: credential.sub };
   }
   /** 解析默认单凭据。 */
@@ -63537,7 +66821,7 @@ var GeminiAuth = class extends Service9 {
       throw new GeminiRefreshTokenExpiredError("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     const next = await this.refreshCredential(credential);
-    await this.ctx.credentials.set(credentialRef13(this.credentialRefName), JSON.stringify(next));
+    await this.ctx.credentials.set(credentialRef14(this.credentialRefName), JSON.stringify(next));
   }
   /**
    * 续期**指定 ref**（RPC `account.refresh` / 定时器）。
@@ -63553,7 +66837,7 @@ var GeminiAuth = class extends Service9 {
       if (!isGeminiRefreshable(credential)) {
         throw new GeminiRefreshTokenExpiredError("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
       }
-      const ref = credentialRef13(refName);
+      const ref = credentialRef14(refName);
       if (pool === void 0) {
         const next = await this.refreshCredential(credential);
         await this.ctx.credentials.set(ref, JSON.stringify(next));
@@ -63587,7 +66871,7 @@ var GeminiAuth = class extends Service9 {
   async refreshAll(pool) {
     const accounts = await pool.listAccounts(this.product.id);
     for (const entry of accounts) {
-      const ref = credentialRef13(entry.credentialRef);
+      const ref = credentialRef14(entry.credentialRef);
       let credential;
       try {
         const resolved = await this.ctx.credentials.resolve(ref);
@@ -63689,7 +66973,7 @@ var GeminiAuth = class extends Service9 {
     }
     for (const entry of entries) {
       try {
-        const ref = credentialRef13(entry.credentialRef);
+        const ref = credentialRef14(entry.credentialRef);
         const resolved = await this.ctx.credentials.resolve(ref);
         if (!resolved) continue;
         let credential = parseGeminiCredential(resolved.value);
@@ -63740,12 +67024,12 @@ var GeminiAuth = class extends Service9 {
    * 一旦字段合并逻辑分叉，就会出现「某条路径丢了 sub/email」。
    */
   async refreshCredential(credential) {
-    const refreshToken = credential.refresh_token;
-    if (!refreshToken) {
+    const refreshToken2 = credential.refresh_token;
+    if (!refreshToken2) {
       throw new GeminiRefreshTokenExpiredError("\u51ED\u636E\u7F3A\u5C11 refresh_token\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
     }
     try {
-      const grant = await refreshGeminiCredential(refreshToken, { fetcher: this.fetchImpl });
+      const grant = await refreshGeminiCredential(refreshToken2, { fetcher: this.fetchImpl });
       return credentialFromGeminiGrant(grant, credential);
     } catch (error) {
       if (error instanceof ChannelNetworkError) throw error;
@@ -63781,6 +67065,8 @@ var GeminiSigStore = class {
     this.logger = logger2;
     this.entries = this.load();
   }
+  path;
+  logger;
   entries;
   dirty = false;
   /** 当前条目数（诊断用）。 */
@@ -63912,7 +67198,7 @@ function createGeminiSigStore(ctx) {
 }
 
 // vendor/channel-pack/src/opencode-adapter.ts
-import { LlmAdapter as LlmAdapter10, LlmError as LlmError19, ReasoningEffortId as ReasoningEffortId13 } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter as LlmAdapter11, LlmError as LlmError20, ReasoningEffortId as ReasoningEffortId14 } from "@deepseek-ai/dsh-llm";
 
 // vendor/channel-pack/src/opencode-messages.ts
 var FREE_LANE_GATE_TOOLS = ["read", "shell"];
@@ -64148,7 +67434,7 @@ var MEASURED_IMAGE_OVERRIDES = {
   "longcat-2.5-preview-free": { image: false, note: "2026-10-02 \u5B9E\u6D4B 500\uFF0Cmodels.dev \u591A\u62A5 image" }
 };
 var isFiniteNumber = (v) => typeof v === "number" && Number.isFinite(v);
-var EFFORT_NAMES2 = {
+var EFFORT_NAMES3 = {
   none: "\u5173\u95ED\u601D\u8003",
   minimal: "\u6700\u5C0F",
   low: "\u4F4E",
@@ -64158,7 +67444,7 @@ var EFFORT_NAMES2 = {
   max: "\u6700\u5927"
 };
 function opencodeEffortName(id) {
-  return EFFORT_NAMES2[id] ?? id;
+  return EFFORT_NAMES3[id] ?? id;
 }
 function normalizeEfforts(entry) {
   if (!Array.isArray(entry.reasoning_options)) return [];
@@ -64354,11 +67640,12 @@ function resolveOpencodeEffort(model, requested, capabilities) {
   if (translated.kind === "mapped") return { effort: translated.effort, outcome: "mapped" };
   return { outcome: "dropped" };
 }
-var OpencodeAdapter = class extends LlmAdapter10 {
+var OpencodeAdapter = class extends LlmAdapter11 {
   constructor(options) {
     super();
     this.options = options;
   }
+  options;
   providerInfo(provider) {
     const id = typeof provider === "string" && provider.length > 0 ? provider : OPENCODE.id;
     return { id, name: OPENCODE.displayName };
@@ -64422,7 +67709,7 @@ var OpencodeAdapter = class extends LlmAdapter10 {
         efforts: capability.efforts.map((effort) => ({
           // ⚠️ `id` 是**品牌类型**（`ReasoningEffortId`），必须经它的构造函数 ——
           // 与 Qoder 同款（`src/qoder-adapter.ts:581`）。
-          id: ReasoningEffortId13(effort),
+          id: ReasoningEffortId14(effort),
           // ⚠️ 没有官方中文的档位（models.dev 会下发 `minimal` / `xhigh` 等
           // Qoder 那份表里没有的值）**回退到 id 本身** —— 宁可显示英文原值，
           // 也不猜一个可能错译的中文。
@@ -64448,10 +67735,10 @@ var OpencodeAdapter = class extends LlmAdapter10 {
   async *stream(options) {
     const slots = await this.options.identitySlots();
     if (slots.length === 0) {
-      throw new LlmError19("opencode: \u6CA1\u6709\u53EF\u7528\u901A\u9053", "MISSING_CREDENTIAL");
+      throw new LlmError20("opencode: \u6CA1\u6709\u53EF\u7528\u901A\u9053", "MISSING_CREDENTIAL");
     }
     if (pickSlot(slots, options.model, /* @__PURE__ */ new Set()) === void 0) {
-      throw new LlmError19(
+      throw new LlmError20(
         `opencode: \u6A21\u578B "${options.model}" \u9700\u8981 API key \u8D26\u53F7\u901A\u9053\uFF08\u533F\u540D\u901A\u9053\u53EA\u652F\u6301\u514D\u8D39\u6A21\u578B\uFF09\uFF0C\u8BF7\u5148\u5728 Channel Pack \u7684 OpenCode \u9762\u677F\u6DFB\u52A0\u4E00\u4E2A\u8D26\u53F7`,
         "MISSING_CREDENTIAL"
       );
@@ -64461,7 +67748,7 @@ var OpencodeAdapter = class extends LlmAdapter10 {
     for (; ; ) {
       const slot2 = pickSlot(slots, options.model, tried);
       if (slot2 === void 0) {
-        throw new LlmError19(
+        throw new LlmError20(
           `opencode: \u6240\u6709\u901A\u9053\u5BF9\u8BE5\u6A21\u578B\u5747\u53D7\u9650${limited.length > 0 ? `\uFF08${limited.join("\u3001")}\uFF09` : ""}`,
           "QUOTA_EXCEEDED"
         );
@@ -64478,13 +67765,13 @@ var OpencodeAdapter = class extends LlmAdapter10 {
         return;
       } catch (error) {
         if (delivered || error instanceof ModelQueuedError) throw error;
-        if (error instanceof LlmError19 && error.code === "QUOTA_EXCEEDED") throw error;
+        if (error instanceof LlmError20 && error.code === "QUOTA_EXCEEDED") throw error;
         const info = classifyOpencodeFailure(error);
         if (info.kind === "free_tier") {
           this.options.warn?.(
             `opencode: \u514D\u8D39\u901A\u9053\u88AB FreeTierError \u62D2\u7EDD \u2014\u2014 \u68C0\u67E5 session id \u5F62\u72B6\uFF08\u5E94\u4E3A ses_ + 12hex + 14base62\uFF09\uFF1A${info.detail}`
           );
-          throw new LlmError19(
+          throw new LlmError20(
             `opencode: \u514D\u8D39\u901A\u9053\u88AB\u4E0A\u6E38\u62D2\u7EDD\uFF08FreeTierError\uFF09\u3002\u8BE5\u9519\u8BEF\u7531\u8BF7\u6C42\u5F62\u72B6\u89E6\u53D1\uFF08session id \u5F62\u72B6\u4E0D\u5BF9\u65F6\u51FA\u73B0\uFF09\uFF0C\u6362 API key \u6216\u6362\u51FA\u53E3\u90FD\u65E0\u6548\u3002`,
             "AUTH",
             { status: 403 }
@@ -64528,13 +67815,13 @@ var OpencodeAdapter = class extends LlmAdapter10 {
     if (refs.size === 0) return void 0;
     const capabilities = getOpencodeCapabilitiesSync();
     if (!supportsOpencodeImage(capabilities.find((c) => c.id === model))) {
-      throw new LlmError19(
+      throw new LlmError20(
         `opencode: \u6A21\u578B "${model}" \u4E0D\u652F\u6301\u56FE\u7247\u8F93\u5165\uFF08\u80FD\u529B\u4EE5\u8FDC\u7AEF models.dev \u4E3A\u51C6\uFF09`,
         "UNSUPPORTED_CONTENT"
       );
     }
     if (this.options.readImage === void 0) {
-      throw new LlmError19("opencode: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1", "UNSUPPORTED_CONTENT");
+      throw new LlmError20("opencode: \u56FE\u7247\u8F93\u5165\u9700\u8981\u9644\u4EF6\u670D\u52A1", "UNSUPPORTED_CONTENT");
     }
     const readImage = this.options.readImage;
     const out = /* @__PURE__ */ new Map();
@@ -64587,7 +67874,7 @@ var OpencodeAdapter = class extends LlmAdapter10 {
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       const retryAfterMs = retryAfterMsFromResponse(response.headers);
-      throw new LlmError19(
+      throw new LlmError20(
         `opencode: HTTP ${response.status} \u2014 ${text.slice(0, 300)}`,
         httpErrorCode2(response.status),
         {
@@ -64718,6 +68005,8 @@ function apply(ctx, config = {}) {
   suppressAutoSettingsPage(ctx);
   registerProviderSettings(
     ctx,
+    "llm-buddy",
+    "llm-workbuddy",
     "llm-lobsterai",
     "llm-qoder",
     "llm-qodercn",
@@ -64733,7 +68022,7 @@ function apply(ctx, config = {}) {
   const accountForRefresh = async (provider, accountId) => {
     if (accountId === void 0) return pool.getAvailableAccount(provider, "");
     const entry = pool.listAccountsByProvider(provider).find((account) => account.id === accountId);
-    if (entry === void 0) throw new LlmError20(`${provider}: \u5F53\u524D\u8BF7\u6C42\u7684\u8D26\u53F7\u5DF2\u79FB\u9664`, "MISSING_CREDENTIAL");
+    if (entry === void 0) throw new LlmError21(`${provider}: \u5F53\u524D\u8BF7\u6C42\u7684\u8D26\u53F7\u5DF2\u79FB\u9664`, "MISSING_CREDENTIAL");
     return { entry };
   };
   configureDeadModelStore(ctx);
@@ -64754,21 +68043,76 @@ function apply(ctx, config = {}) {
       modelId ?? ""
     );
     if (limited === void 0) return;
-    throw new LlmError20(
+    throw new LlmError21(
       `${product.displayName}\uFF1A\u6A21\u578B ${modelId} \u7684\u53EF\u7528\u8D26\u53F7\u5747\u5728\u9650\u6D41\u4E2D\uFF0C\u6700\u8FD1\u4E00\u4E2A\u5C06\u4E8E ${new Date(limited.resetAtMs).toLocaleString("zh-CN")} \u89E3\u7981\u3002\u53EF\u6539\u7528\u5176\u5B83 provider / \u6A21\u578B\uFF0C\u6216\u7B49\u5F85\u89E3\u7981\u540E\u518D\u8BD5\uFF08\u65E0\u9700\u91CD\u65B0\u767B\u5F55\uFF09\u3002`,
       "QUOTA_EXCEEDED"
     );
   };
+  const resolveBuddyCredentialByRef = async (refName) => {
+    const resolved = await ctx.credentials.resolve(credentialRef15(refName));
+    if (!resolved) return void 0;
+    try {
+      return JSON.parse(resolved.value);
+    } catch {
+      return void 0;
+    }
+  };
+  const buddyBalanceSelector = new BuddyBalanceSelector({
+    product: CODEBUDDY,
+    resolveCredential: resolveBuddyCredentialByRef
+  });
+  const workbuddyBalanceSelector = new BuddyBalanceSelector({
+    product: WORKBUDDY,
+    resolveCredential: resolveBuddyCredentialByRef
+  });
+  const pickBuddyCredential = async (options) => {
+    const tried = /* @__PURE__ */ new Set();
+    const candidates = pool.listAccountsByProvider(options.product.id).filter((a) => a.enabled).filter((a) => {
+      const key = options.modelId ?? "";
+      if (key.length === 0) return true;
+      if (!a.modelRateLimits) return true;
+      const resetAt = a.modelRateLimits[key];
+      return resetAt === void 0 || resetAt === 0 || Date.now() >= resetAt;
+    }).map((a) => ({ id: a.id, credentialRef: a.credentialRef }));
+    if (options.isFreeModel === true) {
+      for (const candidate of candidates) {
+        const credential = await resolveBuddyCredentialByRef(candidate.credentialRef);
+        if (credential !== void 0) return { credential, tried };
+        tried.add(candidate.id);
+      }
+    }
+    const allowPermanent = !pool.permanentLocked(options.product.id);
+    const picked = await pickBuddyAccount(options.selector, candidates, {
+      allowPermanent,
+      resolveCredential: resolveBuddyCredentialByRef
+    });
+    if (picked.kind === "account") {
+      return { credential: picked.credential, tried: new Set(picked.tried) };
+    }
+    for (const id of picked.tried) tried.add(id);
+    if (picked.kind === "locked") {
+      const days = buddyExpiringWindowDays();
+      if (picked.reason?.kind === "unknown") {
+        throw new Error(
+          `${options.displayName}\uFF1A\u65E0\u6CD5\u786E\u8BA4\u662F\u5426\u6709\u53EF\u7528\u8D26\u53F7\u3002\u5DF2\u9501\u5B9A\u6C38\u4E45\u79EF\u5206\uFF0C\u800C\u90E8\u5206\u8D26\u53F7\u7684\u4F59\u989D\u67E5\u8BE2\u5931\u8D25\uFF08${picked.reason.errors.slice(0, 2).join("\uFF1B")}\uFF09\u3002\u8FD9\u4E9B\u8D26\u53F7**\u53EF\u80FD\u4ECD\u6709**\u300C${days} \u5929\u5185\u5230\u671F\u300D\u7684\u79EF\u5206 \u2014\u2014 \u8BF7\u91CD\u8BD5\uFF0C\u6216\u5728 Channel Pack \u5BF9\u5E94\u9762\u677F\u68C0\u67E5\u51ED\u636E\u662F\u5426\u5931\u6548\u3002`
+        );
+      }
+      throw new Error(
+        `${options.displayName}\uFF1A\u6CA1\u6709\u53EF\u7528\u8D26\u53F7\u3002\u5DF2\u9501\u5B9A\u6C38\u4E45\u79EF\u5206\uFF0C\u800C\u6240\u6709\u8D26\u53F7\u7684\u300C${days} \u5929\u5185\u5230\u671F\u300D\u79EF\u5206\u90FD\u5DF2\u7528\u5C3D\u3002\u8BF7\u5728 Channel Pack \u7684 ${options.displayName} \u9762\u677F\u89E3\u9501\u6C38\u4E45\u79EF\u5206\uFF0C\u6216\u7B49\u5F85\u8D44\u6E90\u5305\u5230\u671F\u540E\u91CD\u65B0\u53D1\u653E\u989D\u5EA6\u3002`
+      );
+    }
+    return { tried };
+  };
   const lobsterai = new LobsteraiAuth(ctx);
   const lobsteraiAdapter = registerLobsteraiLlm(ctx, {
-    credentialRef: credentialRef14(LOBSTERAI.defaultCredentialRef),
+    credentialRef: credentialRef15(LOBSTERAI.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(LOBSTERAI.id, modelId ?? "");
       if (available2) {
         reportLedgerAccount(LOBSTERAI.id, available2.entry.id);
         return available2.credential;
       }
-      const resolved = await ctx.credentials.resolve(credentialRef14(LOBSTERAI.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(LOBSTERAI.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -64793,7 +68137,7 @@ function apply(ctx, config = {}) {
   const qoder = new QoderAuth(ctx);
   const activeQoderAccountId = /* @__PURE__ */ new Map();
   const qoderAdapter = registerQoderLlm(ctx, {
-    credentialRef: credentialRef14(QODER.defaultCredentialRef),
+    credentialRef: credentialRef15(QODER.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(QODER.id, modelId ?? "");
       if (available2) {
@@ -64803,7 +68147,7 @@ function apply(ctx, config = {}) {
       }
       activeQoderAccountId.set(QODER.id, void 0);
       throwIfAllAccountsRateLimited(QODER, modelId);
-      const resolved = await ctx.credentials.resolve(credentialRef14(QODER.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(QODER.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -64841,7 +68185,7 @@ function apply(ctx, config = {}) {
   });
   const qoderCn = new QoderAuth(ctx, { product: QODER_CN });
   const qoderCnAdapter = registerQoderLlm(ctx, {
-    credentialRef: credentialRef14(QODER_CN.defaultCredentialRef),
+    credentialRef: credentialRef15(QODER_CN.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(QODER_CN.id, modelId ?? "");
       if (available2) {
@@ -64851,7 +68195,7 @@ function apply(ctx, config = {}) {
       }
       activeQoderAccountId.set(QODER_CN.id, void 0);
       throwIfAllAccountsRateLimited(QODER_CN, modelId);
-      const resolved = await ctx.credentials.resolve(credentialRef14(QODER_CN.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(QODER_CN.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -64888,14 +68232,14 @@ function apply(ctx, config = {}) {
   });
   const trae = new TraeAuth(ctx);
   const traeAdapter = registerTraeLlm(ctx, {
-    credentialRef: credentialRef14(TRAE.defaultCredentialRef),
+    credentialRef: credentialRef15(TRAE.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(TRAE.id, modelId ?? "");
       if (available2) {
         reportLedgerAccount(TRAE.id, available2.entry.id);
         return available2.credential;
       }
-      const resolved = await ctx.credentials.resolve(credentialRef14(TRAE.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(TRAE.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -64915,18 +68259,95 @@ function apply(ctx, config = {}) {
     accountPool: pool,
     product: TRAE
   });
+  const buddy = new BuddyAuth(ctx);
+  const buddyAdapter = registerBuddyLlm(ctx, {
+    credentialRef: credentialRef15(BUDDY_CREDENTIAL_REF),
+    resolveCredential: async (modelId) => {
+      const picked = await pickBuddyCredential({
+        product: CODEBUDDY,
+        selector: buddyBalanceSelector,
+        displayName: "CodeBuddy",
+        modelId,
+        // 免费模型跳过「锁定 + 临期积分」这道门（判据见 BuddyAdapter.isFreeModel）。
+        // `buddyAdapter` 在此处是自引用：闭包只在注册完成后才执行，故无 TDZ 问题。
+        isFreeModel: await buddyAdapter.isFreeModel(modelId)
+      });
+      if (picked.credential) return picked.credential;
+      const available2 = await pool.getAvailableAccount(CODEBUDDY.id, modelId ?? "", picked.tried);
+      if (available2) {
+        reportLedgerAccount(CODEBUDDY.id, available2.entry.id);
+        return available2.credential;
+      }
+      throwIfAllAccountsRateLimited(CODEBUDDY, modelId);
+      const resolved = await ctx.credentials.resolve(credentialRef15(BUDDY_CREDENTIAL_REF));
+      if (!resolved) return void 0;
+      try {
+        return JSON.parse(resolved.value);
+      } catch {
+        return void 0;
+      }
+    },
+    // 刷新**账号池里实际使用的那一个账号**，而不是默认单凭据 ref ——
+    // 后者在 Channel Pack 登录路径下根本不存在，会把 401 报成「未配置凭据」
+    // 并自锁。详见 createPoolRefresh 的注释。
+    refresh: createPoolRefresh(pool, "buddy", buddy),
+    fetchRemoteModels: () => buddy.fetchModels(pool),
+    readImage: makeReadImage(ctx),
+    // 图片请求版本（缩放）桥接：issue !IKITT9。不可用时适配器自动回退原图。
+    readImageRequest: makeReadImageRequest(ctx),
+    accountPool: pool,
+    product: CODEBUDDY
+  });
+  const workbuddy = new BuddyAuth(ctx, { product: WORKBUDDY });
+  const workbuddyAdapter = registerBuddyLlm(ctx, {
+    credentialRef: credentialRef15(WORKBUDDY.defaultCredentialRef),
+    resolveCredential: async (modelId) => {
+      const picked = await pickBuddyCredential({
+        product: WORKBUDDY,
+        selector: workbuddyBalanceSelector,
+        displayName: "WorkBuddy",
+        modelId,
+        // 免费模型跳过「锁定 + 临期积分」这道门（判据见 BuddyAdapter.isFreeModel）。
+        // 用户报障「账户可用却提示没有可用账号」正是缺了这一条：免费模型不扣积分，
+        // 却被永久积分锁定拦下。
+        isFreeModel: await workbuddyAdapter.isFreeModel(modelId)
+      });
+      if (picked.credential) return picked.credential;
+      const available2 = await pool.getAvailableAccount(WORKBUDDY.id, modelId ?? "", picked.tried);
+      if (available2) {
+        reportLedgerAccount(WORKBUDDY.id, available2.entry.id);
+        return available2.credential;
+      }
+      throwIfAllAccountsRateLimited(WORKBUDDY, modelId);
+      const resolved = await ctx.credentials.resolve(credentialRef15(WORKBUDDY.defaultCredentialRef));
+      if (!resolved) return void 0;
+      try {
+        return JSON.parse(resolved.value);
+      } catch {
+        return void 0;
+      }
+    },
+    // 同上：必须刷池内账号（`WORKBUDDY_ACCESS_TOKEN` 从未被写入过）。
+    // 这条正是「workbuddy + deepseek-v4.1-flash 一直报未配置凭据」的根因。
+    refresh: createPoolRefresh(pool, "workbuddy", workbuddy),
+    fetchRemoteModels: () => workbuddy.fetchModels(pool),
+    readImage: makeReadImage(ctx),
+    readImageRequest: makeReadImageRequest(ctx),
+    accountPool: pool,
+    product: WORKBUDDY
+  });
   const cline = new ClineAuth(ctx, { fetcher: network.fetch });
   let activeClineAccountId = "";
   const clineAdapter = registerClineLlm(ctx, {
     fetchImpl: network.fetch,
-    credentialRef: credentialRef14(CLINE.defaultCredentialRef),
+    credentialRef: credentialRef15(CLINE.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(CLINE.id, modelId ?? "");
       activeClineAccountId = available2?.entry.id ?? "";
       if (activeClineAccountId.length > 0) reportLedgerAccount(CLINE.id, activeClineAccountId);
       if (available2) return available2.credential;
       throwIfAllAccountsRateLimited(CLINE, modelId);
-      const resolved = await ctx.credentials.resolve(credentialRef14(CLINE.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(CLINE.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -64952,7 +68373,7 @@ function apply(ctx, config = {}) {
   });
   const loomy = new LoomyAuth(ctx);
   const resolveLoomyCredentialByRef = async (refName) => {
-    const resolved = await ctx.credentials.resolve(credentialRef14(refName));
+    const resolved = await ctx.credentials.resolve(credentialRef15(refName));
     if (!resolved) return void 0;
     try {
       return JSON.parse(resolved.value);
@@ -64965,7 +68386,7 @@ function apply(ctx, config = {}) {
     resolveCredential: resolveLoomyCredentialByRef
   });
   const loomyAdapter = registerLoomyLlm(ctx, {
-    credentialRef: credentialRef14(LOOMY.defaultCredentialRef),
+    credentialRef: credentialRef15(LOOMY.defaultCredentialRef),
     /**
      * 解析本轮该用哪个账号的凭据。
      *
@@ -65003,7 +68424,7 @@ function apply(ctx, config = {}) {
         }
       }
       throwIfAllAccountsRateLimited(LOOMY, modelId);
-      const resolved = await ctx.credentials.resolve(credentialRef14(LOOMY.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(LOOMY.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -65016,7 +68437,7 @@ function apply(ctx, config = {}) {
       if (accountId !== void 0 && entry === void 0) throw new Error("loomy: account no longer exists");
       if (entry) await loomy.refreshAccountCredential(entry.credentialRef, pool, entry.id);
       else await loomy.refresh();
-      const resolved = await ctx.credentials.resolve(credentialRef14(entry?.credentialRef ?? LOOMY.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(entry?.credentialRef ?? LOOMY.defaultCredentialRef));
       if (!resolved) throw new Error("loomy: credential no longer exists");
       return JSON.parse(resolved.value);
     },
@@ -65035,7 +68456,7 @@ function apply(ctx, config = {}) {
     // 失败时返回空数组，由适配器回退兜底表。
     fetchRemoteModels: async () => {
       const available2 = await pool.getAvailableAccount(LOOMY.id, "");
-      const resolved = available2 !== null && available2 !== void 0 ? { value: JSON.stringify(available2.credential) } : await ctx.credentials.resolve(credentialRef14(LOOMY.defaultCredentialRef));
+      const resolved = available2 !== null && available2 !== void 0 ? { value: JSON.stringify(available2.credential) } : await ctx.credentials.resolve(credentialRef15(LOOMY.defaultCredentialRef));
       if (resolved === void 0) return [];
       let credential;
       try {
@@ -65057,7 +68478,7 @@ function apply(ctx, config = {}) {
   });
   const raccoon = new RaccoonAuth(ctx);
   const raccoonAdapter = registerRaccoonLlm(ctx, {
-    credentialRef: credentialRef14(RACCOON.defaultCredentialRef),
+    credentialRef: credentialRef15(RACCOON.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(RACCOON.id, modelId ?? "");
       if (available2) {
@@ -65065,7 +68486,7 @@ function apply(ctx, config = {}) {
         return available2.credential;
       }
       throwIfAllAccountsRateLimited(RACCOON, modelId);
-      const resolved = await ctx.credentials.resolve(credentialRef14(RACCOON.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(RACCOON.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -65078,7 +68499,7 @@ function apply(ctx, config = {}) {
       if (accountId !== void 0 && entry === void 0) throw new Error("raccoon: account no longer exists");
       if (entry) await raccoon.refreshAccountCredential(entry.credentialRef, pool, entry.id);
       else await raccoon.refresh();
-      const resolved = await ctx.credentials.resolve(credentialRef14(entry?.credentialRef ?? RACCOON.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(entry?.credentialRef ?? RACCOON.defaultCredentialRef));
       if (!resolved) throw new Error("raccoon: credential no longer exists");
       return JSON.parse(resolved.value);
     },
@@ -65102,14 +68523,14 @@ function apply(ctx, config = {}) {
   });
   const minimax = new MinimaxAuth(ctx);
   const minimaxAdapter = registerMinimaxLlm(ctx, {
-    credentialRef: credentialRef14(MINIMAX.defaultCredentialRef),
+    credentialRef: credentialRef15(MINIMAX.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(MINIMAX.id, modelId ?? "");
       if (available2) {
         reportLedgerAccount(MINIMAX.id, available2.entry.id);
         return available2.credential;
       }
-      const resolved = await ctx.credentials.resolve(credentialRef14(MINIMAX.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(MINIMAX.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -65152,14 +68573,14 @@ function apply(ctx, config = {}) {
   const geminiAdapter = registerGeminiLlm(ctx, {
     fetchImpl: network.fetch,
     projectFetcher: network.fetch,
-    credentialRef: credentialRef14(GEMINI.defaultCredentialRef),
+    credentialRef: credentialRef15(GEMINI.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(GEMINI.id, modelId ?? "");
       if (available2) {
         reportLedgerAccount(GEMINI.id, available2.entry.id);
         return available2.credential;
       }
-      const resolved = await ctx.credentials.resolve(credentialRef14(GEMINI.defaultCredentialRef));
+      const resolved = await ctx.credentials.resolve(credentialRef15(GEMINI.defaultCredentialRef));
       if (!resolved) return void 0;
       try {
         return JSON.parse(resolved.value);
@@ -65192,8 +68613,8 @@ function apply(ctx, config = {}) {
     projectCache: geminiProjectCache,
     persistProject: async (value) => {
       const available2 = await pool.getAvailableAccount(GEMINI.id, "");
-      const ref = available2 ? available2.entry.credentialRef : credentialRef14(GEMINI.defaultCredentialRef);
-      await ctx.credentials.set(credentialRef14(ref), value);
+      const ref = available2 ? available2.entry.credentialRef : credentialRef15(GEMINI.defaultCredentialRef);
+      await ctx.credentials.set(credentialRef15(ref), value);
     },
     ...ctx.logger === void 0 ? {} : { logger: ctx.logger }
   });
@@ -65231,7 +68652,7 @@ function apply(ctx, config = {}) {
   };
   const activeZcodeAccountId = /* @__PURE__ */ new Map();
   const zcodeAdapter = registerZcodeLlm(ctx, {
-    credentialRef: credentialRef14(ZCODE.defaultCredentialRef),
+    credentialRef: credentialRef15(ZCODE.defaultCredentialRef),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(ZCODE.id, modelId ?? "");
       if (available2) {
@@ -65436,7 +68857,7 @@ function apply(ctx, config = {}) {
         await Promise.all(pool.listAccountsByProvider(OPENCODE.id).filter(
           (entry) => model === void 0 || !((entry.modelRateLimits?.[model] ?? 0) > Date.now())
         ).map(async (entry) => {
-          const resolved = await ctx.credentials.resolve(credentialRef14(entry.credentialRef)).catch(() => void 0);
+          const resolved = await ctx.credentials.resolve(credentialRef15(entry.credentialRef)).catch(() => void 0);
           let parsed = {};
           if (resolved !== void 0) {
             try {
@@ -65489,7 +68910,7 @@ function apply(ctx, config = {}) {
     });
     void ensureDefaultAnonymousSlot(
       (entry) => pool.addAccount(entry),
-      (refName, value) => ctx.credentials.set(credentialRef14(refName), value),
+      (refName, value) => ctx.credentials.set(credentialRef15(refName), value),
       () => pool.listAccountsByProvider(OPENCODE.id),
       // ⚠️ 判据是「池里有没有匿名条目」而不是「有没有账号」：用户若主动
       // 删光了匿名通道，那是明确选择，不该每次启动又塞回来（删除会像失灵）。

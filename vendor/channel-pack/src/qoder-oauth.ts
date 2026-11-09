@@ -30,6 +30,7 @@ import {
   type QoderTokenPayload,
 } from './qoder.js'
 import type { QoderProduct } from './qoder-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 在浏览器中打开 URL；永不抛出。 */
 export type OpenBrowser = (url: string) => void | Promise<void>
@@ -115,7 +116,7 @@ export async function pollQoderDeviceToken(
   session: QoderDeviceSession,
   options: QoderLoginFlowOptions,
 ): Promise<QoderTokenPayload> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const pollUrl = buildQoderPollUrl(session, options.product)
   const interval = options.pollIntervalMs ?? QODER_POLL_INTERVAL_MS
   const deadline = Date.now() + (options.timeoutMs ?? QODER_LOGIN_TIMEOUT_MS)
