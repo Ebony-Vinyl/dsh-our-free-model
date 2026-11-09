@@ -631,6 +631,26 @@ function renameAndCompleteTools(payload, shape, { keep } = {}) {
   dropDanglingToolChoice(payload, shape, known);
   return { renames, injected, known };
 }
+function chatMessageHasContent(message) {
+  const keys = ["content", "reasoning_content", "reasoning"];
+  for (const key of keys) {
+    const value = message[key];
+    if (typeof value === "string") {
+      if (value !== "") return true;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.length > 0) return true;
+      continue;
+    }
+    if (value !== null && typeof value === "object") {
+      if (Object.keys(value).length > 0) return true;
+      continue;
+    }
+    if (value !== void 0 && value !== null) return true;
+  }
+  return false;
+}
 function sanitizeToolHistory(payload, shape, known) {
   const fateOf = (name) => {
     if (typeof name !== "string" || name === "") return { verdict: "drop" };
@@ -644,13 +664,14 @@ function sanitizeToolHistory(payload, shape, known) {
     if (messages2 === null) return;
     const droppedCalls2 = /* @__PURE__ */ new Set();
     const droppedFunctions = /* @__PURE__ */ new Set();
+    const emptied = /* @__PURE__ */ new Set();
     let changed2 = false;
     for (let i = 0; i < messages2.length; i += 1) {
       const message = messages2[i];
       if (!message || typeof message !== "object") continue;
       if (Array.isArray(message.tool_calls)) {
         const kept = [];
-        let touched = false;
+        let touched = message.tool_calls.length === 0;
         for (const call of message.tool_calls) {
           const fate = fateOf(call?.function?.name);
           if (fate.verdict === "keep") {
@@ -667,31 +688,47 @@ function sanitizeToolHistory(payload, shape, known) {
           touched = true;
         }
         if (touched) {
-          messages2[i] = { ...message, tool_calls: kept };
+          if (kept.length === 0) {
+            const { tool_calls: _emptied, ...rest } = message;
+            messages2[i] = rest;
+            if (message.tool_calls.length > 0 && message.function_call === void 0) emptied.add(rest);
+          } else {
+            messages2[i] = { ...message, tool_calls: kept };
+          }
           changed2 = true;
         }
       }
-      if (message.function_call && typeof message.function_call === "object") {
-        const fate = fateOf(message.function_call.name);
+      const current = messages2[i];
+      if (current.function_call && typeof current.function_call === "object") {
+        const fate = fateOf(current.function_call.name);
         if (fate.verdict === "rename") {
-          messages2[i] = { ...message, function_call: { ...message.function_call, name: fate.official } };
+          messages2[i] = { ...current, function_call: { ...current.function_call, name: fate.official } };
           changed2 = true;
         } else if (fate.verdict === "drop") {
-          if (typeof message.function_call.name === "string") droppedFunctions.add(message.function_call.name);
-          const { function_call: _dropped, ...rest } = messages2[i];
+          if (typeof current.function_call.name === "string") droppedFunctions.add(current.function_call.name);
+          const { function_call: _dropped, ...rest } = current;
           messages2[i] = rest;
           changed2 = true;
         }
       }
-      if (message.role === "tool" && typeof message.tool_call_id === "string" && droppedCalls2.has(message.tool_call_id)) {
+      const row = messages2[i];
+      if (row.role === "tool" && typeof row.tool_call_id === "string" && droppedCalls2.has(row.tool_call_id)) {
         messages2.splice(i, 1);
         i -= 1;
         changed2 = true;
       }
-      if (message.role === "function" && typeof message.name === "string" && droppedFunctions.has(message.name)) {
+      if (row.role === "function" && typeof row.name === "string" && droppedFunctions.has(row.name)) {
         messages2.splice(i, 1);
         i -= 1;
         changed2 = true;
+      }
+    }
+    if (emptied.size > 0) {
+      for (let i = messages2.length - 1; i >= 0; i -= 1) {
+        if (emptied.has(messages2[i]) && !chatMessageHasContent(messages2[i])) {
+          messages2.splice(i, 1);
+          changed2 = true;
+        }
       }
     }
     if (changed2 && messages2.length === 0) payload.messages = [];
