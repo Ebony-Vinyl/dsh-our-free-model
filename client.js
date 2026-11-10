@@ -8367,9 +8367,9 @@ window.__ModuleLoader__.load({
      *
      * The server acknowledgement is authoritative because it survives a new
      * origin: another port, another hostname, or the desktop shell's random
-     * port all have an empty localStorage. The cache only short-circuits a
-     * repeat check in the same origin, which also covers an ack whose write
-     * has not landed yet.
+     * port all have an empty localStorage. The cache only suppresses a repeat
+     * toast in the same origin; an unconfirmed server acknowledgement must
+     * still be retried if its previous write failed or has not landed yet.
      */
     function reloadNoticePlan(meta, cached) {
       const at = Number(meta?.reloadedAt ?? 0)
@@ -8380,15 +8380,16 @@ window.__ModuleLoader__.load({
       return { at, show: true }
     }
 
-    /** Show the toast at most once, then acknowledge that timestamp. */
+    /** Show the toast at most once, and retry any missing server acknowledgement. */
     async function announceReloadNotice(meta, cached, { show, ack, remember }) {
       const plan = reloadNoticePlan(meta, cached)
       if (plan.at <= 0) return { ...plan, shown: false }
       remember(plan.at)
-      if (!plan.show) return { ...plan, shown: false }
-      show(plan)
-      try { await ack(plan.at) } catch { /* localStorage already blocks a repeat here */ }
-      return { ...plan, shown: true }
+      if (plan.show) show(plan)
+      if (Number(meta?.reloadNoticeSeen ?? 0) !== plan.at) {
+        try { await ack(plan.at) } catch { /* retry on the next check without repeating the toast */ }
+      }
+      return { ...plan, shown: plan.show }
     }
 
     function apply(ctx) {

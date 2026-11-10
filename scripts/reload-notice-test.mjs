@@ -6,6 +6,7 @@
  *   1. a POST ack persists `reloadNoticeSeen`, and /meta reports it;
  *   2. a new origin with no localStorage does not replay an acknowledged notice;
  *   3. a genuinely new `reloadedAt` still shows once, then stops after its ack.
+ *   4. a failed ack is retried from the same origin without another toast.
  * It also boots the plugin once with a legacy settings file and pins the
  * generation-1 adoption rule from index.js.
  *
@@ -135,7 +136,7 @@ const cached = await announceReloadNotice(freshMeta, String(nextAt), {
   ack: async () => { cachedView.acks += 1 },
 })
 assert.deepEqual(cached, { at: nextAt, show: false, shown: false })
-assert.deepEqual([cachedView.shows, cachedView.acks], [0, 0])
+assert.deepEqual([cachedView.shows, cachedView.acks], [0, 1], 'the cache suppresses the toast but must not suppress a missing server ack')
 const freshView = { shows: 0, acks: [], status: 0 }
 const fresh = await announceReloadNotice(freshMeta, '', {
   show: () => { freshView.shows += 1 },
@@ -156,6 +157,35 @@ const third = await announceReloadNotice(await meta(), '', {
 assert.deepEqual(third, { at: nextAt, show: false, shown: false })
 assert.deepEqual([repeated.shows, repeated.acks], [0, 0], 'the new notice is not repeated after its own ack')
 ok('a truly new reload appears once and is then acknowledged')
+
+const retryAt = nextAt + 5_000
+settings.update({ reloadedAt: retryAt, reloadCount: 4 })
+settings.flush()
+let cachedAt = ''
+let retryShows = 0
+let ackAttempts = 0
+const retryCallbacks = {
+  show: () => { retryShows += 1 },
+  remember: at => { cachedAt = String(at) },
+  ack: async at => {
+    ackAttempts += 1
+    if (ackAttempts === 1) throw new Error('temporary acknowledgement failure')
+    assert.equal((await route('POST', '/reload-notice/ack', { at })).status, 200)
+  },
+}
+const failedAck = await announceReloadNotice(await meta(), cachedAt, retryCallbacks)
+assert.deepEqual(failedAck, { at: retryAt, show: true, shown: true })
+assert.equal(cachedAt, String(retryAt), 'the first toast is cached even if its ack fails')
+assert.equal((await meta()).reloadNoticeSeen, nextAt, 'a failed ack does not mark the server notice as seen')
+const retriedAck = await announceReloadNotice(await meta(), cachedAt, retryCallbacks)
+assert.deepEqual(retriedAck, { at: retryAt, show: false, shown: false })
+assert.deepEqual([retryShows, ackAttempts], [1, 2], 'same-origin retry acknowledges without another toast')
+assert.equal((await meta()).reloadNoticeSeen, retryAt)
+assert.equal(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).reloadNoticeSeen, retryAt, 'the retried ack persists')
+const newOrigin = await announceReloadNotice(await meta(), '', retryCallbacks)
+assert.deepEqual(newOrigin, { at: retryAt, show: false, shown: false })
+assert.deepEqual([retryShows, ackAttempts], [1, 2], 'a new origin neither replays nor re-acknowledges the confirmed notice')
+ok('a failed ack retries from the cache and prevents replay in a new origin')
 
 settings.dispose()
 
