@@ -132,10 +132,22 @@ try {
   })
   await check('routable binds and invalid ports fail before creating data', async () => {
     const invalidDir = path.join(scratch, 'invalid')
-    await assert.rejects(startStandalone({ dataDir: invalidDir, host: '0.0.0.0' }), /loopback/)
+    await assert.rejects(startStandalone({ dataDir: invalidDir, host: '192.0.2.1' }), /loopback/)
     await assert.rejects(startStandalone({ dataDir: invalidDir, port: -1 }), /port/)
     await assert.rejects(startStandalone({ dataDir: invalidDir, port: 65536 }), /port/)
     assert.equal(fs.existsSync(invalidDir), false)
+  })
+  await check('wildcard web bind starts and advertises a reachable local address', async () => {
+    const exposed = await startStandalone({
+      dataDir: path.join(scratch, 'wildcard'), host: '0.0.0.0', port: 0,
+      refresh: false, logger: { warn() {} },
+    })
+    try {
+      assert.notEqual(new URL(exposed.url).hostname, '0.0.0.0')
+      assert.equal((await fetch(`${exposed.url}/health`)).status, 200)
+      assert.equal((await fetch(`${exposed.url}/`)).status, 200)
+      assert.match(exposed.managementUrl, /^http:\/\/.+\/#login=/)
+    } finally { await exposed.close() }
   })
   await check('退出时保留已被替换的其他锁，不清理无法确认归属的文件', async () => {
     const directory = path.join(scratch, 'replaced-lock')

@@ -91,7 +91,7 @@ export function managementSettings(value) {
 }
 
 /** 管理读写要求鉴权；登录恢复仅允许同源页面触发固定本机动作。 */
-export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, extensions, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal, desktopPlatform = process.platform, desktopArch = process.arch }) {
+export function createManagement({ stores, runtime, channels, eac, subscriptions, workbenchOptions, magpieEngine, magpieModels, extensions, onEngineStarted, onSubscriptionsChanged, info, onSettingsChanged, loginTerminal = openLoginTerminal, desktopPlatform = process.platform, desktopArch = process.arch, allowLocalNetworkHost = false }) {
   // `desktopPlatform`/`desktopArch` are threaded from the caller instead of read
   // from `process` so the Windows-only update flow stays exercisable on a test
   // runner that is neither (`desktop-update.mjs` already takes them this way).
@@ -677,7 +677,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       // origin and sends no session. It must be decided before both the
       // same-site source fence and the session check.
       else if (pageAsset) servePluginAsset(req, res, pathname)
-      else if (malformedSource || structuralRejection(req) !== undefined) json(res, 403, { error: '管理接口仅允许本机同源访问' })
+      else if (malformedSource || structuralRejection(req, { allowLocalNetworkHost }) !== undefined) json(res, 403, { error: '管理接口请求来源或 Host 校验失败' })
       else if (asset) {
         if (req.method !== 'GET' && req.method !== 'HEAD') json(res, 405, { error: '资源仅支持 GET 或 HEAD' })
         else {

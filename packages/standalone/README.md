@@ -18,6 +18,15 @@ npm run start:standalone
 npm run start:standalone -- --port 18900 --data-dir F:\ofm-data
 ```
 
+默认只监听 `127.0.0.1`。如需让其他设备访问独立 Web 服务，可绑定所有网卡：
+
+```powershell
+npm run start:standalone -- --host 0.0.0.0
+```
+
+使用启动输出中的管理页面链接，或将链接中的主机地址替换为运行服务电脑的局域网 IP。
+此选项只影响独立服务；请勿在不可信网络中开放服务端口。
+
 启动打印管理页面的一次性登录链接、实际 API 地址与密钥文件位置，不打印 API Key。
 在浏览器打开管理链接即可使用控制台，链接 10 分钟内有效且仅能兑换一次。
 默认端口是 `18900`；
@@ -36,7 +45,8 @@ npm run start:standalone -- --port 18900 --data-dir F:\ofm-data
 - `GET /health` 提供不含凭据的产品状态；推理接口与模型清单需要 `Authorization: Bearer <API Key>`。
 - 同一个数据目录只能启动一个本地服务实例。正常退出会清除 `service.lock`。
 - 异常退出后若锁仍存在，先检查锁文件记录的 PID，确认旧进程已停止，再移除该锁文件。
-- 管理页面和管理 API 只监听回环地址；局域网推理需要显式开启独立中继。
+- 默认情况下管理页面和管理 API 只监听回环地址；使用 `--host 0.0.0.0` 后，可经本机网卡地址访问独立服务。
+- 局域网推理中继仍需单独显式开启，与 Web 服务的 `--host` 选项无关。
 
 插件仍使用 `DSH_HOME/our-free-model` 或 `~/.dsh/our-free-model`，两者默认互不影响。
 不要主动把独立服务的 `OFM_HOME` 指向插件的数据目录。
@@ -86,15 +96,30 @@ LAN Key 保存在当前独立目录的 `settings.json` 的 `standaloneLanKey` �
 
 ## Docker
 
-仓库根目录提供 Dockerfile。镜像使用 Node.js 22，容器默认监听 `0.0.0.0:18900`，
+仓库根目录提供 Dockerfile 和 `docker-compose.yml`。在仓库根目录执行以下命令构建并启动：
+
+```bash
+docker compose up -d --build
+```
+
+查看启动日志和一次性管理登录链接：
+
+```bash
+docker compose logs -f ofm
+```
+
+停止服务但保留数据：
+
+```bash
+docker compose down
+```
+
+Compose 会构建使用 Node.js 22 的镜像，并将宿主机 `18900` 映射到容器的 `18900`。
+容器默认监听 `0.0.0.0:18900`，
 管理页面、推理 API 和 `/health` 均通过映射端口访问：
 
 ```bash
-docker build -t ofm:latest .
-docker run --name ofm -d --restart unless-stopped \
-  -p 18900:18900 \
-  -v ofm-data:/ofm-data \
-  ofm:latest
+curl http://127.0.0.1:18900/health
 ```
 
 容器启动参数固定为：
@@ -103,9 +128,9 @@ docker run --name ofm -d --restart unless-stopped \
 npm run start:standalone -- --host 0.0.0.0 --port 18900 --data-dir /ofm-data
 ```
 
-- `/ofm-data` 保存账号凭据、密钥、EAC 授权、设置、账本和账号缓存；删除具名卷会删除全部独立数据。
+- Compose 使用具名卷 `ofm-data` 将 `/ofm-data` 持久化，保存账号凭据、密钥、EAC 授权、设置、账本和账号缓存；运行 `docker compose down -v` 会删除该卷及全部独立数据。
 - 宿主机访问 `http://127.0.0.1:18900/health`；局域网或 Codespaces 使用宿主机地址访问管理页。
-- Dockerfile 内置健康检查，可用 `docker logs -f ofm` 查看一次性管理登录链接和启动状态。
+- Dockerfile 内置健康检查。
 - Dockerfile 设置 `OFM_ALLOW_NON_LOOPBACK=1`，允许管理页面经端口转发或反向代理访问。
 - 仅在可信网络暴露端口；公网部署应在 Docker 容器前增加防火墙、反向代理和访问控制。
 - 镜像不包含宿主机 DSH 凭据或插件配置。首次启动会生成独立 API Key 和管理会话。

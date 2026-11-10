@@ -132,6 +132,7 @@ export async function startStandalone({
   }
   if (typeof desktopPlatform !== 'string' || desktopPlatform === '') throw new TypeError('desktopPlatform must be a non-empty string')
   if (typeof desktopArch !== 'string' || desktopArch === '') throw new TypeError('desktopArch must be a non-empty string')
+  const urlHost = host === '0.0.0.0' ? rankLanAddresses(os.networkInterfaces())[0] ?? '127.0.0.1' : host
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 })
   const releaseLock = await acquireServiceLock(dataDir)
   let stores
@@ -305,11 +306,12 @@ export async function startStandalone({
       stores, runtime, channels, eac, subscriptions, workbenchOptions, extensions,
       magpieEngine, magpieModels,
       desktopPlatform, desktopArch,
+      allowLocalNetworkHost: host === '0.0.0.0',
       onEngineStarted: () => { settings.update({ magpieEnabled: true }); settings.flush() },
       onSubscriptionsChanged: () => runtime?.syncAggregateCatalog?.(),
       info: () => ({
         product: PRODUCT, version: VERSION, dataDir,
-        baseUrl: `http://${host === '::1' ? '[::1]' : host}:${listener?.port ?? requestedPort}`,
+        baseUrl: `http://${urlHost === '::1' ? '[::1]' : urlHost}:${listener?.port ?? requestedPort}`,
         automaticRefresh: refresh,
         networkMode: process.env.OFM_TEST_UPSTREAM ? 'fixture' : 'live',
         capabilities: { anonymous: true, kilo: true, eac: true, accountChannels: true, webUi: true, lan: true, modelWorkspace: true },
@@ -387,8 +389,8 @@ export async function startStandalone({
     const ready = Promise.all([channels.ready, refresh ? refreshModels(false) : Promise.resolve()])
     return {
       product: PRODUCT, version: VERSION, dataDir,
-      url: `http://${host === '::1' ? '[::1]' : host}:${listener.port}`,
-      managementUrl: `http://${host === '::1' ? '[::1]' : host}:${listener.port}/${management.bootstrapFragment}`,
+      url: `http://${urlHost === '::1' ? '[::1]' : urlHost}:${listener.port}`,
+      managementUrl: `http://${urlHost === '::1' ? '[::1]' : urlHost}:${listener.port}/${management.bootstrapFragment}`,
       port: listener.port,
       keyFile: path.join(dataDir, 'settings.json'),
       runtime, channels, ready,

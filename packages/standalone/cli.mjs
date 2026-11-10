@@ -5,7 +5,7 @@ import { startStandalone } from './service.mjs'
 const usage = `Our Free Model 独立本地服务
 用法：node packages/standalone/cli.mjs [选项]
 
-  --host <地址>       监听地址，默认 127.0.0.1；容器可使用 0.0.0.0
+  --host <地址>       监听地址，默认 127.0.0.1；允许其他设备访问时使用 0.0.0.0
   --port <端口>       监听端口，默认 18900（冲突时自动选择可用端口）
   --data-dir <目录>   数据目录，默认 OFM_HOME 或 ~/.our-free-model
   --no-refresh        跳过启动与周期刷新；仍可手动刷新和推理

@@ -504,7 +504,7 @@ try {
       })
       assert.equal(child.status, 1)
     }
-    const hostFlag = spawnSync(process.execPath, ['packages/standalone/cli.mjs', '--host', '0.0.0.0'], {
+    const hostFlag = spawnSync(process.execPath, ['packages/standalone/cli.mjs', '--host', '192.0.2.1'], {
       cwd: new URL('..', import.meta.url), encoding: 'utf8', windowsHide: true, timeout: 10000,
     })
     assert.equal(hostFlag.status, 1)
