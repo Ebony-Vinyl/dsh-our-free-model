@@ -883,9 +883,13 @@ function readTextFile(file) {
 }
 
 /** True when a pnpm lockfile records a `specifier` for `name` as a dependency.
- *  The importer's dependency entry is the only place the package name appears
- *  as a bare mapping key with a `specifier` child; pinned `packages:` and
- *  `snapshots:` keys carry `name@<specifier>` and cannot match.
+ *  Only the profile's own importer counts. A lockfile may also carry workspace
+ *  importers (`packages/app:`) whose dependencies are not installed into the
+ *  profile's node_modules; matching one of those would refuse an upgrade on an
+ *  install the profile never handed to pnpm (issue #343 review: cross-importer
+ *  matching is not byte ownership). A lockfile without an `importers:` section
+ *  (v6 style) keeps its root dependencies at the top level, so the whole text is
+ *  the root scope.
  *
  *  A `link:` specifier is deliberately not ownership: pnpm records no version
  *  and no integrity for a link, so it owns the junction and never the bytes.
@@ -895,14 +899,23 @@ function readTextFile(file) {
  *  pnpm can re-extract, and stays "owned". */
 export function lockfileDeclaresPackage(text, name) {
   const lines = text.split(/\r?\n/)
+  const importers = lines.findIndex(line => /^importers:\s*$/.test(line))
+  let scope = lines
+  if (importers !== -1) {
+    const rootStart = lines.findIndex((line, index) => index > importers && /^\s{2}['"]?\.?['"]?\s*:\s*$/.test(line))
+    if (rootStart === -1) return false
+    let end = rootStart + 1
+    while (end < lines.length && (lines[end].trim() === '' || /^\s{4,}/.test(lines[end]))) end += 1
+    scope = lines.slice(rootStart + 1, end)
+  }
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const entry = new RegExp(`^(\\s*)['"]?${escaped}['"]?\\s*:\\s*$`)
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = entry.exec(lines[index])
+  for (let index = 0; index < scope.length; index += 1) {
+    const match = entry.exec(scope[index])
     if (match === null) continue
     const indent = match[1].length
-    for (let child = index + 1; child < lines.length; child += 1) {
-      const line = lines[child]
+    for (let child = index + 1; child < scope.length; child += 1) {
+      const line = scope[child]
       if (line.trim() === '') continue
       if (line.length - line.trimStart().length <= indent) break
       if (/^\s*"?specifier"?\s*:\s*['"]?link:/.test(line)) return false
@@ -912,9 +925,6 @@ export function lockfileDeclaresPackage(text, name) {
   return false
 }
 
-/** True when `node_modules/.modules.yaml` hoists `name@<specifier>`. pnpm
- *  writes this file as JSON on newer releases and as YAML on older ones, so
- *  the JSON spelling is parsed and the YAML spelling scanned by indentation. */
 function modulesHoistsPackage(text, name) {
   let parsed
   try { parsed = JSON.parse(text) } catch { parsed = undefined }
