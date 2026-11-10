@@ -44,7 +44,7 @@ npm run start:standalone -- --host 0.0.0.0
 - API Key 为此产品单独生成，保存在该目录的 `settings.json` 的 `forwardKey` 字段。
 - `GET /health` 提供不含凭据的产品状态；推理接口与模型清单需要 `Authorization: Bearer <API Key>`。
 - 同一个数据目录只能启动一个本地服务实例。正常退出会清除 `service.lock`。
-- 异常退出后若锁仍存在，先检查锁文件记录的 PID，确认旧进程已停止，再移除该锁文件。
+- Windows 和 Linux 启动时会先获取数据目录的进程互斥端点，再覆盖已有的 `service.lock`；同一数据目录已有服务运行时仍会拒绝启动。其他平台遇到已有锁时不会覆盖。
 - 默认情况下管理页面和管理 API 只监听回环地址；使用 `--host 0.0.0.0` 后，可经本机网卡地址访问独立服务。
 - 局域网推理中继仍需单独显式开启，与 Web 服务的 `--host` 选项无关。
 

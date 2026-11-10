@@ -53,6 +53,6 @@ async function main() {
 }
 
 main().catch(error => {
-  process.stderr.write(`启动失败：${error.code === 'EEXIST' ? '数据目录已有服务运行，或 service.lock 的归属无法确认；请先退出已有服务。Windows 和 Linux 会自动回收已确认进程退出的陈旧锁。' : error.message}\n`)
+  process.stderr.write(`启动失败：${error.code === 'EEXIST' ? '数据目录已有服务运行，或 service.lock 无法安全覆盖；请先退出已有服务。' : error.message}\n`)
   process.exitCode = 1
 })

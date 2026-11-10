@@ -70,18 +70,6 @@ async function acquireServiceLock(dataDir) {
       if (error.code !== 'EEXIST' || !releaseGuard) throw error
       const previousStat = fs.lstatSync(lockFile)
       if (!previousStat.isFile()) throw error
-      const previous = fs.readFileSync(lockFile, 'utf8')
-      let owner
-      try { owner = JSON.parse(previous) } catch { throw error }
-      if (owner?.product !== PRODUCT || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) throw error
-      // 只有 ESRCH 能证明进程已经退出；无权限、PID 复用等情况均保留原锁。
-      let exited = false
-      try { process.kill(owner.pid, 0) }
-      catch (probeError) { exited = probeError.code === 'ESRCH' }
-      if (!exited) throw error
-      const current = fs.lstatSync(lockFile)
-      if (current.dev !== previousStat.dev || current.ino !== previousStat.ino ||
-          fs.readFileSync(lockFile, 'utf8') !== previous) throw error
       fs.unlinkSync(lockFile)
       lock = fs.openSync(lockFile, 'wx', 0o600)
     }

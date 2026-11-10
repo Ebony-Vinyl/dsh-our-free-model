@@ -170,18 +170,17 @@ try {
     await recovered.close()
   })
   if (process.platform === 'win32' || process.platform === 'linux') {
-    await check('没有权限检查进程时保留锁，不把 EPERM 当成进程退出', async () => {
-      const directory = path.join(scratch, 'permission-lock')
-      const lockFile = path.join(directory, 'service.lock')
+    await check('覆盖旧格式或无法确认归属的锁后仍可启动并释放锁', async () => {
+      const directory = path.join(scratch, 'legacy-lock')
       fs.mkdirSync(directory)
-      const original = JSON.stringify({ pid: process.pid, product: 'our-free-model-standalone' })
-      fs.writeFileSync(lockFile, original)
-      const nativeKill = process.kill
-      process.kill = () => { throw Object.assign(new Error('permission denied'), { code: 'EPERM' }) }
+      const lockFile = path.join(directory, 'service.lock')
+      fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, product: 'our-free-model-standalone' }))
+      const recovered = await startStandalone({ dataDir: directory, port: 0, refresh: false, logger: { warn() {} } })
       try {
-        await assert.rejects(startStandalone({ dataDir: directory, port: 0, refresh: false }), { code: 'EEXIST' })
-        assert.equal(fs.readFileSync(lockFile, 'utf8'), original)
-      } finally { process.kill = nativeKill }
+        const owner = JSON.parse(fs.readFileSync(lockFile, 'utf8'))
+        assert.equal(owner.pid, process.pid)
+        assert.notEqual(owner.token, undefined)
+      } finally { await recovered.close() }
     })
   }
   await check('the listener starts while its upstream listing is held', async () => {
