@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 /** 使用实际已打包 RPC，只提供账号池 ref，禁止真实网络与旧单凭据回退。 */
-export async function verifyChannelCreditsRpc({ ctx, call, creds, adapters }) {
+export async function verifyChannelCreditsRpc({ ctx, call, creds, adapters, outletState }) {
   const originalFetch = globalThis.fetch
   const providers = ['qoder', 'qodercn', 'loomy', 'minimax', 'lobsterai', 'zcode', 'gemini']
   let quotaRequests = 0, quotaFailed = true
@@ -67,6 +67,7 @@ export async function verifyChannelCreditsRpc({ ctx, call, creds, adapters }) {
     const freshQuota = await call('credits.balances', { provider: 'gemini', force: true })
     assert.equal(quotaRequests, 2, '手动重试必须真正查询上游替身')
     assert.equal(freshQuota.value.accounts[0].balance.total, 60)
+    await verifyGeminiQuotaUsesChannelFetcher({ call, outletState })
     await verifyRefreshDispatch({ ctx, call })
     for (const provider of ['qoder', 'qodercn']) {
       const service = ctx[`${provider}Auth`], saved = service.refreshAccountCredential, calls = []
@@ -102,6 +103,55 @@ export async function verifyChannelCreditsRpc({ ctx, call, creds, adapters }) {
       await ctx.accountPool.removeAccount(`fixture-credits-${provider}`)
       creds.delete(`FIXTURE_CREDITS_${provider.toUpperCase()}`)
     }
+  }
+}
+
+/**
+ * issue #762：Gemini 配额查询必须复用注入的渠道出口 fetcher。
+ *
+ * 做法：把出口替身打开，同时把 `globalThis.fetch` 换成**只记录并抛错**的毒药。
+ * 旧实现没有把 fetcher 传进 `fetchGeminiCreditBalance`，会回落到裸 fetch，
+ * 配额结果立刻变成「配额查询网络失败」；修复后两个 Gemini 端点都必须经过出口。
+ */
+async function verifyGeminiQuotaUsesChannelFetcher({ call, outletState }) {
+  const originalFetch = globalThis.fetch
+  const seen = []
+  let bareFetchCalls = 0
+  outletState.active = true
+  outletState.requests.length = 0
+  outletState.respond = async (input) => {
+    const url = new URL(String(input instanceof Request ? input.url : input))
+    seen.push(url.pathname)
+    if (url.pathname.endsWith(':retrieveUserQuotaSummary')) {
+      return Response.json({ groups: [{ buckets: [
+        { bucketId: 'gemini-5h', window: '5h', remainingFraction: 0.8, resetTime: new Date(Date.now() + 3600000).toISOString() },
+        { bucketId: 'gemini-weekly', window: 'weekly', remainingFraction: 0.4, resetTime: new Date(Date.now() + 86400000).toISOString() },
+      ] }] })
+    }
+    if (url.pathname.endsWith(':loadCodeAssist')) {
+      return Response.json({ paidTier: { id: 'g1-pro-tier', name: 'Google AI Pro' } })
+    }
+    throw new Error(`fixture outlet 收到未预期请求：${url.pathname}`)
+  }
+  // 任何绕过出口的调用都会撞到这个毒药，并让配额结果变成网络失败。
+  globalThis.fetch = async input => {
+    bareFetchCalls++
+    throw new Error(`Gemini 配额查询不得使用裸 fetch：${String(input)}`)
+  }
+  try {
+    const result = await call('credits.balances', { provider: 'gemini', force: true })
+    assert.equal(result.ok, true)
+    assert.equal(result.value.accounts[0].balance?.total, 60)
+    assert.equal(result.value.accounts[0].extra?.accountTier?.label, 'Pro')
+    assert.equal(bareFetchCalls, 0, 'Gemini 配额查询不得调用裸 fetch')
+    assert.ok(seen.some(path => path.endsWith(':retrieveUserQuotaSummary')), '配额请求必须经过出口')
+    assert.ok(seen.some(path => path.endsWith(':loadCodeAssist')), '档位请求也必须经过出口')
+    console.log('ok  Gemini 配额查询复用注入的出口 fetcher，裸 fetch 零调用')
+  } finally {
+    outletState.active = false
+    outletState.respond = undefined
+    outletState.requests.length = 0
+    globalThis.fetch = originalFetch
   }
 }
 

@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
-import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, parseUploadPackRefs, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, isPackageManagerOwned, signManifest, verifyManifestSignature, stableStringify, DEFAULT_MANIFEST_SOURCES, PINNED_MANIFEST_PUBLIC_KEY, packageUsesHardLinks, installationIsManaged } from '../src/updater.js'
+import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, parseUploadPackRefs, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, isPackageManagerOwned, profileDirOf, signManifest, verifyManifestSignature, stableStringify, DEFAULT_MANIFEST_SOURCES, PINNED_MANIFEST_PUBLIC_KEY, packageUsesHardLinks, installationIsManaged } from '../src/updater.js'
 import { entryUrlOf, packageUrlOf, selfReload } from '../src/reload.js'
 const CONTROLLED_DEFAULTS = ['http://127.0.0.1:1/never.json']
 
@@ -979,6 +979,49 @@ check('signal 2: a hoistedLocations entry in .modules.yaml marks it as pnpm-owne
       hoistedLocations: { 'dsh-our-free-model@file:../dsh-our-free-model-2.3.0.tgz': ['node_modules/dsh-our-free-model'] },
     }, undefined, 2))
     assert.equal(isPackageManagerOwned(pkg), true)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('scoped layout: the profile root is found above the @scope directory', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-scoped-profile-'))
+  const pkg = path.join(profile, 'node_modules', '@ebony-vinyl', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    assert.equal(profileDirOf(pkg), profile)
+    assert.equal(profileDirOf(path.join(profile, 'node_modules', 'dsh-our-free-model')), profile)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('scoped layout: a quoted lockfile key marks the scoped package as pnpm-owned', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-scoped-lock-'))
+  const pkg = path.join(profile, 'node_modules', '@ebony-vinyl', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'",
+      '',
+      'importers:',
+      '',
+      '  .:',
+      '    dependencies:',
+      "      '@ebony-vinyl/dsh-our-free-model':",
+      '        specifier: 2.8.3',
+      '        version: 2.8.3',
+      '',
+    ].join('\n'))
+    assert.equal(isPackageManagerOwned(pkg, '@ebony-vinyl/dsh-our-free-model'), true)
+    assert.equal(isPackageManagerOwned(pkg), false, 'the bare PACKAGE_NAME must not match a scoped key')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('scoped layout: .modules.yaml hoistedLocations is read beside the profile root', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-scoped-modules-'))
+  const pkg = path.join(profile, 'node_modules', '@ebony-vinyl', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'node_modules', '.modules.yaml'), JSON.stringify({
+      layoutVersion: 5,
+      nodeLinker: 'hoisted',
+      hoistedLocations: { '@ebony-vinyl/dsh-our-free-model@2.8.3': ['node_modules/@ebony-vinyl/dsh-our-free-model'] },
+    }, undefined, 2))
+    assert.equal(isPackageManagerOwned(pkg, '@ebony-vinyl/dsh-our-free-model'), true)
   } finally { fs.rmSync(profile, { recursive: true, force: true }) }
 })
 check('a plain distribution: self install is not pnpm-owned', () => {

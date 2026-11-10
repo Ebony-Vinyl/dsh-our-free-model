@@ -138,6 +138,34 @@ export function renameAndCompleteTools(payload, shape, { keep } = {}) {
  * Copy-on-write like every other edit here: the caller's message objects are
  * shared with the host harness, so touched rows are replaced, never mutated.
  */
+/**
+ * Does a chat row still carry something after its ghost calls were removed?
+ *
+ * Mirrors opencode2api v1.4.7's chatMessageHasContent: an emptied call row
+ * that also has no text or reasoning is dropped, rather than left as an empty
+ * assistant message the free tier may refuse.
+ */
+function chatMessageHasContent(message) {
+  const keys = ['content', 'reasoning_content', 'reasoning']
+  for (const key of keys) {
+    const value = message[key]
+    if (typeof value === 'string') {
+      if (value !== '') return true
+      continue
+    }
+    if (Array.isArray(value)) {
+      if (value.length > 0) return true
+      continue
+    }
+    if (value !== null && typeof value === 'object') {
+      if (Object.keys(value).length > 0) return true
+      continue
+    }
+    if (value !== undefined && value !== null) return true
+  }
+  return false
+}
+
 function sanitizeToolHistory(payload, shape, known) {
   /** A history call's fate: kept, rewritten to a served official alias, or dropped. */
   const fateOf = name => {
@@ -152,13 +180,18 @@ function sanitizeToolHistory(payload, shape, known) {
     if (messages === null) return
     const droppedCalls = new Set()
     const droppedFunctions = new Set()
+    const emptied = new Set()
     let changed = false
     for (let i = 0; i < messages.length; i += 1) {
       const message = messages[i]
       if (!message || typeof message !== 'object') continue
       if (Array.isArray(message.tool_calls)) {
         const kept = []
-        let touched = false
+        // An empty array is a shape violation upstream (#787): a caller that
+        // replays its conversation may send `tool_calls: []` on every turn,
+        // and the free tier answers the body with a 400. Treat it as touched
+        // so the field is removed, not forwarded.
+        let touched = message.tool_calls.length === 0
         for (const call of message.tool_calls) {
           const fate = fateOf(call?.function?.name)
           if (fate.verdict === 'keep') { kept.push(call); continue }
@@ -172,31 +205,54 @@ function sanitizeToolHistory(payload, shape, known) {
           touched = true
         }
         if (touched) {
-          messages[i] = { ...message, tool_calls: kept }
+          // Never write the field back empty: upstream refuses it. When every
+          // call was a ghost, drop the whole field; the row may still carry
+          // content or a legacy `function_call`.
+          if (kept.length === 0) {
+            const { tool_calls: _emptied, ...rest } = message
+            messages[i] = rest
+            // Upstream v1.4.7 drops a row that had calls but no text left.
+            if (message.tool_calls.length > 0 && message.function_call === undefined) emptied.add(rest)
+          } else {
+            messages[i] = { ...message, tool_calls: kept }
+          }
           changed = true
         }
       }
-      if (message.function_call && typeof message.function_call === 'object') {
-        const fate = fateOf(message.function_call.name)
+      // Base the legacy branch on the row as it stands after the `tool_calls`
+      // pass; spreading the pre-edit row would resurrect the empty array just
+      // removed above.
+      const current = messages[i]
+      if (current.function_call && typeof current.function_call === 'object') {
+        const fate = fateOf(current.function_call.name)
         if (fate.verdict === 'rename') {
-          messages[i] = { ...message, function_call: { ...message.function_call, name: fate.official } }
+          messages[i] = { ...current, function_call: { ...current.function_call, name: fate.official } }
           changed = true
         } else if (fate.verdict === 'drop') {
-          if (typeof message.function_call.name === 'string') droppedFunctions.add(message.function_call.name)
-          const { function_call: _dropped, ...rest } = messages[i]
+          if (typeof current.function_call.name === 'string') droppedFunctions.add(current.function_call.name)
+          const { function_call: _dropped, ...rest } = current
           messages[i] = rest
           changed = true
         }
       }
-      if (message.role === 'tool' && typeof message.tool_call_id === 'string' && droppedCalls.has(message.tool_call_id)) {
+      const row = messages[i]
+      if (row.role === 'tool' && typeof row.tool_call_id === 'string' && droppedCalls.has(row.tool_call_id)) {
         messages.splice(i, 1)
         i -= 1
         changed = true
       }
-      if (message.role === 'function' && typeof message.name === 'string' && droppedFunctions.has(message.name)) {
+      if (row.role === 'function' && typeof row.name === 'string' && droppedFunctions.has(row.name)) {
         messages.splice(i, 1)
         i -= 1
         changed = true
+      }
+    }
+    if (emptied.size > 0) {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        if (emptied.has(messages[i]) && !chatMessageHasContent(messages[i])) {
+          messages.splice(i, 1)
+          changed = true
+        }
       }
     }
     if (changed && messages.length === 0) payload.messages = []

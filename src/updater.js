@@ -856,12 +856,26 @@ export function verifyInstalled(pkgDir, manifest) {
  * @param {string} pkgDir - the installed package directory
  * @returns {boolean}
  */
-export function isPackageManagerOwned(pkgDir) {
-  const profileDir = path.dirname(path.dirname(path.resolve(pkgDir)))
+export function isPackageManagerOwned(pkgDir, packageName = PACKAGE_NAME) {
+  const profileDir = profileDirOf(pkgDir)
   const lockfile = readTextFile(path.join(profileDir, 'pnpm-lock.yaml'))
-  if (lockfile !== undefined && lockfileDeclaresPackage(lockfile, PACKAGE_NAME)) return true
+  if (lockfile !== undefined && lockfileDeclaresPackage(lockfile, packageName)) return true
   const modules = readTextFile(path.join(profileDir, 'node_modules', '.modules.yaml'))
-  return modules !== undefined && modulesHoistsPackage(modules, PACKAGE_NAME)
+  return modules !== undefined && modulesHoistsPackage(modules, packageName)
+}
+
+/**
+ * The profile root a package directory belongs to.
+ *
+ * A bare install is <profile>/node_modules/<name>; a scoped one is
+ * <profile>/node_modules/@scope/<name>. Walking to node_modules instead of
+ * counting two parents keeps both layouts pointed at the profile, where pnpm
+ * writes its lockfile and .modules.yaml (issue #773).
+ */
+export function profileDirOf(pkgDir) {
+  let dir = path.resolve(pkgDir)
+  while (dir !== path.dirname(dir) && path.basename(dir) !== 'node_modules') dir = path.dirname(dir)
+  return path.dirname(dir)
 }
 
 function readTextFile(file) {
@@ -879,9 +893,10 @@ function readTextFile(file) {
  *  full install — a real tree inside the profile declared as a relative
  *  `link:`. A `file:`, tarball-URL or registry specifier does record a source
  *  pnpm can re-extract, and stays "owned". */
-function lockfileDeclaresPackage(text, name) {
+export function lockfileDeclaresPackage(text, name) {
   const lines = text.split(/\r?\n/)
-  const entry = new RegExp(`^(\\s*)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*$`)
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const entry = new RegExp(`^(\\s*)['"]?${escaped}['"]?\\s*:\\s*$`)
   for (let index = 0; index < lines.length; index += 1) {
     const match = entry.exec(lines[index])
     if (match === null) continue

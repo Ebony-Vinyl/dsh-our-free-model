@@ -728,7 +728,14 @@ function providerIdsOf(
 /** RPC 的可选配置；追加字段以兼容现有 provider / modelAdapters 的位置参数调用。 */
 export interface ChannelPackRpcConfig {
   disableOpencode?: boolean
-
+  /**
+   * 渠道出网实现（`src/index.ts` 里的 `network.fetch`）。
+   *
+   * ⚠️ 余额/配额这类**面板触发的附属查询**必须走它，不能回落到全局裸
+   * `fetch`：裸 fetch 不经过插件出口代理，症状正是「登录/续期/推理都正常，
+   * 只有配额查询报 fetch failed」（issue #762）。
+   */
+  fetcher?: typeof fetch
 }
 
 /**
@@ -2771,7 +2778,10 @@ if (provider === LOBSTERAI.id) {
           const values = await collectCreditBalances<GeminiCredential, typeof GEMINI>(accounts, GEMINI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             fetchBalanceDetailed: async (credential) => {
-              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, { force: req.force === true })
+              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, {
+                force: req.force === true,
+                ...config.fetcher === undefined ? {} : { fetcher: config.fetcher },
+              })
               const extra: RpcCreditsBalanceExtra | undefined = tier === undefined
                 ? undefined
                 : { accountTier: { label: tier.label, title: `${tier.name}（${tier.id}）` } }

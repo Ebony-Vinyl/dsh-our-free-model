@@ -60,6 +60,19 @@ process.env.QODER_MACHINE_TOKEN_PATH = path.join(scratch, 'machine-token.json')
 process.env.QODER_RUNTIME_INFO = path.join(scratch, 'missing-runtime-info.exe')
 const savedFetch = globalThis.fetch
 const fetched = []
+/**
+ * 出口替身：默认关闭，只有 issue #762 的 Gemini 配额用例会临时打开。
+ * 打开后 `network.fetch` 必须走这里，而不是 `globalThis.fetch`。
+ */
+const outletState = { active: false, requests: [], respond: undefined }
+const outlet = {
+  active: () => outletState.active,
+  fetch: async (input, init) => {
+    outletState.requests.push(String(input instanceof Request ? input.url : input))
+    if (outletState.respond === undefined) throw new Error('fixture outlet has no responder')
+    return outletState.respond(input, init)
+  },
+}
 let auditFetch
 const offlineFetch = async (url, init) => {
   if (auditFetch) return auditFetch(url, init)
@@ -116,7 +129,7 @@ fs.writeFileSync(path.join(scratch, 'channel-pack/state.json'), JSON.stringify(s
 try {
   const pack = await import(sourceMode ? '../vendor/channel-pack/src/index.ts' : '../vendor/channel-pack/pack.js')
   const { apply } = pack
-  apply(ctx, { disableOpencode: true })
+  apply(ctx, { disableOpencode: true, outlet })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
   assert.equal(adapters.size, 10, 'all other account providers remain registered')
@@ -190,7 +203,7 @@ try {
   creds.delete('AUTO_LOOMY_FIXTURE')
   console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 10 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
   if (sourceMode) await verifySourceRegressions({ ctx, adapters, call, creds })
-  await verifyChannelCreditsRpc({ ctx, call, creds, adapters })
+  await verifyChannelCreditsRpc({ ctx, call, creds, adapters, outletState })
   console.log('ok  实际渠道 RPC：七渠道仅账号池凭据即可查余额，ZCode 账号池回退及缺凭据反馈')
 
   // A failed browser callback must become a terminal, readable poll result.
