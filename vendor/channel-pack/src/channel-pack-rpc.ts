@@ -71,6 +71,7 @@ import {
 import { GEMINI, geminiAccountLabel, geminiCredentialExpiresAtMs, isGeminiRefreshable } from './gemini.js'
 import type { GeminiCredential } from './gemini.js'
 import type { GeminiAuth, StartedGeminiLoginFlow } from './gemini-auth.js'
+import type { BuddyAuth } from './buddy-auth.js'
 import { fetchGeminiCreditBalance } from './gemini-credits.js'
 import { LOOMY_TASK_POINTS, LOOMY_TASK_TITLES } from './loomy-onboarding.js'
 import { LOBSTERAI } from './lobsterai-product.js'
@@ -781,6 +782,14 @@ export function registerChannelPackRpc(
    */
   gemini: GeminiAuth,
   /**
+   * WorkBuddy（国际版）认证实例。
+   *
+   * ⚠️ 必须排在 **gemini 之后**（即最后一个 provider 形参位）。本仓库全部
+   * `registerChannelPackRpc` 调用点都是**位置传参**，新 provider 一律**追加**
+   * 在末尾，历次因「少传/插队错位」复发 6 次（见 gemini 参数的注释）。
+   */
+  workbuddy: BuddyAuth,
+  /**
    * provider → 适配器实例（可选）。
    *
    * 用于「显示列表」拿到**不受用户黑名单影响**的全量目录（`listAllModels`），
@@ -793,7 +802,8 @@ export function registerChannelPackRpc(
   ctx.inject(['connection'], (connectionCtx) => {
     registerChannelPackEndpoints(
       connectionCtx as Context, pool, lobsterai,
-      qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config,
+      qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, workbuddy,
+      modelAdapters, config,
     )
   })
 }
@@ -903,6 +913,7 @@ function registerChannelPackEndpoints(
   minimax: MinimaxAuth,
   zcode: ZcodeAuth,
   gemini: GeminiAuth,
+  workbuddy: BuddyAuth,
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
   config: ChannelPackRpcConfig = {},
 ): void {
@@ -1894,6 +1905,19 @@ if (provider === LOBSTERAI.id) {
               // 账号池，否则 UI 一直显示「已过期」而实际能正常发消息。
               // ⚠️ Google 会**轮换 refresh_token**，`GeminiAuth` 内部已回写新值。
               await gemini.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+              break
+            case WORKBUDDY.id:
+              // WorkBuddy **有** refresh 端点（`POST /v2/plugin/auth/token/refresh`，
+              // 见 `buddy-auth.ts` 的 `refreshCredential`），这里是真续期。
+              //
+              // ⚠️ 同型第 **5** 次：恢复渠道时只接了注册、恢复表、probe 表与
+              // credits 三个分支，漏了本续期分派 → 账号卡片点「续期」必然抛
+              // `Unknown provider: workbuddy`（本 switch 的 default 分支）。
+              //
+              // ⚠️ 必须传 pool + entry.id —— 续期后要把新的 `expiresAt` 写回账号池，
+              // 否则 UI 一直显示「已过期」而实际能正常发消息
+              //（与 raccoon / minimax / gemini 同因，那三处注释都记着这条）。
+              await workbuddy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
             default:
               throw new Error(`Unknown provider: ${entry.provider}`)
