@@ -54,6 +54,7 @@ const suites = [
   ['stat-bucket-ui', 'stat-bucket-ui-test.mjs', []],
   ['free-pool', 'free-pool-test.mjs', []],
   ['updater', 'updater-test.mjs', []],
+  ['scoped-publish', 'scoped-publish-test.mjs', []],
   ['upgrade-ui', 'upgrade-ui-test.mjs', []],
   ['reload', 'reload-test.mjs', []],
   ['reload-notice', 'reload-notice-test.mjs', []],
