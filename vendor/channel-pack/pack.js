@@ -32316,18 +32316,36 @@ var REF_PREFIX_TO_PROVIDER = [
   // 本表与客户端 `PROVIDERS` 的一致性由
   // `tests/unit/channel-pack-store.spec.ts` 的「恢复表覆盖客户端 PROVIDERS 的全部
   // provider（从真实清单派生）」用例锁死 —— 合并新增 provider 前**先跑它**。
-  ["GEMINI", "gemini"]
+  ["GEMINI", "gemini"],
+  // ⚠️ 第 15 个 provider（workbuddy，本分支恢复）—— 同款坑第 **四** 次。
+  //
+  // 这张表是 `isSupportedProvider()` 的**唯一**判据，而后者在
+  // `channel-pack-rpc.ts` 的 `handleMethod()` 入口就会被调用：漏加 = 该 provider 的
+  // **所有 RPC 一律返回「不支持此渠道。」** —— 添加账号、刷新余额、账号列表、模型
+  // 列表全都不通，而客户端卡片仍会正常渲染（前端 PROVIDERS 是另一份数组）。
+  // 症状就是「面板能打开、一操作就报不支持此渠道」。
+  //
+  // 恢复 WorkBuddy 时踩的正是这一条：渠道注册、适配器、前端卡片都接好了，
+  // 唯独漏了这张表，于是 UI 全残。
+  ["WORKBUDDY", "workbuddy"]
+];
+var RETIRED_ONLY_REF_PREFIX_TO_PROVIDER = [
+  ["BUDDY", "buddy"]
 ];
 function isSupportedProvider(provider) {
   return typeof provider === "string" && REF_PREFIX_TO_PROVIDER.some(([, id]) => id === provider);
 }
+var ALL_REF_PREFIXES = [
+  ...REF_PREFIX_TO_PROVIDER,
+  ...RETIRED_ONLY_REF_PREFIX_TO_PROVIDER
+];
 var ACCOUNT_REF_RE = new RegExp(
   // ⚠️ 按前缀长度**降序**排列：`QODERCN` 必须排在 `QODER` 之前。虽然正则的
   // 回溯最终仍能让 `QODERCN_*` 匹配成功（所以顺序错了也**暂时**看不出问题），
   // 但那时匹配结果就取决于引擎的尝试顺序而非规则 —— 一旦将来加入更多同前缀的
   // provider（如 `QODERX`），就会变成静默错归属：账号挂到 `qoder` 面板，而它的
   // 凭据是 CN 的，请求必然失败。故这里显式定序，而非依赖回溯。
-  `^(${REF_PREFIX_TO_PROVIDER.map(([prefix]) => prefix).sort((a, b) => b.length - a.length).join("|")})_ACCOUNT_([0-9A-Fa-f]{6,})$`
+  `^(${ALL_REF_PREFIXES.map(([prefix]) => prefix).sort((a, b) => b.length - a.length).join("|")})_ACCOUNT_([0-9A-Fa-f]{6,})$`
 );
 function extractCredentialRefNames(text) {
   const names = [];
@@ -32350,7 +32368,7 @@ function accountFromCredentialRef(ref) {
   const prefix = match[1];
   const suffix = match[2];
   if (prefix === void 0 || suffix === void 0) return void 0;
-  const provider = REF_PREFIX_TO_PROVIDER.find(([candidate]) => candidate === prefix)?.[1];
+  const provider = ALL_REF_PREFIXES.find(([candidate]) => candidate === prefix)?.[1];
   if (provider === void 0) return void 0;
   const id = `${provider}-${suffix.toLowerCase()}`;
   return {
