@@ -2,6 +2,17 @@
 import crypto from 'node:crypto'
 
 const LINK = /^[A-Za-z0-9_-]{16,64}$/
+
+/**
+ * A thrown request has a cause worth naming. The wire reason stays one of the
+ * known buckets - the client validates it - but the transport code travels
+ * alongside, so the host can log what actually went wrong instead of an
+ * opaque "unreachable" three layers up.
+ */
+function describeError(error) {
+  const code = error?.cause?.code ?? error?.code ?? error?.name
+  return typeof code === 'string' && code !== '' ? code : 'unknown'
+}
 const RECEIPT_TTL = 15 * 60_000
 const digest = token => crypto.createHash('sha256').update(token).digest('hex')
 
@@ -28,7 +39,7 @@ export function createEacLoginPoller({ credentialOf, fetch, readUser, writeUser,
       })
       if (!response.ok) return { error: `gateway-http-${response.status}` }
       data = await response.json().catch(() => null)
-    } catch { return { error: cancelled() ? 'cancelled' : 'unreachable' } }
+    } catch (error) { return { error: cancelled() ? 'cancelled' : 'unreachable', detail: describeError(error) } }
     if (cancelled()) return { error: 'cancelled' }
     if (data?.status === 'expired') return { status: 'expired' }
     if (data?.status === 'pending') return { status: 'pending' }
@@ -63,15 +74,19 @@ export function createEacLoginPoller({ credentialOf, fetch, readUser, writeUser,
       const controller = new AbortController()
       controllers.set(link, controller)
       try {
-        // The existing start endpoint registers a waiting link. Node transport
-        // does not follow its OAuth redirect; the system browser opens later.
+        // The existing start endpoint registers a waiting link and answers 302
+        // to GitHub's OAuth page; the system browser opens it later. Node's
+        // fetch follows redirects by default, so without redirect: 'manual'
+        // the 302 becomes a 200 from GitHub and the 302 check below never
+        // fires - the host would report gateway-http-200 instead of success.
         const response = await fetch(`${credential.base.replace(/\/v1\/?$/, '')}/auth/github/start?link=${encodeURIComponent(link)}`, {
+          redirect: 'manual',
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
         })
         await response.text().catch(() => {})
         if (startedGeneration !== generation || sessionFor(link).cancelled) return { error: 'cancelled' }
         return response.status === 302 ? { ok: true } : { error: `gateway-http-${response.status}` }
-      } catch { return { error: controller.signal.aborted ? 'cancelled' : 'unreachable' } }
+      } catch (error) { return { error: controller.signal.aborted ? 'cancelled' : 'unreachable', detail: describeError(error) } }
       finally { if (controllers.get(link) === controller) controllers.delete(link) }
     },
     poll(link) {
