@@ -19,7 +19,10 @@
   titlebar.querySelector('.maximize').addEventListener('click', () => run(async () => {
     if (await win.isMaximized()) await win.unmaximize(); else await win.maximize();
   }));
-  titlebar.querySelector('.close').addEventListener('click', () => run(() => win.hide()));
+  // Ask the shell to close the window. Rust answers with CloseRequested, which
+  // hides both the WebView2 and the window; calling win.hide() here would skip
+  // that handler and leave the WebView2 compositing in the background.
+  titlebar.querySelector('.close').addEventListener('click', () => run(() => win.close()));
   titlebar.addEventListener('mousedown', event => {
     if (event.button === 0 && !event.target.closest('button')) run(() => win.startDragging());
   });

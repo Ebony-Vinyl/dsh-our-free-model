@@ -108,6 +108,44 @@ fn stop_service(app: &tauri::AppHandle) {
     }
 }
 
+/// Fit the main window into the monitor's work area at the current scale.
+///
+/// The builder's sizes are logical pixels, while `work_area` is physical. At
+/// 150–200% scaling a 1280×800 window can be taller than a 1920×1200 screen
+/// once the taskbar is removed; `center()` then places the bottom under the
+/// taskbar and the sidebar footer is cut off (issue #766). Clamp both the
+/// initial size and the minimum to the logical work area so the window can
+/// always fit.
+fn fit_window_to_work_area(
+    work: (u32, u32),
+    scale: f64,
+    desired: (f64, f64),
+    minimum: (f64, f64),
+) -> ((f64, f64), (f64, f64)) {
+    let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    let work_width = (work.0 as f64 / scale).max(1.0);
+    let work_height = (work.1 as f64 / scale).max(1.0);
+    let min_width = minimum.0.min(work_width);
+    let min_height = minimum.1.min(work_height);
+    let width = desired.0.min(work_width).max(min_width);
+    let height = desired.1.min(work_height).max(min_height);
+    ((width, height), (min_width, min_height))
+}
+
+/// Hide or show the WebView2 child together with the window.
+///
+/// `WebviewWindow::hide()` only hides the native window; the WebView2
+/// controller keeps `IsVisible(true)` and keeps compositing the page's
+/// infinite CSS animations (issue #804). `Webview::hide()` reaches
+/// `ICoreWebView2Controller::SetIsVisible(false)` through wry, so the GPU
+/// process can go idle while the app stays in the tray.
+fn set_main_webview_visible(app: &tauri::AppHandle, visible: bool) {
+    if let Some(window) = app.get_webview_window("main") {
+        let webview = window.as_ref();
+        let _ = if visible { webview.show() } else { webview.hide() };
+    }
+}
+
 fn show_main(app: &tauri::AppHandle, address: &str) -> tauri::Result<()> {
     let url: tauri::Url = address.parse().expect("服务握手已校验 URL");
     let origin = url.origin().ascii_serialization();
@@ -121,16 +159,32 @@ fn show_main(app: &tauri::AppHandle, address: &str) -> tauri::Result<()> {
         "core:window:allow-unmaximize",
         "core:window:allow-is-maximized",
         "core:window:allow-hide",
+        "core:window:allow-close",
         "core:window:allow-start-dragging",
         "allow-install-desktop-update",
     ] {
         capability = capability.permission(permission);
     }
     app.add_capability(capability)?;
+    let ((width, height), (min_width, min_height)) = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| {
+            let work = monitor.work_area().size;
+            fit_window_to_work_area(
+                (work.width, work.height),
+                monitor.scale_factor(),
+                (1280.0, 800.0),
+                (960.0, 560.0),
+            )
+        })
+        .unwrap_or(((1280.0, 800.0), (960.0, 560.0)));
     WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
         .title("Our Free Model")
-        .inner_size(1280.0, 800.0)
-        .min_inner_size(960.0, 600.0)
+        .inner_size(width, height)
+        .min_inner_size(min_width, min_height)
+        .prevent_overflow()
         .center()
         .decorations(false)
         .initialization_script(titlebar_script(&origin))
@@ -154,6 +208,7 @@ fn show_existing(app: &tauri::AppHandle) {
     {
         let _ = window.unminimize();
         let _ = window.show();
+        set_main_webview_visible(app, true);
         let _ = window.set_focus();
     }
 }
@@ -180,7 +235,10 @@ pub fn run() {
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) { let _ = window.hide(); }
+                            if window.is_visible().unwrap_or(false) {
+                                set_main_webview_visible(tray.app_handle(), false);
+                                let _ = window.hide();
+                            }
                             else { show_existing(tray.app_handle()); }
                         }
                     }
@@ -210,7 +268,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" { api.prevent_close(); let _ = window.hide(); }
+                if window.label() == "main" {
+                    api.prevent_close();
+                    set_main_webview_visible(window.app_handle(), false);
+                    let _ = window.hide();
+                }
             }
         })
         .build(tauri::generate_context!()).expect("无法构建桌面应用")
@@ -220,4 +282,54 @@ pub fn run() {
                 stop_service(app);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fit_window_to_work_area;
+
+    fn close(actual: (f64, f64), expected: (f64, f64)) {
+        assert!((actual.0 - expected.0).abs() < 0.001, "{actual:?} != {expected:?}");
+        assert!((actual.1 - expected.1).abs() < 0.001, "{actual:?} != {expected:?}");
+    }
+
+    #[test]
+    fn a_1920x1200_screen_at_200_percent_fits_above_the_taskbar() {
+        let (inner, minimum) = fit_window_to_work_area(
+            (1920, 1152), 2.0, (1280.0, 800.0), (960.0, 560.0),
+        );
+        close(inner, (960.0, 576.0));
+        close(minimum, (960.0, 560.0));
+    }
+
+    #[test]
+    fn a_1920x1200_screen_at_150_percent_uses_the_full_width() {
+        let (inner, minimum) = fit_window_to_work_area(
+            (1920, 1152), 1.5, (1280.0, 800.0), (960.0, 560.0),
+        );
+        close(inner, (1280.0, 768.0));
+        close(minimum, (960.0, 560.0));
+    }
+
+    #[test]
+    fn a_small_screen_shrinks_both_the_window_and_the_minimum() {
+        let (inner, minimum) = fit_window_to_work_area(
+            (1024, 560), 1.0, (1280.0, 800.0), (960.0, 560.0),
+        );
+        close(inner, (1024.0, 560.0));
+        close(minimum, (960.0, 560.0));
+        let (inner, minimum) = fit_window_to_work_area(
+            (800, 560), 1.0, (1280.0, 800.0), (960.0, 560.0),
+        );
+        close(inner, (800.0, 560.0));
+        close(minimum, (800.0, 560.0));
+    }
+
+    #[test]
+    fn an_invalid_scale_falls_back_to_one() {
+        let (inner, _) = fit_window_to_work_area(
+            (1366, 728), 0.0, (1280.0, 800.0), (960.0, 560.0),
+        );
+        close(inner, (1280.0, 728.0));
+    }
 }
