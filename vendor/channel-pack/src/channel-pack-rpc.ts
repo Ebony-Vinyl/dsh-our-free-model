@@ -41,6 +41,18 @@ import { RACCOON } from './raccoon-product.js'
 import type { RaccoonAuth } from './raccoon-auth.js'
 import type { ZcodeAuth } from './zcode-auth.js'
 import { ZCODE } from './zcode-product.js'
+// WorkBuddy（国际版）恢复：余额查询需要产品配置与专属解析器。
+// `isSupportedProvider` 只认 `channel-pack-store.ts` 的前缀表；本文件内的
+// provider 分支（credits.balances 等）必须**逐个显式补**，否则会落到
+// `unsupported provider` 的兜底文案 —— 恢复渠道时踩过（同型第 5 次）。
+import { WORKBUDDY } from './product.js'
+import {
+  fetchCreditBalance,
+  fetchCheckinStatus,
+  claimDailyCheckin,
+  type CreditBalance as BuddyCreditBalance,
+} from './buddy-credits.js'
+import type { BuddyCredential } from './buddy.js'
 import type { ZcodeCredential } from './zcode.js'
 import { phoneFromUserId, isUsableZcodeCredential } from './zcode.js'
 import type { ZcodeBalanceResult } from './zcode-upstream.js'
@@ -2383,6 +2395,23 @@ if (provider === LOBSTERAI.id) {
           )
           return { ok: true, value: { accounts: value } satisfies RpcCreditsStatusResponse }
         }
+        if (req.provider === WORKBUDDY.id) {
+          // WorkBuddy **有**独立的签到状态端点
+          //（`POST /v2/billing/meter/checkin-activity-status`，见 buddy-credits.ts）。
+          // 与 LobsterAI/TRAE/Cline 那些「如实返回 null」的 provider 不同，故真查。
+          //
+          // ⚠️ 必须查 `checkin-activity-status` 而不是 `checkin-status`：后者返回
+          // 占位数据（active:false、checkin_dates:null），会被误读成「活动未开启」。
+          const statusAccounts = await pool.listAccounts(req.provider)
+          const value = await collectCreditsStatus<BuddyCredential, typeof WORKBUDDY>(
+            statusAccounts, WORKBUDDY, {
+              resolve: (ref) => ctx.credentials.resolve(ref),
+              fetchStatus: (credential, product) => fetchCheckinStatus(credential, product),
+              warn: (msg) => ctx.logger?.warn?.(msg),
+            },
+          )
+          return { ok: true, value: { accounts: value } satisfies RpcCreditsStatusResponse }
+        }
         return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
       }
 
@@ -2589,6 +2618,27 @@ if (provider === LOBSTERAI.id) {
             ok: true,
             value: { results, summary: computeClaimSummary(outcomes) } satisfies RpcCreditsClaimAllResponse,
           }
+        }
+        if (req.provider === WORKBUDDY.id) {
+          // WorkBuddy 的每日签到：`POST /v2/billing/meter/daily-checkin`。
+          //
+          // ⚠️ **必须开状态预检**（`precheckStatus` 默认 true，别传 false）：
+          // 重复领取回 HTTP 400 + code 10001（「今天已签到」），那在 HTTP 层是可靠的；
+          // 但预检是第二道防线 —— 服务端若某天对已领账号也回成功码，
+          // 预检能靠 `todayCheckedIn` 先挡住，避免把「今天已领」报成「+积分」。
+          //
+          // `claimDailyCheckin` 内部已把「已领取 / 无资格 / 活动结束」分别归一成
+          // ClaimOutcome，故这里与其它 provider 走同一条 collectClaimResults 通路。
+          const claimAccounts = await pool.listAccounts(req.provider)
+          const value = await collectClaimResults<BuddyCredential, typeof WORKBUDDY>(
+            claimAccounts, WORKBUDDY, {
+              resolve: (ref) => ctx.credentials.resolve(ref),
+              fetchStatus: (credential, product) => fetchCheckinStatus(credential, product),
+              claim: (credential, product) => claimDailyCheckin(credential, product),
+              warn: (msg) => ctx.logger?.warn?.(msg),
+            },
+          )
+          return { ok: true, value: value satisfies RpcCreditsClaimAllResponse }
         }
         return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
       }
@@ -2975,6 +3025,64 @@ if (provider === LOBSTERAI.id) {
                * 前端需要按模型逐行渲染、缺桶的模型显示占位。
                */
               balance: buildZcodeBalance(result),
+            })
+          }
+          return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }
+        }
+        if (req.provider === WORKBUDDY.id) {
+          /**
+           * WorkBuddy（国际版）余额来自 `POST /v2/billing/meter/...`（只读）。
+           *
+           * ⚠️ 同型第 **5** 次（本方法内已有 lobsterai/qoder/opencode/trae/
+           * minimax/gemini/cline/loomy/raccoon/zcode 共 10 个分支）：恢复渠道时
+           * 只接了注册与适配器，漏掉本分支 → 余额查询落到末尾的
+           * `unsupported provider: workbuddy`，面板显示「余额查询失败」。
+           *
+           * 口径：`total` 是**有效包本周期剩余之和**（与 IDE 顶部 Credits Balance
+           * 一致）；`expiredTotal` 单独给出（失效额度不可扣费，但服务端仍返回，
+           * 既不并进 total 也不丢弃）。查询失败返回 `null` → 这里转成「查不到」
+           * 而不是 0，避免把网络故障显示成「积分已用光」。
+           */
+          const values: RpcCreditsBalancesResponse['accounts'] = []
+          for (const account of accounts) {
+            const resolved = await ctx.credentials.resolve(credentialRef(account.credentialRef))
+            if (!resolved) {
+              values.push({
+                accountId: account.id, nickname: account.nickname,
+                balance: null, error: '凭据未配置',
+              })
+              continue
+            }
+            let credential: BuddyCredential
+            try {
+              credential = JSON.parse(resolved.value) as BuddyCredential
+            } catch {
+              values.push({
+                accountId: account.id, nickname: account.nickname,
+                balance: null, error: '凭据解析失败',
+              })
+              continue
+            }
+            const result = await fetchCreditBalance(credential, WORKBUDDY)
+            if (result === null) {
+              values.push({
+                accountId: account.id, nickname: account.nickname,
+                balance: null, error: '积分查询失败（凭据失效或响应异常）',
+              })
+              continue
+            }
+            values.push({
+              accountId: account.id, nickname: account.nickname,
+              // `buddy-credits.ts` 的 `CreditBalance` 与 `credits.ts` 的**结构完全一致**
+              //（同一份定义的两次落地，字段逐个相同），故直接透传，不做重映射 ——
+              // 重映射只会制造 drift 面：漏一个字段就静默丢数据（例如 `deductionEndTime`
+              // 被改写成 `expiresAt` 字符串后，面板再也算不出「N 天内到期」）。
+              //
+              // 保留一次 `as unknown as`：两个 interface 结构同构但**名义不同**，
+              // TS 的结构化比较在跨模块 interface 上仍会报不重叠。这不是掩盖问题 ——
+              // 若将来真的发生 drift，`satisfies BuddyCreditBalance` 这一侧会先失败。
+              balance: result satisfies BuddyCreditBalance as unknown as
+                RpcCreditsBalancesResponse['accounts'][number]['balance'],
             })
           }
           return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }

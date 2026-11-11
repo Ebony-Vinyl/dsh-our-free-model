@@ -43934,8 +43934,14 @@ function rankBuddyAccountsByBalance(accounts, options = {}) {
 }
 
 // vendor/channel-pack/src/buddy-credits.ts
+var CHECKIN_ACTIVITY_STATUS_PATH = "/v2/billing/meter/checkin-activity-status";
+var DAILY_CHECKIN_PATH = "/v2/billing/meter/daily-checkin";
 var USER_RESOURCE_PATH = "/v2/billing/meter/get-user-resource";
 var REQUEST_TIMEOUT_MS2 = 3e4;
+var CODE_ALREADY_CLAIMED = 10001;
+var CODE_ALREADY_CLAIMED_ALT = 1001;
+var CODE_NO_QUALIFICATION = 1002;
+var CODE_ACTIVITY_ENDED = 1003;
 function checkinHeaders(credential, product) {
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${credential.access_token}`);
@@ -43954,6 +43960,9 @@ function checkinHeaders(credential, product) {
   headers.set("User-Agent", product.userAgent);
   return headers;
 }
+function readBool(source, key) {
+  return source[key] === true;
+}
 function readNumber(source, key) {
   const value = source[key];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -43961,6 +43970,10 @@ function readNumber(source, key) {
 function readString3(source, key) {
   const value = source[key];
   return typeof value === "string" ? value : "";
+}
+function readStringArray(source, key) {
+  const value = source[key];
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 var UNPARSABLE_RESPONSE_MESSAGE = "\u8BF7\u6C42\u5931\u8D25\u6216\u54CD\u5E94\u65E0\u6CD5\u89E3\u6790";
 async function postJson(path2, credential, product, fetcher) {
@@ -43992,6 +44005,59 @@ function describeNonJsonResponse(status, text) {
   }
   const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
   return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
+}
+async function fetchCheckinStatus(credential, product, fetcher = createDomesticFetch()) {
+  const result = await postJson(CHECKIN_ACTIVITY_STATUS_PATH, credential, product, fetcher);
+  if (!result.ok) return null;
+  const body = result.body;
+  if (body.code !== 0) return null;
+  const data = body.data;
+  if (typeof data !== "object" || data === null) return null;
+  const record = data;
+  return {
+    active: readBool(record, "active"),
+    todayCheckedIn: readBool(record, "today_checked_in"),
+    streakDays: readNumber(record, "streak_days"),
+    dailyCredit: readNumber(record, "daily_credit"),
+    todayCredit: readNumber(record, "today_credit"),
+    isStreakDay: readBool(record, "is_streak_day"),
+    totalCredits: readNumber(record, "total_credits"),
+    checkinDates: readStringArray(record, "checkin_dates"),
+    activityName: readString3(record, "activity_name"),
+    themeName: readString3(record, "theme_name"),
+    endTime: readString3(record, "end_time")
+  };
+}
+async function claimDailyCheckin(credential, product, fetcher = createDomesticFetch()) {
+  const result = await postJson(DAILY_CHECKIN_PATH, credential, product, fetcher);
+  if (!result.ok) {
+    return { kind: "failed", code: -1, message: result.message };
+  }
+  const body = result.body;
+  const code = typeof body.code === "number" ? body.code : -1;
+  const message = readString3(body, "msg");
+  if (code === CODE_ALREADY_CLAIMED || code === CODE_ALREADY_CLAIMED_ALT) {
+    return { kind: "already-claimed", message: message.length > 0 ? message : "\u4ECA\u5929\u5DF2\u7B7E\u5230" };
+  }
+  if (code === CODE_NO_QUALIFICATION || code === CODE_ACTIVITY_ENDED) {
+    return { kind: "inactive", message: message.length > 0 ? message : "\u5F53\u524D\u65E0\u9886\u53D6\u8D44\u683C" };
+  }
+  if (code !== 0) {
+    return { kind: "failed", code, message: message.length > 0 ? message : "\u9886\u53D6\u5931\u8D25" };
+  }
+  const data = body.data;
+  if (typeof data !== "object" || data === null) {
+    return { kind: "failed", code, message: "\u9886\u53D6\u54CD\u5E94\u7F3A\u5C11 data \u5B57\u6BB5" };
+  }
+  const record = data;
+  const delayed = readString3(record, "message");
+  return {
+    kind: "claimed",
+    credit: readNumber(record, "credit"),
+    streakDays: readNumber(record, "streak_days"),
+    isStreakDay: readBool(record, "is_streak_day"),
+    ...delayed.length > 0 ? { delayedMessage: delayed } : {}
+  };
 }
 function readPreciseNumber(source, baseKey) {
   const precise = source[`${baseKey}Precise`];
@@ -57887,7 +57953,7 @@ function describeNonJsonResponse2(status, text) {
   const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
   return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
 }
-function readBool(source, key) {
+function readBool2(source, key) {
   return source[key] === true;
 }
 function readNumber7(source, key) {
@@ -57934,7 +58000,7 @@ async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher
   if (!envelope.ok) return null;
   const state = typeof envelope.data.state === "object" && envelope.data.state !== null ? envelope.data.state : {};
   return {
-    claimedToday: readBool(state, "claimedToday"),
+    claimedToday: readBool2(state, "claimedToday"),
     actions: readActions(envelope.data, "actions")
   };
 }
@@ -59199,6 +59265,14 @@ async function probeWithAdapter(entry, credential, modelId, timeoutMs) {
       sessionLane: GEMINI_SESSION_LANE_SMOKE,
       project: GEMINI_DEFAULT_PROJECT,
       product: GEMINI
+    });
+  } else if (entry.provider === WORKBUDDY.id) {
+    adapter = new BuddyAdapter({
+      credentialRef: ref,
+      resolveCredential: async () => credential,
+      refresh: async () => {
+      },
+      product: WORKBUDDY
     });
   } else {
     throw new Error(`Unsupported probe adapter: ${entry.provider}`);
@@ -61591,6 +61665,19 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
           );
           return { ok: true, value: { accounts: value } };
         }
+        if (req.provider === WORKBUDDY.id) {
+          const statusAccounts = await pool.listAccounts(req.provider);
+          const value = await collectCreditsStatus(
+            statusAccounts,
+            WORKBUDDY,
+            {
+              resolve: (ref) => ctx.credentials.resolve(ref),
+              fetchStatus: (credential, product) => fetchCheckinStatus(credential, product),
+              warn: (msg) => ctx.logger?.warn?.(msg)
+            }
+          );
+          return { ok: true, value: { accounts: value } };
+        }
         return { ok: false, error: { code: "bad-request", message: `unsupported provider: ${req.provider}` } };
       }
       // 一键领取：逐账号顺序执行（并发易触发风控），单个账号失败不中断整体。
@@ -61734,6 +61821,20 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
             ok: true,
             value: { results, summary: computeClaimSummary(outcomes) }
           };
+        }
+        if (req.provider === WORKBUDDY.id) {
+          const claimAccounts = await pool.listAccounts(req.provider);
+          const value = await collectClaimResults(
+            claimAccounts,
+            WORKBUDDY,
+            {
+              resolve: (ref) => ctx.credentials.resolve(ref),
+              fetchStatus: (credential, product) => fetchCheckinStatus(credential, product),
+              claim: (credential, product) => claimDailyCheckin(credential, product),
+              warn: (msg) => ctx.logger?.warn?.(msg)
+            }
+          );
+          return { ok: true, value };
         }
         return { ok: false, error: { code: "bad-request", message: `unsupported provider: ${req.provider}` } };
       }
@@ -62046,6 +62147,57 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
                * 前端需要按模型逐行渲染、缺桶的模型显示占位。
                */
               balance: buildZcodeBalance(result)
+            });
+          }
+          return { ok: true, value: { accounts: values } };
+        }
+        if (req.provider === WORKBUDDY.id) {
+          const values = [];
+          for (const account2 of accounts) {
+            const resolved = await ctx.credentials.resolve(credentialRef12(account2.credentialRef));
+            if (!resolved) {
+              values.push({
+                accountId: account2.id,
+                nickname: account2.nickname,
+                balance: null,
+                error: "\u51ED\u636E\u672A\u914D\u7F6E"
+              });
+              continue;
+            }
+            let credential;
+            try {
+              credential = JSON.parse(resolved.value);
+            } catch {
+              values.push({
+                accountId: account2.id,
+                nickname: account2.nickname,
+                balance: null,
+                error: "\u51ED\u636E\u89E3\u6790\u5931\u8D25"
+              });
+              continue;
+            }
+            const result = await fetchCreditBalance(credential, WORKBUDDY);
+            if (result === null) {
+              values.push({
+                accountId: account2.id,
+                nickname: account2.nickname,
+                balance: null,
+                error: "\u79EF\u5206\u67E5\u8BE2\u5931\u8D25\uFF08\u51ED\u636E\u5931\u6548\u6216\u54CD\u5E94\u5F02\u5E38\uFF09"
+              });
+              continue;
+            }
+            values.push({
+              accountId: account2.id,
+              nickname: account2.nickname,
+              // `buddy-credits.ts` 的 `CreditBalance` 与 `credits.ts` 的**结构完全一致**
+              //（同一份定义的两次落地，字段逐个相同），故直接透传，不做重映射 ——
+              // 重映射只会制造 drift 面：漏一个字段就静默丢数据（例如 `deductionEndTime`
+              // 被改写成 `expiresAt` 字符串后，面板再也算不出「N 天内到期」）。
+              //
+              // 保留一次 `as unknown as`：两个 interface 结构同构但**名义不同**，
+              // TS 的结构化比较在跨模块 interface 上仍会报不重叠。这不是掩盖问题 ——
+              // 若将来真的发生 drift，`satisfies BuddyCreditBalance` 这一侧会先失败。
+              balance: result
             });
           }
           return { ok: true, value: { accounts: values } };

@@ -4729,7 +4729,9 @@ window.__ModuleLoader__.load({
 
     /** 与现有 RPC 的能力对应：余额、每日领取及独立签到状态分别判断。 */
     const CHANNEL_CREDITS = {
-      workbuddy: {},
+      // WorkBuddy 同时具备余额查询、签到状态与每日领取（见 buddy-credits.ts）。
+      // 早先写成空对象 `{}`，导致面板不渲染「刷新余额 / 一键领取」按钮。
+      workbuddy: { claim: true, status: true, unit: 'credits' },
       lobsterai: { claim: true },
       qoder: { claim: true },
       qodercn: { claim: true },
