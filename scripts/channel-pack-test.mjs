@@ -24,7 +24,18 @@ const sourceRoot = new URL('../vendor/channel-pack/src/', import.meta.url).href
 const llmKernel = `data:text/javascript,${encodeURIComponent(`
 export * from ${JSON.stringify(kernel)}
 export class LlmError extends Error {
-  constructor(message, code, options) { super(message, options); this.code = code; this.status = options?.status }
+  constructor(message, code, options) {
+    super(message, options)
+    this.code = code
+    this.status = options?.status
+    // 与真实 dsh-llm 的 LlmError 对齐：渠道适配器会从 failure 上读
+    // providerRetryAfterMs（429 的 Retry-After 冷却时长）。
+    this.failure = Object.freeze({
+      message, code,
+      ...(options?.status === undefined ? {} : { status: options.status }),
+      ...(options?.providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs: options.providerRetryAfterMs }),
+    })
+  }
 }
 let nextMessage = 0
 export function createUserMessage(value) { return { id: 'fixture-message-' + ++nextMessage, ...value } }
@@ -1018,6 +1029,102 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
     globalThis.fetch = originalFetch
     await ctx.accountPool.setPermanentLocked('loomy', false)
     for (const { accountId, ref } of added) { await ctx.accountPool.removeAccount(accountId); creds.delete(ref) }
+  }
+
+  // ── #752：探测遇到上游 5xx / 非 JSON 时不能把整轮判成 UNKNOWN ─────────
+  //
+  // 真实缺陷：`probeCredential` 把 502 HTML 抛成普通 Error，`refresh()` 原样
+  // 上抛，adapter 的 stream 在「取凭据」阶段就失败 —— 宿主归类 UNKNOWN 且不重试。
+  // 同一时段的 chat 502 本来会按 SERVER 重试 5 次。这里锁死三条：
+  //   1. 探测 502 HTML 重试 3 次后，聊天仍会真的发出，并按 chat 自己的路径失败；
+  //   2. 200 + 100002 仍是 RefreshTokenExpiredError（不重试、不降级）；
+  //   3. 第一次 502、第二次 200 能重试成功。
+  {
+    const defaultRef = 'LOOMY_ACCESS_TOKEN'
+    const savedDefault = creds.get(defaultRef)
+    const savedAudit = auditFetch
+    const probeFixture = (ref, token) => {
+      creds.set(ref, { value: JSON.stringify({
+        access_token: token, userid: '123456789012345678', phone: '13800138000',
+        expires_at: String(Date.now() - 1000),
+      }) })
+    }
+    try {
+      assert.equal(ctx.accountPool.listAccountsByProvider('loomy').length, 0,
+        '#752 fixture uses the default Loomy credential, so no pool account may divert selection')
+
+      // 1. 502 HTML：3 次探测都失败后，本轮必须继续走到 chat。
+      probeFixture(defaultRef, 'probe-502-token')
+      let probeCalls = 0, chatCalls = 0
+      auditFetch = async (input, init) => {
+        const url = String(input)
+        if (url.includes('/points/records')) {
+          probeCalls++
+          return new Response('<html><body>502 Bad Gateway</body></html>', {
+            status: 502, headers: { 'content-type': 'text/html' },
+          })
+        }
+        if (url.endsWith('/models')) return Response.json({ code: '000000', data: [] })
+        if (url.endsWith('/chat/completions')) {
+          chatCalls++
+          assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer probe-502-token',
+            'the chat keeps using the existing credential instead of inventing a renewed one')
+          return new Response('upstream chat unavailable', { status: 502 })
+        }
+        throw new Error(`unexpected offline request: ${url}`)
+      }
+      let failure
+      try { await collect(adapters.get('loomy').stream({ ...options, provider: 'loomy' })) }
+      catch (error) { failure = error }
+      assert.ok(failure, 'the chat request itself still fails on the upstream 502')
+      assert.equal(failure.code, 'SERVER', 'the failure is the chat request\'s own retryable 5xx, not the probe error')
+      assert.notEqual(failure.name, 'RefreshTokenExpiredError')
+      assert.equal(probeCalls, 3, 'transient probe failures are retried exactly three times')
+      assert.equal(chatCalls, 1, 'the chat request is still sent after the probe gives up')
+
+      // 2. 200 + 100002：明确的登录失效仍然终态。
+      const expiredRef = 'LOOMY_PROBE_100002_FIXTURE'
+      probeFixture(expiredRef, 'probe-100002-token')
+      probeCalls = 0
+      auditFetch = async input => {
+        const url = String(input)
+        if (url.includes('/points/records')) {
+          probeCalls++
+          return Response.json({ code: '100002', desc: '登录已失效' })
+        }
+        throw new Error(`unexpected offline request: ${url}`)
+      }
+      await assert.rejects(
+        ctx.loomyAuth.refreshAccountCredential(expiredRef),
+        error => error.name === 'RefreshTokenExpiredError' && /重新登录/.test(error.message),
+      )
+      assert.equal(probeCalls, 1, 'a definitive 100002 is not retried')
+
+      // 3. 第一次 502、第二次 200：有限重试要真的救回来。
+      const recoveredRef = 'LOOMY_PROBE_RECOVERY_FIXTURE'
+      probeFixture(recoveredRef, 'probe-recovery-token')
+      probeCalls = 0
+      const startedAt = Date.now()
+      auditFetch = async input => {
+        const url = String(input)
+        if (url.includes('/points/records')) {
+          probeCalls++
+          return probeCalls === 1
+            ? new Response('<html>502</html>', { status: 502 })
+            : Response.json({ code: '000000', data: { records: [] } })
+        }
+        throw new Error(`unexpected offline request: ${url}`)
+      }
+      await ctx.loomyAuth.refreshAccountCredential(recoveredRef)
+      assert.equal(probeCalls, 2, 'the second probe attempt succeeds')
+      assert.ok(Date.now() - startedAt >= 150, 'the retry waits before the second attempt')
+      console.log('ok  #752 loomy probe: 502/non-JSON is retried then deferred to the chat request; 100002 stays terminal')
+    } finally {
+      auditFetch = savedAudit
+      if (savedDefault === undefined) creds.delete(defaultRef)
+      else creds.set(defaultRef, savedDefault)
+      for (const ref of ['LOOMY_PROBE_100002_FIXTURE', 'LOOMY_PROBE_RECOVERY_FIXTURE']) creds.delete(ref)
+    }
   }
 }
 
