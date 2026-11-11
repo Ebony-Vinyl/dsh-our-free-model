@@ -72,6 +72,8 @@ import { GEMINI, geminiAccountLabel, geminiCredentialExpiresAtMs, isGeminiRefres
 import type { GeminiCredential } from './gemini.js'
 import type { GeminiAuth, StartedGeminiLoginFlow } from './gemini-auth.js'
 import type { BuddyAuth } from './buddy-auth.js'
+import { fetchAuthState as fetchBuddyAuthState, decorateLoginUrl as decorateBuddyLoginUrl } from './buddy-oauth.js'
+import { credentialExpiresAtMs } from './buddy.js'
 import { fetchGeminiCreditBalance } from './gemini-credits.js'
 import { LOOMY_TASK_POINTS, LOOMY_TASK_TITLES } from './loomy-onboarding.js'
 import { LOBSTERAI } from './lobsterai-product.js'
@@ -1783,6 +1785,86 @@ if (provider === LOBSTERAI.id) {
           })
 
           return { ok: true, value: { accountId: id, loginUrl: geminiStarted.loginUrl } }
+        } else if (provider === WORKBUDDY.id) {
+          /**
+           * WorkBuddy（国际版）：**两阶段**登录。
+           *
+           * ## 为什么不能像 codearts 那样 await 完整流程
+           *
+           * 前端（`client.js` 的 `startLogin`）在**点击的同一个事件循环里**先
+           * `window.open('about:blank')` 预留弹窗，然后才 await `account.create`。
+           * 它要的是**立刻**拿到 URL 去填那个弹窗 —— 迟到的 popup 会被浏览器
+           * 拦截。而 `runBuddyLoginFlow` 是**阻塞式**的（开浏览器 → 轮询 token
+           * → 轮询 account，最长 5 分钟），直接 await 会让弹窗永远空白。
+           *
+           * ⇒ 拆两步：这里只做 `fetchAuthState`（拿 state + authUrl，毫秒级），
+           * 立刻返回；完整轮询放后台，凭据落地后由 `login.poll` 发现。
+           *
+           * ## 占位条目必须**先**建
+           *
+           * `login.poll` 的判据是「条目存在 + 凭据已写入」，故占位条目要在返回
+           * 之前就 addAccount。失败时删掉，不留幽灵账号（与 gemini/zcode 同型）。
+           */
+          await pool.addAccount({
+            id,
+            provider: WORKBUDDY.id,
+            nickname: id,
+            enabled: true,
+            credentialRef: refName,
+            refreshable: false,
+            createdAt: Date.now(),
+          })
+          pendingLoginFailures.delete(id)
+
+          let authUrl: string
+          let loginState: string
+          try {
+            const state = await fetchBuddyAuthState(undefined, undefined, WORKBUDDY)
+            loginState = state.state
+            // 登录 URL 要追加 version 与 loginSessionId；platform/state/路径
+            // 全部由服务端下发的 authUrl 决定，**不得重新拼接**（见 buddy-oauth.ts）。
+            authUrl = decorateBuddyLoginUrl(state.authUrl, WORKBUDDY)
+          } catch (error) {
+            void pool.removeAccount(id).catch(() => {})
+            const reason = error instanceof Error ? error.message : String(error)
+            throw new Error(`无法启动 WorkBuddy 登录（获取授权地址失败）：${reason}`)
+          }
+
+          // 后台跑完整流程：传入已取得的 state，避免二次 fetchAuthState 换掉 state。
+          void workbuddy.login({
+            refName,
+            accountId: id,
+            pool,
+            state: loginState,
+            // 浏览器已在**前端**打开（它拿到 loginUrl 后自己 fill 弹窗），
+            // 故这里把 openBrowser 置空，否则会再弹一个窗口。
+            openBrowser: async () => {},
+          }).then(async (result) => {
+            // 回填展示名与有效期（昵称用账号邮箱/标签，比池 id 可辨认）。
+            // `parseCredential` 是 buddy-auth.ts 的**私有**函数，不导出；
+            // 这里只需读两个展示字段，直接解析 JSON 即可，不复制其校验逻辑。
+            let parsed: BuddyCredential | undefined
+            try {
+              parsed = JSON.parse(result.access) as BuddyCredential
+            } catch {
+              parsed = undefined
+            }
+            await pool.updateAccount(id, {
+              // 昵称优先用账号标签（邮箱），比池 id 可辨认。
+              // `BuddyCredential` 有 `nickname`（服务端下发的展示名），没有 account_label。
+              nickname: parsed?.nickname ?? parsed?.user_id ?? id,
+              expiresAt: parsed !== undefined ? (credentialExpiresAtMs(parsed) ?? undefined) : undefined,
+              refreshable: result.refreshable,
+            })
+            pendingLoginFailures.delete(id)
+          }).catch((error: unknown) => {
+            const reason = error instanceof Error ? error.message : String(error)
+            ctx.logger.warn(`[channel-pack] background ${WORKBUDDY.id} login failed for ${id}: ${reason}`)
+            pendingLoginFailures.set(id, reason.slice(0, 500))
+            void pool.removeAccount(id).catch(() => {})
+          })
+
+          return { ok: true, value: { accountId: id, loginUrl: authUrl } }
         } else {
           return { ok: false, error: { code: 'bad-request', message: `unknown provider: ${provider}` } }
         }

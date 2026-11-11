@@ -61211,6 +61211,61 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
             });
           });
           return { ok: true, value: { accountId: id, loginUrl: geminiStarted.loginUrl } };
+        } else if (provider === WORKBUDDY.id) {
+          await pool.addAccount({
+            id,
+            provider: WORKBUDDY.id,
+            nickname: id,
+            enabled: true,
+            credentialRef: refName,
+            refreshable: false,
+            createdAt: Date.now()
+          });
+          pendingLoginFailures.delete(id);
+          let authUrl;
+          let loginState;
+          try {
+            const state = await fetchAuthState(void 0, void 0, WORKBUDDY);
+            loginState = state.state;
+            authUrl = decorateLoginUrl(state.authUrl, WORKBUDDY);
+          } catch (error) {
+            void pool.removeAccount(id).catch(() => {
+            });
+            const reason = error instanceof Error ? error.message : String(error);
+            throw new Error(`\u65E0\u6CD5\u542F\u52A8 WorkBuddy \u767B\u5F55\uFF08\u83B7\u53D6\u6388\u6743\u5730\u5740\u5931\u8D25\uFF09\uFF1A${reason}`);
+          }
+          void workbuddy.login({
+            refName,
+            accountId: id,
+            pool,
+            state: loginState,
+            // 浏览器已在**前端**打开（它拿到 loginUrl 后自己 fill 弹窗），
+            // 故这里把 openBrowser 置空，否则会再弹一个窗口。
+            openBrowser: async () => {
+            }
+          }).then(async (result) => {
+            let parsed;
+            try {
+              parsed = JSON.parse(result.access);
+            } catch {
+              parsed = void 0;
+            }
+            await pool.updateAccount(id, {
+              // 昵称优先用账号标签（邮箱），比池 id 可辨认。
+              // `BuddyCredential` 有 `nickname`（服务端下发的展示名），没有 account_label。
+              nickname: parsed?.nickname ?? parsed?.user_id ?? id,
+              expiresAt: parsed !== void 0 ? credentialExpiresAtMs2(parsed) ?? void 0 : void 0,
+              refreshable: result.refreshable
+            });
+            pendingLoginFailures.delete(id);
+          }).catch((error) => {
+            const reason = error instanceof Error ? error.message : String(error);
+            ctx.logger.warn(`[channel-pack] background ${WORKBUDDY.id} login failed for ${id}: ${reason}`);
+            pendingLoginFailures.set(id, reason.slice(0, 500));
+            void pool.removeAccount(id).catch(() => {
+            });
+          });
+          return { ok: true, value: { accountId: id, loginUrl: authUrl } };
         } else {
           return { ok: false, error: { code: "bad-request", message: `unknown provider: ${provider}` } };
         }
