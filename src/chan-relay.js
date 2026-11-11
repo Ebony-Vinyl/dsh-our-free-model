@@ -28,6 +28,9 @@ import { keyMatches } from './forward.js'
 /** Request loop breaker: present on hops this relay already forwarded once. */
 const HOP_HEADER = 'x-ofm-chan-relay-hop'
 
+/** Cap for a body this relay will buffer to fold a developer role. */
+const RELAY_BODY_LIMIT = 16 * 1024 * 1024
+
 /** The gateway's own surface — nothing else is forwarded. */
 const FORWARDED_PATHS = new Set([
   '/v1/models',
@@ -42,8 +45,106 @@ const corsHeaders = () => ({
   'access-control-allow-headers': 'authorization, content-type, x-api-key',
 })
 
-function openAiError(res, status, code, message) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
+/**
+ * The chat converter inside the vendored gateway accepts only
+ * `system` / `user` / `assistant` / `tool`, and answers anything else with
+ * `400 unsupported message role` before a model is ever called. OpenAI defines
+ * the system prompt of a reasoning model as the `developer` role, so clients
+ * based on the OpenAI SDK send exactly that. The gateway's Responses lane
+ * already folds `developer` into `system`; its Chat lane never did.
+ *
+ * Folding at this door keeps the vendored upstream byte-identical while making
+ * every Chat Completions client work. The plugin already treats the two roles
+ * as one everywhere else it converts messages (`src/messages.js`,
+ * `src/anthropic.js`, `src/token-saver.js`).
+ *
+ * Returns `{ payload, folded }` when the body changed, or `null` when it must
+ * be forwarded untouched: not JSON, no `developer` message, or a shape this
+ * fold cannot prove safe to rewrite. A relay that mangles a request is worse
+ * than one that lets the upstream error stand.
+ */
+export function foldDeveloperRole(payload) {
+  const buffer = Buffer.isBuffer(payload)
+    ? payload
+    : typeof payload === 'string' ? Buffer.from(payload, 'utf8') : null
+  if (buffer === null) return null
+  // Cheap pre-check: a JSON body carrying a developer role either contains the
+  // word in the clear or spells part of it with a `\u` escape, so the common
+  // case never pays for a parse. Missing it means forwarding untouched,
+  // exactly as before this fold existed.
+  if (buffer.indexOf('developer') === -1 && buffer.indexOf('\\u') === -1) return null
+  let body
+  try { body = JSON.parse(buffer.toString('utf8')) } catch { return null }
+  if (body === null || typeof body !== 'object' || Array.isArray(body) || !Array.isArray(body.messages)) return null
+  let folded = 0
+  const messages = body.messages.map(message => {
+    if (message !== null && typeof message === 'object' && !Array.isArray(message) && message.role === 'developer') {
+      folded += 1
+      return { ...message, role: 'system' }
+    }
+    return message
+  })
+  if (folded === 0) return null
+  // Reuse the parsed object so its key order survives; values in every other
+  // field are already exactly what the caller sent.
+  body.messages = messages
+  return { payload: Buffer.from(JSON.stringify(body), 'utf8'), folded }
+}
+
+/** Whether this hop must be buffered and rewritten instead of streamed. */
+function shouldFoldRequest(method, routePath, headers) {
+  if (method !== 'POST' || routePath !== '/v1/chat/completions') return false
+  const contentType = String(headers['content-type'] ?? '').split(';', 1)[0].trim().toLowerCase()
+  if (contentType !== 'application/json') return false
+  // A compressed body would have to be decoded here to be rewritten; leave
+  // those bytes alone rather than forward a corrupt stream.
+  const encoding = String(headers['content-encoding'] ?? '').trim().toLowerCase()
+  return encoding === '' || encoding === 'identity'
+}
+
+class RequestBodyTooLargeError extends Error {
+  constructor(limit) {
+    super(`request body is too large (limit ${limit} bytes)`)
+    this.name = 'RequestBodyTooLargeError'
+  }
+}
+
+/**
+ * Read a request body under the same cap the gateway applies to one. The
+ * caller still owes the client a response, so this never destroys the socket
+ * itself; over-limit bytes are drained and discarded, and the caller answers
+ * 413 with `Connection: close`.
+ */
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let size = 0
+    let settled = false
+    const settle = (fn, value) => {
+      if (settled) return
+      settled = true
+      fn(value)
+    }
+    req.on('data', chunk => {
+      if (settled) return
+      size += chunk.length
+      if (size > limit) {
+        settle(reject, new RequestBodyTooLargeError(limit))
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('error', error => settle(reject, error))
+    req.on('end', () => settle(resolve, Buffer.concat(chunks)))
+    // A client that disappears mid-upload must not leave this promise pending.
+    req.on('close', () => {
+      if (!req.complete) settle(reject, new Error('the request body ended before it was complete'))
+    })
+  })
+}
+
+function openAiError(res, status, code, message, extra = {}) {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...extra })
   res.end(JSON.stringify({ error: { message, type: code, code } }))
 }
 
@@ -95,8 +196,13 @@ export function chanGatewayEnabled(env = process.env) {
 /**
  * Bind the relay. `config()` is read per request, so a settings save applies
  * without a rebind (except host/port, which the caller rebinds for).
+ * `requestBodyLimit` is a test seam for the 413 path; production callers keep
+ * the 16 MiB default.
  */
-export async function startChanRelay({ config, log = () => {} }) {
+export async function startChanRelay({ config, log = () => {}, requestBodyLimit = RELAY_BODY_LIMIT }) {
+  const bodyLimit = Number.isFinite(requestBodyLimit) && requestBodyLimit > 0
+    ? Math.trunc(requestBodyLimit)
+    : RELAY_BODY_LIMIT
   const server = http.createServer((req, res) => {
     void relay(req, res).catch(error => {
       log(`relay request failed: ${error?.message ?? error}`)
@@ -143,6 +249,38 @@ export async function startChanRelay({ config, log = () => {} }) {
     // the key that belongs to this machine.
     headers.authorization = `Bearer ${settings.gatewayKey}`
     headers[HOP_HEADER] = '1'
+
+    // The Chat Completions fold (see foldDeveloperRole): only this one route
+    // is buffered, and every other request keeps streaming through untouched.
+    let buffered = null
+    if (shouldFoldRequest(req.method, routePath, req.headers)) {
+      try {
+        buffered = await readBody(req, bodyLimit)
+      } catch (error) {
+        // Drain whatever is still arriving so the answer can flush; the
+        // `Connection: close` below ends the socket instead of reusing it.
+        req.resume()
+        if (res.destroyed) {
+          return
+        }
+        if (error instanceof RequestBodyTooLargeError) {
+          openAiError(res, 413, 'invalid_request_error', error.message, { connection: 'close' })
+        } else {
+          openAiError(res, 400, 'invalid_request_error', 'could not read the request body', { connection: 'close' })
+        }
+        return
+      }
+      // The buffered length is now known, so framing is stated once, exactly.
+      headers['content-length'] = String(buffered.length)
+      delete headers['transfer-encoding']
+      const folded = foldDeveloperRole(buffered)
+      if (folded !== null) {
+        buffered = folded.payload
+        headers['content-length'] = String(buffered.length)
+        log(`folded ${folded.folded} developer message(s) to system role for ${req.method} ${routePath}`)
+      }
+    }
+
     const target = http.request({
       host: settings.gatewayHost || '127.0.0.1',
       port: settings.gatewayPort,
@@ -167,6 +305,12 @@ export async function startChanRelay({ config, log = () => {} }) {
     res.once('close', () => {
       if (!res.writableEnded) target.destroy()
     })
+    // A buffered body replaces the stream: it has already been read out of
+    // `req`, so piping it again would hang the upstream on an empty body.
+    if (buffered !== null) {
+      target.end(buffered)
+      return
+    }
     req.pipe(target)
   }
 
