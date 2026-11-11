@@ -436,6 +436,7 @@ function sha256File(file) {
 const STAGE_ATTEMPTS = 3
 const STAGE_BACKOFF_MS = 700
 
+
 /** A CN egress to the CDN drops connections regularly, and a one-shot staging
  * turned one flaky second into a whole failed upgrade ("fetch failed" on a
  * random file). Transport-class failures retry with a short backoff; integrity
@@ -873,9 +874,20 @@ export function isPackageManagerOwned(pkgDir, packageName = PACKAGE_NAME) {
  * writes its lockfile and .modules.yaml (issue #773).
  */
 export function profileDirOf(pkgDir) {
-  let dir = path.resolve(pkgDir)
-  while (dir !== path.dirname(dir) && path.basename(dir) !== 'node_modules') dir = path.dirname(dir)
-  return path.dirname(dir)
+  // The profile root is the parent of the *outermost* node_modules segment.
+  // Walking to the *first* node_modules on the way up stops inside pnpm's
+  // isolated store: an isolated install sits at
+  //   <profile>/node_modules/.pnpm/<name>@<version>/node_modules/<name>
+  // so the first match is the store's inner node_modules and the lockfile
+  // lookup then points at the store, never at the profile. The guard misses
+  // every isolated install that way (issue #343 review asked for the real
+  // linker matrix). Splitting on the separator keeps hoisted, scoped and
+  // nested-dependency layouts on the same profile root.
+  const resolved = path.resolve(pkgDir)
+  const parts = resolved.split(path.sep)
+  const outermost = parts.indexOf('node_modules')
+  if (outermost <= 0) return path.dirname(resolved)
+  return parts.slice(0, outermost).join(path.sep) || path.sep
 }
 
 function readTextFile(file) {
@@ -942,7 +954,7 @@ function modulesHoistsPackage(text, name) {
 /** The refusal `apply` raises for a package-manager-owned copy. Carries
  *  `statusCode: 409`, the settings API's refusal convention for an install
  *  whose bytes another writer owns (see index.js `MANAGED_MESSAGE`). */
-const PACKAGE_MANAGER_REFUSAL = 'this installation is owned by pnpm; the in-app upgrade would be a second writer and can corrupt the copy — update it with pnpm (or reinstall from a release)'
+const PACKAGE_MANAGER_REFUSAL = 'this installation is owned by pnpm; the in-app upgrade would be a second writer and can corrupt the copy — update it with pnpm, or set distribution: managed in the profile so pnpm stays the only writer, or reinstall from a release; a relative link: dependency keeps in-app upgrades safe'
 
 /**
  * The upgrade lifecycle. The optional activate callback lets the Host include
