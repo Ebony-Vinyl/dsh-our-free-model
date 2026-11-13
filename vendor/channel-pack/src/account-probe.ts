@@ -39,8 +39,10 @@ import { clineProductById } from './cline-product.js'
 import { zcodeProductById } from './zcode-product.js'
 import { GeminiAdapter } from './gemini-adapter.js'
 import { LoomyAdapter } from './loomy-adapter.js'
+import { ScnetAdapter } from './scnet-adapter.js'
 import { GEMINI, GEMINI_DEFAULT_PROJECT, GEMINI_SESSION_LANE_SMOKE } from './gemini.js'
 import { LOOMY } from './loomy-product.js'
+import { SCNET } from './scnet-product.js'
 import type { LobsteraiCredential } from './lobsterai.js'
 import type { QoderCredential } from './qoder.js'
 import type { ClineCredential } from './cline.js'
@@ -48,6 +50,7 @@ import type { ZcodeCredential } from './zcode.js'
 import type { TraeCredential } from './trae.js'
 import type { GeminiCredential } from './gemini.js'
 import type { LoomyCredential } from './loomy.js'
+import type { ScnetCredential } from './scnet.js'
 import type {
   ProbeAccountResult,
   ProbeModelResult,
@@ -291,6 +294,23 @@ async function probeWithAdapter(
       resolveCredential: async () => credential as LoomyCredential,
       refresh: async () => {},
       product: LOOMY,
+    })
+  } else if (entry.provider === SCNET.id) {
+    // SCNet（超算互联网）→ ScnetAdapter。
+    //
+    // ⚠️ 没有分支时「测试」会落到 else 抛 `Unsupported probe adapter: scnet`，
+    // 而客户端把原因读成空串，用户看到的是一句「测试失败：」后面什么都没有
+    //（与 loomy 当年的 #681 同型）。
+    //
+    // 探测场景下 `accountPool` / `fetchRemoteModels` 都可缺省：`loadModels()`
+    // 会退回 `product.fallbackModels`，`providerCatalogVisible` 在
+    // `accountPool === undefined` 时直接返回 true。`refresh` 置空 —— 探测只做
+    // **轻量存活检查**，凭据真过期就让它以 AUTH 失败如实上报。
+    adapter = new ScnetAdapter({
+      credentialRef: ref,
+      resolveCredential: async () => credential as ScnetCredential,
+      refresh: async () => {},
+      product: SCNET,
     })
   } else if (entry.provider === TRAE_PROVIDER_ID) {
     // TRAE 只有一个产品（`TRAE` 常量），没有 productById 式的查表，

@@ -37,6 +37,10 @@ import { LOOMY } from './loomy-product.js'
 import { creditExpiringWindowDays } from './credit-expiry-window.js'
 import type { LoomyAuth } from './loomy-auth.js'
 import type { LoomyCredential } from './loomy.js'
+import { SCNET } from './scnet-product.js'
+import type { ScnetAuth } from './scnet-auth.js'
+import type { ScnetCredential } from './scnet.js'
+import type { StartedScnetLoginFlow } from './scnet-login-page.js'
 import { RACCOON } from './raccoon-product.js'
 import type { RaccoonAuth } from './raccoon-auth.js'
 import type { ZcodeAuth } from './zcode-auth.js'
@@ -769,6 +773,15 @@ export function registerChannelPackRpc(
    */
   gemini: GeminiAuth,
   /**
+   * SCNet（超算互联网）实例：手机号 + 图形验证码 + 短信码登录，
+   * 平台 Cookie 换 `sk-` Key。
+   *
+   * ⚠️ 与 `gemini` 同一条约定：**新 provider 一律追加在末尾**（这里即
+   * `gemini` 之后、`modelAdapters` 之前），既有的调用点才不用逐个补占位 ——
+   * 本仓库已因「插入中间」错位复发 6 次。
+   */
+  scnet: ScnetAuth,
+  /**
    * provider → 适配器实例（可选）。
    *
    * 用于「显示列表」拿到**不受用户黑名单影响**的全量目录（`listAllModels`），
@@ -781,7 +794,7 @@ export function registerChannelPackRpc(
   ctx.inject(['connection'], (connectionCtx) => {
     registerChannelPackEndpoints(
       connectionCtx as Context, pool, lobsterai,
-      qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config,
+      qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, scnet, modelAdapters, config,
     )
   })
 }
@@ -891,6 +904,7 @@ function registerChannelPackEndpoints(
   minimax: MinimaxAuth,
   zcode: ZcodeAuth,
   gemini: GeminiAuth,
+  scnet: ScnetAuth,
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
   config: ChannelPackRpcConfig = {},
 ): void {
@@ -1267,8 +1281,19 @@ function registerChannelPackEndpoints(
    */
   async function handleMethod(method: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
     // 旧客户端仍可能携带退役 provider 或历史账号 id。拒绝调用但不删除数据。
-    const request = payload !== null && typeof payload === 'object'
+    let request = payload !== null && typeof payload === 'object'
       ? payload as Record<string, unknown> : undefined
+    /**
+     * 兼容**旧浏览器半身**：本渠道的 provider id 曾是 `scnet`（与独立插件
+     * dsh-scnet-connect 的路由名冲突后改成 `scnet-ofm`）。浏览器缓存里的旧
+     * client.js 仍会发 `scnet`，不映射就会得到「不支持此渠道」（真实反馈）。
+     *
+     * 映射只发生在 RPC 入口，插件内部一律用新 id；新前端发来的 `scnet-ofm` 原样通过。
+     */
+    if (request !== undefined && request.provider === 'scnet') {
+      request = { ...request, provider: SCNET.id }
+      payload = request
+    }
     const account = typeof request?.accountId === 'string' ? pool.findAccount(request.accountId) : undefined
     if ((request?.provider !== undefined && !isSupportedProvider(request.provider)) || (account !== undefined && !isSupportedProvider(account.provider))) {
       return { ok: false, error: { code: 'provider-unsupported', message: '不支持此渠道。' } }
@@ -1295,7 +1320,10 @@ function registerChannelPackEndpoints(
         }
         const id = `${provider}-${shortId()}`
         const suffix = shortId().toUpperCase()
-        const refName = `${provider.toUpperCase()}_ACCOUNT_${suffix}`
+        // ⚠️ ref 名必须匹配 DSH 的 `/^[A-Za-z_][A-Za-z0-9_]*$/`：provider id 里若有
+        // 连字符（如 `scnet-ofm`），原样拼出来的 `SCNET-OFM_ACCOUNT_*` 会让
+        // credentialRef() 抛 TypeError，账号看起来建了、凭据却一行都没写进去。
+        const refName = `${provider.toUpperCase().replace(/[^A-Z0-9]/g, '')}_ACCOUNT_${suffix}`
 if (provider === LOBSTERAI.id) {
 
           const started = await lobsterai.startLogin({ refName })
@@ -1492,6 +1520,64 @@ if (provider === LOBSTERAI.id) {
           })
 
           return { ok: true, value: { accountId: id, loginUrl: started.loginUrl } }
+        } else if (provider === SCNET.id) {
+          /**
+           * SCNet 走**本地登录页**承载（手机号 + 图形验证码 + 短信验证码），
+           * 与 Loomy 的微信扫码页同型：`startLogin` 立即返回指向 127.0.0.1 的
+           * `loginUrl`，后台 await 结果。
+           *
+           * ⚠️ 绝不能在用户完成登录后才返回 loginUrl —— `window.open` 只在用户
+           *    手势窗口内有效，那时手势早已过期、弹窗必被拦截。
+           *
+           * ⚠️ 先登记**占位条目**（无凭据），使前端 `login.poll` 能立即看到该账号；
+           *    登录成功后再回填昵称/有效期。失败则删除占位条目。
+           */
+          await pool.addAccount({
+            id,
+            provider: SCNET.id,
+            nickname: id,
+            enabled: true,
+            credentialRef: refName,
+            refreshable: false,
+            createdAt: Date.now(),
+          })
+
+          let scnetStarted: StartedScnetLoginFlow
+          try {
+            scnetStarted = await scnet.startLogin()
+          } catch (error) {
+            // 本地登录页起不来：删掉占位条目，不留幽灵账号。
+            void pool.removeAccount(id).catch(() => {})
+            const reason = error instanceof Error ? error.message : String(error)
+            throw new Error(`无法启动 SCNet 登录（本地登录页启动失败）：${reason}`)
+          }
+
+          scnetStarted.result.then(async (login) => {
+            const result = await scnet.persistLogin(login, { refName })
+            const credential = JSON.parse(result.access) as ScnetCredential
+            await pool.updateAccount(id, {
+              // 平台没有昵称接口：用手机号尾号让多账号可区分（`SCNet 0000`）。
+              nickname: login.phone !== undefined && login.phone.length >= 4
+                ? `SCNet ${login.phone.slice(-4)}`
+                : credential.account?.userName !== undefined && credential.account.userName.length > 0
+                  ? `SCNet ${credential.account.userName}`
+                  : id,
+              expiresAt: result.expires > 0 ? result.expires : undefined,
+              // SCNet **可以**静默续期：只要平台 Cookie 还在，refresh() 就能重换 Key。
+              refreshable: result.refreshable,
+            })
+            // ⚠️ **必须广播**：适配器的 `listModels` 在「没有任何已登录账号」时返回
+            // 空数组（DSH 据此把整个 provider 分组从选择器里隐藏）。登录成功这一刻
+            // 目录才第一次变得非空，不通知的话用户要等到下次重启 DSH 才看得到
+            // `SCNet-Max` —— 真实反馈正是「登录成功了但模型列表里没有」。
+            broadcastCatalogChanged(ctx)
+          }).catch((error: unknown) => {
+            ctx.logger.warn(`[channel-pack] background ${SCNET.id} login failed for ${id}: ${String(error)}`)
+            // 登录失败：移除占位条目，避免留下无凭据的幽灵账号
+            void pool.removeAccount(id).catch(() => {})
+          })
+
+          return { ok: true, value: { accountId: id, loginUrl: scnetStarted.loginUrl } }
         } else if (provider === RACCOON.id) {
           // raccoon 走**本地页承载**的微信扫码 / 短信双路径登录（与 Loomy 同型）：
           // `startLogin` 立即返回指向 127.0.0.1 的 `loginUrl`，后台 await 结果。
@@ -1882,6 +1968,12 @@ if (provider === LOBSTERAI.id) {
               // 账号池，否则 UI 一直显示「已过期」而实际能正常发消息。
               // ⚠️ Google 会**轮换 refresh_token**，`GeminiAuth` 内部已回写新值。
               await gemini.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+              break
+            case SCNET.id:
+              // SCNet **可以**静默续期（只要平台 Cookie 还在，refresh() 就能重换
+              // `sk-` Key）。⚠️ 必须传 pool + entry.id —— 续期后要把新的
+              // `expiresAt` 写回账号池，否则 UI 一直显示「已过期」而实际能发消息。
+              await scnet.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
             default:
               throw new Error(`Unknown provider: ${entry.provider}`)

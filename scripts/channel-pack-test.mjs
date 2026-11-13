@@ -132,7 +132,9 @@ try {
   apply(ctx, { disableOpencode: true, outlet })
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(adapters.has('opencode'), false, 'disabled account provider is not registered')
-  assert.equal(adapters.size, 10, 'all other account providers remain registered')
+  // 11 = 既有十个账号渠道（LobsterAI/Qoder/Qoder 中国版/TRAE/Cline/Loomy/Raccoon/
+  // MiniMax/ZCode/Gemini）+ 2026-11-13 新增的 SCNet。
+  assert.equal(adapters.size, 11, 'all other account providers remain registered')
   verifyChannelImagePricing(adapters)
   console.log('ok  十渠道同步图片计价：缺失及默认方法兜底，厂商计价优先，重复图片与已卸载图片正确计数')
   assert.equal(writes.length, 0, 'mount neither creates nor deletes credentials')
@@ -201,7 +203,7 @@ try {
   ctx.loomyAuth.claimDailyQuota = savedClaim
   await ctx.accountPool.removeAccount('automatic-loomy')
   creds.delete('AUTO_LOOMY_FIXTURE')
-  console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 10 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
+  console.log(`ok  ${sourceMode ? 'source modules' : 'generated pack'}: 11 providers, no OpenCode registration/warmup, historical data retained, account RPCs refused`)
   if (sourceMode) await verifySourceRegressions({ ctx, adapters, call, creds })
   await verifyChannelCreditsRpc({ ctx, call, creds, adapters, outletState })
   console.log('ok  实际渠道 RPC：七渠道仅账号池凭据即可查余额，ZCode 账号池回退及缺凭据反馈')
@@ -281,10 +283,10 @@ try {
     visit(node.children)
   }
   visit(tree)
-  assert.equal(cards.length, 10)
+  assert.equal(cards.length, 11)
   for (const provider of ['opencode', 'unsupported-alpha', 'unsupported-beta']) assert.equal(cards.includes(provider), false)
   assert.deepEqual([...cards].sort(), [...adapters.keys()].sort(), 'UI and mounted account providers agree')
-  console.log('ok  actual channel page: 10 account cards, OpenCode and unsupported providers removed')
+  console.log('ok  actual channel page: 11 account cards, OpenCode and unsupported providers removed')
   await verifyChannelModelActions()
   await verifyChannelCreditsUi()
   console.log('ok  共享渠道余额：十渠道能力、失败原因、重试、签到反馈和请求交错')

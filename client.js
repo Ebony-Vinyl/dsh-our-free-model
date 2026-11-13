@@ -4723,6 +4723,12 @@ window.__ModuleLoader__.load({
       { id: 'minimax', name: 'MiniMax Code', org: 'MiniMax', accent: '#E4007F', note: '设备码 + PKCE，每日签到', login: 'browser' },
       { id: 'zcode', name: 'ZCode', org: '智谱', accent: '#3B6EF6', note: '浏览器登录（需本机可开浏览器）', login: 'browser' },
       { id: 'gemini', name: 'Gemini', org: 'Google Code Assist', accent: '#4285F4', note: '本地回调 OAuth 免费线', login: 'browser' },
+      // SCNet（超算互联网）：手机号 + 图形验证码 + 短信码登录，免费模型 SCNet-Max。
+      // 登录页由 channel pack 起在 127.0.0.1 上（与 Loomy 的微信扫码页同型），
+      // 故这里不需要任何新 UI 分支 —— `account.create` 返回的 loginUrl 直接打开即可。
+      // ⚠️ id 是 `scnet-ofm` 而不是 `scnet`：后者是独立插件 dsh-scnet-connect 的
+      // provider 路由名，两者并存时必须区分，否则 OFM 的适配器注册会被静默跳过。
+      { id: 'scnet-ofm', name: 'SCNet', org: '超算互联网', accent: '#00A9E0', note: '手机号验证码登录，免费 SCNet-Max（基座为DeepSeek-V4.1-Flash-1017）', login: 'browser+sms' },
     ]
 
     /** 与现有 RPC 的能力对应：余额、每日领取及独立签到状态分别判断。 */
@@ -5122,7 +5128,10 @@ window.__ModuleLoader__.load({
               ? creditCapability.quota ? t('chan.credits.loaded').replace('{count}', String((balances ?? []).filter(row => Number.isFinite(row.balance?.total)).length)) : kilo(balancesTotal)
               : balances === undefined ? '…' : '—')) : null),
         compact ? h('div', { className: 'ofm_directoryactions' },
-          h('span', { className: 'ofm_id' }, channel.id),
+          // 目录视图里显示**中文名**而不是 provider id：id 是 DSH 内部路由键
+          // （如 `scnet-ofm`），对用户没有意义；原始 id 放在 title 里便于排查。
+          h('span', { className: 'ofm_id', title: channel.id },
+            `${channel.name}${channel.org ? `（${channel.org}）` : ''}`),
           h('button', {
             type: 'button', className: `ofm_btn ${accountsCount > 0 || expanded ? 'ghost' : 'primary'}`,
             disabled: !rpc || busy !== '', 'aria-expanded': expanded,

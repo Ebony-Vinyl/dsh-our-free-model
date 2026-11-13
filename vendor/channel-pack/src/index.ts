@@ -44,6 +44,11 @@ import type { QoderCredential } from './qoder.js'
 import type { TraeCredential } from './trae.js'
 import type { ClineCredential } from './cline.js'
 import type { LoomyCredential } from './loomy.js'
+import { registerScnetLlm } from './scnet-adapter.js'
+import { ScnetAuth } from './scnet-auth.js'
+import { loadScnetModels } from './scnet-catalog.js'
+import { scnetApiKeyOf, type ScnetCredential } from './scnet.js'
+import { SCNET } from './scnet-product.js'
 import type { RaccoonCredential } from './raccoon.js'
 import { MinimaxAuth } from './minimax-auth.js'
 import { registerMinimaxLlm } from './minimax-adapter.js'
@@ -265,7 +270,7 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   registerProviderSettings(
     ctx, 'llm-lobsterai',
     'llm-qoder', 'llm-qodercn', 'llm-trae', 'llm-cline', 'llm-loomy', 'llm-raccoon',
-    'llm-minimax', 'llm-zcode', 'llm-gemini',
+    'llm-minimax', 'llm-zcode', 'llm-gemini', 'llm-scnet',
   )
   const pool = new AccountPool(ctx)
   const accountForRefresh = async (provider: string, accountId?: string) => {
@@ -825,6 +830,136 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
     product: LOOMY,
   })
 
+
+  // ===== SCNet（超算互联网）服务 =====
+  // 第十五个账号渠道。登录与 Loomy 同族（**手机号 + 短信验证码**），但多一道
+  // **图形验证码**，且平台侧支持「未注册号码自动注册」。推理走标准 OpenAI
+  // 兼容网关（https://api.scnet.cn/api/llm/v1），故复用 openai-compat.ts。
+  //
+  // 服务名由 ScnetAuth 依 product.id 派生，注册为 ctx['scnet-ofmAuth']。
+  // ⚠️ provider id 是 `scnet-ofm` 而非 `scnet`：后者已被独立插件 dsh-scnet-connect
+  // 占用（同一 llm 路由重复注册会让本插件被静默跳过，见 scnet-product.ts 的说明）。
+  // 不注册斜杠命令：入口在 EAC router 的 SCNet 卡片。
+  const scnet = new ScnetAuth(ctx)
+
+  /** 按凭据 ref 解析 SCNet 凭据（续期与兜底路径共用）。 */
+  const resolveScnetCredentialByRef = async (refName: string): Promise<ScnetCredential | undefined> => {
+    const resolved = await ctx.credentials.resolve(credentialRef(refName))
+    if (!resolved) return undefined
+    try {
+      return JSON.parse(resolved.value) as ScnetCredential
+    } catch {
+      return undefined
+    }
+  }
+
+  const scnetAdapter = registerScnetLlm(ctx, {
+    credentialRef: credentialRef(SCNET.defaultCredentialRef),
+    /**
+     * 解析本轮该用哪个账号的凭据。
+     *
+     * ⚠️ `modelId` **必须**透传给 `getAvailableAccount`：SCNet 的限流是**按模型**
+     * 记的（网关会对单模型回 429/额度类错误），传空串等于「不按模型过滤」。
+     */
+    resolveCredential: async (modelId?: string) => {
+      const available = await pool.getAvailableAccount(SCNET.id, modelId ?? '')
+      if (available !== null) {
+        // Token 账本：回报「本笔请求解析出的账号」。
+        reportLedgerAccount(SCNET.id, available.entry.id)
+        return available.credential as ScnetCredential
+      }
+      throwIfAllAccountsRateLimited(SCNET, modelId)
+      return await resolveScnetCredentialByRef(SCNET.defaultCredentialRef)
+    },
+    refresh: async (accountId?: string, _reason?: 'auth') => {
+      const entry = accountId === undefined ? undefined
+        : pool.listAccountsByProvider(SCNET.id).find(account => account.id === accountId)
+      if (accountId !== undefined && entry === undefined) throw new Error('scnet: account no longer exists')
+      if (entry !== undefined) await scnet.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+      else await scnet.refresh()
+      return await resolveScnetCredentialByRef(entry?.credentialRef ?? SCNET.defaultCredentialRef)
+    },
+    nextAccount: async (modelId, tried) => {
+      const available = await pool.getAvailableAccount(SCNET.id, modelId, tried)
+      if (available === null) return undefined
+      reportLedgerAccount(SCNET.id, available.entry.id)
+      return { accountId: available.entry.id, credential: available.credential as ScnetCredential }
+    },
+    /**
+     * 远端模型目录。
+     *
+     * 优先用账号池里的活跃账号：换 key 后读「客户端目录 + 网关 /models」
+     * （见 `scnet-catalog.ts`）。池空时退回单凭据 ref；都没有就返回空数组，
+     * 由适配器回退兜底模型表。
+     */
+    fetchRemoteModels: async () => {
+      const available = await pool.getAvailableAccount(SCNET.id, '')
+      const credential = available !== null
+        ? available.credential as ScnetCredential
+        : await resolveScnetCredentialByRef(SCNET.defaultCredentialRef)
+      const apiKey = scnetApiKeyOf(credential)
+      if (credential === undefined || apiKey === undefined) return []
+      return await loadScnetModels({
+        product: SCNET,
+        apiKey,
+        baseUrl: typeof credential.baseUrl === 'string' && credential.baseUrl.length > 0 ? credential.baseUrl : SCNET.apiBase,
+        fetcher: network.fetch,
+      })
+    },
+    // 图片字节桥接：SCNet 网关实测支持视觉输入。
+    readImage: makeReadImage(ctx),
+    accountPool: pool,
+    product: SCNET,
+  })
+
+  /**
+   * 把旧 `scnet` 路由下的账号迁到 `scnet-ofm`（一次性、幂等）。
+   *
+   * 背景：本渠道最初的 provider id 就是 `scnet`，与独立插件 dsh-scnet-connect 的
+   * 路由名撞车（后者在 bundle 顺序里更靠前，先占住了路由）。改 id 之后，
+   * 已经登录过的账号仍挂在旧 provider 名下：账号列表看不见、模型也不出。
+   *
+   * 迁移方式：**复制凭据到新 ref → 用新 provider 重新登记 → 删掉旧条目**
+   *（removeAccount 会顺带 unset 旧 ref，此时凭据已复制，不会丢）。
+   * 任何一条失败都跳过并记日志，绝不因为迁移而弄丢凭据。
+   */
+  const migrateLegacyScnetAccounts = async (): Promise<void> => {
+    const legacyPrefix = 'SCNET_ACCOUNT_'
+    const nextPrefix = 'SCNETOFM_ACCOUNT_'
+    const legacy = (await pool.listAllAccounts()).filter(entry => entry.provider === 'scnet')
+    for (const entry of legacy) {
+      const oldRef = entry.credentialRef
+      if (!oldRef.startsWith(legacyPrefix)) continue
+      const suffix = oldRef.slice(legacyPrefix.length)
+      const newRef = `${nextPrefix}${suffix}`
+      try {
+        const resolved = await ctx.credentials.resolve(credentialRef(oldRef))
+        if (!resolved) continue
+        await ctx.credentials.set(credentialRef(newRef), resolved.value)
+        await pool.addAccount({
+          ...entry,
+          id: `scnet-ofm-${suffix.toLowerCase()}`,
+          provider: SCNET.id,
+          credentialRef: newRef,
+        })
+        // 旧条目连同旧 ref 一起清掉（凭据已复制到 newRef，安全）。
+        await pool.removeAccount(entry.id)
+        ctx.logger?.warn?.(
+          `[channel-pack] 已把 SCNet 账号 ${entry.id} 迁移到 ${SCNET.id}（凭据 ${oldRef} → ${newRef}）`,
+        )
+      } catch (error) {
+        ctx.logger?.warn?.(
+          `[channel-pack] 迁移 SCNet 账号 ${entry.id} 失败（保留原样，可重新登录）：`
+          + `${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
+  }
+  void migrateLegacyScnetAccounts().catch((error: unknown) => {
+    ctx.logger?.warn?.(
+      `[channel-pack] SCNet 账号迁移失败（不影响其它渠道）：${error instanceof Error ? error.message : String(error)}`,
+    )
+  })
   // ===== Raccoon Work（商汤小浣熊）服务 =====
   // 第九个产品线。登录与 Loomy 同型（**本地页承载**的微信扫码 + 短信双路径），
   // 但**有** refresh 端点（凭据可静默续期），且客户端可能未安装。
@@ -1404,6 +1539,9 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
     // ⚠️ 漏了这一行定时器不武装：凭据到期后**不会自动续期**，
     // 用户会看到「每隔一小时就要重新登录」，且日志里一个字都没有。
     ['gemini', (p) => gemini.refreshAll(p)],
+    // ⚠️ SCNet **可续期**（平台 Cookie 还在就能重换 `sk-` Key）：漏了这一行
+    // 定时器不武装，Key 到期后只能重新收短信。
+    ['scnet-ofm', (p) => scnet.refreshAll(p)],
   ]
 
   async function refreshAllCredentials(): Promise<void> {
@@ -1455,6 +1593,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
       trae.stop()
       cline.stop()
       loomy.stop()
+      scnet.stop()
       zcode.stop()
       // ⚠ 必须 dispose captcha 浏览器 —— 否则会留下孤儿 chromium
       //（约 200-400MB，且用户没有界面能关掉它）。
@@ -1478,6 +1617,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
     trae.stop()
     cline.stop()
     loomy.stop()
+    scnet.stop()
     zcode.stop()
     // 同上：captcha 浏览器必须随插件一起回收。
     zcodeAdapter.stop()
@@ -1653,6 +1793,9 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
     trae: pruned(TRAE.id, traeAdapter),
     cline: pruned(CLINE.id, clineAdapter),
     loomy: pruned(LOOMY.id, loomyAdapter),
+    // ⚠️ key 必须是 **provider id**（`scnet-ofm`）：provider.status / model.list 都按
+    // 这个 key 查表，写成旧的 `scnet` 会让卡片上的「模型」恒显示「—」。
+    [SCNET.id]: pruned(SCNET.id, scnetAdapter),
     raccoon: pruned(RACCOON.id, raccoonAdapter),
     minimax: pruned(MINIMAX.id, minimaxAdapter),
     gemini: pruned(GEMINI.id, geminiAdapter),
@@ -1665,7 +1808,7 @@ const zcodeAdapter = registerZcodeLlm(ctx, {
   // 丢的却是「下一轮工具调用能不能带上签名」。
   ctx.effect(() => () => { void geminiSigStore.flush().catch(() => {}) })
 
-  registerChannelPackRpc(ctx, pool, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, {
+  registerChannelPackRpc(ctx, pool, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, scnet, modelAdapters, {
     ...config,
     // ⚠️ 配额等附属查询必须复用同一出口；省略会让 gemini-credits 回落到裸 fetch。
     fetcher: network.fetch,

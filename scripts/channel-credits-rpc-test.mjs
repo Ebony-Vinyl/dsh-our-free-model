@@ -159,6 +159,9 @@ async function verifyRefreshDispatch({ ctx, call }) {
   const providers = [
     'lobsterai', 'qoder', 'qodercn', 'trae',
     'cline', 'loomy', 'raccoon', 'minimax', 'zcode', 'gemini',
+    // SCNet（2026-11-13 新增，id 为 scnet-ofm 以避开 dsh-scnet-connect 的路由名）：
+    // 可静默续期，必须与其余渠道同一条分派路径。
+    'scnet-ofm',
   ]
   for (const provider of providers) {
     const service = ctx[`${provider}Auth`]
@@ -185,5 +188,5 @@ async function verifyRefreshDispatch({ ctx, call }) {
       await ctx.accountPool.removeAccount(accountId)
     }
   }
-  console.log('ok  refresh RPC: all 10 providers pass exact ref/pool/id; disabled accounts refresh; failures return ok:false')
+  console.log('ok  refresh RPC: all 11 providers pass exact ref/pool/id; disabled accounts refresh; failures return ok:false')
 }

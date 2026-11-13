@@ -190,8 +190,9 @@ try {
   service = await startStandalone({ dataDir, port: 0, refresh: false, logger: { warn: message => warnings.push(message), info() {} } })
   await service.ready
   key = JSON.parse(fs.readFileSync(service.keyFile)).forwardKey
-  await check('十个真实渠道注册，独立目录、统一模型目录和机读能力可用', async () => {
-    assert.equal(service.channels.providers.length, 10)
+  await check('十一个真实渠道注册，独立目录、统一模型目录和机读能力可用', async () => {
+    // 11 = 既有十个账号渠道 + 2026-11-13 新增的 SCNet。
+    assert.equal(service.channels.providers.length, 11)
     assert.equal(service.channels.providers.includes('opencode'), false)
     assert.equal((await rpc('account.list', { provider: 'cline' })).accounts.length, 1)
     const { value } = await api('/v1/models')
@@ -216,7 +217,10 @@ try {
       assert.equal(service.channels.providers.includes(provider), false)
       assert.equal(models.some(row => row.id.startsWith(`${provider}/`)), false)
     }
-    const before = requests.length
+    // 插件市场索引（ofm-extensions 的 registry.json/sig）由宿主后台异步刷新，与
+    // 「渠道是否触达上游」无关；把它计入断言会让这条用例随初始化时序抖动。
+    const upstreamOnly = (rows) => rows.filter(row => !row.pathname.includes('ofm-extensions'))
+    const before = upstreamOnly(requests).length
     for (const provider of unsupportedProviders) {
       const accountId = `${provider}-fixture`
       for (const [method, payload] of [
@@ -237,7 +241,7 @@ try {
         ['/v1/messages', { max_tokens: 16, messages: [{ role: 'user', content: 'unsupported fixture' }] }],
       ]) assert.equal((await api(endpoint, { model: `${provider}/fixture-free`, ...payload })).response.status, 404)
     }
-    assert.equal(requests.length, before, '未知渠道请求不得触达任何上游端点')
+    assert.equal(upstreamOnly(requests).length, before, '未知渠道请求不得触达任何上游端点')
     assertUnsupportedDataPreserved()
   })
   await check('同源鉴权覆盖渠道与 EAC 操作，跨域和无密钥访问失败', async () => {

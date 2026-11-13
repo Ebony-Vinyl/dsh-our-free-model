@@ -69,7 +69,7 @@
 - **路由（降级链）**——把任意车道的模型串成一条命名链，以 `combo:<name>` 作为虚拟模型出现在选择器与网关上；`fallback` 固定从链首开始，`round-robin` 轮换起点并连续 N 轮粘滞。链接在输出任何正文之前失败会被整段丢弃，切换对调用方不可见；思考增量不算正文，因此「想了很久才撞上配额墙」正是降级最有价值的场景。
 - **本地网关原生说 Anthropic**——新增 `POST /v1/messages`（流式与非流式，含 thinking / tool_use 块、真实 stop_reason 与流内 error 事件）与 `POST /v1/messages/count_tokens`（本地估算）；`/v1/models` 广播全部车道，含聚合行与链路。网关页新增「接入客户端」分区，按实际绑定的端口与真实要求的密钥生成 Claude Code、Codex、OpenAI SDK、Anthropic SDK、curl 与局域网的可复制配方。
 - **接口具备鉴权围栏**——插件 HTTP 路由优先级高于内核 `/api`，因此内置与内核一致的信任检查（优先复用 composition 的 connection 服务，缺失时退回结构化围栏）。
-- **十个账号渠道，一体接入**——LobsterAI（有道）、Qoder / Qoder 中国版（阿里系）、TRAE（字节）、Cline、Loomy（讯飞）、Raccoon（商汤）、MiniMax Code、ZCode（智谱）、Gemini（Google Code Assist）十个账号渠道开箱即用，外加 Kilo 免费车道与原匿名免费通道；OpenCode 账号渠道在本插件中默认停用。各渠道的登录流程、账号池、每日积分领取、模型黑名单与其本地 OpenAI 网关（Chat Completions + Responses，默认 `127.0.0.1:8326`）原样挂载与运行；凭据只写入宿主凭据库，浏览器永远拿不到明文。
+- **十一个账号渠道，一体接入**——LobsterAI（有道）、Qoder / Qoder 中国版（阿里系）、TRAE（字节）、Cline、Loomy（讯飞）、Raccoon（商汤）、MiniMax Code、ZCode（智谱）、Gemini（Google Code Assist）、SCNet（超算互联网，手机号 + 图形验证码短信登录，免费 `SCNet-Max`）十一个账号渠道开箱即用，外加 Kilo 免费车道与原匿名免费通道；OpenCode 账号渠道在本插件中默认停用。各渠道的登录流程、账号池、每日积分领取、模型黑名单与其本地 OpenAI 网关（Chat Completions + Responses，默认 `127.0.0.1:8326`）原样挂载与运行；凭据只写入宿主凭据库，浏览器永远拿不到明文。
 - **视觉特效按需开启**——设置页顶部“视觉特效”开关默认关闭，鱼缸和业务功能始终保留；开启后恢复背景光晕、毛玻璃与装饰动画，选择仅保存在当前浏览器。
 - **OFM 插件中心：渠道 / 增强 / 页面统一市场**——新仓库 [Ebony-Vinyl/ofm-extensions](https://github.com/Ebony-Vinyl/ofm-extensions) 承载社区插件：Ed25519 签名索引、安装即校验 SHA-256 与静态扫描、运行在 Worker VM 沙箱（唯一 import 是受控的 `ofm:sdk`，网络只放行 manifest 声明的域名，密钥只进不出，每个 hook 带超时熔断）。渠道插件装上即出现在模型选择器（支持 `replaces` 接管内置车道），增强插件以 `onRequest`/`onModels`/`onUsage` 挂进请求链；页面插件在侧边栏贡献一个沙箱 iframe 页面，只能通过受控消息桥读写自己的配置与存储。清单 v1 与 v2 双兼容；内置账号渠道包、聚合渠道目录、客户端启动器、资源库格式与模型工作台也以 built-in 描述符登记在同一插件中心，不可卸载但可查看贡献。发现、安装、更新、启停、配置、密钥、自检、卸载全部在控制台「插件中心」完成；开发者模式可安装本地未签名包（显式风险确认、未验证徽标、同一沙箱）。市场页另带封面横幅、类型色带与骨架屏，详情弹层含签名源码直达链接、发布说明（changelog）与权限清单；索引由宿主后台定时刷新，已装插件的清单可一键导出 / 导入（JSON，不含密钥）用于迁移。模型工作台（magpie）车道的推理请求也接入同一增强钩子链（onRequest），并默认经宿主可替换的 fetch 出站，本机代理类插件（如上下文扩展）重新可见；OFM_ENGINE_PRIVATE_FETCH=1 可回到私有直连。
 - **免费车道额度断路器与出口代理（issue #708/#767 的完整回答）**——上游按出口 IP 计免费配额，一次真实 429 即开窗（`Retry-After` 缺省 6 小时），窗口内本插件本地拒绝新回合、不再向墙上送请求；`FreeTierError` 单独锁道。手动测试全部保留（清单刷新/单模型检测/测速），自动探测依旧禁用——状态从真实回合被动学习。车道可配独立出口代理（http/https/socks5），也认 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` 环境变量；「换出口后重试一次」一键清窗，「测试出口」打第三方回显不花配额。请求形状对齐官方 2.2.3 客户端（`traceparent`/`b3`/通配 `accept`），并移植 opencode2api v1.4.7 的工具名绑定、幽灵调用清理与标题请求免整形。
@@ -109,7 +109,7 @@ npm run start:standalone
 ```
 
 独立服务默认使用 `~/.our-free-model` 和端口 `18900`，拥有自己的 API Key，
-不读取插件数据。支持匿名/Kilo、EAC 和十个账号渠道，提供
+不读取插件数据。支持匿名/Kilo、EAC 和十一个账号渠道，提供
 Chat Completions、Responses API，以及独立网页管理（概览、模型、用量、聚合渠道、路由、
 EAC、客户端与订阅、资源库、API 接入、设置与**插件中心**）。
 插件中心与桌面端共用一套签名市场：渠道、增强与页面插件在此安装、启停、配置与卸载，

@@ -357,6 +357,14 @@ const REF_PREFIX_TO_PROVIDER: ReadonlyArray<readonly [string, string]> = [
   // `tests/unit/channel-pack-store.spec.ts` 的「恢复表覆盖客户端 PROVIDERS 的全部
   // provider（从真实清单派生）」用例锁死 —— 合并新增 provider 前**先跑它**。
   ['GEMINI', 'gemini'],
+  // ⚠️ 第 15 个 provider（scnet，2026-11-13 新增）—— 同款坑第 **四** 次：
+  // 漏加 = `SCNET_ACCOUNT_*` 的账号在 `state.json` 缺失时静默消失（凭据还在
+  // `.credentials.yaml` 里，只是索引建不出来）。
+  // 注意：前缀是 `SCNETOFM`（**不带连字符**）—— DSH 的凭据 ref 名只允许
+  // `/^[A-Za-z_][A-Za-z0-9_]*$/`，写 `SCNET-OFM_*` 会让 credentialRef() 直接抛
+  // TypeError，表现为「登录页说成功、但凭据一行都没落盘」。
+  // 也不能是 `SCNET`/`scnet` —— 那个路由名属于独立插件 dsh-scnet-connect。
+  ['SCNETOFM', 'scnet-ofm'],
 ]
 
 /** 已实现渠道的统一判定，拒绝未知渠道且不依赖旧产品黑名单。 */
