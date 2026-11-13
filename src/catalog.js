@@ -307,6 +307,7 @@ const EAC_DISPLAY_NAMES = {
   'z-ai/glm-5.3': 'GLM 5.3',
   'z-ai/glm-5.3-flash': 'GLM 5.3 Flash',
   'mistralai/mistral-large-4-1t-a52b': 'Mistral Large 4 1T A52B',
+  'minimaxai/minimax-m3.1-flash': 'MiniMax M3.1 Flash',
 }
 
 /**
@@ -416,6 +417,22 @@ const EAC_CAPABILITIES = [
     vision: false, reasoning: true, contextWindow: 131072, maxOutput: 32768,
     efforts: ['low', 'medium', 'high'], effortDefault: 'medium',
     effortPatch: { reasoning_effort: '$effort' },
+  },
+  {
+    // MiniMax M3.1 Flash advertises a 1M window on the vendor page, but this
+    // lane's relay enforces 256K: measured 2026-11-04, a request reporting
+    // 261679 prompt tokens completed while ~262k answered "Invalid request".
+    // Token-dense and token-sparse payloads failed at the same token count, so
+    // the ceiling is tokens, not bytes. Declaring the smaller, real figure is
+    // what keeps the harness from sending prompts the relay refuses.
+    //
+    // Without this row the generic fallback declared 131072, which under
+    // compaction-basic (thresholdRatio 0.8, headroomTokens 65536, 32768
+    // completion reservation) collapsed the pressure threshold to 32768
+    // tokens — a quarter of the window — so ordinary sessions compacted
+    // constantly at ~20-25% context.
+    match: /^minimaxai\/minimax-m3\.1-flash/,
+    vision: false, reasoning: true, contextWindow: 262144, maxOutput: 32768,
   },
 ]
 

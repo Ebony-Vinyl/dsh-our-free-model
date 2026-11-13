@@ -814,6 +814,26 @@ const { createGatewayServer, resetAnalytics, poolProbe } = await import('../work
   check('display names never leak the org prefix', roster.every(entry => !entry.name.includes('deepseek-ai/') && !entry.name.includes('moonshotai/')), true)
 }
 
+// ── declared capacity reaches the row, not just the fallback ────────────────
+{
+  // Capacity drives the harness's compaction threshold, so a fallback narrower
+  // than the relay silently turns ordinary sessions into loops of continual
+  // summarisation. MiniMax M3.1 Flash is the case that proved it: on the
+  // generic 131072 fallback the threshold collapsed to a quarter of the window
+  // and sessions compacted at ~20-25% context. The vendor advertises 1M, but
+  // this relay stops at 256K — measured 2026-11-04, a prompt reporting 261679
+  // tokens completes while ~262k answers "Invalid request" — so the row
+  // declares the relay's real ceiling rather than the vendor's.
+  const roster = buildEacCatalog(['minimaxai/minimax-m3.1-flash'])
+  const row = roster[0]
+  check('an id with a declared capacity does not take the generic fallback',
+    [row.contextWindow, row.maxOutput], [262144, 32768])
+  check('that capacity is wider than the fallback the lane would otherwise assume',
+    row.contextWindow > 131072, true)
+  check('and the row still reads as its own model under the channel tag',
+    row.name, 'EAC MiniMax M3.1 Flash')
+}
+
 // ── effort menus and their wire patches (NVIDIA Build declaration shape) ────
 {
   const { effortsFor, effortPatchFor, budgetFor } = await import('../src/effort.js')
