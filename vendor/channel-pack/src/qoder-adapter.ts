@@ -444,6 +444,31 @@ export interface QoderAdapterOptions {
   resolveCredential: (modelId?: string) => Promise<QoderCredential | undefined>
   /** 静默续期凭据。 */
   refresh: (accountId?: string) => Promise<void>
+  /**
+   * ★ 积分感知选号 hook（2026-11-13）：额度/排队换号时优先问它。
+   *
+   * ## 为什么存在
+   *
+   * Qoder 的领取积分「30 天有效」（campaigns 的 `expiresAt`）、专用资源包
+   * 也有到期时间；而池的 `getAvailableAccount` 只按 `enabled` + 限流过滤，
+   * 不看余额 —— 临期积分会被手动顺序里靠前的常规号挡住，到期即焚。
+   * 宿主（index.ts）在这里注入 `CreditBalanceSelector.pick` 的包装。
+   *
+   * ## 契约（与 `TraeAdapterOptions.nextAccount` 同型）
+   *
+   * - `modelId` 参与候选过滤（Qoder 额度是「模型 + 账号」维度，见
+   *   `switchAccountOnQuota`）；`tried` 必须排除 —— 不排除会在 A/B 间空转；
+   * - 返回 `undefined` = 「按原逻辑从池里取」：选号器查不到余额（失败开放）
+   *   或没有更优候选时返回 undefined，本适配器退回既有池路径；
+   * - 抛错 = 选号器故障：同样退回池路径（捕获），不让优化环节破坏请求。
+   *
+   * ⚠️ hook 返回的凭据**仍会经过 `ensureUid`**（见两个调用点）：
+   * 旧凭据缺 uid 时 WASM 会产出签名无效的请求，hook 不能绕过补齐。
+   */
+  nextAccount?: (
+    modelId: string,
+    tried: ReadonlySet<string>,
+  ) => Promise<{ accountId: string; credential: QoderCredential } | undefined>
   /** 多账号池（用于限流时切换账号与模型黑名单）。 */
   accountPool?: AccountPool
   /**
@@ -1065,6 +1090,21 @@ export class QoderAdapter extends LlmAdapter {
     //
     // ⚠️ 必须传 `tried`：池按「限流重置时间最早到期」排序，**刚失败的账号可能
     // 仍排第一**，不排除就会拿回同一个、命中下面的检查而立即放弃切换。
+    //
+    // 积分感知 hook（nextAccount）优先：返回临期分档后的最优候选；
+    // 未提供 / 返回 undefined / 抛错 → 退回池路径（失败开放，语义与
+    // 引入 hook 前逐字节一致）。hook 的凭据同样过 `ensureUid`。
+    if (this.options.nextAccount !== undefined) {
+      try {
+        const picked = await this.options.nextAccount(options.model, tried)
+        if (picked !== undefined) {
+          tried.add(picked.accountId)
+          return { credential: await this.ensureUid(picked.credential), accountId: picked.accountId }
+        }
+      } catch {
+        // 选号器故障不影响换号：落到池路径。
+      }
+    }
 
     const next = await pool.getAvailableAccount(this.product.id, options.model, tried)
     if (next === null || tried.has(next.entry.id)) return undefined
@@ -1112,6 +1152,24 @@ export class QoderAdapter extends LlmAdapter {
     const pool = this.options.accountPool
     if (pool === undefined) return undefined
     if (activeAccountId !== undefined && activeAccountId.length > 0) tried.add(activeAccountId)
+
+    // 积分感知 hook 优先（与 switchAccountOnQuota 同款失败开放语义）。
+    // hook 候选同样要过「坏凭据跳过 / 同 token 跳过」防御 —— 循环里处理。
+    if (this.options.nextAccount !== undefined) {
+      try {
+        const picked = await this.options.nextAccount(options.model, tried)
+        if (picked !== undefined) {
+          tried.add(picked.accountId)
+          if (isUsableQoderCredential(picked.credential)
+            && picked.credential.access_token !== activeCredential.access_token) {
+            return { credential: await this.ensureUid(picked.credential), accountId: picked.accountId }
+          }
+          // hook 候选不可用 → 不再回问 hook（tried 已含它），落到池路径继续。
+        }
+      } catch {
+        // 选号器故障不影响换号：落到池路径。
+      }
+    }
 
     for (;;) {
       const next = await pool.getAvailableAccount(this.product.id, options.model, tried)

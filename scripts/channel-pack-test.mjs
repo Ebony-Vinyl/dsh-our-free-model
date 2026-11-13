@@ -330,6 +330,33 @@ try {
 async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const { verifyChannelQueueRotation } = await import('./channel-queue-rotation-test.mjs')
   await verifyChannelQueueRotation()
+  // 积分路由（2026-11-13）：分档/选号器在独立套件 credit-routing 覆盖；
+  // 此处跑需要 kernel 替身的适配器接线用例（TRAE/Qoder nextAccount hook
+  // 与池回退）。池替身补齐 queue-rotation 反查所需的方法。
+  {
+    const { verifyCreditRoutingWiring } = await import('./credit-routing-test.mjs')
+    await verifyCreditRoutingWiring({
+      makePool: (provider, ids) => {
+        const rows = ids.map(id => ({ entry: { id, provider, enabled: true, credentialRef: `ref-${id}`, modelRateLimits: {} }, credential: null }))
+        return {
+          rows,
+          listAccountsByProvider: id => rows.filter(row => row.entry.provider === id).map(row => row.entry),
+          getAvailableAccount: async (id, model, excluded = new Set()) => rows.find(row => row.entry.provider === id && row.entry.enabled
+            && !excluded.has(row.entry.id) && !(row.entry.modelRateLimits[model] > Date.now())) ?? null,
+          findAccountIdByCredential: async (id, token) => rows.find(row => row.entry.provider === id && row.credential?.access_token === token)?.entry.id ?? '',
+          findAccountIdByIdentityField: async (id, field, token) => rows.find(row => row.entry.provider === id && row.credential?.[field] === token)?.entry.id ?? '',
+        }
+      },
+      collect: async iterable => { const result = []; for await (const chunk of iterable) result.push(chunk); return result },
+      // TRAE 的 SSE 是 SOLO 自定义格式（event: output / done），与 OpenAI 帧不同；
+      // 形状对齐 channel-queue-rotation-test.mjs 的 trae 分支。
+      success: () => new Response(
+        'event: output\ndata: ' + JSON.stringify({ response: 'ok' }) + '\n\n'
+        + 'event: done\ndata: ' + JSON.stringify({ finish_reason: 'stop' }) + '\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
+    })
+  }
   const { verifyChannelPrFixes } = await import('./channel-pr-fixes-test.mjs')
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
