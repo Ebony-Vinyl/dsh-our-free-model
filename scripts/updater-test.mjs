@@ -16,7 +16,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
-import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, parseUploadPackRefs, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, isPackageManagerOwned, profileDirOf, signManifest, verifyManifestSignature, stableStringify, DEFAULT_MANIFEST_SOURCES, PINNED_MANIFEST_PUBLIC_KEY, packageUsesHardLinks, installationIsManaged } from '../src/updater.js'
+import { parseVersion, compareVersions, parseManifest, fileUrlOf, downloadManifest, parseUploadPackRefs, PluginUpdater, stageRelease, verifyStaged, backupPackage, restoreBackup, installStaged, verifyInstalled, isPackageManagerOwned, profileDirOf, stageTimeoutFor, signManifest, verifyManifestSignature, stableStringify, DEFAULT_MANIFEST_SOURCES, PINNED_MANIFEST_PUBLIC_KEY, packageUsesHardLinks, installationIsManaged } from '../src/updater.js'
 import { entryUrlOf, packageUrlOf, selfReload } from '../src/reload.js'
 const CONTROLLED_DEFAULTS = ['http://127.0.0.1:1/never.json']
 
@@ -1034,6 +1034,35 @@ check('a plain distribution: self install is not pnpm-owned', () => {
     fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      some-other-plugin:\n        specifier: 1.0.0\n        version: 1.0.0\n")
     assert.equal(isPackageManagerOwned(pkg), false, 'another package in the lockfile is not a signal')
   } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('a large file gets a size-scaled download window (issue #786)', () => {
+  assert.equal(stageTimeoutFor(0, 30000), 30000, 'an unknown size keeps the configured budget')
+  assert.equal(stageTimeoutFor(1024, 30000), 30000, 'a small file is still allowed the configured budget')
+  const sized = stageTimeoutFor(32 * 1024 * 1024, 30000)
+  assert.ok(sized > 30000, 'a 32 MB file must not be held to a flat 30 s window')
+  assert.ok(sized <= 10 * 60 * 1000, 'the scaled budget stays bounded')
+})
+await checkAsync('stageRelease scales the window per file so a slow large file still stages', async () => {
+  const body = Buffer.alloc(700 * 1024, 7)
+  const digest = crypto.createHash('sha256').update(body).digest('hex')
+  const pkgBody = Buffer.from(JSON.stringify({ name: 'dsh-our-free-model', version: '9.9.9' }))
+  const pkgDigest = crypto.createHash('sha256').update(pkgBody).digest('hex')
+  const manifest = parseManifest({ version: '9.9.9', base: '../', files: [
+    { path: 'package.json', size: pkgBody.length, sha256: pkgDigest },
+    { path: 'assets/engine.bin', size: body.length, sha256: digest },
+  ] })
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-stage-'))
+  const url = `https://cdn.jsdelivr.net/gh/Ebony-Vinyl/dsh-our-free-model/${'a'.repeat(40)}/feed/manifest.json`
+  // 300 ms is above the configured 100 ms budget and below the scaled window.
+  const fetchImpl = async (url) => {
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const bytes = String(url).includes('package.json') ? pkgBody : body
+    return { ok: true, status: 200, arrayBuffer: async () => bytes }
+  }
+  try {
+    await stageRelease({ manifest, manifestUrl: url, stageDir: data, fetchImpl, timeoutMs: 100 })
+    assert.equal(fs.readFileSync(path.join(data, 'assets', 'engine.bin')).length, body.length)
+  } finally { fs.rmSync(data, { recursive: true, force: true }) }
 })
 check('a link: specifier is not byte ownership (pnpm owns the junction, not the files)', () => {
   // The safe way to keep `distribution: self` next to a `dependencies` entry:
