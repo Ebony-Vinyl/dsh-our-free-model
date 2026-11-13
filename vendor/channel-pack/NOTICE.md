@@ -3,7 +3,14 @@
 本目录基于 [Jet（iJetLi）](https://gitee.com/iJetLi) 发布的 MIT 渠道实现
 吸收并裁剪的渠道实现，由 `dsh-our-free-model` 的 Host 半身在独立 fiber 上挂载，
 提供 LobsterAI、Qoder、Qoder 中国版、TRAE、Cline、Loomy、Raccoon、MiniMax Code、ZCode、Gemini 十个账号渠道的
-登录流程、账号池、积分领取、模型黑名单与本地 OpenAI 网关可用。OFM 挂载时关闭上游 OpenCode 账号接入，原有匿名免费车道保持独立。
+登录流程、账号池、积分领取、模型黑名单与本地 OpenAI 网关可用。
+
+OFM 另在本目录内**新增**第十一个渠道 SCNet（超算互联网）：`src/scnet-*.ts` 与
+`src/scnet-login-page.ts` 为本地新增文件（非上游代码），登录走平台网页短信 +
+图形验证码（未注册手机号自动注册），推理走 `https://api.scnet.cn/api/llm/v1`
+的 OpenAI 兼容端点。它们与上游十个渠道共用同一套 product/auth/adapter/RPC 契约。
+
+OFM 挂载时关闭上游 OpenCode 账号接入，原有匿名免费车道保持独立。
 目录名与内部标识符在本插件的再构建中统一改为 channel-pack；出处与许可证不变。
 
 - 上游作者：Jet（https://gitee.com/iJetLi）

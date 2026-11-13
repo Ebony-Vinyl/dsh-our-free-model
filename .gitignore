@@ -43,3 +43,6 @@ packages/desktop/src-tauri/.node-license-cache/
 packages/desktop/node_modules/
 
 _audit/
+
+# 本地研究笔记（渠道接入调研产出，不进仓库）。
+.research/

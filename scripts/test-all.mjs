@@ -77,6 +77,8 @@ const suites = [
   ['chan-relay', 'chan-relay-test.mjs', []],
   ['channel-pack', 'channel-pack-test.mjs', []],
   ['channel-pack-gate', 'channel-pack-gate-test.mjs', []],
+  // SCNet 渠道：网页登录状态机（图形验证码/自动注册）、换 Key、本地登录页端到端、模型目录。
+  ['scnet-channel', 'scnet-channel-test.mjs', []],
   ['auto-checkin-tick', 'auto-checkin-tick-test.mjs', []],
   ['channel-source', 'channel-pack-test.mjs', ['--source', '--channels-only']],
   ['channel-network', 'channel-network-test.mjs', []],
