@@ -45,6 +45,7 @@ OFM_ESBUILD_DIR=/tmp/ofm-channel-build npm run channel-pack
 - 打包入口改为 `src/index.ts`；宿主模块仍保持外部，undici 内联。
 - 再构建使用 esbuild 0.25.12，undici 8.12.2 使用根目录锁文件，与插件和独立端的运行产物保持一致。
 - `src/credential-expiry.ts` 与 `src/credit-expiry-window.ts` 提供渠道间共享的纯函数。积分临时窗口默认 15 天，可通过 `DSH_CREDIT_EXPIRING_WINDOW_DAYS` 显式设置为非负天数。
+- `src/credit-routing-rank.ts` 与 `src/credit-balance-selector.ts`：积分感知选号（2026-11-13）。TRAE / Qoder / Qodercn 换号时按「临期积分优先」分档挑下一号；60s 成功 / 5s 失败双 TTL 缓存；**失败开放** —— 查不到余额或无更优候选时退回账号池原路径，不拦截请求（与 Loomy 的前置阻断语义不同：这三家的额度耗尽显式报错，反应式换号已兜底）。`src/trae-adapter.ts` / `src/qoder-adapter.ts` 的可选 `nextAccount` hook、`src/index.ts` 的三实例注入。
 
 本目录**不含**上游的浏览器半身（`plugin-src/client`）与其设置页——
 界面由 `dsh-our-free-model` 自己的三页界面取代，渠道操作经上游的
