@@ -79,6 +79,45 @@ export class RefreshTokenExpiredError extends Error {
   }
 }
 
+/**
+ * 凭据探测**暂时无法判定**（网络错误 / HTTP 5xx / 非 JSON / 408 / 429）。
+ *
+ * ⚠️ 这不是「凭据已失效」：把它当成 `RefreshTokenExpiredError` 会让一次上游
+ * 抖动直接要求用户重新短信登录；把它当成普通 `Error` 又会让宿主把整轮聊天
+ * 归为 `UNKNOWN` 且不重试（issue #752）。
+ *
+ * 故这里给一个**明确的可重试错误**：`code` 取宿主认识的 `TRANSPORT`，
+ * 同时保留专用 `name` 供调用方精确捕获。正常聊天路径由 `index.ts` 的
+ * Loomy refresh 回调捕获它并返回已有凭据，让真正的 chat 请求去面对上游；
+ * 万一它逃到宿主，也会因为 `TRANSPORT` 进入常规重试白名单。
+ */
+export class LoomyProbeUnavailableError extends Error {
+  /** 宿主可重试错误码（`DEFAULT_RETRYABLE_CODES` 含 `TRANSPORT`）。 */
+  readonly code = 'TRANSPORT'
+  /** 语义标记：这是可重试的瞬时故障，不是凭据终态。 */
+  readonly retryable = true
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'LoomyProbeUnavailableError'
+  }
+}
+
+/**
+ * 探测瞬时失败的重试间隔（毫秒）。
+ *
+ * 3 次尝试、两次退避（200ms / 600ms），总等待 800ms —— 比一次正常请求还短，
+ * 不会把聊天拖成分钟级；更长的退避留给宿主对 chat 请求自己的重试策略。
+ */
+const LOOMY_PROBE_RETRY_DELAYS_MS = [200, 600] as const
+
+/** 单次探测的判定结果。 */
+type LoomyProbeOutcome =
+  | { kind: 'ok' }
+  | { kind: 'expired'; message: string }
+  | { kind: 'transient'; message: string }
+  | { kind: 'fatal'; message: string }
+
 /** 一次成功登录的结果。 */
 export interface LoomyLoginResult {
   /** 已存储的凭据 JSON 字符串。 */
@@ -315,6 +354,11 @@ export class LoomyAuth extends Service {
    * 「换一份新凭据」，在这里只能是「确认这份凭据还活着」。
    * 失效时抛 `RefreshTokenExpiredError`，让 UI 明确提示重新登录，
    * 而不是静默假装成功。
+   *
+   * @throws {RefreshTokenExpiredError} 明确的登录失效（业务码 `100002`）。
+   * @throws {LoomyProbeUnavailableError} 重试后仍无法判定（网络 / 5xx /
+   *   非 JSON / 408 / 429）。调用方**不要**据此要求重新登录；聊天路径应保留
+   *   已有凭据，让上游的 chat 请求按它自己的重试策略处理。
    */
   async refresh(): Promise<void> {
     const credential = await this.resolveDefaultCredential()
@@ -337,6 +381,10 @@ export class LoomyAuth extends Service {
    * UI 卡片读的正是池值。Loomy 虽不能续期（凭据里的 exp 不会变），但池值
    * 可能与凭据实际 exp 不一致（历史写入偏差），对账能让显示恢复正确。
    * 只回写 `expiresAt`，见 `LOOMY_EXPIRY_ACCESSORS` 的说明。
+   *
+   * @throws {RefreshTokenExpiredError} 明确的登录失效（业务码 `100002`）。
+   * @throws {LoomyProbeUnavailableError} 重试后仍无法判定；此时**不**回写
+   *   账号池有效期，避免把“没验证到”伪装成“已验证”。
    */
   async refreshAccountCredential(
     refName: string,
@@ -366,9 +414,53 @@ export class LoomyAuth extends Service {
    * 选 `GET /points/records?pageSize=1` 的理由：它是最便宜的只读端点
    * （不消耗积分、不产生任何副作用），且认证语义与其它业务端点一致。
    *
+   * ## 为什么瞬时失败要重试，且最终不能抛普通 Error（issue #752）
+   *
+   * 探测端点是普通业务接口：上游 502 会回 HTML、网关超时会直接断连接。
+   * 这些**都没有回答“凭据是否有效”**，既不能判失效，也不该让整轮聊天在
+   * 取凭据阶段就终止 —— 同一时段的 chat 502 本来会被宿主重试 5 次。
+   *
+   * 故：
+   * - 网络错误 / 5xx / 非 JSON / 408 / 429：短退避重试，仍失败则抛
+   *   {@link LoomyProbeUnavailableError}（明确的“未判定”而非“已失效”）；
+   * - `100002`：立即抛 {@link RefreshTokenExpiredError}，不重试；
+   * - 401/403 或其它确定的业务错误：立即抛普通 Error，照旧失败。
+   *
    * @throws {RefreshTokenExpiredError} 收到 `100002`（登录已失效）。
+   * @throws {LoomyProbeUnavailableError} 重试后仍无法判定凭据有效性。
    */
   private async probeCredential(credential: LoomyCredential): Promise<void> {
+    const attempts = LOOMY_PROBE_RETRY_DELAYS_MS.length + 1
+    let lastReason = '未知原因'
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (attempt > 1) {
+        const delayMs = LOOMY_PROBE_RETRY_DELAYS_MS[attempt - 2]!
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+
+      const outcome = await this.probeCredentialOnce(credential)
+      if (outcome.kind === 'ok') return
+      if (outcome.kind === 'expired') throw new RefreshTokenExpiredError(outcome.message)
+      if (outcome.kind === 'fatal') throw new Error(outcome.message)
+
+      lastReason = outcome.message
+      if (attempt < attempts) {
+        this.ctx.logger?.warn?.(
+          `[loomy] 凭据探测第 ${attempt}/${attempts} 次暂时失败（${outcome.message}），`
+          + `${LOOMY_PROBE_RETRY_DELAYS_MS[attempt - 1]}ms 后重试`,
+        )
+      }
+    }
+
+    throw new LoomyProbeUnavailableError(
+      `Loomy 凭据探测暂时不可用（已尝试 ${attempts} 次）：${lastReason}。`
+      + '未判定凭据失效，稍后重试即可。',
+    )
+  }
+
+  /** 执行单次探测并分类结果（不重试、不抛错）。 */
+  private async probeCredentialOnce(credential: LoomyCredential): Promise<LoomyProbeOutcome> {
     let response: Response
     try {
       response = await this.fetchImpl(
@@ -381,24 +473,56 @@ export class LoomyAuth extends Service {
       )
     } catch (error) {
       // 传输层失败**不能**判为终态 —— 网络抖动不该让用户重新登录。
-      throw new Error(`Loomy 凭据探测网络失败：${error instanceof Error ? error.message : String(error)}`)
+      return {
+        kind: 'transient',
+        message: `网络失败：${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+
+    const status = response.status
+    if (status >= 500 || status === 408 || status === 429) {
+      // 网关/限流层没有回答“凭据是否有效”。先释放响应体再重试。
+      try { await response.body?.cancel() } catch {}
+      return { kind: 'transient', message: `HTTP ${status}` }
     }
 
     let parsed: unknown
     try {
       parsed = await response.json()
     } catch {
-      throw new Error(`Loomy 凭据探测响应不是 JSON（HTTP ${response.status}）`)
+      if (status === 401 || status === 403) {
+        // 明确的认证失败：不重试，也不降级成“继续聊天”。
+        return { kind: 'fatal', message: `Loomy 凭据探测被拒绝（HTTP ${status}），请重新登录` }
+      }
+      // 200/4xx 却回 HTML（代理页、登录页）同样无法判定，按瞬时故障处理。
+      return { kind: 'transient', message: `响应不是 JSON（HTTP ${status}）` }
     }
 
     const envelope = parseLoomyEnvelope(parsed)
-    if (envelope.ok) return
+    if (status === 401 || status === 403) {
+      // ⚠️ 只有业务码 100002 才代表登录失效（Loomy 的业务失败恒 HTTP 200，
+      // 故 401/403 只可能来自网关/中间层）。HTTP 401 即使 body 自称成功也不能信。
+      return envelope.code === LOOMY_AUTH_ERROR_CODE
+        ? { kind: 'expired', message: `Loomy 凭证已失效，请重新登录（${envelope.message}）` }
+        : { kind: 'fatal', message: `Loomy 凭据探测被拒绝（HTTP ${status}）：${envelope.message}` }
+    }
+
+    // 合法 JSON 但缺业务码（数组、`{}`、登录页 JSON）同样没有回答“凭据是否
+    // 有效”：按瞬时故障重试，而不是让整轮聊天死在一个无法判定的响应上。
+    if (envelope.code.length === 0) {
+      return {
+        kind: 'transient',
+        message: `响应缺少可判定的业务码（HTTP ${status}）：${envelope.message}`,
+      }
+    }
+
+    if (envelope.ok) return { kind: 'ok' }
     if (envelope.code === LOOMY_AUTH_ERROR_CODE) {
       // ⚠️ Loomy 无法续期：这里只能明确报「需重新登录」，
       // 不能像其余 provider 那样尝试换新凭据。
-      throw new RefreshTokenExpiredError(`Loomy 凭证已失效，请重新登录（${envelope.message}）`)
+      return { kind: 'expired', message: `Loomy 凭证已失效，请重新登录（${envelope.message}）` }
     }
-    throw new Error(`Loomy 凭据探测失败：${envelope.message}`)
+    return { kind: 'fatal', message: `Loomy 凭据探测失败：${envelope.message}` }
   }
 
   /**
@@ -452,6 +576,11 @@ export class LoomyAuth extends Service {
         if (error instanceof RefreshTokenExpiredError) {
           this.ctx.logger?.warn?.(
             `[loomy] 账号 ${entry.id} 的凭证已失效（Loomy 无续期端点，需重新登录）`,
+          )
+        } else if (error instanceof LoomyProbeUnavailableError) {
+          // “没验证到”不是“已失效”：定时健康检查只记日志，绝不改账号状态。
+          this.ctx.logger?.warn?.(
+            `[loomy] 账号 ${entry.id} 凭据探测暂时不可用（未判定失效）：${error.message}`,
           )
         } else {
           // 非终态失败（网络抖动、5xx）也必须留日志：曾经完全静默的实现

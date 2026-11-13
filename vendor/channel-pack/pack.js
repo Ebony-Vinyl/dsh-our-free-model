@@ -41592,6 +41592,20 @@ var RACCOON = {
 };
 
 // vendor/channel-pack/src/raccoon-adapter.ts
+var RATE_LIMIT_DEFAULT_COOLDOWN_MS = 6e4;
+var RATE_LIMIT_MAX_COOLDOWN_MS = 15 * 6e4;
+function rateLimitCooldownFromHeaders(headers) {
+  const parsed = retryAfterMsFromResponse(headers);
+  const requested = parsed !== void 0 && parsed > 0 ? parsed : RATE_LIMIT_DEFAULT_COOLDOWN_MS;
+  return Math.min(requested, RATE_LIMIT_MAX_COOLDOWN_MS);
+}
+function rateLimitCooldownFromError(error) {
+  const requested = error.failure?.providerRetryAfterMs;
+  if (requested === void 0 || !Number.isFinite(requested) || requested <= 0) {
+    return RATE_LIMIT_DEFAULT_COOLDOWN_MS;
+  }
+  return Math.min(requested, RATE_LIMIT_MAX_COOLDOWN_MS);
+}
 function isQuotaError(data) {
   const error = typeof data.error === "object" && data.error !== null ? data.error : data;
   return String(error.code ?? data.code) === "402" || /积分不足|余额不足|insufficient[_\s]+(?:points|balance|credits)/i.test(
@@ -41846,10 +41860,14 @@ var RaccoonAdapter = class extends LlmAdapter6 {
             quota ||= isQuotaError(JSON.parse(errorText));
           } catch {
           }
+          const retryAfterMs = !quota && response.status === 429 ? rateLimitCooldownFromHeaders(response.headers) : void 0;
           throw new LlmError11(
             `raccoon: ${errorDetail2(errorText)}`,
             quota ? "QUOTA_EXCEEDED" : httpErrorCode2(response.status),
-            { status: response.status }
+            {
+              status: response.status,
+              ...retryAfterMs === void 0 ? {} : { providerRetryAfterMs: retryAfterMs }
+            }
           );
         }
         for await (const chunk of consumeOpenAiSse(response, { signal: options.signal }, {
@@ -41864,9 +41882,15 @@ var RaccoonAdapter = class extends LlmAdapter6 {
         }
         return;
       } catch (error) {
-        if (options.signal?.aborted || !(error instanceof LlmError11) || error.code !== "QUOTA_EXCEEDED") throw error;
+        if (options.signal?.aborted || !(error instanceof LlmError11)) throw error;
+        const quota = error.code === "QUOTA_EXCEEDED";
+        if (!quota && error.code !== "RATE_LIMIT") throw error;
         if (accountId) {
-          await this.options.accountPool?.updateModelRateLimit(accountId, options.model, nextUtc8DayStartMs());
+          await this.options.accountPool?.updateModelRateLimit(
+            accountId,
+            options.model,
+            quota ? nextUtc8DayStartMs() : Date.now() + rateLimitCooldownFromError(error)
+          );
         }
         if (emitted || attempt === 2 || this.options.nextAccount === void 0) throw error;
         const next = await this.options.nextAccount(options.model, tried);
@@ -45543,6 +45567,17 @@ var RefreshTokenExpiredError5 = class extends Error {
     this.name = "RefreshTokenExpiredError";
   }
 };
+var LoomyProbeUnavailableError = class extends Error {
+  /** 宿主可重试错误码（`DEFAULT_RETRYABLE_CODES` 含 `TRANSPORT`）。 */
+  code = "TRANSPORT";
+  /** 语义标记：这是可重试的瞬时故障，不是凭据终态。 */
+  retryable = true;
+  constructor(message, options) {
+    super(message, options);
+    this.name = "LoomyProbeUnavailableError";
+  }
+};
+var LOOMY_PROBE_RETRY_DELAYS_MS = [200, 600];
 function parseCredential5(value) {
   try {
     const parsed = JSON.parse(value);
@@ -45709,6 +45744,11 @@ var LoomyAuth = class extends Service5 {
    * 「换一份新凭据」，在这里只能是「确认这份凭据还活着」。
    * 失效时抛 `RefreshTokenExpiredError`，让 UI 明确提示重新登录，
    * 而不是静默假装成功。
+   *
+   * @throws {RefreshTokenExpiredError} 明确的登录失效（业务码 `100002`）。
+   * @throws {LoomyProbeUnavailableError} 重试后仍无法判定（网络 / 5xx /
+   *   非 JSON / 408 / 429）。调用方**不要**据此要求重新登录；聊天路径应保留
+   *   已有凭据，让上游的 chat 请求按它自己的重试策略处理。
    */
   async refresh() {
     const credential = await this.resolveDefaultCredential();
@@ -45730,6 +45770,10 @@ var LoomyAuth = class extends Service5 {
    * UI 卡片读的正是池值。Loomy 虽不能续期（凭据里的 exp 不会变），但池值
    * 可能与凭据实际 exp 不一致（历史写入偏差），对账能让显示恢复正确。
    * 只回写 `expiresAt`，见 `LOOMY_EXPIRY_ACCESSORS` 的说明。
+   *
+   * @throws {RefreshTokenExpiredError} 明确的登录失效（业务码 `100002`）。
+   * @throws {LoomyProbeUnavailableError} 重试后仍无法判定；此时**不**回写
+   *   账号池有效期，避免把“没验证到”伪装成“已验证”。
    */
   async refreshAccountCredential(refName, pool, accountId) {
     const ref = credentialRef6(refName);
@@ -45754,9 +45798,46 @@ var LoomyAuth = class extends Service5 {
    * 选 `GET /points/records?pageSize=1` 的理由：它是最便宜的只读端点
    * （不消耗积分、不产生任何副作用），且认证语义与其它业务端点一致。
    *
+   * ## 为什么瞬时失败要重试，且最终不能抛普通 Error（issue #752）
+   *
+   * 探测端点是普通业务接口：上游 502 会回 HTML、网关超时会直接断连接。
+   * 这些**都没有回答“凭据是否有效”**，既不能判失效，也不该让整轮聊天在
+   * 取凭据阶段就终止 —— 同一时段的 chat 502 本来会被宿主重试 5 次。
+   *
+   * 故：
+   * - 网络错误 / 5xx / 非 JSON / 408 / 429：短退避重试，仍失败则抛
+   *   {@link LoomyProbeUnavailableError}（明确的“未判定”而非“已失效”）；
+   * - `100002`：立即抛 {@link RefreshTokenExpiredError}，不重试；
+   * - 401/403 或其它确定的业务错误：立即抛普通 Error，照旧失败。
+   *
    * @throws {RefreshTokenExpiredError} 收到 `100002`（登录已失效）。
+   * @throws {LoomyProbeUnavailableError} 重试后仍无法判定凭据有效性。
    */
   async probeCredential(credential) {
+    const attempts = LOOMY_PROBE_RETRY_DELAYS_MS.length + 1;
+    let lastReason = "\u672A\u77E5\u539F\u56E0";
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (attempt > 1) {
+        const delayMs = LOOMY_PROBE_RETRY_DELAYS_MS[attempt - 2];
+        await new Promise((resolve2) => setTimeout(resolve2, delayMs));
+      }
+      const outcome = await this.probeCredentialOnce(credential);
+      if (outcome.kind === "ok") return;
+      if (outcome.kind === "expired") throw new RefreshTokenExpiredError5(outcome.message);
+      if (outcome.kind === "fatal") throw new Error(outcome.message);
+      lastReason = outcome.message;
+      if (attempt < attempts) {
+        this.ctx.logger?.warn?.(
+          `[loomy] \u51ED\u636E\u63A2\u6D4B\u7B2C ${attempt}/${attempts} \u6B21\u6682\u65F6\u5931\u8D25\uFF08${outcome.message}\uFF09\uFF0C${LOOMY_PROBE_RETRY_DELAYS_MS[attempt - 1]}ms \u540E\u91CD\u8BD5`
+        );
+      }
+    }
+    throw new LoomyProbeUnavailableError(
+      `Loomy \u51ED\u636E\u63A2\u6D4B\u6682\u65F6\u4E0D\u53EF\u7528\uFF08\u5DF2\u5C1D\u8BD5 ${attempts} \u6B21\uFF09\uFF1A${lastReason}\u3002\u672A\u5224\u5B9A\u51ED\u636E\u5931\u6548\uFF0C\u7A0D\u540E\u91CD\u8BD5\u5373\u53EF\u3002`
+    );
+  }
+  /** 执行单次探测并分类结果（不重试、不抛错）。 */
+  async probeCredentialOnce(credential) {
     let response;
     try {
       response = await this.fetchImpl(
@@ -45768,20 +45849,43 @@ var LoomyAuth = class extends Service5 {
         }
       );
     } catch (error) {
-      throw new Error(`Loomy \u51ED\u636E\u63A2\u6D4B\u7F51\u7EDC\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
+      return {
+        kind: "transient",
+        message: `\u7F51\u7EDC\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+    const status = response.status;
+    if (status >= 500 || status === 408 || status === 429) {
+      try {
+        await response.body?.cancel();
+      } catch {
+      }
+      return { kind: "transient", message: `HTTP ${status}` };
     }
     let parsed;
     try {
       parsed = await response.json();
     } catch {
-      throw new Error(`Loomy \u51ED\u636E\u63A2\u6D4B\u54CD\u5E94\u4E0D\u662F JSON\uFF08HTTP ${response.status}\uFF09`);
+      if (status === 401 || status === 403) {
+        return { kind: "fatal", message: `Loomy \u51ED\u636E\u63A2\u6D4B\u88AB\u62D2\u7EDD\uFF08HTTP ${status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55` };
+      }
+      return { kind: "transient", message: `\u54CD\u5E94\u4E0D\u662F JSON\uFF08HTTP ${status}\uFF09` };
     }
     const envelope = parseLoomyEnvelope(parsed);
-    if (envelope.ok) return;
-    if (envelope.code === LOOMY_AUTH_ERROR_CODE) {
-      throw new RefreshTokenExpiredError5(`Loomy \u51ED\u8BC1\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\uFF08${envelope.message}\uFF09`);
+    if (status === 401 || status === 403) {
+      return envelope.code === LOOMY_AUTH_ERROR_CODE ? { kind: "expired", message: `Loomy \u51ED\u8BC1\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\uFF08${envelope.message}\uFF09` } : { kind: "fatal", message: `Loomy \u51ED\u636E\u63A2\u6D4B\u88AB\u62D2\u7EDD\uFF08HTTP ${status}\uFF09\uFF1A${envelope.message}` };
     }
-    throw new Error(`Loomy \u51ED\u636E\u63A2\u6D4B\u5931\u8D25\uFF1A${envelope.message}`);
+    if (envelope.code.length === 0) {
+      return {
+        kind: "transient",
+        message: `\u54CD\u5E94\u7F3A\u5C11\u53EF\u5224\u5B9A\u7684\u4E1A\u52A1\u7801\uFF08HTTP ${status}\uFF09\uFF1A${envelope.message}`
+      };
+    }
+    if (envelope.ok) return { kind: "ok" };
+    if (envelope.code === LOOMY_AUTH_ERROR_CODE) {
+      return { kind: "expired", message: `Loomy \u51ED\u8BC1\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\uFF08${envelope.message}\uFF09` };
+    }
+    return { kind: "fatal", message: `Loomy \u51ED\u636E\u63A2\u6D4B\u5931\u8D25\uFF1A${envelope.message}` };
   }
   /**
    * 批量探测本产品的账号。
@@ -45826,6 +45930,10 @@ var LoomyAuth = class extends Service5 {
         if (error instanceof RefreshTokenExpiredError5) {
           this.ctx.logger?.warn?.(
             `[loomy] \u8D26\u53F7 ${entry.id} \u7684\u51ED\u8BC1\u5DF2\u5931\u6548\uFF08Loomy \u65E0\u7EED\u671F\u7AEF\u70B9\uFF0C\u9700\u91CD\u65B0\u767B\u5F55\uFF09`
+          );
+        } else if (error instanceof LoomyProbeUnavailableError) {
+          this.ctx.logger?.warn?.(
+            `[loomy] \u8D26\u53F7 ${entry.id} \u51ED\u636E\u63A2\u6D4B\u6682\u65F6\u4E0D\u53EF\u7528\uFF08\u672A\u5224\u5B9A\u5931\u6548\uFF09\uFF1A${error.message}`
           );
         } else {
           this.ctx.logger?.warn?.(
@@ -65014,8 +65122,15 @@ function apply(ctx, config = {}) {
     refresh: async (accountId) => {
       const entry = accountId === void 0 ? void 0 : pool.listAccountsByProvider(LOOMY.id).find((account) => account.id === accountId);
       if (accountId !== void 0 && entry === void 0) throw new Error("loomy: account no longer exists");
-      if (entry) await loomy.refreshAccountCredential(entry.credentialRef, pool, entry.id);
-      else await loomy.refresh();
+      try {
+        if (entry) await loomy.refreshAccountCredential(entry.credentialRef, pool, entry.id);
+        else await loomy.refresh();
+      } catch (error) {
+        if (!(error instanceof LoomyProbeUnavailableError)) throw error;
+        ctx.logger?.warn?.(
+          "[loomy] \u51ED\u636E\u63A2\u6D4B\u6682\u65F6\u4E0D\u53EF\u7528\uFF0C\u4FDD\u7559\u5DF2\u6709\u51ED\u636E\u4EA4\u7ED9 chat \u8BF7\u6C42\u5224\u5B9A\uFF1A" + error.message
+        );
+      }
       const resolved = await ctx.credentials.resolve(credentialRef14(entry?.credentialRef ?? LOOMY.defaultCredentialRef));
       if (!resolved) throw new Error("loomy: credential no longer exists");
       return JSON.parse(resolved.value);
