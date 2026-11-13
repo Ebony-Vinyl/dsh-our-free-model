@@ -439,7 +439,73 @@ for (const error of [new TypeError('fetch failed'), new Error('HTTP 301'), new E
       assert.equal(calls.length, 5, 'only the failed file uses a second mirror')
       assert.equal(calls.every(call => call.opts.redirect === 'error'), true)
       const pair = calls.filter(call => call.url.includes('/src/new-deep.js'))
-      assert.equal(pair[0].opts.signal, pair[1].opts.signal, 'mirror requests share one deadline')
+      assert.notEqual(pair[0].opts.signal, pair[1].opts.signal, 'each mirror has its own deadline')
+    } finally { fs.rmSync(data, { recursive: true, force: true }) }
+  })
+}
+
+await checkAsync('a timed-out CDN file falls back to gcore with a fresh deadline', async () => {
+  const fixture = snapshotFetch({ source: cdnSnapshot })
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-timeout-fallback-'))
+  const hosts = []
+  const fetchImpl = async (url, opts) => {
+    const parsed = new URL(url)
+    if (!parsed.pathname.endsWith('/src/new-deep.js')) return fixture.fetchImpl(url, opts)
+    hosts.push(parsed.hostname)
+    if (parsed.hostname === 'cdn.jsdelivr.net') {
+      return new Promise((resolve, reject) => opts.signal.addEventListener('abort', () => reject(opts.signal.reason), { once: true }))
+    }
+    assert.equal(opts.signal.aborted, false, 'the next source gets its own deadline')
+    assert.match(parsed.pathname, new RegExp(`@${SNAPSHOT}/src/new-deep\\.js$`))
+    return new Response(newFiles['src/new-deep.js'])
+  }
+  const keepAlive = setInterval(() => {}, 1000)
+  try {
+    await stageRelease({ manifest: parseManifest(newManifest), manifestUrl: cdnSnapshot, stageDir: data, fetchImpl, timeoutMs: 40 })
+    verifyStaged(data, parseManifest(newManifest))
+    assert.deepEqual(hosts, ['cdn.jsdelivr.net', 'gcore.jsdelivr.net'])
+  } finally {
+    clearInterval(keepAlive)
+    fs.rmSync(data, { recursive: true, force: true })
+  }
+})
+
+for (const [name, source] of [['raw', rawSnapshot], ['raw proxy', proxySnapshot]]) {
+  await checkAsync(`${name} manifest falls back to the same pinned commit`, async () => {
+    const fixture = snapshotFetch({ source })
+    const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-raw-fallback-'))
+    const hosts = []
+    const fetchImpl = async (url, opts) => {
+      const parsed = new URL(url)
+      if (!parsed.pathname.endsWith('/src/new-deep.js')) return fixture.fetchImpl(url, opts)
+      hosts.push(parsed.hostname)
+      if (parsed.hostname !== 'cdn.jsdelivr.net') throw new TypeError('fetch failed')
+      assert.match(parsed.pathname, new RegExp(`@${SNAPSHOT}/src/new-deep\\.js$`))
+      return new Response(newFiles['src/new-deep.js'])
+    }
+    try {
+      await stageRelease({ manifest: parseManifest(newManifest), manifestUrl: source, stageDir: data, fetchImpl })
+      verifyStaged(data, parseManifest(newManifest))
+      assert.equal(hosts.at(-1), 'cdn.jsdelivr.net')
+    } finally { fs.rmSync(data, { recursive: true, force: true }) }
+  })
+}
+
+for (const source of [rawSource, `https://untrusted.example/${REPOSITORY}/${SNAPSHOT}/feed/manifest.json`]) {
+  await checkAsync('mutable and custom origins do not gain official file fallbacks', async () => {
+    const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-custom-source-'))
+    const calls = []
+    const fetchImpl = async url => {
+      calls.push(String(url))
+      return new Response(null, { status: 404 })
+    }
+    try {
+      await assert.rejects(() => stageRelease({
+        manifest: { base: '../', files: [{ path: 'index.js', size: 1, sha256: sha('x') }] },
+        manifestUrl: source, stageDir: data, fetchImpl,
+      }), /HTTP 404/)
+      assert.equal(calls.length, 1)
+      assert.equal(new URL(calls[0]).hostname, new URL(source).hostname)
     } finally { fs.rmSync(data, { recursive: true, force: true }) }
   })
 }
@@ -496,6 +562,26 @@ await checkAsync('CDN authorization refusal cannot trigger a mirror fallback', a
     await assert.rejects(() => stageRelease({ manifest: parseManifest(newManifest), manifestUrl: cdnSnapshot, stageDir: data, fetchImpl }), /HTTP 403/)
     assert.equal(calls.length, 4)
     assert.equal(calls.some(url => url.includes('gcore')), false)
+  } finally { fs.rmSync(data, { recursive: true, force: true }) }
+})
+
+await checkAsync('raw authorization refusal for an engine file cannot trigger a mirror fallback', async () => {
+  const enginePath = 'vendor/magpie/bin/magpie-win32-x64.exe'
+  const withEngine = manifestFor({ ...newFiles, [enginePath]: 'engine-binary-fixture' })
+  const fixture = snapshotFetch({ source: rawSnapshot })
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-raw-denied-'))
+  const calls = []
+  const fetchImpl = async (url, opts) => {
+    if (new URL(url).pathname.endsWith(`/${enginePath}`)) {
+      calls.push(String(url))
+      return new Response(null, { status: 403 })
+    }
+    return fixture.fetchImpl(url, opts)
+  }
+  try {
+    await assert.rejects(() => stageRelease({ manifest: parseManifest(withEngine), manifestUrl: rawSnapshot, stageDir: data, fetchImpl }), /HTTP 403/)
+    assert.equal(calls.length, 1)
+    assert.equal(new URL(calls[0]).hostname, 'raw.githubusercontent.com')
   } finally { fs.rmSync(data, { recursive: true, force: true }) }
 })
 
