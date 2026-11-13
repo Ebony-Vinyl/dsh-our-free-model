@@ -39,9 +39,9 @@
 ## 交流群
 
 <div align="center">
-  <img src="docs/images/qq-group-1132072680.jpg" alt="AI技术交流群16入群二维码（群号：1132072680）" width="300">
+  <img src="docs/images/qq-group-891170115.png" alt="OFM技术交流群17入群二维码（群号：891170115）" width="300">
   <br>
-  <b>QQ 群：1132072680（AI技术交流群16）</b>
+  <b>QQ 群：891170115（OFM技术交流群17）</b>
   <br>
   扫码加入群聊，一起交流插件使用心得、反馈问题与分享玩法。
 </div>
