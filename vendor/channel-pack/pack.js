@@ -58738,7 +58738,10 @@ function registerChannelPackEndpoints(ctx, pool, lobsterai, qoder, qoderCn, trae
           const values = await collectCreditBalances(accounts, GEMINI, {
             resolve: (ref) => ctx.credentials.resolve(ref),
             fetchBalanceDetailed: async (credential) => {
-              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, { force: req.force === true });
+              const { balance, error, tier } = await fetchGeminiCreditBalance(credential, GEMINI, {
+                force: req.force === true,
+                ...config.fetcher === void 0 ? {} : { fetcher: config.fetcher }
+              });
               const extra = tier === void 0 ? void 0 : { accountTier: { label: tier.label, title: `${tier.name}\uFF08${tier.id}\uFF09` } };
               return {
                 balance,
@@ -65535,7 +65538,9 @@ function apply(ctx, config = {}) {
     });
   });
   registerChannelPackRpc(ctx, pool, lobsterai, qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, {
-    ...config
+    ...config,
+    // ⚠️ 配额等附属查询必须复用同一出口；省略会让 gemini-credits 回落到裸 fetch。
+    fetcher: network.fetch
   });
   mountOpenAiGateway(ctx, pool);
   installLoopResume(ctx);

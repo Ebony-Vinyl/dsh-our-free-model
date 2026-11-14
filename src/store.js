@@ -284,6 +284,10 @@ export const SETTINGS_INITIAL = {
   /** When the running code was hot-reloaded into place, and how many times. */
   reloadedAt: 0,
   reloadCount: 0,
+  /** The `reloadedAt` the browser has already acknowledged. Stored here, not
+   *  in localStorage, so a new origin (another port or the desktop shell's
+   *  random port) does not replay the same notice. */
+  reloadNoticeSeen: 0,
   /** Version installed by the in-app upgrader, for the settings page. */
   installedVersion: '',
 }

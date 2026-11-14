@@ -1,7 +1,7 @@
 {
   "version": "2.8.4",
   "base": "../",
-  "publishedAt": "2026-11-14T17:52:29.924Z",
+  "publishedAt": "2026-11-14T18:51:33.031Z",
   "notes": "",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 646668,
-      "sha256": "1ba3f0f3b0e4b35b10331759c0746e860e7c40b9feba6b6aa1abd902ce158b94"
+      "size": 648208,
+      "sha256": "324bedb9005e34559e9d6787b97a9587954f6e452bbb94b793ab1cbe5a7a1b1c"
     },
     {
       "path": "cordis.patch.yml",
@@ -31,8 +31,8 @@
     },
     {
       "path": "index.js",
-      "size": 138501,
-      "sha256": "9db06c3e2ce47e5ba985ca421b689a1e7aa2bc0a356dd347fb1d5354e2bd5080"
+      "size": 140066,
+      "sha256": "4248fa4cb0ff396f75bc70354f41b0e4f8be6beb50f2b3032d62df29cce66310"
     },
     {
       "path": "LICENSE",
@@ -251,8 +251,8 @@
     },
     {
       "path": "src/o2a.js",
-      "size": 58335,
-      "sha256": "c43c87cbb4f13b7c734cfb9832685e5665c9099b39ea34a68dfd20772a141159"
+      "size": 59531,
+      "sha256": "fb6475bbb2f308250537b09c41892378294eeb298a018dbaa911495a8d814afb"
     },
     {
       "path": "src/open-external.js",
@@ -311,8 +311,8 @@
     },
     {
       "path": "src/store.js",
-      "size": 26272,
-      "sha256": "ad420667a4dd9876e8dafdf969520345dda59a56e29f3c7778c0acbf78fae805"
+      "size": 26504,
+      "sha256": "aef3b5a819a7d41ed27412fd8a8461e80aeaf54bb7cd34ad0f911f18501e6817"
     },
     {
       "path": "src/stream.js",
@@ -346,8 +346,8 @@
     },
     {
       "path": "src/updater.js",
-      "size": 61689,
-      "sha256": "1659274599461422f6c3e3b7ffd72e6aefd042daeaec43498317844aad17a5c6"
+      "size": 62273,
+      "sha256": "11d7c14cd3293b5567359c28aa6e0efd614bae2a5b3f744125c5f4cf356daecc"
     },
     {
       "path": "src/upstream.js",
@@ -381,8 +381,8 @@
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2847080,
-      "sha256": "9d48c3b718814ecbb55e7b940806e0677cec7a1df5b493721b6c9c120e45effd"
+      "size": 2847331,
+      "sha256": "df0047685e14d1e4f75aa16f07e6f26258d991c923ff40f199dbb453c0096fd6"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
@@ -405,5 +405,5 @@
       "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ],
-  "signature": "P08rQfGsQ2o6FeMwuRB3hSOx9yQvGs6LrnPPRXHW9Nj/N028GVSxfkBr66Ki+s3tv3isTg3L7wvC3m+ToUqsCQ=="
+  "signature": "lPJj+8VuXiHuxdGd67G4x8Z8NwgzMBZcO0UpM1mWfTvtOiFRIK/91H14un3yZWh/QhZjBjvZqF7oZ6jp/+cgDw=="
 }

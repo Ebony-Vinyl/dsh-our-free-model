@@ -170,6 +170,19 @@ export function apply(ctx, config) {
   if (generation > 1) {
     settings.update({ reloadedAt: Date.now(), reloadCount: generation - 1 })
     settings.flush()
+  } else {
+    // Before issue #761 the only "already seen" marker lived in the browser's
+    // origin-scoped localStorage. A settings file from that build can carry an
+    // old reloadedAt with no acknowledgement beside it; adopting it here keeps
+    // a plain process restart (a new desktop port is a new origin) from
+    // replaying a stale notice. A genuinely new reload writes a new timestamp.
+    const stored = settings.get()
+    const at = Number(stored.reloadedAt ?? 0)
+    const seen = Number(stored.reloadNoticeSeen ?? 0)
+    if (Number.isSafeInteger(at) && at > 0 && seen === 0) {
+      settings.update({ reloadNoticeSeen: at })
+      settings.flush()
+    }
   }
 
   /** `managed` stands down everything that would rewrite the installed bytes. */
@@ -1408,6 +1421,7 @@ export function apply(ctx, config) {
       generation,
       reloadedAt: settings.get().reloadedAt ?? 0,
       reloadCount: settings.get().reloadCount ?? 0,
+      reloadNoticeSeen: settings.get().reloadNoticeSeen ?? 0,
       dataDir,
       autoReloadWatch: settings.get().autoReloadWatch === true,
       lastReload: globalThis[Symbol.for('our-free-model.last-reload')] ?? undefined,
@@ -2017,6 +2031,21 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/meta') {
         return send(200, { ...deps.meta(), feed: { fetchedAt: deps.announcements.view().fetchedAt, source: deps.announcements.view().source, error: deps.announcements.view().error }, update: deps.update.status() })
+      }
+      if (method === 'POST' && routePath === '/reload-notice/ack') {
+        const body = await readJson(req)
+        const at = body?.at
+        const current = Number(deps.settings.get().reloadedAt ?? 0)
+        // Only the timestamp this process announced may be acknowledged: an
+        // older page or a hand-written request must not pre-mark a future
+        // reload as seen.
+        if (typeof at !== 'number' || !Number.isSafeInteger(at) || at <= 0 || at !== current) {
+          return send(400, { error: 'at must match the current reloadedAt' })
+        }
+        deps.settings.update({ reloadNoticeSeen: at })
+        deps.settings.flush()
+        if (deps.settings.writeFailed === true) return send(500, { error: 'could not persist settings' })
+        return send(200, { ok: true, reloadNoticeSeen: at })
       }
       if (method === 'POST' && routePath === '/eac/login/start') {
         const started = await deps.eacAuth.start()
