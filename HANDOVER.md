@@ -1372,3 +1372,57 @@ berubah pada kedua kondisi. WARP masih terinstall dan tidak perlu.
   jam 07:00 nanti jalur `/zen/v1` masih menolak.
 - Jangan sentuh: `forwardKey`, settings egress/aggregate OpenRouter, VPS
   `103.141.234.177`, 9router, `D:\Aset\windus`.
+
+# SESI 18 — 2026-11-14/15 — WARP IPv6 MEMBUKA jalur ZEN (200 terbukti)
+
+## 67. Koreksi penting terhadap §55 dan §65
+
+§55 menyimpulkan "WARP IPv6/NAT64 teruji, TIDAK menolong". **Itu sudah tidak
+berlaku.** Pada sesi ini, dengan WARP **aktif lewat IPv6** (`warp=on`,
+`ip=2a09:bac5:39e7:25c3::3c3:16`, `colo=SIN`), satu turn ZEN lewat pipeline penuh
+OFM (`scripts/ofm-live-zen-probe.mjs`) menjawab:
+
+```
+session ses_e2560c10fffe5n3VT0st3vrUA4 | clock-ok true
+STATUS 200 | deltas 12
+transport sidecar active
+```
+
+Jadi `deepseek-v4.1-flash-free` **bisa** dipakai. Jalur request-nya (env block,
+jam sesi segar, sidecar Bun) sudah benar dan pernah lolos end-to-end.
+
+Dugaan sebab §55 dulu keliru: saat itu perbaikan §59 (request tidak lagi
+dikirim **dua kali** lewat sidecar→Node) belum ada, jadi tiap percobaan WARP
+membakar dua request sebelum sempat lolos. Kini satu percobaan = satu request.
+
+## 68. Tapi jatahnya langsung habis
+
+Beberapa detik setelah 200 itu, semua jalur kembali `429`
+`Free usage limit reached` — termasuk probe minimal yang tadi 200:
+
+| Uji (berurutan, jeda ≥3 s) | Hasil |
+|---|---|
+| `ofm-live-zen-probe deepseek-v4.1-flash-free` | **200**, 12 delta |
+| `POST /v1/chat/completions` deepseek-v4.1-flash-free | 429 (0,71 s) |
+| `POST /v1/chat/completions` big-pickle | 429 (0,44 s) |
+| `POST /v1/chat/completions` glm-5.3-flash-free | 429 (0,33 s) |
+| `ofm-live-zen-probe` lagi | 429 |
+
+Catatan: waktu 0,3–0,7 s membuktikan tidak ada retry-storm (perbaikan §61
+bekerja); 429 tidak pernah dikirim ulang.
+
+Jadi kesimpulan §65 ("reset tepat 00:00 UTC") juga **tidak lengkap**: jendela
+bisa terbuka bukan hanya karena reset waktu. Yang belum jelas: apakah WARP
+memberi egress/identitas baru dengan jatah kecil yang langsung tersedot, atau
+gate memberi kelonggaran sesaat lalu menutup lagi. Perlu diukur ulang dengan
+waktu tunggu lebih panjang, bukan probe beruntun.
+
+## 69. Langkah berikut
+
+1. Uji ulang dengan **jeda panjang** (≥10 menit) tanpa probe beruntun, WARP
+   tetap aktif. Kalau 200 muncul lagi → jatah memang kecil, bukan gate.
+2. Kalau 200 hanya sekali lalu tertutup sementara probe minimal pun 429 →
+   kemungkinan besar jatah per-identitas-WARP sangat kecil.
+3. Jangan sentuh WARP tanpa izin user; user sendiri yang mengaktifkannya.
+4. Kuota `big-pickle` dan `glm-5.3-flash-free` **belum pernah** terlihat 200;
+   jangan klaim pulih sebelum terukur.
