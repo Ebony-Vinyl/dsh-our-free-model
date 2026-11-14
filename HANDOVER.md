@@ -1663,3 +1663,81 @@ Tanggal: 15 Nov 2026 (05:00–05:15 UTC / 12:00–12:15 WIB)
    dan hemat — jatah hariannya kecil.
 5. `/root/ofm-probe/` di VPS sekarang **lengkap** (11 file), bisa dipakai lagi
    untuk probe pipeline tanpa menyentuh gateway laptop.
+
+# SESI 14 — Terobosan: `deepseek-v4.1-flash-free`, `big-pickle`, `glm-5.3-flash-free` HIDUP (200)
+
+Tanggal: 15 Nov 2026 (±06:30 UTC / 13:30 WIB)
+
+## Yang berubah dibanding Sesi 13
+
+Sesi 13 menyimpulkan "kuota per `/64`, mati". **Kesimpulan itu terlalu cepat.**
+Bukti baru:
+
+| Host | Model | Hasil |
+|---|---|---|
+| laptop | `deepseek-v4.1-flash-free` | **200** |
+| laptop | `big-pickle` | **200** (PERTAMA KALI) |
+| laptop | `glm-5.3-flash-free` | **200** (PERTAMA KALI) |
+| laptop | `longcat-2.5-free` | **200** |
+| VPS tambalan | `longcat-2.5-free` | 429 |
+| VPS tambalan | `deepseek-v4.1-flash-free` | 429 |
+
+Kesimpulan yang benar: **jatah ZEN dihitung per jalur egress, dan laptop
+punya keranjang sendiri yang masih tersisa.** VPS WARP memang keranjang
+terpisah tapi keranjangnya sudah terpakai/habis (atau blok Cloudflare-nya
+berbagi penghitung dengan pemakai lain). Jadi:
+
+- **Klaim "per `/64`" tetap benar secara teknis**, tetapi VPS bukan solusi
+  karena blok WARP-nya sendiri sudah kena.
+- **Jangan pakai VPS** untuk lane ini. Laptop langsung = jalur terbaik.
+- Reset harian 00:00 UTC (07:00 WIB) tetap berlaku.
+
+## Terbukti lewat jalur yang dipakai Zed (`/v1/messages`)
+
+`deepseek-v4.1-flash-free`, streaming, dengan thinking:
+
+- `content_block_start` thinking → banyak `thinking_delta` → **`text_delta`
+  berisi jawaban** → `stop_reason: end_turn` → `message_stop`.
+- Artinya **thinking TIDAK menggantung** di gateway. Kalau di Zed berhenti
+  setelah thinking, penyebabnya bukan OFM.
+
+Penyebab yang paling mungkin kalau di Zed masih menggantung:
+1. `"interleaved_reasoning": false` di settings Zed untuk model ini —
+   Zed tidak menyambung ulang setelah blok thinking.
+2. `max_tokens` Zed terlalu kecil (32K tidak masalah, tapi kalau `effort`
+   tinggi dan model banyak thinking, bisa kehabisan sebelum teks).
+3. Retry/`stop_reason` tidak terbaca karena `prompt_cache_key: false` —
+   bukan penyebab berhenti, hanya performa.
+
+Saran setelan Zed untuk `deepseek-v4.1-flash-free`:
+`"enable_thinking": false` (paling aman di Zed) atau naikkan max output.
+
+## Catatan penting soal kuota
+
+Kuota segar ini **kecil dan cepat habis**. Sesi 14 menghabiskan ~12 request
+untuk pengujian. **Jangan probe beruntun lagi.** Pakai langsung dari Zed.
+
+## Instrumen yang ditambahkan
+
+- `tools/cek-model.sh` — uji cepat N model lewat gateway OFM (jeda 3 dtk).
+  Dipakai untuk tabel di atas.
+- `tools/gatectl.mjs` — uji dua kutub gerbang ZEN vs kuota (dijalankan di VPS).
+  Membuktikan request bentuk-penuh pun 429 dari VPS = kuota, bukan gerbang.
+- `tools/zen-probe.mjs` — probe `fetch` polos ke gerbang ZEN (tanpa OFM).
+
+## Peta kondisi model saat ini (diukur Sesi 13–14)
+
+HIDUP (200): ovh/* (semua), kilo-auto/free, nvidia/nemotron-3.5-super-vl,
+nvidia nemotron ultra/lightning/nano-omni, llm7/gpt-oss:20b,
+llm7/mistral-Nemo, longcat-2.5-free, iceman-free, inkling-2-small-free,
+stealth/glyph-cluster, reflection/beam-free, baidu/ernie-5.5-flash,
+dots-3-note-preview, particle-1, liquid/lfm-3-1.7b, cohere/north-mini-code,
+openrouter/free, gemini-3.8-flash (BUTUH max_tokens ≥800, 120 reasoning token),
+open_router/cohere, open_router/dots-studio, open_router/nvidia-lightning,
++ tiga model ZEN di atas.
+
+MATI dari hulu (bukan salah OFM): `llm7/nemotron-3-nano:30b`,
+`llm7/codestral-latest`, `open_router/xingchen-agi/xing4.0-29b-a4b:free`,
+`reflection/beam-free` hanya dari VPS. `inclusionai/ling-3.2-flash:free`
+kena limit harian hulu (bukan kita). `flint-40b-free` & `minimax-m3.1-flash-free`
+kena 429 kuota ZEN saat diuji.
