@@ -1,0 +1,157 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   反馈与许愿 —— 单色体系下的表单页。
+
+   这一页只有一个任务：让用户把话说清楚并交出去。所以没有装饰性的渐变、
+   没有卡片堆叠，只有一条从上到下的路径：登录 → 选类型 → 写 → 提交。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.fb-page { display: flex; flex-direction: column; gap: 14px; max-width: 860px; }
+
+/* ── 登录前的门槛卡 ──────────────────────────────────────────────────────── */
+.fb-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 28px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--bg-1);
+  text-align: center;
+  color: var(--fg-1);
+}
+.fb-gate > svg { color: var(--fg-2); }
+.fb-gate h2 { margin: 2px 0 0; font-size: 15px; font-weight: 560; color: var(--fg-0); }
+.fb-gate p { max-width: 46ch; margin: 0; font-size: 12px; line-height: 1.7; color: var(--fg-2); }
+.fb-gate .ui-button { margin-top: 6px; }
+
+/* ── 验证码 ──────────────────────────────────────────────────────────────── */
+.fb-code {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+}
+.fb-code > div { display: flex; flex-direction: column; gap: 3px; }
+/* 验证码要被抄下来，所以用等宽、大字、宽字距 —— 但不要彩色高亮，
+   单色体系里靠尺寸和字距就足够突出。 */
+.fb-code strong {
+  font-family: var(--mono-font);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--fg-0);
+  font-variant-numeric: tabular-nums;
+}
+.fb-code small { font-size: 11px; color: var(--fg-2); }
+.fb-code a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--fg-1);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-2);
+  padding-bottom: 1px;
+}
+.fb-code a:hover { color: var(--fg-0); border-bottom-color: var(--line-3); }
+.fb-code p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.fb-code p svg { animation: m-spin 1.6s linear infinite; }
+
+/* ── 表单 ────────────────────────────────────────────────────────────────── */
+.fb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--bg-1);
+}
+.fb-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--fg-1);
+}
+.fb-form textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 10px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  color: var(--fg-0);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.65;
+  resize: vertical;
+}
+.fb-form textarea:focus-visible {
+  outline: none;
+  border-color: var(--line-3);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.fb-form textarea::placeholder { color: var(--fg-3); }
+.fb-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+.fb-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ok);
+  overflow-wrap: anywhere;
+}
+.fb-actions { display: flex; justify-content: flex-end; }
+
+/* 类型分段：复用 .wb-segments 的观感，但这一页是主包，不能依赖 workbench.css
+   的加载顺序，所以关键布局在这里重述一遍。 */
+.fb-form .wb-segments { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line-1); border-radius: var(--r-sm); background: var(--bg-2); align-self: flex-start; }
+.fb-form .wb-segments button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: calc(var(--r-sm) - 1px);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-snap), color var(--dur-fast) var(--ease-snap);
+}
+.fb-form .wb-segments button[aria-pressed="true"] { background: var(--bg-1); color: var(--fg-0); box-shadow: var(--shadow-xs); }
+.fb-form .wb-segments button:hover:not([aria-pressed="true"]) { color: var(--fg-1); }
+.fb-form .wb-segments button:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 700px) {
+  .fb-form { padding: 16px; }
+  .fb-gate { padding: 30px 18px; }
+  .fb-code { gap: 10px 16px; }
+  .fb-code strong { font-size: 19px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-code p svg { animation: none; }
+}

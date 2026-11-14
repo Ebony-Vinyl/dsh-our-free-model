@@ -1,0 +1,434 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 概览页
+
+   四张 KPI 卡（数字滚动 + 迷你趋势线）、Token 图表（逐柱生长 + 悬停读数）、
+   API 接入卡（等宽端点 + 复制动效）、模型来源（错峰入场 + 磁吸箭头）、
+   运行检查。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ── KPI 行 ───────────────────────────────────────────────────────────────── */
+.dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ov-metric {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px 16px 14px;
+  overflow: hidden;
+}
+/* 左上角一束极淡的光，四张卡位置不同，拼起来像一条扫过的光带。
+   这些卡片同时带 .m-tilt，而 m-tilt 的镜面高光用的是同一个 ::after —— 两条规则
+   抢一个伪元素时后加载的这份会赢，倾斜高光就永远画不出来。用 :not(.m-tilt) 让位，
+   倾斜卡片的 hover 高光由 motion.css 统一负责。 */
+.ov-metric:not(.m-tilt)::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: -10%;
+  width: 70%;
+  height: 180%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 5%), transparent);
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out-expo);
+}
+.ov-metric:not(.m-tilt):hover::after { opacity: 1; }
+
+.ov-metric > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ov-metric > div:first-child > span {
+  font-size: 11px;
+  font-weight: 520;
+  letter-spacing: 0.02em;
+  color: var(--fg-2);
+}
+.ov-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  transition: border-color var(--dur-base) ease, transform var(--dur-base) var(--ease-spring);
+}
+.ov-metric:hover .ov-metric-icon { border-color: var(--line-2); transform: translateY(-1px); }
+
+/* 数字用等宽 + 表格数字，滚动时不抖动 */
+.ov-metric strong {
+  font-family: var(--mono-font);
+  font-size: 27px;
+  font-weight: 560;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-0);
+}
+.ov-metric p { font-size: 11px; color: var(--fg-2); padding-right: 80px; }
+
+/* 卡片底部的趋势带：贴住卡片下缘、通栏、不压任何文字。
+   有趋势带的卡片额外留出 34px 底内边距，曲线不会被裁掉。 */
+.ov-metric:has(.ov-spark) { padding-bottom: 36px; }
+.ov-spark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 32px;
+  border-radius: 0 0 calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px);
+  pointer-events: none;
+}
+/* 趋势带：默认就是「画好」的状态。
+   描线动画只是锦上添花 —— 用 animation 从 dashoffset:700 收到 0，
+   但基础样式里 dashoffset 必须是 0，这样动画被禁用（reduced-motion /
+   data-motion=off）或没触发时，曲线依然完整可见。
+   反过来写（基础 700、靠动画归零）一旦动画不跑，线就永久消失。 */
+.ov-spark polygon {
+  fill: var(--fg-0);
+  opacity: .18;
+  stroke: none;
+  animation: ov-spark-fade 420ms var(--ease-out-expo) both;
+}
+.ov-spark polyline {
+  fill: none;
+  stroke: var(--fg-0);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  animation: ov-spark-draw 720ms var(--ease-out-expo) both;
+}
+@keyframes ov-spark-draw {
+  from { stroke-dasharray: 700; stroke-dashoffset: 700; }
+  to   { stroke-dasharray: 700; stroke-dashoffset: 0; }
+}
+@keyframes ov-spark-fade { from { opacity: 0; } to { opacity: .18; } }
+
+.ov-metric p { padding-right: 0; }
+
+/* ── 主区：图表 + 接入卡 ──────────────────────────────────────────────────── */
+.dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.ov-chart-panel { display: flex; flex-direction: column; min-width: 0; }
+.ov-chart-total {
+  margin-bottom: 4px;
+  font-family: var(--mono-font);
+  font-size: 30px;
+  font-weight: 560;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.ov-chart-total span { font-size: 12px; font-weight: 450; color: var(--fg-2); margin-left: 5px; }
+
+.ov-chart {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: end;
+  gap: 6px;
+  height: 148px;
+  margin-top: 10px;
+  padding-bottom: 20px;
+}
+
+/* 网格线：自左向右生长，只画一次 */
+.chart-grid-lines {
+  position: absolute;
+  inset: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.chart-grid-lines span {
+  display: block;
+  height: 1px;
+  background: var(--line-1);
+  transform-origin: left center;
+  animation: m-grid-in 700ms var(--ease-out-expo) both;
+}
+.chart-grid-lines span:nth-child(1) { animation-delay: 60ms; }
+.chart-grid-lines span:nth-child(2) { animation-delay: 130ms; }
+.chart-grid-lines span:nth-child(3) { animation-delay: 200ms; }
+.chart-grid-lines span:nth-child(4) { animation-delay: 270ms; }
+
+.ov-chart-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+.ov-chart-col > span {
+  position: absolute;
+  bottom: -18px;
+  font-family: var(--mono-font);
+  font-size: 9.5px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+.ov-chart-bar {
+  width: min(100%, 34px);
+  min-height: 2px;
+  border-radius: var(--r-xs) var(--r-xs) 0 0;
+  background: linear-gradient(to top, var(--fg-2), var(--fg-1));
+  transform-origin: bottom center;
+  animation: m-bar-grow 620ms var(--ease-out-expo) both;
+  transition: filter var(--dur-fast) ease, opacity var(--dur-fast) ease;
+}
+/* 每根柱子错峰生长 */
+.ov-chart-col:nth-child(2) .ov-chart-bar { animation-delay: 40ms; }
+.ov-chart-col:nth-child(3) .ov-chart-bar { animation-delay: 80ms; }
+.ov-chart-col:nth-child(4) .ov-chart-bar { animation-delay: 120ms; }
+.ov-chart-col:nth-child(5) .ov-chart-bar { animation-delay: 160ms; }
+.ov-chart-col:nth-child(6) .ov-chart-bar { animation-delay: 200ms; }
+.ov-chart-col:nth-child(7) .ov-chart-bar { animation-delay: 240ms; }
+.ov-chart-col:nth-child(8) .ov-chart-bar { animation-delay: 280ms; }
+
+.ov-chart-bar.zero { background: var(--line-2); }
+.ov-chart-col:hover .ov-chart-bar { filter: brightness(1.18); }
+
+/* 空态：居中压在图表区上 */
+.ov-chart-empty {
+  position: absolute;
+  inset: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+  color: var(--fg-2);
+  background: radial-gradient(closest-side, var(--bg-1) 40%, transparent);
+}
+.ov-chart-empty svg { opacity: .45; }
+.ov-chart-empty span { font-size: 12px; color: var(--fg-1); }
+.ov-chart-empty small { font-size: 10.5px; color: var(--fg-3); }
+
+/* ── API 接入卡 ───────────────────────────────────────────────────────────── */
+.ov-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+.ov-quick-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  color: var(--fg-0);
+}
+.ov-quick h2 { font-size: 14px; }
+.ov-quick > p { font-size: 11.5px; color: var(--fg-2); }
+.ov-quick > label {
+  margin-top: 5px;
+  font-family: var(--mono-font);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.ov-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  min-width: 0;
+  transition: border-color var(--dur-fast) ease;
+}
+.ov-endpoint:hover { border-color: var(--line-3); }
+.ov-endpoint code {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--fg-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ov-endpoint .ui-button { flex: none; }
+.ov-copied { color: var(--ok); }
+
+.connect-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 3px 0;
+  font-size: 10.5px;
+  color: var(--fg-2);
+}
+.connect-steps span { display: flex; align-items: center; gap: 6px; }
+.connect-steps span::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--fg-3);
+  flex: none;
+}
+
+.connect-button { margin-top: auto; width: 100%; }
+
+.connection-footnote {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-1);
+  font-size: 10.5px;
+  color: var(--fg-2);
+}
+
+/* ── 下区：模型来源 + 运行检查 ─────────────────────────────────────────────── */
+.dashboard-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ov-panel { display: flex; flex-direction: column; min-width: 0; }
+.ov-source-list { display: flex; flex-direction: column; gap: 6px; }
+
+.ov-source-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-base) var(--ease-out-expo),
+    background-color var(--dur-base) var(--ease-out-expo),
+    transform var(--dur-base) var(--ease-spring);
+}
+.ov-source-row:hover {
+  border-color: var(--line-2);
+  background: var(--bg-3);
+  transform: translateX(2px);
+}
+.ov-source-row > span:nth-child(2) { min-width: 0; flex: 1; }
+.ov-source-row strong { display: block; font-size: 12.5px; font-weight: 560; }
+.ov-source-row small { display: block; font-size: 10.5px; color: var(--fg-2); }
+.ov-source-row > svg { flex: none; color: var(--fg-3); transition: transform var(--dur-base) var(--ease-spring), color var(--dur-base) ease; }
+.ov-source-row:hover > svg { transform: translateX(2px); color: var(--fg-1); }
+.ov-source-row .ui-badge { flex: none; }
+
+.ov-source-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-1);
+  color: var(--fg-1);
+}
+
+/* 运行检查 */
+.runtime-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 11.5px;
+  color: var(--fg-1);
+}
+.runtime-check svg { flex: none; color: var(--fg-3); }
+.runtime-check span { flex: 1; min-width: 0; }
+.runtime-check strong { font-weight: 520; color: var(--fg-0); font-size: 11.5px; }
+
+.ov-failure-list { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; }
+.ov-failure-row {
+  padding: 7px 9px;
+  border: 1px solid var(--err-line);
+  border-radius: var(--r-sm);
+  background: var(--err-soft);
+  font-size: 11px;
+  min-width: 0;
+}
+.ov-failure-row span { display: block; color: var(--fg-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-failure-row small { display: block; color: var(--err); font-size: 10px; }
+
+.ov-runtime-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.ov-runtime-empty svg { color: var(--ok); flex: none; }
+
+/* ── 响应式 ───────────────────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 950px) {
+  .dashboard-main-grid,
+  .dashboard-bottom-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 700px) {
+  .dashboard { gap: 12px; }
+  .dashboard-metrics { gap: 9px; }
+  .ov-metric { padding: 12px 13px; }
+  .ov-metric strong { font-size: 23px; }
+  .ov-spark { display: none; }
+  .ov-chart { height: 118px; }
+  .ov-chart-total { font-size: 24px; }
+}
+
+@media (max-width: 430px) {
+  .dashboard-metrics { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-heading { flex-direction: column; align-items: stretch; gap: 10px; }
+  .dashboard-heading .ui-button { width: 100%; }
+}

@@ -1,45 +1,138 @@
-/* The disclaimer dialog: one card, readable measure, no motion beyond a fade. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 使用须知与免责声明
+
+   一次性卡片：页头、可滚动正文、底部确认。原生 <dialog> + ::backdrop，
+   焦点陷阱和 Esc 交给浏览器。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .ofm-disclaimer-dialog {
-  width: min(640px, calc(100vw - 48px));
+  width: min(620px, calc(100vw - 40px));
   max-height: min(84vh, 720px);
   padding: 0;
-  border: 1px solid var(--line, #e3e3e8);
-  border-radius: 14px;
-  background: var(--card, #fff);
-  color: var(--fg, #1c1c21);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 24%);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-1);
+  color: var(--fg-0);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
-.ofm-disclaimer-dialog::backdrop { background: rgb(0 0 0 / 42%); backdrop-filter: blur(4px); }
+.ofm-disclaimer-dialog::backdrop {
+  background: rgb(0 0 0 / 52%);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+/* 进场：淡入 + 轻微上浮。用 [open] 限定，关闭时不播 */
+.ofm-disclaimer-dialog[open] { animation: m-rise var(--dur-base) var(--ease-out-expo) both; }
+
 .ofm-disclaimer-dialog > header {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 20px 24px 14px;
-  border-bottom: 1px solid var(--line, #e3e3e8);
-  background: linear-gradient(150deg, color-mix(in srgb, var(--accent, #4f46e5) 7%, transparent), transparent 70%);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid var(--line-1);
 }
-.ofm-disclaimer-eyebrow { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted, #85858d); }
-.ofm-disclaimer-dialog h2 { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 650; }
-.ofm-disclaimer-dialog header p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--fg-2, #63636b); }
+/* 页头一层极淡的顶光，把"标题"和正文分开 */
+.ofm-disclaimer-dialog > header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fg-2), transparent);
+  opacity: .5;
+}
+.ofm-disclaimer-eyebrow {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.ofm-disclaimer-dialog h2 { margin: 0; font-size: 17px; line-height: 1.35; }
+.ofm-disclaimer-dialog header p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+
 .ofm-disclaimer-body {
-  display: flex; flex-direction: column; gap: 14px;
-  max-height: min(52vh, 440px); overflow: auto;
-  padding: 16px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  max-height: min(52vh, 430px);
+  padding: 16px 22px 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
-.ofm-disclaimer-body p { margin: 0; font-size: 13px; line-height: 1.72; color: var(--fg-2, #63636b); }
-.ofm-disclaimer-intro { color: var(--fg, #1c1c21) !important; }
-.ofm-disclaimer-body section { display: flex; flex-direction: column; gap: 5px; padding-top: 13px; border-top: 1px solid var(--line, #e3e3e8); }
-.ofm-disclaimer-body section:first-of-type { border-top: 0; padding-top: 0; }
-.ofm-disclaimer-body h3 { margin: 0; font-size: 13.5px; font-weight: 650; }
+.ofm-disclaimer-body p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--fg-1);
+  text-wrap: pretty;
+}
+.ofm-disclaimer-intro { color: var(--fg-0) !important; }
+.ofm-disclaimer-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-1);
+}
+.ofm-disclaimer-body section:first-of-type { padding-top: 0; border-top: 0; }
+.ofm-disclaimer-body h3 { margin: 0; font-size: 12.5px; font-weight: 620; color: var(--fg-0); }
+
 .ofm-disclaimer-dialog > footer {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 13px 24px;
-  border-top: 1px solid var(--line, #e3e3e8);
-  background: color-mix(in srgb, var(--bg, #f4f4f6) 70%, transparent);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 13px 22px;
+  border-top: 1px solid var(--line-1);
+  background: var(--bg-2);
 }
-.ofm-disclaimer-version { font-size: 11.5px; color: var(--muted, #85858d); }
-.ofm-disclaimer-error { font-size: 12px; color: var(--red, #d64545); }
-.ofm-disclaimer-dialog footer .primary { margin-left: auto; }
-@media (prefers-reduced-motion: no-preference) {
-  .ofm-disclaimer-dialog[open] { animation: ofm-disclaimer-in .22s ease-out; }
-  @keyframes ofm-disclaimer-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+.ofm-disclaimer-version {
+  font-family: var(--mono-font);
+  font-size: 10px;
+  color: var(--fg-3);
+}
+.ofm-disclaimer-error { font-size: 11px; color: var(--err); }
+
+/* 确认按钮：全站唯一的主操作样式（白底黑字 / 黑底白字） */
+.ofm-disclaimer-dialog footer .primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 540;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) ease, transform var(--dur-base) var(--ease-spring);
+}
+.ofm-disclaimer-dialog footer .primary:hover:not(:disabled) { background: var(--accent-hover); }
+.ofm-disclaimer-dialog footer .primary:active:not(:disabled) { transform: scale(.98); }
+.ofm-disclaimer-dialog footer .primary:disabled { opacity: .55; cursor: progress; }
+
+@media (max-width: 700px) {
+  .ofm-disclaimer-dialog { width: calc(100vw - 24px); border-radius: var(--r-lg); }
+  .ofm-disclaimer-dialog > header { padding: 16px 16px 12px; }
+  .ofm-disclaimer-body { padding: 14px 16px 16px; gap: 11px; }
+  .ofm-disclaimer-dialog > footer { padding: 11px 16px; }
+  .ofm-disclaimer-dialog footer .primary { width: 100%; margin-left: 0; }
+  .ofm-disclaimer-version { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ofm-disclaimer-dialog[open] { animation: none !important; }
 }

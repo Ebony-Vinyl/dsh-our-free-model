@@ -11,6 +11,7 @@ import { createProviderManagement } from './providers.mjs'
 import { createWorkbenchLibrary } from './library.mjs'
 import { createRoutingManagement } from './routing.mjs'
 import { createDesktopUpdater } from './desktop-update.mjs'
+import { createFeedback } from './feedback.mjs'
 import { DISCLAIMER, DISCLAIMER_VERSION, disclaimerAcknowledged } from '../../src/disclaimer.js'
 import { pageBridgeSource } from '../../src/plugins.js'
 
@@ -164,6 +165,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
   const providerManagement = runtime ? createProviderManagement({ stores, runtime, persist }) : undefined
   const routingManagement = runtime ? createRoutingManagement({ stores, runtime, persist }) : undefined
   const library = workbench ? createWorkbenchLibrary({ dataDir: info().dataDir, workbench }) : undefined
+  const feedback = createFeedback({ settings: () => stores.settings.get(), persist })
   workbench?.setLibrary(library)
   const summary = () => {
     const state = runtime.state()
@@ -302,6 +304,7 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       || pathname === `${PREFIX}/engine` || pathname.startsWith(`${PREFIX}/engine/`)
       || pathname === `${PREFIX}/extensions` || pathname.startsWith(`${PREFIX}/extensions/`)
       || pathname === `${PREFIX}/plugins` || pathname.startsWith(`${PREFIX}/plugins/`)
+      || pathname === `${PREFIX}/feedback` || pathname.startsWith(`${PREFIX}/feedback/`)
     // A sandboxed plugin page inside the workspace carries a per-run HMAC
     // capability in its own path; it has an opaque origin and cannot send this
     // console's session. The engine validates the capability and serves only
@@ -561,6 +564,16 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       } else throw fail(404, '订阅操作不存在')
       runtime.syncAggregateCatalog()
       json(res, 200, { accounts: subscriptions.list() })
+    } else if (method === 'GET' && pathname === `${PREFIX}/feedback`) {
+      json(res, 200, feedback.status())
+    } else if (method === 'POST' && pathname.startsWith(`${PREFIX}/feedback/`)) {
+      const action = pathname.slice(`${PREFIX}/feedback/`.length)
+      const body = await readBody(req, 32 * 1024)
+      if (action === 'start') json(res, 200, await feedback.start())
+      else if (action === 'poll') json(res, 200, await feedback.poll(body))
+      else if (action === 'signout') json(res, 200, feedback.signOut())
+      else if (action === 'submit') json(res, 200, await feedback.submit(body))
+      else throw fail(404, '反馈操作不存在')
     } else if (method === 'POST' && pathname === `${PREFIX}/channels/rpc` && channels) {
       // 渠道备份导入包含多账号凭据，仍限制总大小，但不能套设置表单的 16KB。
       const body = await readBody(req, 8 * 1024 * 1024)

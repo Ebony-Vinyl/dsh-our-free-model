@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Check, ChevronDown, ChevronUp, CircleAlert, Clock3, FileJson, FolderSearch, KeyRound, Monitor, Play, Plus, RefreshCw, Save, Search, Square, Terminal, Trash2, Upload } from 'lucide-react'
 import { Badge, Button, Input, Switch } from './components/ui'
+import { ProviderIcon } from './components/provider-icon'
 import { WorkbenchDialog } from './components/workbench-dialog'
 import { failureMessage, management, useManagementResource } from './management'
+import { useReveal } from './motion/hooks'
 import type { Host, Summary } from './types'
 
 interface Client {
@@ -29,7 +31,7 @@ const dateLabel = (value?: number | string) => {
   return Number.isNaN(date.valueOf()) ? '' : date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function ClientRow({ client, summary, onChanged }: { client: Client; summary: Summary; onChanged(): Promise<void> }) {
+function ClientRow({ client, summary, index, onChanged }: { client: Client; summary: Summary; index: number; onChanged(): Promise<void> }) {
   const [expanded, setExpanded] = useState(false)
   const [executable, setExecutable] = useState(client.executable)
   const [cwd, setCwd] = useState(client.cwd)
@@ -43,6 +45,21 @@ function ClientRow({ client, summary, onChanged }: { client: Client; summary: Su
   useEffect(() => () => { live.current = false }, [])
   const availableModels = useMemo(() => summary.catalog.filter(row => row.routable && !row.hiddenByUser && !row.hiddenByGroup), [summary.catalog])
   const dirty = executable !== client.executable || cwd !== client.cwd || model !== client.model || mode !== client.mode
+  // 接入开关：magpie 的 agent 行只表达"是否接入"，落盘仍走同一个保存接口。
+  // 关闭时不删配置，只把模型清空 —— 用户重新打开不需要再选一遍。
+  const attached = client.mode === 'gateway' && !!model
+  const toggle = async (next: boolean) => {
+    if (lock.current) return
+    lock.current = true; setBusy('attach'); setError(''); setStatus('')
+    try {
+      await management('/workbench/clients/save', {
+        id: client.id,
+        ...(next ? { mode: 'gateway', model: availableModels[0]?.id ?? '' } : { model: '' }),
+      })
+      if (live.current) { setStatus(next ? '已接入本地网关。' : '已断开本地网关。'); await onChanged() }
+    } catch (reason) { if (live.current) setError(failureMessage(reason)) }
+    finally { lock.current = false; if (live.current) setBusy('') }
+  }
   const run = async (action: 'save' | 'launch' | 'stop') => {
     if (lock.current) return
     lock.current = true; setBusy(action); setError(''); setStatus('')
@@ -59,9 +76,9 @@ function ClientRow({ client, summary, onChanged }: { client: Client; summary: Su
     } catch (reason) { if (live.current) setError(failureMessage(reason)) }
     finally { lock.current = false; if (live.current) setBusy('') }
   }
-  return <div className="wb-client" data-running={client.running ? 'true' : undefined}>
+  return <div className="wb-client" data-running={client.running ? 'true' : undefined} style={{ '--i': String(index) } as React.CSSProperties}>
     <div className="wb-client-row">
-      <span className={`wb-app-icon ${client.kind === 'desktop' ? 'is-green' : ''}`}>{client.kind === 'desktop' ? <Monitor size={22} /> : <Terminal size={22} />}</span>
+      <span className={`wb-app-icon ${client.kind === 'desktop' ? 'is-green' : ''}`}><ProviderIcon id={client.id} name={client.name} /></span>
       <div className="wb-client-name"><strong>{client.name}</strong><small>{client.kind === 'desktop' ? '桌面应用' : '命令行客户端'}<span> · </span>{client.running ? '运行中' : client.installed ? '已检测到' : '未检测到'}</small></div>
       <label className="wb-model-select"><span className="wb-sr-only">{client.name} 模型</span><select value={model} disabled={!!busy || client.running || client.nativeOnly} onChange={event => { setModel(event.target.value); setStatus('') }}>
         <option value="">{mode === 'gateway' ? '选择网关模型' : '客户端默认模型'}</option>
@@ -73,10 +90,19 @@ function ClientRow({ client, summary, onChanged }: { client: Client; summary: Su
         <Button variant="ghost" title={`${client.name} 启动设置`} aria-label={`${client.name} 启动设置`} aria-expanded={expanded} disabled={!!busy} onClick={() => setExpanded(!expanded)}>{expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button>
         {client.running ? <Button variant="outline" disabled={!!busy} busy={busy === 'stop'} onClick={() => void run('stop')}><Square size={13} />停止</Button>
           : <Button disabled={!!busy || !executable.trim() || (mode === 'gateway' && !model)} busy={busy === 'launch'} onClick={() => void run('launch')}><Play size={14} />启动</Button>}
+        <Switch checked={attached} aria-label={`将 ${client.name} 接入本地网关`} disabled={!!busy || client.running || client.nativeOnly} onCheckedChange={next => void toggle(next)} />
       </div>
     </div>
     {expanded && <form className="wb-client-settings" onSubmit={event => { event.preventDefault(); void run('save') }}>
-      <label>可执行文件<Input value={executable} disabled={!!busy || client.running} placeholder="可执行文件的绝对路径" onChange={event => setExecutable(event.target.value)} /></label>
+      {/* 参照 magpie 的 agent 行：主界面只表达"接入/不接入"与用哪个模型；
+          可执行文件、工作目录这类环境细节收进展开区。
+          检测到的路径只读展示 —— 它是自动探测的结果，不是要用户填的字段；
+          只有确实需要覆盖时才用"手动指定路径"输入。 */}
+      <div className="wb-client-detected">
+        <span>可执行文件</span>
+        <code title={client.executable || '未检测到'}>{client.executable || '未检测到，可在下方手动指定'}</code>
+      </div>
+      <label>手动指定路径<Input value={executable} disabled={!!busy || client.running} placeholder="留空则使用自动检测到的路径" onChange={event => setExecutable(event.target.value)} /></label>
       <label>工作目录<Input value={cwd} disabled={!!busy || client.running} placeholder="默认工作目录" onChange={event => setCwd(event.target.value)} /></label>
       <label>接入方式<select value={mode} disabled={!!busy || client.running || client.nativeOnly} onChange={event => setMode(event.target.value as Client['mode'])}><option value="gateway">第三方 API · 本地网关</option><option value="native">客户端原生配置</option></select></label>
       <Button type="submit" variant="outline" busy={busy === 'save'} disabled={!!busy || !dirty || !!client.running}><Save size={14} />保存</Button>
@@ -230,6 +256,9 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
     } catch (reason) { if (live.current) setError(failureMessage(reason)) }
     finally { lock.current = false; if (live.current) setBusy('') }
   }
+  // 两个列表各自入场：容器进视口后逐项错峰升起
+  const clientReveal = useReveal<HTMLElement>(workbench.data?.clients.length ?? 0)
+  const accountReveal = useReveal<HTMLElement>(accounts.length)
   const rows = accounts.filter(account => `${account.label} ${account.provider} ${account.plan ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()))
   return <div className="wb-page">
     <header className="wb-heading"><div><span className="wb-eyebrow">DESKTOP WORKBENCH</span><h1>客户端与订阅</h1><p>本机客户端 · 第三方 API · 订阅额度</p></div>
@@ -237,8 +266,8 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
     <div className="wb-summary"><span><strong>{workbench.data ? workbench.data.clients.filter(client => client.installed).length : '—'}</strong> 已安装客户端</span><span><i className="wb-dot" /><strong>{workbench.data ? workbench.data.clients.filter(client => client.running).length : '—'}</strong> 运行中</span><span><strong>{subscriptions.data || workbench.data ? accounts.filter(account => account.enabled).length : '—'}</strong> 已启用订阅</span></div>
     <div className="wb-section-heading"><h2><Monitor size={17} />客户端</h2><Badge tone="blue">第三方 API 接入</Badge></div>
     {workbench.error && <div className="wb-feedback wb-error" role="alert"><CircleAlert size={16} /><span>{workbench.error}</span><Button variant="outline" onClick={() => void workbench.reload()}>重试</Button></div>}
-    <section className="wb-client-list" aria-label="客户端启动器" aria-busy={workbench.loading}>
-      {workbench.data?.clients.map(client => <ClientRow key={client.id} client={client} summary={summary} onChanged={workbench.reload} />)}
+    <section className="wb-client-list m-reveal" ref={clientReveal} aria-label="客户端启动器" aria-busy={workbench.loading}>
+      {workbench.data?.clients.map((client, index) => <ClientRow key={client.id} client={client} summary={summary} index={index} onChanged={workbench.reload} />)}
       {!workbench.data && workbench.loading && <div className="wb-empty" role="status"><RefreshCw size={22} /><strong>正在检测客户端</strong></div>}
       {workbench.data?.clients.length === 0 && <div className="wb-empty"><Terminal size={24} /><strong>服务未返回可配置的客户端</strong><Button variant="outline" onClick={() => void workbench.reload()}>重新检测</Button></div>}
     </section>
@@ -253,13 +282,13 @@ export function Agents({ summary, active, host }: { summary: Summary; active: bo
     <div className="wb-toolbar"><label className="wb-search"><Search size={16} /><Input aria-label="搜索订阅" placeholder="搜索账号、供应商或方案" value={search} onChange={event => setSearch(event.target.value)} /></label><span className="wb-toolbar-meta">5 小时 / 每周额度</span></div>
     {(error || subscriptions.error) && <div className="wb-feedback wb-error" role="alert"><CircleAlert size={16} /><span>{error || subscriptions.error}</span><Button variant="outline" disabled={!!busy} onClick={() => { setError(''); void subscriptions.reload() }}>重试</Button></div>}
     {status && <div className="wb-feedback wb-status" role="status"><Check size={16} />{status}</div>}
-    <section className="wb-account-list" aria-label="订阅账号" aria-busy={subscriptions.loading}>
-      {rows.map(account => {
+    <section className="wb-account-list m-reveal" ref={accountReveal} aria-label="订阅账号" aria-busy={subscriptions.loading}>
+      {rows.map((account, index) => {
         const windows = account.quota?.windows ?? []
         const fiveHour = windows.find(window => window.kind === 'five_hour' || window.windowSeconds === 18000 || /5\s*h|5.?hour|five.?hour|5.?小时|session|short/i.test(window.name))
         const weekly = windows.find(window => window.kind === 'weekly' || window.windowSeconds === 604800 || /week|seven.?day|7.?day|周|星期/i.test(window.name))
         const other = windows.filter(window => window !== fiveHour && window !== weekly)
-        return <div className="wb-account" key={account.id}>
+        return <div className="wb-account" key={account.id} style={{ '--i': String(index) } as React.CSSProperties}>
           <div className="wb-account-info"><span className="wb-app-icon is-green"><KeyRound size={20} /></span><div><strong>{account.label}</strong><small>{account.provider}{account.plan || account.quota?.plan ? ` · ${account.plan || account.quota?.plan}` : ''}</small><small>{account.models?.length ?? 0} 个模型</small></div>
             <Switch checked={account.enabled} aria-label={`启用订阅 ${account.label}`} disabled={!!busy} onCheckedChange={enabled => void run('/subscriptions/enabled', { id: account.id, enabled }, `enable:${account.id}`)} /></div>
           <div className="wb-quota-windows"><QuotaMeter title="5 小时" window={fiveHour} /><QuotaMeter title="每周" window={weekly} />{other.map((window, index) => <QuotaMeter title={window.name} window={window} key={`${window.name}:${index}`} />)}</div>

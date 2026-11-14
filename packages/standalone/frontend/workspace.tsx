@@ -93,7 +93,7 @@ export function Workspace({ active }: { active: boolean }) {
   const toolbar = (
     <header className="ws-toolbar">
       <div className="ws-title">
-        <h2>模型工作台</h2>
+        <h2>模型工作台（magpie）</h2>
         <p>在应用内管理渠道、账号与模型；改动会同步进模型清单。</p>
       </div>
       <div className="ws-tools" role="group" aria-label="模型工作台操作">

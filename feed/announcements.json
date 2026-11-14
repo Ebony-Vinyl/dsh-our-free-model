@@ -2,10 +2,34 @@
  "$schema": "./announcements.schema.md",
  "announcements": [
   {
+   "id": "2026-11-15-v2.8.4-release",
+   "title": "v2.8.4：EAC 两个 400K 高速模型的数据须知、模型工作台标注 magpie",
+   "level": "update",
+   "pinned": true,
+   "createdAt": "2026-11-15T01:00:00Z",
+   "link": {
+    "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.4",
+    "label": "查看插件更新说明"
+   },
+   "html": "<p><b>2.8.4 把 EAC 渠道那两个 400K 高速模型的上游数据处理条款写进了公告</b>（见本页置顶的另一条），并给「模型工作台」补上了引擎标注——现在它叫 <b>模型工作台（magpie）</b>，与扩展市场里的内置描述符一致。</p><p>同期并入的还有几处修复：EAC 渠道的两个 Dahl 模型上下文校准为 400K、输出上限 8192，视觉按上游实际能力标为不支持；AMD Radeon 九个模型补齐能力表；卡片性能胶囊改为读本站 <code>/api/perf-metrics</code> 的实时数据（Dahl 两个模型因 24 小时窗口跨了渠道切换、数据尚未稳定，暂时不显示胶囊，跑满一个完整窗口后自动出现）。反馈入口的问题修复：默认反馈地址丢了 <code>/feedback</code> 前缀导致登录与提交全部 404、令牌失效后不再一直显示「已登录」、深色主题下 26 个供应商图标因缺少 fill 而不可见、聚光灯与倾斜高光互相覆盖。npm 渠道同步发布 <b>@ebony-vinyl/dsh-our-free-model@2.8.4</b>；npm 上那个裸名的 dsh-our-free-model 仍是第三方打包，请勿安装。</p>"
+  },
+  {
+   "id": "2026-11-15-eac-400k-models-data-notice",
+   "title": "EAC 那两个 400K 高速模型：上游数据处理的须知",
+   "level": "warn",
+   "pinned": true,
+   "createdAt": "2026-11-15T00:00:00Z",
+   "link": {
+    "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model",
+    "label": "反馈与许愿"
+   },
+   "html": "<p>EAC 协付渠道里带 <b>高速</b> 与 <b>爆</b> 标记的两个 400K 上下文模型（DeepSeek V4 Flash 与 GLM 5.3 Flash），由上游提供商 Dahl Inference 提供服务。选择它们之前，请先读完下面四条——这些是上游自己的说明，不是本插件的判断：</p><ul><li><b>请求可能经过分布式网络中的独立计算运营方处理</b>，不是单一数据中心内的封闭链路。</li><li>上游<b>不承诺</b>标准服务具有零数据留存或端到端保密保障。</li><li>计算运营方在执行请求时<b>可能接触到请求内容</b>。</li><li>部分已完成的 API 请求可能经过脱敏后，<b>用于测试环境的负载与可靠性测试</b>。</li></ul><p>因此：<b>不要把密码、密钥、个人身份信息、商业机密或任何你不愿第三方处理的内容发给这两个模型</b>。需要处理敏感内容时，请改用你自己的付费 API（聚合渠道），或选择其它模型。插件本身不上传任何东西——用量、设置、转发 Key 都只落在本机，但发往模型的 prompt 与工具结果必然经过上游。</p><p><b>问题反馈与功能许愿</b>：独立端控制台左侧「项目支持 → 反馈与许愿」已上线该入口，用 GitHub 登录后即可提交（插件端目前没有这个页面，可在仓库的 Issues 页提）。遇到 OFM 的问题、或想加什么功能，都往那里提——它会带上你的版本与平台信息，方便定位。</p><p>另外，我们正在尝试基于 <a href=\"https://github.com/Ebony-Vinyl/EACbot\">EACbot</a> 搭建一套用于维护开源项目的全自动化工作流（问题归类、复现、回归与发布检查）。<b>EACbot 本身目前尚处于开发实验阶段</b>，还不稳定，暂不承接正式反馈——请仍通过上面的反馈入口提交，不要直接拿 EACbot 当问题渠道。</p>"
+  },
+  {
    "id": "2026-11-08-v2.8.3-claude-tui-fix",
    "title": "v2.8.3:修复 Claude 订阅 TUI 交互模式卡 45 秒回退 -p",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-11-08T13:00:00Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.3",
@@ -17,7 +41,7 @@
    "id": "2026-11-08-v2.8.2-picks-star-ask",
    "title": "说点心里话：这三个项目，想请你顺手点个 Star",
    "level": "urgent",
-   "pinned": true,
+   "pinned": false,
    "holdSeconds": 3,
    "createdAt": "2026-11-08T00:00:00Z",
    "html": "<p>这个插件免费、无广告、不需要你登录任何账号。写它、维护它、每次上游改版半夜爬起来修适配，靠的都是同一批人的热情。而开源项目能拿到的唯一回报，就是 GitHub 上那一颗颗 <b>Star</b>——它几乎决定作者还能投入多少个晚上。</p><p>如果你用过这个插件，觉得它帮你省下了钱或者时间，<b>恳请花三十秒</b>看看同一作者的这三个项目：用得上就顺手点一个 Star；用不上也没关系，认真读到这里，对作者来说已经很实在了。</p><ul><li><a href=\"https://github.com/Ebony-Vinyl/EAC-Desktop\">EAC-Desktop</a> — 基于 DeepSeek Harness 的开源桌面工作台：Tauri 原生窗口、随包 Node 运行时，双击即进入工作，项目、会话、插件与皮肤市场都在一处。</li><li><a href=\"https://github.com/Ebony-Vinyl/EAC-Pack\">EAC-Pack</a> — 揽尽万象：让数百个 DSH 插件和谐共存的插件套件。</li><li><a href=\"https://github.com/Ebony-Vinyl/EAC-design-world\">EAC-design-world</a> — 在本地把视频和设计做完：多轨剪辑、模板与设计体系、原生预览画布和真实文件导出，不把素材交给任何人。</li></ul><p>三个仓库都在持续更新。<b>点 Star 不要钱，但对作者是真金白银般的鼓励。</b>谢谢每一个读到这里的人。</p>"
@@ -26,7 +50,7 @@
    "id": "2026-11-07-v2.8.2-plugin-release",
    "title": "v2.8.2：扩展市场自动更新（观察窗口防投毒）、迁移清单与模型货架",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-11-07T10:00:00Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.2",
@@ -38,7 +62,7 @@
    "id": "2026-11-01-v2.8.0-plugin-release",
    "title": "v2.8.0：免费道整形层对齐参考网关 v1.4.6，引擎一键跟进",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-11-01T04:00:00Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.0",
@@ -50,7 +74,7 @@
    "id": "2026-10-31-v2.7.4-plugin-release",
    "title": "v2.7.4：社区修复合并与稳定性大扫除",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-10-31T04:00:00Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.7.4",
@@ -62,7 +86,7 @@
    "id": "2026-10-30-v2.7.3-plugin-release",
    "title": "v2.7.3：免费车道兼容、账号排队换号与安全升级",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-10-30T06:49:33Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.7.3",
@@ -74,7 +98,7 @@
    "id": "2026-10-25-v2.7.1-channel-exclusion",
    "title": "v2.7.1：彻底移除 WorkBuddy 国内版/国际版与华为云渠道",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-10-25T10:00:00Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.7.1",

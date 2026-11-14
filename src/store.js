@@ -256,6 +256,14 @@ export const SETTINGS_INITIAL = {
   feedUrl: '',
   /** Minutes between announcement-feed polls; floored at 5. */
   feedPollMinutes: 30,
+  /** Where the in-plugin feedback form submits. Empty keeps the built-in
+   *  project server; an override lets a self-hosting operator point at their
+   *  own collector. Feedback is never sent anywhere else. */
+  feedbackUrl: '',
+  /** GitHub login this install completed for the feedback form: `{ token,
+   *  login, at }`, or null. The token only authorizes feedback submission —
+   *  it is not an API credential and is never sent to a model endpoint. */
+  feedbackAuth: null,
   /** Raise OS-level notifications for new announcements and updates (the
    *  browser asks for permission on the user's click). */
   notifyOs: false,

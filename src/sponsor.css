@@ -75,17 +75,20 @@
 .ofm-sponsor-plugin { --sp-accent: var(--dsw-alias-accent-primary, #385d99); }
 .ofm_tab.ofm-sponsor-nav { color: var(--dsw-alias-accent-primary, #385d99); font-weight: 650; }
 .ofm_tab.ofm-sponsor-nav::before { content: ''; display: inline-block; width: 5px; height: 5px; margin-right: 7px; vertical-align: middle; border-radius: 50%; background: currentColor; }
-.ofm-sponsor-desktop { --sp-ink: #342c23; --sp-muted: #726452; --sp-paper: #fffdf8; --sp-soft: #f7f1e7; --sp-line: #e0d5c4; --sp-accent: #8a4d0d; --sp-radius: 12px; }
-.ofm-sponsor-desktop .ofm-sponsor-intro h2 { font-family: 'Noto Serif SC', 'Songti SC', 'SimSun', serif; font-weight: 600; }
+/* 控制台（独立端）变体：与新的单色控制台视觉一致。
+   注意插件端变体（.ofm-sponsor-plugin）不受影响——它跑在宿主设置页里，
+   配色跟随宿主的 --dsw-alias-* 令牌。 */
+.ofm-sponsor-desktop { --sp-ink: var(--fg-0, #0b0b0d); --sp-muted: var(--fg-2, #8a8a94); --sp-paper: var(--bg-1, #fff); --sp-soft: var(--bg-2, #fbfbfc); --sp-line: var(--line-2, rgb(0 0 0 / 12%)); --sp-accent: var(--fg-0, #0b0b0d); --sp-radius: var(--r-lg, 14px); }
+.ofm-sponsor-desktop .ofm-sponsor-intro h2 { font-family: inherit; font-weight: 620; letter-spacing: -0.012em; }
 .ofm-sponsor-desktop .ofm-sponsor-intro { padding-bottom: 24px; border-bottom: 1px solid var(--sp-line); }
-.console-nav-item.ofm-sponsor-nav { color: #875016; }
-.console-nav-item.ofm-sponsor-nav > span:not(.console-nav-indicator) { font-size: 12px; font-weight: 600; white-space: normal; line-height: 1.5; }
-[data-theme='dark'] .ofm-sponsor-desktop { --sp-ink: #e2e9ed; --sp-muted: #a0b3bd; --sp-paper: #0c131a; --sp-soft: #101e25; --sp-line: #25444b; --sp-accent: #69ded0; --sp-radius: 0px; }
-[data-theme='dark'] .ofm-sponsor-desktop.ofm-sponsor-dialog { border-color: #31585e; box-shadow: 0 24px 100px -22px rgb(0 0 0 / 65%); }
-[data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-intro h2 { font-family: inherit; font-weight: 600; }
-[data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-seal { border-radius: 0; clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); }
-[data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-visit, [data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-fold { color: #0c131a; }
-[data-theme='dark'] .console-nav-item.ofm-sponsor-nav { color: #69ded0; }
+.console-nav-item.ofm-sponsor-nav { color: var(--fg-2, #8a8a94); }
+.console-nav-item.ofm-sponsor-nav > span:not(.console-nav-indicator) { font-size: 12px; font-weight: 500; white-space: normal; line-height: 1.5; }
+[data-theme='dark'] .ofm-sponsor-desktop { --sp-ink: var(--fg-0, #f5f5f7); --sp-muted: var(--fg-2, #6e6e78); --sp-paper: var(--bg-1, #0b0b0d); --sp-soft: var(--bg-2, #121215); --sp-line: var(--line-2, rgb(255 255 255 / 13%)); --sp-accent: var(--fg-0, #ffffff); --sp-radius: var(--r-lg, 14px); }
+[data-theme='dark'] .ofm-sponsor-desktop.ofm-sponsor-dialog { border-color: var(--line-2, rgb(255 255 255 / 13%)); box-shadow: var(--shadow-lg, 0 24px 100px -22px rgb(0 0 0 / 65%)); }
+[data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-intro h2 { font-family: inherit; font-weight: 620; }
+[data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-seal { border-radius: var(--r-md, 10px); clip-path: none; }
+[data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-visit, [data-theme='dark'] .ofm-sponsor-desktop .ofm-sponsor-fold { color: var(--accent-ink, #08080a); }
+[data-theme='dark'] .console-nav-item.ofm-sponsor-nav { color: var(--fg-2, #6e6e78); }
 @keyframes ofm-sponsor-appear { from { opacity: .2; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (max-width: 600px) {
   .ofm-sponsor-dialog { width: calc(100vw - 20px); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }

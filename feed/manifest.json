@@ -1,7 +1,7 @@
 {
-  "version": "2.8.3",
+  "version": "2.8.4",
   "base": "../",
-  "publishedAt": "2026-11-08T05:55:53.297Z",
+  "publishedAt": "2026-11-14T17:52:29.924Z",
   "notes": "",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 628734,
-      "sha256": "54ba792f5fd3238c01623c3581bf47ad11d0384df4defa7fdd35ee91c9594515"
+      "size": 646668,
+      "sha256": "1ba3f0f3b0e4b35b10331759c0746e860e7c40b9feba6b6aa1abd902ce158b94"
     },
     {
       "path": "cordis.patch.yml",
@@ -31,8 +31,8 @@
     },
     {
       "path": "index.js",
-      "size": 135491,
-      "sha256": "e905f725e42c71b32bd0a7a6b87df85bff6d90c26403232e4c4372e692f83a42"
+      "size": 138501,
+      "sha256": "9db06c3e2ce47e5ba985ca421b689a1e7aa2bc0a356dd347fb1d5354e2bd5080"
     },
     {
       "path": "LICENSE",
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 5208,
-      "sha256": "d717e757e7c9358b5c7f5dcfcb3f5313564d677e7e3e1e75ef60dec03ee1839b"
+      "sha256": "788e73af33d3105367174d1af38be7d38d29e387bb8e2a8b3b12591dfc48dd0d"
     },
     {
       "path": "src/adapter.js",
@@ -76,8 +76,8 @@
     },
     {
       "path": "src/catalog.js",
-      "size": 37765,
-      "sha256": "2860d311d3b1c4e6529afd836f50a3ffded89238aced3b36fb33167299177c06"
+      "size": 44164,
+      "sha256": "3ff5e01a09c87e23e4fd815d180575094223350225aa2c1996c9da77a47169a5"
     },
     {
       "path": "src/chan-relay.js",
@@ -246,8 +246,8 @@
     },
     {
       "path": "src/model-test.js",
-      "size": 5090,
-      "sha256": "2afc982c5d74aa345656536f98240b45c5aa6d676a796ffb8be87785dda78da7"
+      "size": 16800,
+      "sha256": "a246b8efa330709b91bfa8b083ff00d8f64704960705647855669f3d7a41b366"
     },
     {
       "path": "src/o2a.js",
@@ -266,8 +266,8 @@
     },
     {
       "path": "src/plugins.js",
-      "size": 46841,
-      "sha256": "4d5c716b17bb56c4e180f7f1f9ab6ac4c16142c58eb3ad82c56eb45e2332d9e0"
+      "size": 46875,
+      "sha256": "b67f8e9ff52c80f61abe590067e64d74a1ff9e75ced58c97eaf0707487b1b989"
     },
     {
       "path": "src/probe.js",
@@ -311,8 +311,8 @@
     },
     {
       "path": "src/store.js",
-      "size": 25787,
-      "sha256": "64d3d5690ab0a632aa7bfaec388d99ca0ce5c7b98ff972b916ee9d270878c214"
+      "size": 26272,
+      "sha256": "ad420667a4dd9876e8dafdf969520345dda59a56e29f3c7778c0acbf78fae805"
     },
     {
       "path": "src/stream.js",
@@ -405,5 +405,5 @@
       "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ],
-  "signature": "C1OQgzl4fyzZBnZmXgiUEn6ps6M+ViQD7D4s5nlLFZapcowp4ZoO/rWFthbLuKl1SzCvFDM2Y0WOCNb6L8JbCA=="
+  "signature": "P08rQfGsQ2o6FeMwuRB3hSOx9yQvGs6LrnPPRXHW9Nj/N028GVSxfkBr66Ki+s3tv3isTg3L7wvC3m+ToUqsCQ=="
 }

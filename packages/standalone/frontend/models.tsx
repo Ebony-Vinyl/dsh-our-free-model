@@ -204,6 +204,7 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
     {models.length ? <div className="model-table" role="table" aria-label="模型清单" aria-rowcount={models.length + 1} aria-colcount={5}>
       <div className="model-table-header" role="row"><span role="columnheader">模型 / ID</span><span role="columnheader">渠道与能力</span>
         <span role="columnheader">上下文 / 输出</span><span role="columnheader">可用状态</span><span role="columnheader">操作</span></div>
+      <div className="model-table-body">
       <div ref={scrollRef} className="model-scroll" role="rowgroup" tabIndex={0} aria-label="滚动模型列表" onKeyDown={event => {
         if (event.target !== event.currentTarget) return
         if (event.key === 'Home' || event.key === 'End') {
@@ -256,6 +257,7 @@ export function Models({ summary, host, active }: { summary: Summary; host: Host
             </div>
           })}
         </div>
+      </div>
       </div>
     </div> : <div className="model-empty"><Boxes size={28} /><h2>{summary.catalog.length ? '没有匹配的模型' : '模型清单为空'}</h2>
       <p>{summary.catalog.length ? '调整搜索条件或清空筛选。' : '刷新清单后重试，或检查渠道连接。'}</p>

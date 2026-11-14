@@ -1,0 +1,390 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 动效系统
+
+   零依赖。全部动效只碰 transform / opacity / filter，不触发布局。
+   所有动画都可被三层闸门关掉：
+     1. @media (prefers-reduced-motion: reduce) —— 系统偏好，最后一道保险
+     2. [data-motion="off"]                      —— 侧边栏开关（localStorage）
+     3. [data-motion-active="false"]             —— 标签页隐藏 / 面板离屏
+
+   装饰层（极光 / 网格 / 扫描线 / 颗粒 / 尘埃）挂在固定定位的 .m-field 上，
+   由 motion/field.tsx 渲染；canvas 尘埃由 JS 驱动，CSS 只负责尺寸。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 关键帧 ──────────────────────────────────────────────────────────────── */
+
+/* 极光带缓慢漂移：位移 + 极轻微缩放，肉眼是"呼吸"而非"移动" */
+@keyframes m-drift {
+  0%   { transform: translate3d(-2%, -1.5%, 0) scale(1.04); }
+  50%  { transform: translate3d(1.5%, 1%, 0) scale(1.07); }
+  100% { transform: translate3d(-2%, -1.5%, 0) scale(1.04); }
+}
+@keyframes m-drift-slow {
+  0%   { transform: translate3d(2%, 1%, 0) scale(1.06); }
+  50%  { transform: translate3d(-1.5%, -1%, 0) scale(1.03); }
+  100% { transform: translate3d(2%, 1%, 0) scale(1.06); }
+}
+
+/* 扫描线：一条 1px 亮线自上而下扫过整个视口，周期很长，偶尔才注意得到 */
+@keyframes m-scan-sweep {
+  0%   { transform: translate3d(0, -20vh, 0); opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translate3d(0, 120vh, 0); opacity: 0; }
+}
+
+/* 骨架屏高光 */
+@keyframes m-shimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+
+/* 扫光：主按钮点击 / 卡片悬停时一道斜光掠过 */
+@keyframes m-sheen {
+  0%   { transform: translate3d(-120%, 0, 0) skewX(-18deg); opacity: 0; }
+  25%  { opacity: .85; }
+  100% { transform: translate3d(220%, 0, 0) skewX(-18deg); opacity: 0; }
+}
+
+/* 入场：位移 + 淡入 + 轻微失焦，比单纯 fade 有"对焦"感 */
+@keyframes m-rise {
+  0%   { opacity: 0; transform: translate3d(0, 14px, 0); filter: blur(6px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes m-rise-left {
+  0%   { opacity: 0; transform: translate3d(-16px, 0, 0); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* 纯淡入：只用于遮罩层这类不能位移的元素（位移会让 ::backdrop 露出边缘） */
+@keyframes m-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 弹出：回弹缓动，用于徽章 / 提示 / 弹窗 */
+@keyframes m-pop {
+  0%   { opacity: 0; transform: scale(.92); }
+  60%  { opacity: 1; transform: scale(1.012); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* 页面转场：整个内容舞台重挂时播放 */
+@keyframes m-page-in {
+  0%   { opacity: 0; transform: translate3d(0, 10px, 0) scale(.995); filter: blur(8px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+/* 柱状图逐根生长 */
+@keyframes m-bar-grow {
+  0%   { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+
+/* 开关滑块：先压扁再弹到位（"墨水扩散"） */
+@keyframes m-ink-spread {
+  0%   { transform: scaleX(.72) scaleY(1.1); }
+  60%  { transform: scaleX(1.16) scaleY(.9); }
+  100% { transform: none; }
+}
+
+/* 状态点呼吸 */
+@keyframes m-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .45; transform: scale(.86); }
+}
+
+/* 焦点环扩散 */
+@keyframes m-ring {
+  0%   { box-shadow: 0 0 0 0 var(--focus-halo); }
+  100% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* 品牌字标的轻微抖动，只在悬停时触发一次 */
+@keyframes m-glitch {
+  0%, 100% { transform: none; }
+  20% { transform: translate3d(-1px, 0, 0); }
+  40% { transform: translate3d(1px, 1px, 0); }
+  60% { transform: translate3d(-1px, -1px, 0); }
+  80% { transform: translate3d(1px, 0, 0); }
+}
+
+/* 光标闪烁 */
+@keyframes m-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes m-spin { to { transform: rotate(360deg); } }
+
+/* 载入条：不确定进度，来回滑动 */
+@keyframes m-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+
+/* 图表网格线自左向右生长 */
+@keyframes m-grid-in {
+  0%   { transform: scaleX(0); opacity: 0; }
+  100% { transform: scaleX(1); opacity: 1; }
+}
+
+/* ── 装饰层 ──────────────────────────────────────────────────────────────── */
+
+.m-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+
+/* 极光：三层低透明径向渐变，各自以不同周期漂移，叠加后像缓慢流动的极光 */
+.m-aurora {
+  position: absolute;
+  inset: -20% -10%;
+  will-change: transform;
+}
+.m-aurora::before,
+.m-aurora::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.m-aurora::before {
+  background:
+    radial-gradient(52% 42% at 18% 8%, var(--aurora-1), transparent 68%),
+    radial-gradient(46% 38% at 82% 18%, var(--aurora-2), transparent 70%);
+  opacity: var(--aurora-alpha);
+  animation: m-drift 34s ease-in-out infinite;
+}
+.m-aurora::after {
+  background:
+    radial-gradient(58% 46% at 68% 86%, var(--aurora-2), transparent 72%),
+    radial-gradient(40% 34% at 12% 74%, var(--aurora-3), transparent 70%);
+  opacity: calc(var(--aurora-alpha) * .78);
+  animation: m-drift-slow 46s ease-in-out infinite;
+}
+
+/* 细网格：44px 一格，1px 线，几乎看不见但给页面一个"坐标感" */
+.m-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  /* 边缘淡出，避免网格硬切到视口边界 */
+  mask-image: radial-gradient(120% 100% at 50% 0%, #000 20%, transparent 88%);
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 20%, transparent 88%);
+}
+
+/* 扫描线：一条亮线 + 一层极淡的横向扫描纹（深色专属，浅色 --scan-alpha:0） */
+.m-scan {
+  position: absolute;
+  inset: 0;
+  opacity: var(--scan-alpha);
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 4%) 0 1px,
+    transparent 1px 4px
+  );
+}
+.m-scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22vh;
+  background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 7%), transparent);
+  animation: m-scan-sweep 14s linear infinite;
+  animation-delay: 3s;
+}
+
+/* 颗粒：feTurbulence 生成一次，铺满视口，柔光叠加 */
+.m-grain {
+  position: absolute;
+  inset: 0;
+  opacity: var(--grain-alpha);
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+  background-size: 160px 160px;
+}
+
+/* 尘埃：canvas，JS 绘制；尺寸与混合模式在此 */
+.m-dust {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: .9;
+}
+
+/* 内容必须浮在装饰层之上 —— 与 app.css 的 z-index 契约一致 */
+.app-shell,
+.sidebar,
+.topbar,
+main,
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+/* 主题层同样需要抬升，但绝不能碰 .sidebar 的 position（否则 sticky 失效）。
+   测试 standalone-frontend-test 明确要求这条规则存在且带 :not(.sidebar)。
+   末尾的 --m-stack 是惰性声明：它让压缩器无法把这条规则与上面那条合并成
+   一个选择器列表（一旦合并，列表里出现 .sidebar，守卫就会误判）。 */
+[data-theme="dark"] .app-shell > :not(.sidebar) {
+  position: relative;
+  z-index: 1;
+  --m-stack: 1;
+}
+
+/* ── 工具类：聚光灯 ──────────────────────────────────────────────────────────
+   卡片跟随鼠标位置亮起一块柔光。坐标由 useSpotlight() 写入 --spot-x/--spot-y，
+   未初始化时退到中心，静态下也好看。 */
+.m-spot {
+  position: relative;
+  isolation: isolate;
+}
+.m-spot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out-expo);
+  background: radial-gradient(
+    280px circle at var(--spot-x, 50%) var(--spot-y, 0%),
+    rgb(255 255 255 / var(--spot-alpha, .08)),
+    transparent 72%
+  );
+}
+.m-spot:hover::before,
+.m-spot:focus-within::before { opacity: 1; }
+
+/* ── 工具类：3D 倾斜 ─────────────────────────────────────────────────────────
+   useTilt() 写 --tilt-x/--tilt-y（度）与 --tilt-lift（px）。 */
+.m-tilt {
+  transform:
+    perspective(900px)
+    rotateX(var(--tilt-x, 0deg))
+    rotateY(var(--tilt-y, 0deg))
+    translate3d(0, var(--tilt-lift, 0px), 0);
+  transform-style: preserve-3d;
+  transition: transform var(--dur-slow) var(--ease-out-expo), box-shadow var(--dur-base) var(--ease-out-expo);
+  will-change: transform;
+}
+.m-tilt.is-tracking { transition: transform 60ms linear, box-shadow var(--dur-base) var(--ease-out-expo); }
+
+/* 倾斜时随角度移动的镜面高光 */
+.m-tilt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out-expo);
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgb(255 255 255 / calc(var(--sheen-a, 0) * .55)) 48%,
+    transparent 64%
+  );
+}
+.m-tilt:hover::after { opacity: 1; }
+
+/* ── 工具类：磁吸 ─────────────────────────────────────────────────────────────
+   useMagnetic() 写 --mag-x/--mag-y，最大 3px，避免"按钮跑掉"。 */
+.m-magnetic {
+  transform: translate3d(var(--mag-x, 0px), var(--mag-y, 0px), 0);
+  transition: transform 260ms var(--ease-spring);
+}
+
+/* ── 工具类：入场错峰 ─────────────────────────────────────────────────────────
+   useReveal() 给容器加 .is-revealed，子项按 --i 依次升起。
+
+   关键：初始隐藏只在「动效被允许」时才生效（.m-reveal.is-armed）。
+   否则 IntersectionObserver 没跑、JS 出错、或元素初始就在视口外时，
+   内容会永久停在 opacity:0 —— 那是最糟的失败模式：不是少个动画，而是内容消失。 */
+.m-reveal.is-armed > * {
+  opacity: 0;
+  transform: translate3d(0, 12px, 0);
+}
+.m-reveal.is-armed.is-revealed > * {
+  animation: m-rise var(--dur-slow) var(--ease-out-expo) both;
+  /* 错峰上限 8 档：长列表（几十行）如果按 --i 线性递增，
+     最后几行要等两三秒才出现，看起来像卡住了。 */
+  animation-delay: calc(min(var(--i, 0), 8) * 55ms);
+}
+
+/* ── 工具类：页面转场 ─────────────────────────────────────────────────────── */
+.page-stage {
+  animation: m-page-in var(--dur-page) var(--ease-out-expo) both;
+  min-width: 0;
+}
+
+/* ── 主题扩散（View Transitions）─────────────────────────────────────────────
+   shell.tsx 的 useTheme 写入 --theme-reveal-x/y/r，新主题以圆形 clip-path 从
+   切换按钮扩散覆盖旧主题。测试要求 ::view-transition-new(root) 与 clip-path: circle( 同时出现。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-reveal-in 560ms var(--ease-glide) both;
+}
+@keyframes theme-reveal-in {
+  from { clip-path: circle(0 at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%)); }
+  to   { clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%)); }
+}
+/* 扩散期间关掉全站的颜色过渡，否则快照会抓到过渡中间色 */
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: none !important;
+}
+
+/* ── 闸门 1：系统偏好减少动效 ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .m-reveal.is-armed > * { opacity: 1; transform: none; }
+  .m-field .m-dust { display: none; }
+}
+
+/* ── 闸门 2：用户关闭动效 ─────────────────────────────────────────────────── */
+[data-motion="off"] *,
+[data-motion="off"] *::before,
+[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+[data-motion="off"] .m-reveal.is-armed > * { opacity: 1; transform: none; }
+[data-motion="off"] .m-tilt,
+[data-motion="off"] .m-magnetic { transform: none !important; }
+[data-motion="off"] .m-spot::before,
+[data-motion="off"] .m-tilt::after { display: none; }
+[data-motion="off"] .m-field { display: none; }
+
+/* ── 闸门 3：标签页隐藏 / 面板离屏 ───────────────────────────────────────── */
+[data-motion-active="false"] *,
+[data-motion-active="false"] *::before,
+[data-motion-active="false"] *::after {
+  animation-play-state: paused !important;
+}

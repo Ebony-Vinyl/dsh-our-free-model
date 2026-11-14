@@ -660,8 +660,8 @@ export function builtinDescriptors() {
     {
       manifest: {
         id: 'core-model-workspace',
-        name: '模型工作台',
-        description: '内置的本地模型工作台页面与模型目录同步。',
+        name: '模型工作台（magpie）',
+        description: '内置的本地模型工作台页面与模型目录同步（引擎为 magpie）。',
         icon: 'panels',
         provides: ['ui'],
       },

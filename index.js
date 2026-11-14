@@ -43,7 +43,7 @@ import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
 import { unlockSealedLane } from './src/vault.js'
 import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort.js'
-import { modelAvailability } from './src/model-test.js'
+import { readPerf, readSeries, siteRootFor, modelAvailability } from './src/model-test.js'
 import { AnnouncementFeed } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
 import { PluginUpdater, installationIsManaged } from './src/updater.js'
@@ -1152,6 +1152,10 @@ export function apply(ctx, config) {
     },
     subscriptions,
     onSubscriptionsChanged: syncAggregateCatalog,
+    // The sealed credential names the lane's base (`…/eac/v1`); the perf route
+    // derives the site root from it so the metrics endpoint is found without a
+    // second hard-coded address.
+    sealedCredential: sealedCredentialOf,
     // ── the aggregate lane's settings surface ────────────────────────────────
     // The registry is static data; the configured half is the settings file with
     // every key masked. Writing one provider rebuilds the catalog and re-emits
@@ -1816,6 +1820,29 @@ function imageResolver(ctx, logger) {
 /** The fixed failure classes the pool proxy may surface to the client. */
 const POOL_REASONS = new Set(['no-lane', 'gateway-status', 'malformed', 'unreachable'])
 
+// ── per-model performance figures ─────────────────────────────────────────────
+// The roster asks for these on every mount, and they are hourly samples: a
+// minute of staleness costs nothing, while an outbound hop per page load is
+// pure load on the site. The in-flight promise is shared as well, so a burst of
+// mounts costs one request rather than one each.
+const PERF_FRESH_MS = 60_000
+let perfCache = { at: 0, data: null }
+let perfPending = null
+function perfSnapshot(root, fetchImpl) {
+  if (root === null || root === undefined) return Promise.resolve({ models: {} })
+  if (perfCache.data !== null && Date.now() - perfCache.at < PERF_FRESH_MS) return Promise.resolve(perfCache.data)
+  if (perfPending !== null) return perfPending
+  perfPending = readPerf({ root, fetch: fetchImpl })
+    .then(data => {
+      // Only a non-empty answer is worth keeping: caching "the site did not
+      // answer" would hide a recovery for a full minute.
+      if (Object.keys(data.models).length > 0) perfCache = { at: Date.now(), data }
+      return data
+    })
+    .finally(() => { perfPending = null })
+  return perfPending
+}
+
 export function createApiRoutes(deps) {
   return async function handler(req, res) {
     const url = new URL(req.url ?? '/', 'http://localhost')
@@ -1875,6 +1902,30 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/stats') {
         return send(200, buildStats(deps.stats.get(), deps.catalog()))
+      }
+      // Per-model performance figures for the roster's cards. The site's own
+      // metrics endpoint is public but sends no CORS headers, so the page
+      // cannot call it directly — this is the server-side hop. One request
+      // answers every model, and the map holds only models whose figure is
+      // trustworthy (see src/model-test.js); an absent model draws no strip.
+      //
+      // Cached for a minute and de-duplicated while in flight: the roster asks
+      // on every mount, and the figures are hourly samples — a fresh outbound
+      // request per page load buys nothing but load on the site.
+      if (method === 'GET' && routePath === '/perf') {
+        const credential = deps.sealedCredential?.() ?? null
+        const root = siteRootFor(credential?.base)
+        return send(200, await perfSnapshot(root, deps.perfFetch ?? directFetch))
+      }
+      // One model's hourly trend series, for the charts behind 详情. Separate
+      // from `/perf` because it is per model: the roster would otherwise pay
+      // twelve requests to draw twelve strips nobody has expanded yet.
+      if (method === 'GET' && routePath === '/perf/series') {
+        const modelId = url.searchParams.get('model') ?? ''
+        const credential = deps.sealedCredential?.() ?? null
+        const root = siteRootFor(credential?.base)
+        const series = await readSeries({ root, modelId, fetch: deps.perfFetch ?? directFetch })
+        return send(200, series === null ? { series: null } : series)
       }
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())

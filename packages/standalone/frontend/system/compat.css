@@ -1,0 +1,164 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 通用件
+
+   这里只放「多个页面共用、但不属于外壳也不属于某一个页面」的少量规则。
+   第一段时它还是个补丁堆，装着十几页的缺口；第二段把各页重做后，
+   大部分条目已经搬回各自的样式表，只剩这些真正跨页的。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 页头：概览 / 用量 / 设置 / 接入 / 更新共用 ───────────────────────────── */
+.dashboard-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.dashboard-heading > div { min-width: 0; }
+.dashboard-heading h1 { margin: 4px 0 3px; }
+.dashboard-heading p { font-size: 12px; line-height: 1.6; color: var(--fg-2); }
+.dashboard-heading > svg { flex: none; color: var(--fg-3); margin-top: 4px; }
+
+/* ── 卡片页脚：概览 / 用量 / 设置 ─────────────────────────────────────────── */
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-1);
+  font-size: 10.5px;
+  color: var(--fg-2);
+}
+.card-foot > span { min-width: 0; overflow-wrap: anywhere; }
+.card-foot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-1);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, gap var(--dur-base) var(--ease-spring);
+}
+.card-foot button:hover { color: var(--fg-0); gap: 8px; }
+
+/* ── 错误条：通知条上的红色变体 ───────────────────────────────────────────── */
+.error-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-color: var(--err-line);
+  background: var(--err-soft);
+  color: var(--err);
+}
+.error-notice > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* 页内错误条（用量统计 / 模型清单 / 渠道浏览器共用）。
+   放在这里而不是 models.css：那是按需分包，只访问用量页时它还没下载。 */
+.channel-error {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--err-line);
+  border-radius: var(--r-md);
+  background: var(--err-soft);
+  color: var(--err);
+  font-size: 11.5px;
+  line-height: 1.55;
+  animation: m-rise var(--dur-base) var(--ease-out-expo) both;
+}
+.channel-error > svg { flex: none; }
+.channel-error > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.channel-error .ui-button { flex: none; }
+
+/* ── 表单小标签 ───────────────────────────────────────────────────────────── */
+.footnote { font-size: 11px; line-height: 1.65; color: var(--fg-2); overflow-wrap: anywhere; text-wrap: pretty; }
+.field-label,
+.detail-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  color: var(--fg-2);
+}
+.detail-label { margin-top: 18px; }
+
+/* ── 渠道浏览器（components/channel-browser.tsx）的工具条 ────────────────── */
+.channel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.channel-search { position: relative; flex: 1 1 200px; min-width: 180px; max-width: 340px; }
+.channel-search > svg {
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  color: var(--fg-3);
+  pointer-events: none;
+}
+.channel-search input { width: 100%; height: 32px; padding-left: 32px; }
+.channel-results-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 13px 0 9px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+.channel-results-meta span { display: flex; align-items: center; gap: 5px; }
+
+/* 渠道详情布局（左右分栏） */
+.provider-detail-layout {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 22px;
+}
+.provider-detail-main { min-width: 0; }
+.provider-detail-sidebar {
+  align-self: start;
+  padding: 0 18px 0 0;
+  border: 0;
+  border-right: 1px solid var(--line-1);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.provider-detail-sidebar::before { display: none; }
+.provider-detail-sidebar h2 { font-size: 13.5px; }
+.provider-detail-sidebar h2:focus { outline: none; }
+.provider-detail-sidebar p { margin: 2px 0 18px; font-size: 10.5px; color: var(--fg-3); }
+.provider-detail-description h2 { font-size: 15px; }
+.provider-detail-description p { margin: 4px 0 14px; font-size: 11.5px; color: var(--fg-1); }
+
+/* 超长标识符兜底 */
+.notice > span,
+.ov-source-row strong,
+.ov-source-row small,
+.ov-endpoint code { overflow-wrap: anywhere; }
+
+@media (max-width: 950px) {
+  .provider-detail-layout { grid-template-columns: 170px minmax(0, 1fr); gap: 16px; }
+}
+
+@media (max-width: 700px) {
+  .provider-detail-layout { grid-template-columns: minmax(0, 1fr); }
+  .provider-detail-sidebar {
+    padding: 0 0 14px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-1);
+  }
+  .provider-detail-sidebar p { margin-bottom: 10px; }
+  .channel-search { max-width: none; flex-basis: 100%; }
+  .dashboard-heading { flex-wrap: wrap; }
+}

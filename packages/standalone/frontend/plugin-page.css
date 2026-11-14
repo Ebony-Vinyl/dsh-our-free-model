@@ -1,9 +1,100 @@
-.plugin-page { display: flex; flex-direction: column; gap: 16px; padding: 4px 2px 24px; }
-.plugin-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
-.plugin-page-header h1 { margin: 2px 0 4px; font-size: 26px; line-height: 1.2; color: var(--ink); }
-.plugin-page-header p { margin: 0; color: var(--muted); max-width: 720px; overflow-wrap: anywhere; }
-.plugin-page-frame { position: relative; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; min-height: 360px; }
-.plugin-page-frame iframe { display: block; width: 100%; border: 0; background: var(--surface); }
-.plugin-page-loading { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); background: var(--surface); }
-.plugin-page-fallback { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--danger-line); background: var(--danger-soft); color: var(--danger-ink); border-radius: 16px; padding: 18px; }
-.plugin-page-fallback p { margin: 4px 0 0; color: var(--ink-soft); font-size: 13px; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 插件页面宿主
+
+   一个插件页面 = 一个 sandbox="allow-scripts" 的 iframe。
+   这里只负责外壳：页头、圆角容器、加载态、失败态。
+
+   注意 iframe 的高度由插件自己 postMessage 上报（plugin-page.tsx 里
+   setHeight），所以容器不能写死高度，也不要用 contain: size。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.plugin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.plugin-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.plugin-page-header > div:first-child { min-width: 0; }
+.plugin-page-header h1 { margin: 4px 0 3px; font-size: 22px; line-height: 1.25; }
+.plugin-page-header p {
+  margin: 0;
+  max-width: 720px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.plugin-page-header .plugin-actions { flex: none; }
+
+.plugin-page-frame {
+  position: relative;
+  min-height: 360px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  background: var(--bg-1);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.plugin-page-frame iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: var(--bg-1);
+  /* 插件页面自带主题；这一层只兜住加载瞬间 */
+  color-scheme: light dark;
+}
+
+.plugin-page-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  background: var(--bg-1);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.plugin-page-fallback {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 16px;
+  border: 1px solid var(--err-line);
+  border-radius: var(--r-lg);
+  background: var(--err-soft);
+  color: var(--err);
+  animation: m-rise var(--dur-base) var(--ease-out-expo) both;
+}
+.plugin-page-fallback > svg { flex: none; margin-top: 1px; }
+.plugin-page-fallback strong { display: block; font-size: 12.5px; }
+.plugin-page-fallback p {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--fg-1);
+  overflow-wrap: anywhere;
+}
+
+/* 旋转指示器（plugin-page.tsx 里给 Loader2 挂了 .spin） */
+.spin { animation: m-spin 1s linear infinite; }
+
+@media (max-width: 700px) {
+  .plugin-page-header h1 { font-size: 19px; }
+  .plugin-page-frame { min-height: 280px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin-page-fallback { animation: none !important; }
+  .spin { animation-duration: 2.4s !important; }
+}

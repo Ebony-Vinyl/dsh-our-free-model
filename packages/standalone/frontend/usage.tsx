@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, CircleAlert, Layers3, RefreshCw, Search, RotateCcw, X } from 'lucide-react'
 import { Badge, Button, Card, Input } from './components/ui'
+import { useCountUp } from './motion/hooks'
 import { usageDays, usageModels } from './usage-data.mjs'
 import type { Host, Stats, UsageModel } from './types'
 import './usage.css'
@@ -9,6 +10,16 @@ const number = (value: number) => new Intl.NumberFormat('zh-CN').format(value)
 const compact = (value: number) => value >= 1e6 ? `${Number((value / 1e6).toFixed(1))}M`
   : value >= 1e3 ? `${Number((value / 1e3).toFixed(1))}K` : number(value)
 const measured = (value?: number | null) => value != null && Number.isFinite(value) ? number(value) : '—'
+
+/**
+ * 指标数字：滚动到位。
+ * 用单独的组件是因为 useCountUp 是 hook —— 不能在 map 里调用。
+ * `format` 在每帧都会跑，所以这里只做格式化，不碰任何状态。
+ */
+function MetricValue({ value, format }: { value: number; format(value: number): string }) {
+  const animated = useCountUp(value)
+  return <>{format(Math.round(animated))}</>
+}
 
 export function Usage({ stats, host, active }: { stats: Stats; host: Host; active: boolean }) {
   const [period, setPeriod] = useState(14)
@@ -72,9 +83,11 @@ export function Usage({ stats, host, active }: { stats: Stats; host: Host; activ
     {message && <p className="usage-feedback" role="status">{message}</p>}
     {error && <div className="channel-error" role="alert"><CircleAlert size={16} /><span>{error}</span>
       <Button variant="ghost" aria-label="关闭统计错误提示" onClick={() => setError('')}><X size={15} /></Button></div>}
-    <div className="usage-metrics">{metrics.map(metric => <Card className="dashboard-metric ov-metric" key={metric.name}>
-      <div><span>{metric.name}</span><div className="ov-metric-icon"><metric.icon size={17} /></div></div>
-      <strong title={number(metric.value)} data-metric={metric.name}>{metric.name.includes('Token') ? compact(metric.value) : number(metric.value)}</strong><p>{metric.detail}</p>
+    <div className="usage-metrics">{metrics.map(metric => <Card className="ov-metric" key={metric.name}>
+      <div><span>{metric.name}</span><div className="ov-metric-icon"><metric.icon size={15} /></div></div>
+      <strong title={number(metric.value)} data-metric={metric.name}>
+        <MetricValue value={metric.value} format={metric.name.includes('Token') ? compact : number} />
+      </strong><p>{metric.detail}</p>
     </Card>)}</div>
     <div className="usage-scope"><span>累计统计 · 不受下方趋势天数影响</span>
       <span>物理失败请求 <strong data-testid="usage-request-failures">{number(stats.requestFailures)}</strong></span>

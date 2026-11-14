@@ -1,32 +1,102 @@
-/* The model workspace: a full-height frame plus a thin toolbar. */
-.ws-page { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
-.ws-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.ws-title h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -.01em; }
-.ws-title p { margin: 4px 0 0; font-size: 12.5px; color: var(--dsw-alias-label-tertiary); }
-.ws-tools { display: flex; align-items: center; gap: 4px; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 模型工作台（iframe 外壳）
+
+   工作台本身是引擎自己的页面（/api/management/engine/ui/），
+   这里只负责那个"框"：工具条、圆角容器、启动/错误态、全屏。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ws-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ws-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ws-title { min-width: 0; }
+.ws-title h2 { font-size: 17px; letter-spacing: -0.01em; }
+.ws-title p { margin-top: 3px; font-size: 11.5px; line-height: 1.6; color: var(--fg-2); }
+.ws-tools { display: flex; align-items: center; gap: 2px; flex: none; }
+
 .ws-body {
-  position: relative; flex: 1 1 auto; min-height: 0;
-  display: flex; flex-direction: column;
-  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
-  background: var(--surface);
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-lg);
+  background: var(--bg-1);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
-.ws-frame { flex: 1 1 auto; width: 100%; min-height: 560px; border: 0; background: var(--bg); display: block; }
+
+.ws-frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 560px;
+  border: 0;
+  background: var(--bg-0);
+  /* 引擎页面自己带主题，外壳只给一个底色兜住加载瞬间的白闪 */
+  color-scheme: light dark;
+}
+
 .ws-empty {
-  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; padding: 40px; min-height: 320px;
-  font-size: 13px; color: var(--dsw-alias-label-tertiary);
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 320px;
+  padding: 40px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--fg-2);
 }
+.ws-empty > span { animation: m-pulse 2.4s var(--ease-out-expo) infinite; }
+
 .ws-error {
-  margin: 12px; padding: 10px 12px; border-radius: 8px;
-  background: color-mix(in srgb, var(--red, #d64545) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--red, #d64545) 34%, transparent);
-  color: var(--red, #d64545); font-size: 12.5px;
+  margin: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--err-line);
+  border-radius: var(--r-sm);
+  background: var(--err-soft);
+  color: var(--err);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
-/* Full screen: the frame takes the viewport and the console behind it is inert. */
+
+/* 全屏：盖住整个视口，背后的控制台变 inert */
 .ws-page.is-expanded {
-  position: fixed; inset: 0; z-index: 60;
-  padding: 14px; gap: 10px;
-  background: var(--bg);
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-0);
+  animation: m-fade var(--dur-base) ease both;
 }
 .ws-page.is-expanded .ws-body { min-height: 0; }
 .ws-page.is-expanded .ws-frame { min-height: 0; }
+
+@media (max-width: 700px) {
+  .ws-title h2 { font-size: 15px; }
+  .ws-frame { min-height: 420px; }
+  .ws-page.is-expanded { padding: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-empty > span,
+  .ws-page.is-expanded { animation: none !important; }
+}

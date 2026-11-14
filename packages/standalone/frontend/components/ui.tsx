@@ -9,19 +9,24 @@ export const cn = (...values: ClassValue[]) => twMerge(clsx(values))
 type ButtonVariant = 'default' | 'outline' | 'ghost'
 type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
-export function Button({ className, variant = 'default', size, busy = false, asChild = false, children, disabled, ...props }:
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize; busy?: boolean; asChild?: boolean }) {
+/**
+ * 按钮。`asChild` 时渲染为 Slot（Radix），把样式挂到调用方给的子元素上。
+ * forwardRef 是必需的：动效 hook 要把 ref 挂到真实 DOM 上写 CSS 变量。
+ */
+export const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant; size?: ButtonSize; busy?: boolean; asChild?: boolean
+}>(function Button({ className, variant = 'default', size, busy = false, asChild = false, children, disabled, ...props }, ref) {
   const Component = asChild ? Slot : 'button'
-  return <Component type="button" className={cn('ui-button', `ui-button-${variant}`, size && `ui-button-${size}`, busy && 'is-busy', className)}
+  return <Component type="button" ref={ref} className={cn('ui-button', `ui-button-${variant}`, size && `ui-button-${size}`, busy && 'is-busy', className)}
     disabled={disabled || busy} data-busy={busy || undefined} {...props}>
     {busy && <Spinner className="ui-button-spinner" aria-hidden="true" />}{children}
   </Component>
-}
+})
 
-export function Card({ className, interactive = false, ...props }:
-  React.HTMLAttributes<HTMLDivElement> & { interactive?: boolean }) {
-  return <div className={cn('ui-card', interactive && 'ui-card-interactive', className)} {...props} />
-}
+export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { interactive?: boolean }>(
+  function Card({ className, interactive = false, ...props }, ref) {
+    return <div ref={ref} className={cn('ui-card', interactive && 'ui-card-interactive', className)} {...props} />
+  })
 
 export function Badge({ className, tone = 'neutral', dot = false, children, ...props }:
   React.HTMLAttributes<HTMLSpanElement> & { tone?: 'neutral' | 'success' | 'warning' | 'blue'; dot?: boolean }) {

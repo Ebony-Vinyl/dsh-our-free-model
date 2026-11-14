@@ -15,7 +15,14 @@ function redact(value: string, body: unknown): string {
     .replace(/\b(?:sk-|AIza|Bearer\s+)[\w.-]{8,}/gi, '[已隐藏]')
 }
 
-export async function management<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+/**
+ * 请求管理接口。
+ *
+ * `signOutOn401` 决定 401 是否要踢掉整个控制台会话。默认要（管理会话确实过期了），
+ * 但反馈页的 401 是"GitHub 登录失效"，不是"管理会话失效" —— 那种情况踢到登录页会
+ * 让用户丢掉已经写好的反馈正文，而重连 GitHub 本来只需要在页面里点一下。
+ */
+export async function management<T>(path: string, body?: unknown, signal?: AbortSignal, options?: { signOutOn401?: boolean }): Promise<T> {
   const response = await fetch(`/api/management${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     credentials: 'same-origin',
@@ -24,11 +31,15 @@ export async function management<T>(path: string, body?: unknown, signal?: Abort
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
   })
-  if (response.status === 401) window.dispatchEvent(new CustomEvent('ofm:unauthorized'))
+  if (response.status === 401 && options?.signOutOn401 !== false) window.dispatchEvent(new CustomEvent('ofm:unauthorized'))
   const value = await response.json().catch(() => { throw new Error(`服务返回了无效响应 (${response.status})`) })
   if (!response.ok || value?.ok === false) {
     const reason = value?.error?.message ?? value?.error ?? value?.message
-    throw new Error(redact(typeof reason === 'string' ? reason : `请求失败 (${response.status})`, body))
+    // 状态码随错误一起抛出：调用方需要区分"管理会话过期"(401) 与普通失败。
+    throw Object.assign(
+      new Error(redact(typeof reason === 'string' ? reason : `请求失败 (${response.status})`, body)),
+      { status: response.status },
+    )
   }
   return value as T
 }

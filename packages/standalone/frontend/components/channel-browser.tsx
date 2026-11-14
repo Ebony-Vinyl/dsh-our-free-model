@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, CircleAlert, Network, Search, ShieldCheck
 import { providers } from 'ofm-provider-list'
 import { shared } from 'ofm-shared-client'
 import { Badge, Button, Card, Input } from './ui'
+import { ProviderIcon } from './provider-icon'
 import type { Summary } from '../types'
 
 interface Status { closed?: boolean; accounts?: { total: number; enabled: number }; models?: { total: number; disabled: number } }
@@ -108,7 +109,7 @@ export function ChannelBrowser({ rpc, summary }: { rpc: Rpc; summary: Summary & 
         const status = statuses?.[provider.id]
         const state = status?.closed ? '已关闭' : (status?.accounts?.enabled ?? 0) > 0 ? '已接入' : '未连接'
         return <Card className="provider-card channel-directory-row" key={provider.id}>
-          <span className="provider-logo" style={{ color: provider.accent, backgroundColor: `${provider.accent}0d` }}>{provider.name.slice(0, 2).toUpperCase()}</span>
+          <span className="provider-logo"><ProviderIcon id={provider.id} name={provider.name} size={18} /></span>
           <div className="channel-directory-name"><h2>{provider.name}</h2><div className="provider-org">{provider.org}</div><p className="provider-description">{provider.note}</p></div>
           <div className="provider-counts"><span>账号 <strong>{status ? status.accounts?.total ?? 0 : '—'}</strong></span>
             <span>模型 <strong>{status ? Math.max(0, (status.models?.total ?? 0) - (status.models?.disabled ?? 0)) : '—'}</strong></span></div>

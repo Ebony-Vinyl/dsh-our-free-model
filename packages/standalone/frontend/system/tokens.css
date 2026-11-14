@@ -1,0 +1,252 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Our Free Model · 独立端控制台 — 设计令牌
+
+   单一事实来源。所有颜色、缓动、半径、阴影、模糊都在这里定义一次。
+
+   配色原则：单色（黑/白）承载全部结构与交互，语义色只出现在状态点、
+   徽章与错误条上。深色是主战场；浅色不是"反过来"，而是同一套几何在
+   纸面上的降噪版本——装饰强度整体下调一档。
+
+   命名：--bg-* 背景层级 · --fg-* 文字层级 · --line-* 描边层级
+        --accent 主操作 · --ok/--warn/--err 语义
+   旧令牌名（--ink/--muted/--paper/--surface/--line/--green/--accent-*）
+   全部保留为别名，指向新值，这样尚未重做的页面不会在切换期崩掉。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* ── 字体 ───────────────────────────────────────────────────────────────── */
+  --font-sans: "Inter var", "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --mono-font: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* ── 缓动 ───────────────────────────────────────────────────────────────── */
+  --ease-out-expo: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.22, 1.24, 0.36, 1);
+  --ease-glide: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snap: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+  --dur-page: 420ms;
+
+  /* ── 几何 ───────────────────────────────────────────────────────────────── */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+  --sidebar-w: 232px;
+  --page-max: 1500px;
+
+  /* ── 浅色：纸面降噪 ─────────────────────────────────────────────────────── */
+  --bg-0: #f6f6f7;
+  --bg-1: #ffffff;
+  --bg-2: #fbfbfc;
+  --bg-3: #f0f0f2;
+  --bg-4: #e7e7ea;
+
+  --fg-0: #0b0b0d;
+  --fg-1: #4a4a52;
+  --fg-2: #8a8a94;
+  --fg-3: #b4b4bc;
+
+  --line-1: rgb(0 0 0 / 7%);
+  --line-2: rgb(0 0 0 / 12%);
+  --line-3: rgb(0 0 0 / 22%);
+
+  --accent: #0b0b0d;
+  --accent-ink: #ffffff;
+  --accent-soft: rgb(0 0 0 / 5%);
+  --accent-glow: rgb(0 0 0 / 10%);
+  --accent-hover: #26262c;
+  --accent-line: rgb(0 0 0 / 16%);
+
+  --ok: #0f7a52;
+  --ok-soft: rgb(15 122 82 / 9%);
+  --ok-line: rgb(15 122 82 / 26%);
+  --warn: #8a5a12;
+  --warn-soft: rgb(138 90 18 / 9%);
+  --warn-line: rgb(138 90 18 / 26%);
+  --err: #b02a37;
+  --err-soft: rgb(176 42 55 / 9%);
+  --err-line: rgb(176 42 55 / 26%);
+
+  /* 装饰强度：浅色一律 ≤ 深色的 1/3 */
+  --veil: rgb(255 255 255 / 62%);
+  --aurora-1: rgb(255 255 255 / 90%);
+  --aurora-2: rgb(228 228 236 / 70%);
+  --aurora-3: rgb(246 246 248 / 80%);
+  --aurora-alpha: 0.55;
+  --grid-line: rgb(0 0 0 / 4.5%);
+  --grid-size: 44px;
+  --grain-alpha: 0.030;
+  --scan-alpha: 0;
+  --spot-alpha: 0.055;
+  --halo: 0 0 0 0 transparent;
+  --sheen: rgb(255 255 255 / 70%);
+
+  --glass-bg: rgb(255 255 255 / 72%);
+  --glass-blur: 18px;
+  --glass-sat: 1.2;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 4%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 5%), 0 2px 8px -4px rgb(0 0 0 / 8%);
+  --shadow-md: 0 2px 4px -1px rgb(0 0 0 / 6%), 0 12px 28px -12px rgb(0 0 0 / 16%);
+  --shadow-lg: 0 4px 10px -4px rgb(0 0 0 / 8%), 0 28px 56px -24px rgb(0 0 0 / 22%);
+  --shadow-accent: 0 8px 24px -10px rgb(0 0 0 / 26%);
+
+  /* ── 旧名别名（未重做的页面仍读这些） ───────────────────────────────────── */
+  --ink: var(--fg-0);
+  --ink-soft: var(--fg-1);
+  --ink-faint: var(--fg-2);
+  --ink-quiet: var(--fg-2);
+  --muted: var(--fg-1);
+  --line: var(--line-2);
+  --line-soft: var(--line-1);
+  --paper: var(--bg-0);
+  --surface: var(--bg-1);
+  --surface-hover: var(--bg-2);
+  --hover: var(--bg-3);
+  --green: var(--accent);
+  --success: var(--ok);
+  --success-ink: var(--ok);
+  --success-soft: var(--ok-soft);
+  --success-line: var(--ok-line);
+  --warning: var(--warn);
+  --warning-soft: var(--warn-soft);
+  --warning-line: var(--warn-line);
+  --danger: var(--err);
+  --danger-ink: var(--err);
+  --danger-soft: var(--err-soft);
+  --danger-line: var(--err-line);
+  --amber: var(--fg-0);
+  --amber-ink: var(--fg-0);
+  --amber-soft: var(--accent-soft);
+  --amber-line: var(--line-2);
+  --amber-glow: var(--accent-glow);
+  --focus-ring: var(--fg-0);
+  --focus-halo: rgb(0 0 0 / 12%);
+  --thumb: rgb(0 0 0 / 14%);
+  --thumb-strong: rgb(0 0 0 / 26%);
+
+  /* ── 共享岛屿（client.js 的 .ofm_*）依赖的宿主令牌 ────────────────────────
+     这几个名字原先在独立端从未定义，导致岛屿里的告警色/遮罩/强调字色
+     全部落到 client.js 里的字面量回退值。补齐后岛屿无需改一行即可跟随主题。 */
+  --dsw-alias-label-primary: var(--fg-0);
+  --dsw-alias-label-secondary: var(--fg-1);
+  --dsw-alias-label-tertiary: var(--fg-2);
+  --dsw-alias-label-on-accent: var(--accent-ink);
+  --dsw-alias-bg-layer-1: var(--bg-1);
+  --dsw-alias-bg-layer-2: var(--bg-0);
+  --dsw-alias-bg-layer-3: var(--bg-3);
+  --dsw-alias-bg-mask-1: rgb(0 0 0 / 42%);
+  --dsw-mask-blur: 6px;
+  --dsw-alias-border-l1: var(--line-1);
+  --dsw-alias-border-l2: var(--line-2);
+  --dsw-alias-state-success-primary: var(--ok);
+  --dsw-alias-state-warning-primary: var(--warn);
+  --dsw-alias-state-error-primary: var(--err);
+  --dsw-alias-state-business-primary: var(--fg-0);
+  --dsw-alias-accent-primary: var(--accent);
+  --dsw-alias-accent-secondary: var(--accent-soft);
+
+  /* workspace.css / disclaimer.css 读了但从未定义的名字。
+     注意：这里绝不能写 `--fg-2: var(--fg-1)` —— 同一块里更晚的声明会
+     覆盖上面真正的 --fg-2，浅色下次要文字会整片变深，设计层级就没了。
+     那两个文件读的 `--fg-2` 本来就是"次要文字"的意思，与真令牌一致。 */
+  --bg: var(--bg-0);
+  --fg: var(--fg-0);
+  --card: var(--bg-1);
+  --red: var(--err);
+  --accent-legacy: var(--accent);
+
+  /* ── 旧「赛博终端」令牌的收口 ────────────────────────────────────────────
+     usage.css / models.css 里还有约 84 处引用 --cp-cyan / --cp-amber 等，
+     它们原本是青+琥珀的霓虹配色，与新单色体系冲突。这里统一重定义为
+     灰阶（青→前景色，琥珀→次要前景色，红保留为错误语义色），
+     这样那些规则不必逐行改动就自动落回单色。 */
+  --cp-cyan: var(--fg-0);
+  --cp-cyan-soft: var(--accent-soft);
+  --cp-cyan-line: var(--line-2);
+  --cp-amber: var(--fg-1);
+  --cp-glow: var(--accent-glow);
+  --cp-grid: var(--grid-line);
+  --cp-scan: transparent;
+  --cp-red: var(--err);
+  --cp-red-soft: var(--err-soft);
+  --cp-red-line: var(--err-line);
+}
+
+/* ── 深色：主战场 ────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-0: #050506;
+  --bg-1: #0b0b0d;
+  --bg-2: #121215;
+  --bg-3: #1a1a1e;
+  --bg-4: #24242a;
+
+  --fg-0: #f5f5f7;
+  --fg-1: #a8a8b0;
+  --fg-2: #6e6e78;
+  --fg-3: #4a4a52;
+
+  --line-1: rgb(255 255 255 / 7%);
+  --line-2: rgb(255 255 255 / 13%);
+  --line-3: rgb(255 255 255 / 22%);
+
+  --accent: #ffffff;
+  --accent-ink: #08080a;
+  --accent-soft: rgb(255 255 255 / 8%);
+  --accent-glow: rgb(255 255 255 / 18%);
+  --accent-hover: #e4e4e8;
+  --accent-line: rgb(255 255 255 / 24%);
+
+  --ok: #5fd39a;
+  --ok-soft: rgb(95 211 154 / 11%);
+  --ok-line: rgb(95 211 154 / 30%);
+  --warn: #e0b062;
+  --warn-soft: rgb(224 176 98 / 11%);
+  --warn-line: rgb(224 176 98 / 30%);
+  --err: #ef6b7a;
+  --err-soft: rgb(239 107 122 / 11%);
+  --err-line: rgb(239 107 122 / 30%);
+
+  --veil: rgb(5 5 6 / 62%);
+  --aurora-1: rgb(255 255 255 / 100%);
+  --aurora-2: rgb(160 160 200 / 100%);
+  --aurora-3: rgb(120 120 140 / 100%);
+  --aurora-alpha: 0.085;
+  --grid-line: rgb(255 255 255 / 4%);
+  --grid-size: 44px;
+  --grain-alpha: 0.075;
+  --scan-alpha: 0.05;
+  --spot-alpha: 0.085;
+  --halo: 0 0 32px rgb(255 255 255 / 6%);
+  --sheen: rgb(255 255 255 / 14%);
+
+  --glass-bg: rgb(11 11 13 / 66%);
+  --glass-blur: 22px;
+  --glass-sat: 1.3;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 60%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 60%), 0 2px 10px -4px rgb(0 0 0 / 70%);
+  --shadow-md: 0 2px 6px -2px rgb(0 0 0 / 70%), 0 16px 36px -16px rgb(0 0 0 / 85%);
+  --shadow-lg: 0 6px 14px -6px rgb(0 0 0 / 80%), 0 36px 72px -28px rgb(0 0 0 / 92%);
+  --shadow-accent: 0 10px 30px -12px rgb(255 255 255 / 22%);
+
+  --focus-halo: rgb(255 255 255 / 16%);
+  --thumb: rgb(255 255 255 / 14%);
+  --thumb-strong: rgb(255 255 255 / 28%);
+
+  --dsw-alias-bg-mask-1: rgb(0 0 0 / 68%);
+  --dsw-mask-blur: 8px;
+}
+
+/* 系统要求减少动效时，装饰强度再降一档（真正的动画关闭在 motion.css）。 */
+@media (prefers-reduced-motion: reduce) {
+  :root { --aurora-alpha: 0; --scan-alpha: 0; --spot-alpha: 0; --grain-alpha: 0.02; }
+}

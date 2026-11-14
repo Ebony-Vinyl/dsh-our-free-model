@@ -1,11 +1,13 @@
-.desktop-update-browser{display:grid;gap:20px}
-.desktop-update-versions{display:flex;flex-wrap:wrap;gap:28px;padding:8px 0 20px}
-.desktop-update-versions>div{display:grid;gap:8px;min-width:140px}
-.desktop-update-versions small{color:var(--muted);font-size:12px}
-.desktop-update-versions strong{font-size:22px;font-weight:600}
-.desktop-update-versions span{font-size:13px}
-.desktop-update-actions{display:flex;flex-wrap:wrap;gap:10px}
-.desktop-update-progress{display:grid;gap:10px;margin-top:20px;font-size:13px}
-.desktop-update-progress>div{display:flex;justify-content:space-between;gap:12px}
-.desktop-update-progress progress{width:100%;height:8px;accent-color:var(--amber)}
-.desktop-update-notes{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;font-size:13px;line-height:1.8}
+/* 应用更新的主要样式已并入 settings.css —— 它与服务设置共用同一套分组卡片
+   语言，拆成两份只会让两边慢慢漂移。这个文件保留，因为 desktop-update.tsx
+   里有 `import './desktop-update.css'` 的契约，而且桌面端独有的一点点
+   差异放这里最清楚。 */
+
+/* 更新说明里的版本号/命令走等宽，正文仍是正文字体 */
+.desktop-update-notes code {
+  font-family: var(--mono-font);
+  font-size: 0.95em;
+}
+
+/* 进度条在深色下需要自己的一层底：原生 <progress> 的默认轨道不跟主题 */
+.desktop-update-progress progress { color-scheme: light dark; }

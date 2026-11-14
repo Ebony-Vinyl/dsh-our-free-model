@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { Cable, Check, CircleCheck, Copy, Eye, EyeOff, KeyRound, Link2, LockKeyhole, RotateCcw, ShieldAlert, Terminal } from 'lucide-react'
 import { Button, Card } from './components/ui'
 import type { Host, Summary } from './types'
+// API 接入与服务设置共用同一套表单语言（分组卡片 / 字段行 / 凭据框）。
+// 这个 import 是必需的：connection 在主包里，而 settings.css 原先只被
+// 懒加载的 settings.tsx 引入 —— 只访问本页时样式根本没下载。
+import './settings.css'
 
 export function Connection({ summary, host, active }: { summary: Summary; host: Host; active: boolean }) {
   const [apiKey, setApiKey] = useState('')
