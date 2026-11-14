@@ -834,7 +834,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 await checkAsync('a silent stream is kept alive with SSE comment frames', async () => {
   const res = fakeResponse()
   const stop = startHeartbeat(res, 5)
-  await sleep(60)
+  // Wait for the frames rather than for a fixed slice of wall time: a 5 ms
+  // interval against a 60 ms sleep assumes the timer never gets starved, and on
+  // a loaded box it does — the assertion then reports one frame and the suite
+  // flakes. Polling keeps the requirement (repeated frames) without timing it.
+  const deadline = Date.now() + 2000
+  while (res.writes.length < 2 && Date.now() < deadline) await sleep(5)
   assert.ok(res.writes.length >= 2, `expected repeated comment frames, got ${res.writes.length}`)
   assert.ok(res.writes.every(chunk => chunk === ': ping\n\n'), 'only comment frames may go out')
   stop()
