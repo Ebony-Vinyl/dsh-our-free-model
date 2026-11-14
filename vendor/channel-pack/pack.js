@@ -37769,6 +37769,16 @@ var QoderAdapter = class extends LlmAdapter2 {
       await pool.updateModelRateLimit(activeAccountId, options.model, nextUtc8DayStartMs());
       tried.add(activeAccountId);
     }
+    if (this.options.nextAccount !== void 0) {
+      try {
+        const picked = await this.options.nextAccount(options.model, tried);
+        if (picked !== void 0) {
+          tried.add(picked.accountId);
+          return { credential: await this.ensureUid(picked.credential), accountId: picked.accountId };
+        }
+      } catch {
+      }
+    }
     const next = await pool.getAvailableAccount(this.product.id, options.model, tried);
     if (next === null || tried.has(next.entry.id)) return void 0;
     tried.add(next.entry.id);
@@ -37800,6 +37810,18 @@ var QoderAdapter = class extends LlmAdapter2 {
     const pool = this.options.accountPool;
     if (pool === void 0) return void 0;
     if (activeAccountId !== void 0 && activeAccountId.length > 0) tried.add(activeAccountId);
+    if (this.options.nextAccount !== void 0) {
+      try {
+        const picked = await this.options.nextAccount(options.model, tried);
+        if (picked !== void 0) {
+          tried.add(picked.accountId);
+          if (isUsableQoderCredential(picked.credential) && picked.credential.access_token !== activeCredential.access_token) {
+            return { credential: await this.ensureUid(picked.credential), accountId: picked.accountId };
+          }
+        }
+      } catch {
+      }
+    }
     for (; ; ) {
       const next = await pool.getAvailableAccount(this.product.id, options.model, tried);
       if (next === null || tried.has(next.entry.id)) return void 0;
@@ -39339,15 +39361,11 @@ var TraeAdapter = class extends LlmAdapter3 {
               Date.now() + TRAE_RATE_LIMIT_FALLBACK_MS
             );
           }
-          const next = await this.options.accountPool.getAvailableAccount(
-            this.product.id,
-            options.model,
-            tried
-          );
-          if (!next || tried.has(next.entry.id)) break;
-          tried.add(next.entry.id);
+          const next = await this.nextAccountFor(options.model, tried);
+          if (next === void 0) break;
+          tried.add(next.accountId);
           credential = next.credential;
-          currentAccountId = next.entry.id;
+          currentAccountId = next.accountId;
           response = await this.send(credential, body, options);
           if (response.ok) {
             yield* this.consumeSse(response, options);
@@ -39390,17 +39408,13 @@ var TraeAdapter = class extends LlmAdapter3 {
               Date.now() + TRAE_RATE_LIMIT_FALLBACK_MS
             );
           }
-          const next = await this.options.accountPool.getAvailableAccount(
-            this.product.id,
-            options.model,
-            triedStreamAccounts
-          );
-          if (next === null || next === void 0 || triedStreamAccounts.has(next.entry.id)) {
+          const next = await this.nextAccountFor(options.model, triedStreamAccounts);
+          if (next === void 0) {
             throw new LlmError8(error.message, "QUOTA_EXCEEDED");
           }
-          triedStreamAccounts.add(next.entry.id);
+          triedStreamAccounts.add(next.accountId);
           credential = next.credential;
-          currentAccountId = next.entry.id;
+          currentAccountId = next.accountId;
           response = await this.send(credential, body, options);
           if (!response.ok) {
             const text = await response.text().catch(() => "");
@@ -39424,6 +39438,39 @@ var TraeAdapter = class extends LlmAdapter3 {
     }
   }
   /** 发起一次 chat 请求；网络失败映射为可重试的 TRANSPORT 错误。 */
+  /**
+   * 换号时的统一取号入口：积分感知 hook 优先，池路径兜底。
+   *
+   * ## 两层语义（HTTP 层与流内层共用，见各自调用点）
+   *
+   * 1. `options.nextAccount`（宿主注入的 `CreditBalanceSelector` 包装）
+   *    存在时**先问它**：返回的账号已按「临期积分优先」分档。抛错时
+   *    视为「选号器故障」—— 捕获后落到第 2 层（失败开放：一个
+   *    「本来是优化」的环节绝不能让换号失败）；
+   * 2. hook 未提供 / 返回 undefined / 抛错 → 既有 `getAvailableAccount`
+   *    池路径，逐字节保留原语义（手动顺序 + enabled + 模型限流过滤）。
+   *
+   * ⚠️ 返回形状统一为 `{ accountId, credential }`：hook 与池路径的
+   * 返回结构不同（池是 `{ entry, credential }`），在此收拢，两个调用
+   * 点不必各自做形状适配 —— 两处各写一遍必然漂移（`trae-errors.ts`
+   * 文件头的同款理由）。
+   *
+   * ⚠️ `tried` 原样透传给两层：不排除已试账号会在 A/B 间空转。
+   */
+  async nextAccountFor(model, tried) {
+    if (this.options.nextAccount !== void 0) {
+      try {
+        const picked = await this.options.nextAccount(model, tried);
+        if (picked !== void 0) return picked;
+      } catch {
+      }
+    }
+    const pool = this.options.accountPool;
+    if (pool === void 0) return void 0;
+    const next = await pool.getAvailableAccount(this.product.id, model, tried);
+    if (next === null || tried.has(next.entry.id)) return void 0;
+    return { accountId: next.entry.id, credential: next.credential };
+  }
   async send(credential, body, options) {
     this.sendCount += 1;
     const headers = new Headers(
@@ -47542,6 +47589,776 @@ var LoomyBalanceSelector = class {
   }
 };
 
+// vendor/channel-pack/src/credit-expiry-window.ts
+var DEFAULT_CREDIT_EXPIRING_WINDOW_DAYS = 15;
+function creditExpiringWindowDays(env = process.env) {
+  const raw = env.DSH_CREDIT_EXPIRING_WINDOW_DAYS;
+  if (typeof raw !== "string" || raw.trim().length === 0) return DEFAULT_CREDIT_EXPIRING_WINDOW_DAYS;
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CREDIT_EXPIRING_WINDOW_DAYS;
+  return parsed;
+}
+
+// vendor/channel-pack/src/credit-routing-rank.ts
+var CREDIT_TIER = Object.freeze({
+  /** 有即将作废的有效积分 —— 优先消耗（本调度的核心价值）。 */
+  expiring: 0,
+  /** 有常规积分（到期未知或在窗外）。 */
+  usable: 1,
+  /** 查询成功且余额归零。 */
+  zero: 2,
+  /** 查询失败 / 余额未知 —— 与归零严格区分。 */
+  unknown: 3
+});
+var DAY_MS = 864e5;
+function nonNegative(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+function creditTierOf(signal, options) {
+  const balance = signal.balance;
+  if (balance === void 0) return CREDIT_TIER.unknown;
+  const packages = Array.isArray(balance.packages) ? balance.packages.filter((p) => p.active) : [];
+  let hasRemaining = false;
+  for (const item of packages) {
+    const remaining = nonNegative(item.remaining);
+    if (remaining <= 0) continue;
+    hasRemaining = true;
+    const end = item.deductionEndTime;
+    if (typeof end === "number" && Number.isFinite(end) && end <= options.now + options.windowDays * DAY_MS) {
+      return CREDIT_TIER.expiring;
+    }
+  }
+  return hasRemaining ? CREDIT_TIER.usable : CREDIT_TIER.zero;
+}
+function rankCreditAccounts(accounts, options) {
+  return accounts.map((account, index) => ({ account, index, tier: creditTierOf(account, options) })).sort((a, b) => a.tier - b.tier || a.index - b.index).map((entry) => entry.account);
+}
+
+// vendor/channel-pack/src/credit-balance-selector.ts
+var CREDIT_BALANCE_CACHE_TTL_MS = 6e4;
+var CREDIT_BALANCE_ERROR_CACHE_TTL_MS = 5e3;
+var CreditBalanceSelector = class {
+  cache = /* @__PURE__ */ new Map();
+  deps;
+  constructor(deps) {
+    this.deps = deps;
+  }
+  /** 清空缓存（单账号 or 全部；为手动刷新等将来接线留口）。 */
+  invalidate(accountId) {
+    if (accountId === void 0) this.cache.clear();
+    else this.cache.delete(accountId);
+  }
+  /** 查一个账号的余额（带双 TTL 缓存）。查询失败返回 undefined，不抛错。 */
+  async balanceOf(account) {
+    const now = this.deps.now?.() ?? Date.now();
+    const cached2 = this.cache.get(account.id);
+    if (cached2 !== void 0) {
+      const ttl = cached2.value !== void 0 ? this.deps.ttlMs ?? CREDIT_BALANCE_CACHE_TTL_MS : this.deps.errorTtlMs ?? CREDIT_BALANCE_ERROR_CACHE_TTL_MS;
+      if (now - cached2.at < ttl) return cached2.value;
+    }
+    const value = await this.fetchBalance(account);
+    this.cache.set(account.id, { at: now, value });
+    return value;
+  }
+  /** 真正解析凭据并查一次余额；任何一步失败都归为「未知」。 */
+  async fetchBalance(account) {
+    let credential;
+    try {
+      credential = await this.deps.resolveCredential(account.credentialRef);
+    } catch {
+      return void 0;
+    }
+    if (credential === void 0 || credential === null) return void 0;
+    try {
+      return await this.deps.fetchBalance(credential) ?? void 0;
+    } catch {
+      return void 0;
+    }
+  }
+  /**
+   * 从候选账号中按「临期优先」挑一个。
+   *
+   * - tier 0/1 的账号参与挑选，档内保持传入顺序（手动优先级）；
+   * - **没有 tier<2 的候选时返回 undefined** —— 调用方据此退回既有
+   *   选号路径（`getAvailableAccount` / 单凭据兜底），本选号器绝不
+   *   报「没分」、绝不拦截请求；
+   * - `excludeAccountIds` 与既有轮换约定一致：请求级换号时逐个排除
+   *   已试账号，防 A/B 空转（`qoder-adapter.ts` 的实测注释）。
+   */
+  async pick(candidates, excludeAccountIds) {
+    const pool = excludeAccountIds === void 0 ? candidates : candidates.filter((account) => !excludeAccountIds.has(account.id));
+    if (pool.length === 0) return void 0;
+    const balances = await Promise.all(pool.map((account) => this.balanceOf(account)));
+    const signals = pool.map((account, index2) => ({
+      id: account.id,
+      index: index2,
+      balance: balances[index2]
+    }));
+    const windowDays = this.deps.windowDays ?? creditExpiringWindowDays();
+    const now = this.deps.now?.() ?? Date.now();
+    const ranked = rankCreditAccounts(signals, { windowDays, now });
+    const best = ranked[0];
+    if (best === void 0) return void 0;
+    const tier = creditTierOf(best, { windowDays, now });
+    if (tier === CREDIT_TIER.zero || tier === CREDIT_TIER.unknown) return void 0;
+    const index = best.index;
+    return { account: pool[index], tier, balance: balances[index] };
+  }
+};
+
+// vendor/channel-pack/src/trae-credits.ts
+function classifyTraeCheckinError(httpStatus, code) {
+  if (httpStatus === 200 && code === 1005) {
+    return { type: "PlanLimit", cooldownSecs: 43200 };
+  }
+  if (httpStatus === 429) {
+    return { type: "SoftRate", cooldownSecs: 60 };
+  }
+  if (httpStatus === 401) {
+    return { type: "SessionDead", cooldownSecs: -1 };
+  }
+  if (httpStatus === 404) {
+    return { type: "NotFound", cooldownSecs: 60 };
+  }
+  if (httpStatus >= 500 && httpStatus < 600) {
+    return { type: "Server", cooldownSecs: 600 };
+  }
+  if (httpStatus >= 400 && httpStatus < 500) {
+    return { type: "Client", cooldownSecs: 600 };
+  }
+  if (code !== void 0 && code !== 0) {
+    return { type: "BusinessError", cooldownSecs: 300 };
+  }
+  return { type: "Unknown", cooldownSecs: 0 };
+}
+function readNumber3(source, key) {
+  const value = source[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function readString3(source, key) {
+  const value = source[key];
+  return typeof value === "string" ? value : "";
+}
+function readClaimCode(body) {
+  const raw = body.code;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && /^-?\d+$/.test(raw.trim())) return Number(raw.trim());
+  return raw === void 0 ? 0 : -1;
+}
+async function postJson2(path2, credential, body, fetcher, userId) {
+  const uid = userId ?? credential.uid;
+  if (uid.length === 0) {
+    return { ok: false, message: "\u7F3A\u5C11 user_id\uFF0C\u65E0\u6CD5\u6784\u9020\u8BBE\u5907\u8EAB\u4EFD", httpStatus: 0 };
+  }
+  try {
+    const response = await fetcher(`https://api.trae.cn${path2}`, {
+      method: "POST",
+      headers: traeCheckinHeaders(credential, {}, uid),
+      body,
+      signal: AbortSignal.timeout(TRAE_REQUEST_TIMEOUT_MS)
+    });
+    const httpStatus = response.status;
+    const text = await response.text();
+    if (!response.ok) {
+      const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
+      return { ok: false, message: `HTTP ${response.status}: ${snippet}`, httpStatus };
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return { ok: false, message: `\u975E JSON \u54CD\u5E94: ${text.trim().slice(0, 80)}`, httpStatus };
+    }
+    if (typeof parsed !== "object" || parsed === null) {
+      return { ok: false, message: "\u54CD\u5E94\u4E0D\u662F\u5BF9\u8C61", httpStatus };
+    }
+    return { ok: true, body: parsed, httpStatus };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error), httpStatus: 0 };
+  }
+}
+async function fetchTraeCheckinStatus(credential, _product, fetcher = fetch) {
+  const result = await postJson2(TRAE_CHECKIN_STATUS_PATH, credential, "{}", fetcher, credential.uid);
+  if (!result.ok) return null;
+  const body = result.body;
+  const code = readClaimCode(body);
+  if (code !== 0) return null;
+  return {
+    active: body.enable === true,
+    todayCheckedIn: body.checked_in === true,
+    streakDays: readNumber3(body, "streak_days") || 0,
+    dailyCredit: readNumber3(body, "credits") || 0,
+    todayCredit: 0,
+    isStreakDay: false,
+    totalCredits: readNumber3(body, "total_credits") || 0,
+    checkinDates: [],
+    activityName: "",
+    themeName: "",
+    endTime: ""
+  };
+}
+async function claimTraeDailyCheckin(credential, product, fetcher = fetch, generation = 0, onRotate, userId, retryCount = 3) {
+  const uid = userId ?? credential.uid;
+  const doClaim = async () => {
+    let lastError = { ok: false, httpStatus: 0, message: "", code: 0 };
+    for (let attempt = 0; attempt <= Math.max(0, retryCount); attempt++) {
+      const result = await postJson2(TRAE_CHECKIN_CLAIM_PATH, credential, "{}", fetcher, uid);
+      if (result.ok) {
+        const c = readClaimCode(result.body);
+        return { ok: true, body: result.body, httpStatus: result.httpStatus, message: "", code: c };
+      }
+      lastError = { ok: false, httpStatus: result.httpStatus, message: result.message, code: 0 };
+      if (result.httpStatus > 0) {
+        return lastError;
+      }
+      if (attempt < retryCount) {
+        await new Promise((r) => setTimeout(r, 1e3));
+      }
+    }
+    return lastError;
+  };
+  const response = await doClaim();
+  if (!response.ok) {
+    return { kind: "failed", code: -1, message: response.message, errorType: "Unknown", cooldownSecs: 0 };
+  }
+  const body = response.body;
+  const code = readClaimCode(body);
+  if (code === 9074) {
+    return {
+      kind: "failed",
+      code: 9074,
+      message: readString3(body, "message") || readString3(body, "msg") || "\u7B7E\u5230\u4EBA\u6570\u8FC7\u591A\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5",
+      errorType: "BusinessError",
+      cooldownSecs: 300
+    };
+  }
+  const msg = readString3(body, "message") || readString3(body, "msg") || "";
+  if (code === 0) {
+    const status = await fetchTraeCheckinStatus(credential, product, fetcher);
+    return {
+      kind: "claimed",
+      credit: status?.dailyCredit ?? 0,
+      streakDays: status?.streakDays ?? 0,
+      isStreakDay: false
+    };
+  }
+  const { type, cooldownSecs } = classifyTraeCheckinError(response.httpStatus, code);
+  return {
+    kind: "failed",
+    code,
+    message: msg.length > 0 ? msg : `\u7B7E\u5230\u5931\u8D25\uFF08code=${code}\uFF09`,
+    errorType: type,
+    cooldownSecs
+  };
+}
+async function fetchTraeCreditBalance(credential, _product, fetcher = fetch) {
+  const result = await postJson2(
+    TRAE_ENT_USAGE_PATH,
+    credential,
+    JSON.stringify({ require_usage: true, req_source: 2 }),
+    fetcher,
+    credential.uid
+  );
+  if (!result.ok) return null;
+  const body = result.body;
+  const packList = body.user_entitlement_pack_list;
+  if (!Array.isArray(packList) || packList.length === 0) return null;
+  const packages = [];
+  let total = 0;
+  let expiredTotal = 0;
+  for (const item of packList) {
+    if (typeof item !== "object" || item === null) continue;
+    const entry = item;
+    const base = entry.entitlement_base_info;
+    if (typeof base !== "object" || base === null) continue;
+    const quota = base.quota;
+    if (typeof quota !== "object" || quota === null) continue;
+    const creditsLimit = readNumber3(quota, "credits_limit");
+    if (creditsLimit <= 0) continue;
+    const usage = entry.usage;
+    const used = typeof usage === "object" && usage !== null ? readNumber3(usage, "credits_amount") : 0;
+    const expireSec = readNumber3(entry, "expire_time");
+    const deductionEndMs = expireSec > 0 ? expireSec * 1e3 : void 0;
+    const pkg = {
+      // ⚠️ 包名用 `display_desc`（实测"每月登录赠送"/"签到奖励"/"免费"），
+      // 不是 `base.name` —— 后者实测为 undefined，旧代码全部回退成了"资源包"。
+      name: readString3(base, "display_desc") || readString3(entry, "display_desc") || "\u8D44\u6E90\u5305",
+      unit: "credits",
+      remaining: creditsLimit - used,
+      total: creditsLimit,
+      used,
+      active: true,
+      cycleStartTime: "",
+      cycleEndTime: "",
+      expiredTime: "",
+      ...deductionEndMs !== void 0 ? { deductionEndTime: deductionEndMs } : {}
+    };
+    packages.push(pkg);
+    total += pkg.remaining;
+  }
+  return { total, packages, expiredTotal };
+}
+
+// vendor/channel-pack/src/credits.ts
+function roundCredits(value) {
+  return Math.round(value * 100) / 100;
+}
+function normalizeCreditUnit(unit) {
+  return unit === "token" ? "token" : "credit";
+}
+function claimUnitOf(unit) {
+  return normalizeCreditUnit(typeof unit === "string" ? unit : "");
+}
+function formatCreditAmount(value) {
+  if (!Number.isFinite(value)) return "?";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+function formatTokenAmount(value) {
+  if (!Number.isFinite(value)) return "?";
+  const abs = Math.abs(value);
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
+  return String(Math.round(value));
+}
+function claimUnitLabel(unit) {
+  return unit === "token" ? "Token" : "\u79EF\u5206";
+}
+function formatUnitAmount(value, unit) {
+  const text = unit === "token" ? formatTokenAmount(value) : formatCreditAmount(value);
+  return `${text}${claimUnitLabel(unit)}`;
+}
+function formatClaimGains(totals) {
+  if (totals === void 0 || totals === null || typeof totals !== "object") return null;
+  const parts = [];
+  for (const unit of ["token", "credit"]) {
+    const value = Number(totals[unit]);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    parts.push(`+${formatUnitAmount(value, unit)}`);
+  }
+  return parts.length === 0 ? null : parts.join(", ");
+}
+
+// vendor/channel-pack/src/qoder-machine.ts
+import { execFileSync, spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync4, readFileSync as readFileSync5, readdirSync } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join4 } from "node:path";
+var RUNTIME_INFO_TIMEOUT_MS = 2e4;
+var cached;
+function candidatePaths() {
+  const override = process.env.QODER_MACHINE_TOKEN_PATH;
+  if (override !== void 0 && override.length > 0) return [override];
+  const paths = [];
+  const appData = process.env.APPDATA;
+  if (appData !== void 0 && appData.length > 0) {
+    for (const dir of ["Qoder", "Qoder CN"]) {
+      paths.push(join4(appData, dir, "SharedClientCache", "cache", "machine_token.json"));
+    }
+  }
+  const home = homedir2();
+  for (const dir of ["Qoder", "Qoder CN"]) {
+    paths.push(join4(home, "Library", "Application Support", dir, "SharedClientCache", "cache", "machine_token.json"));
+    paths.push(join4(home, ".config", dir, "SharedClientCache", "cache", "machine_token.json"));
+  }
+  return paths;
+}
+function parseFile(path2) {
+  let raw;
+  try {
+    raw = readFileSync5(path2, "utf8");
+  } catch {
+    return void 0;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return void 0;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return void 0;
+  const record = parsed;
+  const token = record.token;
+  const type = record.type;
+  if (typeof token !== "string" || token.length === 0) return void 0;
+  if (typeof type !== "string" || type.length === 0) return void 0;
+  return { token, type };
+}
+async function resolveQoderMachineIdentityAsync(forceExecutable) {
+  if (cached !== void 0) return cached ?? void 0;
+  const live = await readFromRuntimeInfoAsync(forceExecutable);
+  if (live !== void 0) {
+    cached = live;
+    return live;
+  }
+  for (const path2 of candidatePaths()) {
+    const identity = parseFile(path2);
+    if (identity !== void 0) {
+      cached = identity;
+      return identity;
+    }
+  }
+  cached = null;
+  return void 0;
+}
+var QODER_DATA_DIR_NAMES = [".qoder", ".qoder-cn"];
+function findRuntimeInfoExecutable(home, dataDirNames = QODER_DATA_DIR_NAMES) {
+  const exeName = process.platform === "win32" ? "runtime-info.exe" : "runtime-info";
+  for (const dirName of dataDirNames) {
+    const binDir = join4(home, dirName, ".bin");
+    let entries;
+    try {
+      entries = readdirSync(binDir);
+    } catch {
+      continue;
+    }
+    const dir = entries.find((name2) => name2.startsWith("umid-"));
+    if (dir === void 0) continue;
+    const exe = join4(binDir, dir, exeName);
+    if (existsSync4(exe)) return exe;
+  }
+  return void 0;
+}
+function locateRuntimeInfo(override) {
+  const fromEnv = process.env.QODER_RUNTIME_INFO;
+  const candidate = override ?? (fromEnv !== void 0 && fromEnv.length > 0 ? fromEnv : void 0);
+  if (candidate !== void 0) {
+    return existsSync4(candidate) ? candidate : void 0;
+  }
+  return findRuntimeInfoExecutable(homedir2());
+}
+var RUNTIME_INFO_ENVIRONMENT = "3";
+function runtimeInfoArgs() {
+  return [RUNTIME_INFO_ENVIRONMENT, "--account-stdin"];
+}
+function parseRuntimeInfoOutput(out) {
+  const start = out.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(out.slice(start));
+  } catch {
+    return void 0;
+  }
+  if (typeof parsed !== "object" || parsed === null) return void 0;
+  const record = parsed;
+  const token = record.machineToken;
+  const type = record.machineType;
+  if (typeof token !== "string" || token.length === 0) return void 0;
+  if (typeof type !== "string" || type.length === 0) return void 0;
+  return { token, type };
+}
+async function readFromRuntimeInfoAsync(override) {
+  const exe = locateRuntimeInfo(override);
+  if (exe === void 0) return void 0;
+  return await new Promise((resolve2) => {
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve2(value);
+    };
+    let child;
+    try {
+      child = spawn2(exe, [...runtimeInfoArgs()], { windowsHide: true });
+    } catch {
+      done(void 0);
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {
+      }
+      done(void 0);
+    }, RUNTIME_INFO_TIMEOUT_MS);
+    timer.unref?.();
+    let stdout = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", () => {
+    });
+    child.once("error", () => {
+      clearTimeout(timer);
+      done(void 0);
+    });
+    child.once("close", () => {
+      clearTimeout(timer);
+      done(parseRuntimeInfoOutput(stdout));
+    });
+    child.stdin?.on("error", () => {
+    });
+    child.stdin?.end(JSON.stringify({ account: "" }));
+  });
+}
+async function withQoderMachineHeadersAsync(headers, forceExecutable) {
+  const identity = await resolveQoderMachineIdentityAsync(forceExecutable);
+  if (identity === void 0) return headers;
+  return {
+    ...headers,
+    "Cosy-MachineToken": identity.token,
+    "Cosy-MachineType": identity.type
+  };
+}
+
+// vendor/channel-pack/src/qoder-credits.ts
+var QODER_USAGE_PATH = "/sash/api/v2/me/usage";
+var QODER_CAMPAIGNS_PATH = "/sash/api/v1/me/campaigns";
+var QODER_CAMPAIGN_REFRESH_HOUR_UTC8 = 10;
+function hasQoderCampaignRefreshedToday(nowMs = Date.now()) {
+  const utc8 = new Date(nowMs + QODER_BILLING_UTC_OFFSET_MS);
+  return utc8.getUTCHours() >= QODER_CAMPAIGN_REFRESH_HOUR_UTC8;
+}
+var QODER_CREDITS_TIMEOUT_MS = 15e3;
+var NOT_ACTIVATED_HINT = "\u8BE5\u8D26\u53F7\u5C1A\u672A\u5728 Qoder \u4FA7\u5F00\u901A\u6BCF\u65E5\u9886\u53D6\uFF08\u6BCF\u65E5 100 Credits\uFF09\u3002\u8BF7\u5148\u7528 Qoder \u5B98\u65B9\u5BA2\u6237\u7AEF\u767B\u5F55\u4E00\u6B21\u8BE5\u8D26\u53F7\uFF0C\u5F00\u901A\u540E\u518D\u56DE\u6765\u9886\u53D6\u3002";
+var NOT_REFRESHED_YET_HINT = `\u4ECA\u5929\u7684\u6BCF\u65E5\u6D3B\u52A8\u5C1A\u672A\u5237\u65B0\uFF08\u6BCF\u65E5 ${QODER_CAMPAIGN_REFRESH_HOUR_UTC8}:00\uFF08UTC+8\uFF09\u5237\u65B0\uFF09\uFF0C\u5F53\u524D\u770B\u5230\u7684\u662F\u6628\u5929\u90A3\u4E00\u8F6E\uFF0C\u8BF7\u7A0D\u540E\u518D\u6765\u9886\u53D6\u3002`;
+function isQoderNotActivated(campaigns, usageBody) {
+  if (campaigns === void 0) return false;
+  const hasBenefit = campaigns.campaigns.some((c) => c.actionType === "CLAIM_BENEFIT");
+  if (hasBenefit) return false;
+  if (typeof usageBody !== "object" || usageBody === null) return false;
+  const usage = usageBody.qoderUsage;
+  if (typeof usage !== "object" || usage === null) return false;
+  const record = usage;
+  return record.addOnQuota === void 0;
+}
+async function fetchQoderUsageRaw(credential, product, fetcher = fetch) {
+  try {
+    const response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
+      method: "GET",
+      headers: await creditsHeaders(credential, product),
+      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
+    });
+    if (!response.ok) return void 0;
+    return await response.json();
+  } catch {
+    return void 0;
+  }
+}
+async function creditsHeaders(credential, product) {
+  return await withQoderMachineHeadersAsync({
+    Accept: "application/json",
+    Authorization: `Bearer ${qoderBearerToken(credential)}`,
+    // 桌面 app 身份（`'10'`）；服务端据此进入活动下发分支。
+    "Cosy-ClientType": product.sashClientType,
+    "User-Agent": "Qoder"
+  });
+}
+function readNumber4(source, key) {
+  if (typeof source !== "object" || source === null) return void 0;
+  const value = source[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : void 0;
+  }
+  return void 0;
+}
+function readString4(source, key) {
+  if (typeof source !== "object" || source === null) return void 0;
+  const value = source[key];
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+var QODER_PLAN_PACKAGE = "\u5957\u9910\u989D\u5EA6";
+function toPackage(name2, quota, options = {}) {
+  const total = readNumber4(quota, "total");
+  const used = readNumber4(quota, "used");
+  const remainingRaw = readNumber4(quota, "remaining");
+  if (total === void 0 && used === void 0 && remainingRaw === void 0) return void 0;
+  const totalValue = Math.max(0, total ?? 0);
+  const usedValue = Math.max(0, used ?? 0);
+  const remaining = remainingRaw !== void 0 ? Math.max(0, remainingRaw) : Math.max(0, totalValue - usedValue);
+  const expMs = options.expiredTime && options.expiredTime.length > 0 ? Date.parse(options.expiredTime.replace(" ", "T")) : Number.NaN;
+  return {
+    name: name2,
+    unit: readString4(quota, "unit") ?? "credits",
+    remaining,
+    total: totalValue,
+    used: usedValue,
+    active: options.active ?? true,
+    cycleStartTime: "",
+    cycleEndTime: "",
+    expiredTime: options.expiredTime ?? "",
+    ...Number.isFinite(expMs) ? { deductionEndTime: expMs } : {}
+  };
+}
+async function fetchQoderCreditBalance(credential, product, fetcher = fetch) {
+  let response;
+  try {
+    response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
+      method: "GET",
+      headers: await creditsHeaders(credential, product),
+      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+  const root = body;
+  if (root.displayMode === "enterprise") return null;
+  const usage = root.qoderUsage;
+  if (typeof usage !== "object" || usage === null) return null;
+  const packages = [];
+  const userQuota = toPackage(QODER_PLAN_PACKAGE, usage.userQuota);
+  if (userQuota !== void 0) packages.push(userQuota);
+  const addOnQuota = toPackage("\u8D44\u6E90\u5305", usage.addOnQuota);
+  if (addOnQuota !== void 0) packages.push(addOnQuota);
+  const dedicated = usage.dedicatedResourcePackages;
+  if (Array.isArray(dedicated)) {
+    for (const item of dedicated) {
+      const pkg = toPackage(
+        readString4(item, "name") ?? readString4(item, "id") ?? "\u4E13\u7528\u8D44\u6E90\u5305",
+        item,
+        { expiredTime: readString4(item, "expiresAt") ?? readString4(item, "expires_at") ?? "" }
+      );
+      if (pkg !== void 0) packages.push(pkg);
+    }
+  }
+  if (packages.length === 0) return null;
+  const total = roundCredits(packages.reduce((sum, pkg) => sum + pkg.remaining, 0));
+  return { total, packages, expiredTotal: 0 };
+}
+function parseQoderCampaigns(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return void 0;
+  const root = body;
+  const raw = root.campaigns;
+  const campaigns = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const id = readString4(item, "campaignId");
+      if (id === void 0) continue;
+      campaigns.push({
+        campaignId: id,
+        ...readString4(item, "campaignKey") !== void 0 ? { campaignKey: readString4(item, "campaignKey") } : {},
+        ...readString4(item, "actionType") !== void 0 ? { actionType: readString4(item, "actionType") } : {},
+        ...readString4(item, "claimStatus") !== void 0 ? { claimStatus: readString4(item, "claimStatus") } : {},
+        ...benefitAmount(item) !== void 0 ? { amount: benefitAmount(item) } : {}
+      });
+    }
+  }
+  return {
+    showCampaign: root.showCampaign === true,
+    claimable: root.claimable === true,
+    campaigns
+  };
+}
+function benefitAmount(item) {
+  if (typeof item !== "object" || item === null) return void 0;
+  return readNumber4(item.benefit, "amount");
+}
+async function loadCampaigns(credential, product, fetcher) {
+  let response;
+  try {
+    response = await fetcher(`${product.openApiBase}${QODER_CAMPAIGNS_PATH}`, {
+      method: "GET",
+      headers: await creditsHeaders(credential, product),
+      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
+    });
+  } catch {
+    return void 0;
+  }
+  if (!response.ok) return void 0;
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    return void 0;
+  }
+  return parseQoderCampaigns(body);
+}
+function claimableCampaigns(parsed) {
+  return parsed.campaigns.filter(
+    (c) => c.actionType === "CLAIM_BENEFIT" && c.claimStatus === "CLAIMABLE"
+  );
+}
+function parseClaimResult(body) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return {};
+  const root = body;
+  return {
+    ...readString4(root, "status") !== void 0 ? { status: readString4(root, "status") } : {},
+    ...typeof root.replayed === "boolean" ? { replayed: root.replayed } : {},
+    ...benefitAmount(root) !== void 0 ? { amount: benefitAmount(root) } : {}
+  };
+}
+async function claimQoderCampaign(credential, product, campaignId, fetcher = fetch) {
+  const url = `${product.openApiBase}${QODER_CAMPAIGNS_PATH}/${encodeURIComponent(campaignId)}/claim`;
+  let response;
+  try {
+    response = await fetcher(url, {
+      method: "POST",
+      headers: { ...await creditsHeaders(credential, product), "Content-Type": "application/json" },
+      body: "",
+      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
+    });
+  } catch (error) {
+    return { kind: "failed", code: -1, message: error instanceof Error ? error.message : String(error) };
+  }
+  const text = await response.text().catch(() => "");
+  let body;
+  try {
+    body = text.length > 0 ? JSON.parse(text) : {};
+  } catch {
+    return { kind: "failed", code: response.status, message: describeNonJson(response.status, text) };
+  }
+  if (!response.ok) {
+    return { kind: "failed", code: response.status, message: describeNonJson(response.status, text) };
+  }
+  const result = parseClaimResult(body);
+  if (result.replayed === true) {
+    return { kind: "already-claimed", message: "\u4ECA\u5929\u5DF2\u9886\u53D6" };
+  }
+  if (result.status !== void 0 && result.status !== "CLAIMED") {
+    return { kind: "failed", code: -1, message: `\u9886\u53D6\u672A\u6210\u529F\uFF08status=${result.status}\uFF09` };
+  }
+  return { kind: "claimed", credit: result.amount ?? 0, streakDays: 0, isStreakDay: false };
+}
+function describeNonJson(status, text) {
+  if (status === 401 || status === 403) return `\u51ED\u636E\u5DF2\u5931\u6548\uFF08HTTP ${status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\u8BE5\u8D26\u53F7`;
+  const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
+  return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
+}
+async function claimQoderDailyCheckin(credential, product, fetcher = fetch, nowMs = Date.now()) {
+  const parsed = await loadCampaigns(credential, product, fetcher);
+  if (parsed === void 0) {
+    return { kind: "failed", code: -1, message: "\u6D3B\u52A8\u5217\u8868\u67E5\u8BE2\u5931\u8D25" };
+  }
+  const refreshed = hasQoderCampaignRefreshedToday(nowMs);
+  const stale = refreshed ? void 0 : { coversToday: false };
+  const targets = claimableCampaigns(parsed);
+  if (targets.length === 0) {
+    const claimedBefore = parsed.campaigns.some(
+      (c) => c.actionType === "CLAIM_BENEFIT" && c.claimStatus === "CLAIMED"
+    );
+    if (claimedBefore) {
+      if (!refreshed) return { kind: "inactive", message: NOT_REFRESHED_YET_HINT };
+      return { kind: "already-claimed", message: "\u4ECA\u5929\u5DF2\u9886\u53D6" };
+    }
+    const usage = await fetchQoderUsageRaw(credential, product, fetcher);
+    if (isQoderNotActivated(parsed, usage)) {
+      return { kind: "inactive", message: NOT_ACTIVATED_HINT, actionRequired: true };
+    }
+    return { kind: "inactive", message: "\u5F53\u524D\u6CA1\u6709\u53EF\u9886\u53D6\u7684\u6D3B\u52A8" };
+  }
+  let total = 0;
+  let firstError;
+  for (const target of targets) {
+    const outcome = await claimQoderCampaign(credential, product, target.campaignId, fetcher);
+    if (outcome.kind === "claimed") total += outcome.credit;
+    else if (outcome.kind === "failed" && firstError === void 0) firstError = outcome.message;
+  }
+  if (total > 0) return { kind: "claimed", credit: total, streakDays: 0, isStreakDay: false, ...stale };
+  if (firstError !== void 0) return { kind: "failed", code: -1, message: firstError };
+  return { kind: "already-claimed", message: "\u4ECA\u5929\u5DF2\u9886\u53D6", ...stale };
+}
+
 // vendor/channel-pack/src/zcode-auth.ts
 import { Service as Service7 } from "@deepseek-ai/cordis";
 
@@ -47655,11 +48472,11 @@ function zcodeProductById(id) {
 }
 
 // vendor/channel-pack/src/zcode-captcha.ts
-import { spawn as spawn2, spawnSync } from "node:child_process";
-import { existsSync as existsSync4, mkdtempSync, rmSync, writeFileSync as writeFileSync4 } from "node:fs";
+import { spawn as spawn3, spawnSync } from "node:child_process";
+import { existsSync as existsSync5, mkdtempSync, rmSync, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer as createServer5 } from "node:net";
-import { homedir as homedir2, tmpdir } from "node:os";
-import { basename, isAbsolute, join as join4, posix } from "node:path";
+import { homedir as homedir3, tmpdir } from "node:os";
+import { basename, isAbsolute, join as join5, posix } from "node:path";
 var ZCODE_CAPTCHA_FALLBACK = {
   region: "cn",
   prefix: "no8xfe",
@@ -47726,21 +48543,21 @@ function windowsBrowserCandidates(env, home) {
      * 用户设了它们就说明默认路径不对。若排在 `~/scoop` 之后，会出现
      * 「旧默认路径恰好存在 → 用它，而用户实际在用的那个被忽略」。
      */
-    ...env.SCOOP !== void 0 && env.SCOOP.trim().length > 0 ? [join4(env.SCOOP.trim(), "apps", "chromium", "current", "chrome.exe")] : [],
-    ...env.SCOOP_GLOBAL !== void 0 && env.SCOOP_GLOBAL.trim().length > 0 ? [join4(env.SCOOP_GLOBAL.trim(), "apps", "chromium", "current", "chrome.exe")] : [],
+    ...env.SCOOP !== void 0 && env.SCOOP.trim().length > 0 ? [join5(env.SCOOP.trim(), "apps", "chromium", "current", "chrome.exe")] : [],
+    ...env.SCOOP_GLOBAL !== void 0 && env.SCOOP_GLOBAL.trim().length > 0 ? [join5(env.SCOOP_GLOBAL.trim(), "apps", "chromium", "current", "chrome.exe")] : [],
     // ② scoop 默认根目录（`~/scoop`）。实测可用。
-    join4(home, "scoop", "apps", "chromium", "current", "chrome.exe"),
+    join5(home, "scoop", "apps", "chromium", "current", "chrome.exe"),
     // ③ 系统 Chrome。
-    join4(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
-    join4(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
-    join4(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+    join5(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+    join5(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+    join5(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
     // ④ Chromium。
-    join4(localAppData, "Chromium", "Application", "chrome.exe"),
-    join4(programFiles, "Chromium", "Application", "chrome.exe"),
+    join5(localAppData, "Chromium", "Application", "chrome.exe"),
+    join5(programFiles, "Chromium", "Application", "chrome.exe"),
     // ⑤ Edge（Chromium 内核，系统普遍自带）。
-    join4(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
-    join4(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
-    join4(localAppData, "Microsoft", "Edge", "Application", "msedge.exe")
+    join5(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+    join5(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+    join5(localAppData, "Microsoft", "Edge", "Application", "msedge.exe")
   ];
 }
 function macBrowserCandidates(home) {
@@ -47774,7 +48591,7 @@ function linuxBrowserCandidates(home) {
 function browserCandidates(input = {}) {
   const platform = input.platform ?? process.platform;
   const env = input.env ?? process.env;
-  const home = input.home ?? homedir2();
+  const home = input.home ?? homedir3();
   let candidates;
   if (platform === "darwin") {
     candidates = macBrowserCandidates(home);
@@ -47793,7 +48610,7 @@ function findBrowserExecutable() {
   for (const candidate of browserCandidates()) {
     try {
       if (candidate.length === 0 || !isAbsolute(candidate)) continue;
-      if (existsSync4(candidate)) return candidate;
+      if (existsSync5(candidate)) return candidate;
     } catch {
     }
   }
@@ -48066,11 +48883,11 @@ foreach ($h in $all) {
 }
 Write-Output "hidden=$n"
 `;
-    const dir = mkdtempSync(join4(tmpdir(), "zcode-hide-"));
-    const file = join4(dir, "hide.ps1");
+    const dir = mkdtempSync(join5(tmpdir(), "zcode-hide-"));
+    const file = join5(dir, "hide.ps1");
     dirCreated = dir;
     writeFileSync4(file, script, "ascii");
-    const child = spawn2("powershell.exe", [
+    const child = spawn3("powershell.exe", [
       "-NoProfile",
       "-NonInteractive",
       "-ExecutionPolicy",
@@ -48091,7 +48908,7 @@ Write-Output "hidden=$n"
   }
 }
 function hideWindowLinux(pid) {
-  const list = spawn2("wmctrl", ["-lp"], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+  const list = spawn3("wmctrl", ["-lp"], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
   const chunks = [];
   list.stdout?.on("data", (c) => chunks.push(c));
   list.on("error", () => {
@@ -48100,7 +48917,7 @@ function hideWindowLinux(pid) {
     try {
       const ids = parseWmctrlList(Buffer.concat(chunks).toString("utf8"), pid);
       for (const id of ids) {
-        const child = spawn2("wmctrl", buildLinuxSkipTaskbarArgs(id), {
+        const child = spawn3("wmctrl", buildLinuxSkipTaskbarArgs(id), {
           stdio: "ignore",
           windowsHide: true
         });
@@ -48125,7 +48942,7 @@ function warnMacosHideOnce(log, reason) {
   );
 }
 function hideWindowMacos(pid, log) {
-  const child = spawn2("osascript", buildMacosMiniaturizeArgs(pid), {
+  const child = spawn3("osascript", buildMacosMiniaturizeArgs(pid), {
     stdio: "ignore",
     windowsHide: true
   });
@@ -48226,10 +49043,10 @@ var ZcodeCaptchaBrowser = class {
       );
     }
     this.spawnFailure = void 0;
-    this.profileDir = mkdtempSync(join4(tmpdir(), "zcode-captcha-"));
+    this.profileDir = mkdtempSync(join5(tmpdir(), "zcode-captcha-"));
     this.port = this.options.debugPort ?? await pickFreePort();
     const hide = this.options.hideWindow !== false;
-    this.child = spawn2(executable, [
+    this.child = spawn3(executable, [
       `--remote-debugging-port=${this.port}`,
       `--user-data-dir=${this.profileDir}`,
       "--no-first-run",
@@ -48729,7 +49546,7 @@ var ZcodeCaptchaBrowser = class {
     tryRemove(0);
   }
 };
-var ZCODE_HOME = homedir2();
+var ZCODE_HOME = homedir3();
 
 // vendor/channel-pack/src/captcha-pool.ts
 var CaptchaPool = class {
@@ -53205,16 +54022,6 @@ async function disposeGatewayRuntime() {
   lastApiKey = null;
 }
 
-// vendor/channel-pack/src/credit-expiry-window.ts
-var DEFAULT_CREDIT_EXPIRING_WINDOW_DAYS = 15;
-function creditExpiringWindowDays(env = process.env) {
-  const raw = env.DSH_CREDIT_EXPIRING_WINDOW_DAYS;
-  if (typeof raw !== "string" || raw.trim().length === 0) return DEFAULT_CREDIT_EXPIRING_WINDOW_DAYS;
-  const parsed = Number(raw.trim());
-  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CREDIT_EXPIRING_WINDOW_DAYS;
-  return parsed;
-}
-
 // vendor/channel-pack/src/minimax-product.ts
 var MINIMAX_FALLBACK_MODELS = [
   {
@@ -53399,45 +54206,6 @@ function fallbackToEntry(model) {
 }
 function minimaxFallbackEntries(product = MINIMAX) {
   return product.fallbackModels.map(fallbackToEntry);
-}
-
-// vendor/channel-pack/src/credits.ts
-function roundCredits(value) {
-  return Math.round(value * 100) / 100;
-}
-function normalizeCreditUnit(unit) {
-  return unit === "token" ? "token" : "credit";
-}
-function claimUnitOf(unit) {
-  return normalizeCreditUnit(typeof unit === "string" ? unit : "");
-}
-function formatCreditAmount(value) {
-  if (!Number.isFinite(value)) return "?";
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
-function formatTokenAmount(value) {
-  if (!Number.isFinite(value)) return "?";
-  const abs = Math.abs(value);
-  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
-  return String(Math.round(value));
-}
-function claimUnitLabel(unit) {
-  return unit === "token" ? "Token" : "\u79EF\u5206";
-}
-function formatUnitAmount(value, unit) {
-  const text = unit === "token" ? formatTokenAmount(value) : formatCreditAmount(value);
-  return `${text}${claimUnitLabel(unit)}`;
-}
-function formatClaimGains(totals) {
-  if (totals === void 0 || totals === null || typeof totals !== "object") return null;
-  const parts = [];
-  for (const unit of ["token", "credit"]) {
-    const value = Number(totals[unit]);
-    if (!Number.isFinite(value) || value <= 0) continue;
-    parts.push(`+${formatUnitAmount(value, unit)}`);
-  }
-  return parts.length === 0 ? null : parts.join(", ");
 }
 
 // vendor/channel-pack/src/minimax-credits.ts
@@ -54125,430 +54893,10 @@ function quotaRejectionHint(text) {
   return text === "" ? "" : `\uFF1A${text.slice(0, 160)}`;
 }
 
-// vendor/channel-pack/src/qoder-machine.ts
-import { execFileSync, spawn as spawn3 } from "node:child_process";
-import { existsSync as existsSync5, readFileSync as readFileSync5, readdirSync } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import { join as join5 } from "node:path";
-var RUNTIME_INFO_TIMEOUT_MS = 2e4;
-var cached;
-function candidatePaths() {
-  const override = process.env.QODER_MACHINE_TOKEN_PATH;
-  if (override !== void 0 && override.length > 0) return [override];
-  const paths = [];
-  const appData = process.env.APPDATA;
-  if (appData !== void 0 && appData.length > 0) {
-    for (const dir of ["Qoder", "Qoder CN"]) {
-      paths.push(join5(appData, dir, "SharedClientCache", "cache", "machine_token.json"));
-    }
-  }
-  const home = homedir3();
-  for (const dir of ["Qoder", "Qoder CN"]) {
-    paths.push(join5(home, "Library", "Application Support", dir, "SharedClientCache", "cache", "machine_token.json"));
-    paths.push(join5(home, ".config", dir, "SharedClientCache", "cache", "machine_token.json"));
-  }
-  return paths;
-}
-function parseFile(path2) {
-  let raw;
-  try {
-    raw = readFileSync5(path2, "utf8");
-  } catch {
-    return void 0;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return void 0;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return void 0;
-  const record = parsed;
-  const token = record.token;
-  const type = record.type;
-  if (typeof token !== "string" || token.length === 0) return void 0;
-  if (typeof type !== "string" || type.length === 0) return void 0;
-  return { token, type };
-}
-async function resolveQoderMachineIdentityAsync(forceExecutable) {
-  if (cached !== void 0) return cached ?? void 0;
-  const live = await readFromRuntimeInfoAsync(forceExecutable);
-  if (live !== void 0) {
-    cached = live;
-    return live;
-  }
-  for (const path2 of candidatePaths()) {
-    const identity = parseFile(path2);
-    if (identity !== void 0) {
-      cached = identity;
-      return identity;
-    }
-  }
-  cached = null;
-  return void 0;
-}
-var QODER_DATA_DIR_NAMES = [".qoder", ".qoder-cn"];
-function findRuntimeInfoExecutable(home, dataDirNames = QODER_DATA_DIR_NAMES) {
-  const exeName = process.platform === "win32" ? "runtime-info.exe" : "runtime-info";
-  for (const dirName of dataDirNames) {
-    const binDir = join5(home, dirName, ".bin");
-    let entries;
-    try {
-      entries = readdirSync(binDir);
-    } catch {
-      continue;
-    }
-    const dir = entries.find((name2) => name2.startsWith("umid-"));
-    if (dir === void 0) continue;
-    const exe = join5(binDir, dir, exeName);
-    if (existsSync5(exe)) return exe;
-  }
-  return void 0;
-}
-function locateRuntimeInfo(override) {
-  const fromEnv = process.env.QODER_RUNTIME_INFO;
-  const candidate = override ?? (fromEnv !== void 0 && fromEnv.length > 0 ? fromEnv : void 0);
-  if (candidate !== void 0) {
-    return existsSync5(candidate) ? candidate : void 0;
-  }
-  return findRuntimeInfoExecutable(homedir3());
-}
-var RUNTIME_INFO_ENVIRONMENT = "3";
-function runtimeInfoArgs() {
-  return [RUNTIME_INFO_ENVIRONMENT, "--account-stdin"];
-}
-function parseRuntimeInfoOutput(out) {
-  const start = out.indexOf("{");
-  if (start < 0) return void 0;
-  let parsed;
-  try {
-    parsed = JSON.parse(out.slice(start));
-  } catch {
-    return void 0;
-  }
-  if (typeof parsed !== "object" || parsed === null) return void 0;
-  const record = parsed;
-  const token = record.machineToken;
-  const type = record.machineType;
-  if (typeof token !== "string" || token.length === 0) return void 0;
-  if (typeof type !== "string" || type.length === 0) return void 0;
-  return { token, type };
-}
-async function readFromRuntimeInfoAsync(override) {
-  const exe = locateRuntimeInfo(override);
-  if (exe === void 0) return void 0;
-  return await new Promise((resolve2) => {
-    let settled = false;
-    const done = (value) => {
-      if (settled) return;
-      settled = true;
-      resolve2(value);
-    };
-    let child;
-    try {
-      child = spawn3(exe, [...runtimeInfoArgs()], { windowsHide: true });
-    } catch {
-      done(void 0);
-      return;
-    }
-    const timer = setTimeout(() => {
-      try {
-        child.kill();
-      } catch {
-      }
-      done(void 0);
-    }, RUNTIME_INFO_TIMEOUT_MS);
-    timer.unref?.();
-    let stdout = "";
-    child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.stderr?.on("data", () => {
-    });
-    child.once("error", () => {
-      clearTimeout(timer);
-      done(void 0);
-    });
-    child.once("close", () => {
-      clearTimeout(timer);
-      done(parseRuntimeInfoOutput(stdout));
-    });
-    child.stdin?.on("error", () => {
-    });
-    child.stdin?.end(JSON.stringify({ account: "" }));
-  });
-}
-async function withQoderMachineHeadersAsync(headers, forceExecutable) {
-  const identity = await resolveQoderMachineIdentityAsync(forceExecutable);
-  if (identity === void 0) return headers;
-  return {
-    ...headers,
-    "Cosy-MachineToken": identity.token,
-    "Cosy-MachineType": identity.type
-  };
-}
-
-// vendor/channel-pack/src/qoder-credits.ts
-var QODER_USAGE_PATH = "/sash/api/v2/me/usage";
-var QODER_CAMPAIGNS_PATH = "/sash/api/v1/me/campaigns";
-var QODER_CAMPAIGN_REFRESH_HOUR_UTC8 = 10;
-function hasQoderCampaignRefreshedToday(nowMs = Date.now()) {
-  const utc8 = new Date(nowMs + QODER_BILLING_UTC_OFFSET_MS);
-  return utc8.getUTCHours() >= QODER_CAMPAIGN_REFRESH_HOUR_UTC8;
-}
-var QODER_CREDITS_TIMEOUT_MS = 15e3;
-var NOT_ACTIVATED_HINT = "\u8BE5\u8D26\u53F7\u5C1A\u672A\u5728 Qoder \u4FA7\u5F00\u901A\u6BCF\u65E5\u9886\u53D6\uFF08\u6BCF\u65E5 100 Credits\uFF09\u3002\u8BF7\u5148\u7528 Qoder \u5B98\u65B9\u5BA2\u6237\u7AEF\u767B\u5F55\u4E00\u6B21\u8BE5\u8D26\u53F7\uFF0C\u5F00\u901A\u540E\u518D\u56DE\u6765\u9886\u53D6\u3002";
-var NOT_REFRESHED_YET_HINT = `\u4ECA\u5929\u7684\u6BCF\u65E5\u6D3B\u52A8\u5C1A\u672A\u5237\u65B0\uFF08\u6BCF\u65E5 ${QODER_CAMPAIGN_REFRESH_HOUR_UTC8}:00\uFF08UTC+8\uFF09\u5237\u65B0\uFF09\uFF0C\u5F53\u524D\u770B\u5230\u7684\u662F\u6628\u5929\u90A3\u4E00\u8F6E\uFF0C\u8BF7\u7A0D\u540E\u518D\u6765\u9886\u53D6\u3002`;
-function isQoderNotActivated(campaigns, usageBody) {
-  if (campaigns === void 0) return false;
-  const hasBenefit = campaigns.campaigns.some((c) => c.actionType === "CLAIM_BENEFIT");
-  if (hasBenefit) return false;
-  if (typeof usageBody !== "object" || usageBody === null) return false;
-  const usage = usageBody.qoderUsage;
-  if (typeof usage !== "object" || usage === null) return false;
-  const record = usage;
-  return record.addOnQuota === void 0;
-}
-async function fetchQoderUsageRaw(credential, product, fetcher = fetch) {
-  try {
-    const response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
-      method: "GET",
-      headers: await creditsHeaders(credential, product),
-      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
-    });
-    if (!response.ok) return void 0;
-    return await response.json();
-  } catch {
-    return void 0;
-  }
-}
-async function creditsHeaders(credential, product) {
-  return await withQoderMachineHeadersAsync({
-    Accept: "application/json",
-    Authorization: `Bearer ${qoderBearerToken(credential)}`,
-    // 桌面 app 身份（`'10'`）；服务端据此进入活动下发分支。
-    "Cosy-ClientType": product.sashClientType,
-    "User-Agent": "Qoder"
-  });
-}
-function readNumber3(source, key) {
-  if (typeof source !== "object" || source === null) return void 0;
-  const value = source[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : void 0;
-  }
-  return void 0;
-}
-function readString3(source, key) {
-  if (typeof source !== "object" || source === null) return void 0;
-  const value = source[key];
-  return typeof value === "string" && value.length > 0 ? value : void 0;
-}
-var QODER_PLAN_PACKAGE = "\u5957\u9910\u989D\u5EA6";
-function toPackage(name2, quota, options = {}) {
-  const total = readNumber3(quota, "total");
-  const used = readNumber3(quota, "used");
-  const remainingRaw = readNumber3(quota, "remaining");
-  if (total === void 0 && used === void 0 && remainingRaw === void 0) return void 0;
-  const totalValue = Math.max(0, total ?? 0);
-  const usedValue = Math.max(0, used ?? 0);
-  const remaining = remainingRaw !== void 0 ? Math.max(0, remainingRaw) : Math.max(0, totalValue - usedValue);
-  const expMs = options.expiredTime && options.expiredTime.length > 0 ? Date.parse(options.expiredTime.replace(" ", "T")) : Number.NaN;
-  return {
-    name: name2,
-    unit: readString3(quota, "unit") ?? "credits",
-    remaining,
-    total: totalValue,
-    used: usedValue,
-    active: options.active ?? true,
-    cycleStartTime: "",
-    cycleEndTime: "",
-    expiredTime: options.expiredTime ?? "",
-    ...Number.isFinite(expMs) ? { deductionEndTime: expMs } : {}
-  };
-}
-async function fetchQoderCreditBalance(credential, product, fetcher = fetch) {
-  let response;
-  try {
-    response = await fetcher(`${product.openApiBase}${QODER_USAGE_PATH}`, {
-      method: "GET",
-      headers: await creditsHeaders(credential, product),
-      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
-    });
-  } catch {
-    return null;
-  }
-  if (!response.ok) return null;
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    return null;
-  }
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
-  const root = body;
-  if (root.displayMode === "enterprise") return null;
-  const usage = root.qoderUsage;
-  if (typeof usage !== "object" || usage === null) return null;
-  const packages = [];
-  const userQuota = toPackage(QODER_PLAN_PACKAGE, usage.userQuota);
-  if (userQuota !== void 0) packages.push(userQuota);
-  const addOnQuota = toPackage("\u8D44\u6E90\u5305", usage.addOnQuota);
-  if (addOnQuota !== void 0) packages.push(addOnQuota);
-  const dedicated = usage.dedicatedResourcePackages;
-  if (Array.isArray(dedicated)) {
-    for (const item of dedicated) {
-      const pkg = toPackage(
-        readString3(item, "name") ?? readString3(item, "id") ?? "\u4E13\u7528\u8D44\u6E90\u5305",
-        item,
-        { expiredTime: readString3(item, "expiresAt") ?? readString3(item, "expires_at") ?? "" }
-      );
-      if (pkg !== void 0) packages.push(pkg);
-    }
-  }
-  if (packages.length === 0) return null;
-  const total = roundCredits(packages.reduce((sum, pkg) => sum + pkg.remaining, 0));
-  return { total, packages, expiredTotal: 0 };
-}
-function parseQoderCampaigns(body) {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return void 0;
-  const root = body;
-  const raw = root.campaigns;
-  const campaigns = [];
-  if (Array.isArray(raw)) {
-    for (const item of raw) {
-      const id = readString3(item, "campaignId");
-      if (id === void 0) continue;
-      campaigns.push({
-        campaignId: id,
-        ...readString3(item, "campaignKey") !== void 0 ? { campaignKey: readString3(item, "campaignKey") } : {},
-        ...readString3(item, "actionType") !== void 0 ? { actionType: readString3(item, "actionType") } : {},
-        ...readString3(item, "claimStatus") !== void 0 ? { claimStatus: readString3(item, "claimStatus") } : {},
-        ...benefitAmount(item) !== void 0 ? { amount: benefitAmount(item) } : {}
-      });
-    }
-  }
-  return {
-    showCampaign: root.showCampaign === true,
-    claimable: root.claimable === true,
-    campaigns
-  };
-}
-function benefitAmount(item) {
-  if (typeof item !== "object" || item === null) return void 0;
-  return readNumber3(item.benefit, "amount");
-}
-async function loadCampaigns(credential, product, fetcher) {
-  let response;
-  try {
-    response = await fetcher(`${product.openApiBase}${QODER_CAMPAIGNS_PATH}`, {
-      method: "GET",
-      headers: await creditsHeaders(credential, product),
-      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
-    });
-  } catch {
-    return void 0;
-  }
-  if (!response.ok) return void 0;
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    return void 0;
-  }
-  return parseQoderCampaigns(body);
-}
-function claimableCampaigns(parsed) {
-  return parsed.campaigns.filter(
-    (c) => c.actionType === "CLAIM_BENEFIT" && c.claimStatus === "CLAIMABLE"
-  );
-}
-function parseClaimResult(body) {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return {};
-  const root = body;
-  return {
-    ...readString3(root, "status") !== void 0 ? { status: readString3(root, "status") } : {},
-    ...typeof root.replayed === "boolean" ? { replayed: root.replayed } : {},
-    ...benefitAmount(root) !== void 0 ? { amount: benefitAmount(root) } : {}
-  };
-}
-async function claimQoderCampaign(credential, product, campaignId, fetcher = fetch) {
-  const url = `${product.openApiBase}${QODER_CAMPAIGNS_PATH}/${encodeURIComponent(campaignId)}/claim`;
-  let response;
-  try {
-    response = await fetcher(url, {
-      method: "POST",
-      headers: { ...await creditsHeaders(credential, product), "Content-Type": "application/json" },
-      body: "",
-      signal: AbortSignal.timeout(QODER_CREDITS_TIMEOUT_MS)
-    });
-  } catch (error) {
-    return { kind: "failed", code: -1, message: error instanceof Error ? error.message : String(error) };
-  }
-  const text = await response.text().catch(() => "");
-  let body;
-  try {
-    body = text.length > 0 ? JSON.parse(text) : {};
-  } catch {
-    return { kind: "failed", code: response.status, message: describeNonJson(response.status, text) };
-  }
-  if (!response.ok) {
-    return { kind: "failed", code: response.status, message: describeNonJson(response.status, text) };
-  }
-  const result = parseClaimResult(body);
-  if (result.replayed === true) {
-    return { kind: "already-claimed", message: "\u4ECA\u5929\u5DF2\u9886\u53D6" };
-  }
-  if (result.status !== void 0 && result.status !== "CLAIMED") {
-    return { kind: "failed", code: -1, message: `\u9886\u53D6\u672A\u6210\u529F\uFF08status=${result.status}\uFF09` };
-  }
-  return { kind: "claimed", credit: result.amount ?? 0, streakDays: 0, isStreakDay: false };
-}
-function describeNonJson(status, text) {
-  if (status === 401 || status === 403) return `\u51ED\u636E\u5DF2\u5931\u6548\uFF08HTTP ${status}\uFF09\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\u8BE5\u8D26\u53F7`;
-  const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
-  return `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${status}\uFF09\uFF1A${snippet}`;
-}
-async function claimQoderDailyCheckin(credential, product, fetcher = fetch, nowMs = Date.now()) {
-  const parsed = await loadCampaigns(credential, product, fetcher);
-  if (parsed === void 0) {
-    return { kind: "failed", code: -1, message: "\u6D3B\u52A8\u5217\u8868\u67E5\u8BE2\u5931\u8D25" };
-  }
-  const refreshed = hasQoderCampaignRefreshedToday(nowMs);
-  const stale = refreshed ? void 0 : { coversToday: false };
-  const targets = claimableCampaigns(parsed);
-  if (targets.length === 0) {
-    const claimedBefore = parsed.campaigns.some(
-      (c) => c.actionType === "CLAIM_BENEFIT" && c.claimStatus === "CLAIMED"
-    );
-    if (claimedBefore) {
-      if (!refreshed) return { kind: "inactive", message: NOT_REFRESHED_YET_HINT };
-      return { kind: "already-claimed", message: "\u4ECA\u5929\u5DF2\u9886\u53D6" };
-    }
-    const usage = await fetchQoderUsageRaw(credential, product, fetcher);
-    if (isQoderNotActivated(parsed, usage)) {
-      return { kind: "inactive", message: NOT_ACTIVATED_HINT, actionRequired: true };
-    }
-    return { kind: "inactive", message: "\u5F53\u524D\u6CA1\u6709\u53EF\u9886\u53D6\u7684\u6D3B\u52A8" };
-  }
-  let total = 0;
-  let firstError;
-  for (const target of targets) {
-    const outcome = await claimQoderCampaign(credential, product, target.campaignId, fetcher);
-    if (outcome.kind === "claimed") total += outcome.credit;
-    else if (outcome.kind === "failed" && firstError === void 0) firstError = outcome.message;
-  }
-  if (total > 0) return { kind: "claimed", credit: total, streakDays: 0, isStreakDay: false, ...stale };
-  if (firstError !== void 0) return { kind: "failed", code: -1, message: firstError };
-  return { kind: "already-claimed", message: "\u4ECA\u5929\u5DF2\u9886\u53D6", ...stale };
-}
-
 // vendor/channel-pack/src/cline-credits.ts
 var CLINE_CREDITS_TIMEOUT_MS = 3e4;
 var CLINE_BALANCE_SCALE = 1e5;
-function readNumber4(source, key) {
+function readNumber5(source, key) {
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -54583,7 +54931,7 @@ function parseClineBalanceResponse(value) {
   }
   const data = typeof record.data === "object" && record.data !== null && !Array.isArray(record.data) ? record.data : void 0;
   if (data === void 0) return { error: "\u54CD\u5E94\u7F3A\u5C11 data \u5B57\u6BB5" };
-  const rawBalance = readNumber4(data, "balance");
+  const rawBalance = readNumber5(data, "balance");
   if (rawBalance === void 0) return { error: "\u54CD\u5E94\u7F3A\u5C11 balance \u5B57\u6BB5" };
   return { rawBalance };
 }
@@ -54629,7 +54977,7 @@ async function fetchClineCreditBalance(credential, product, fetcher = fetch, opt
 // vendor/channel-pack/src/cline-quota.ts
 var CLINE_QUOTA_TIMEOUT_MS = 3e4;
 var CLINE_USAGE_LIMITS_PATH = "/api/v1/users/me/plan/usage-limits";
-function readNumber5(source, key) {
+function readNumber6(source, key) {
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -54638,7 +54986,7 @@ function readNumber5(source, key) {
   }
   return void 0;
 }
-function readString4(source, key) {
+function readString5(source, key) {
   const value = source[key];
   if (typeof value !== "string") return void 0;
   const trimmed = value.trim();
@@ -54682,15 +55030,15 @@ function parseClineUsageLimits(value) {
   for (const item of raw) {
     if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
     const entry = item;
-    const type = readString4(entry, "type");
+    const type = readString5(entry, "type");
     if (type === void 0) continue;
     windows.push({
       type,
-      percentUsed: readNumber5(entry, "percentUsed") ?? 0,
+      percentUsed: readNumber6(entry, "percentUsed") ?? 0,
       // ⚠️ `resetsAt` 是 ISO 字符串。若网关某天回数字时间戳，也不要在这里
       // 猜单位（秒/毫秒），原样转成字符串交由展示层判定 —— 猜错会显示
       // 1970 年或 5 万年后的时间，比不显示更难排查。
-      resetsAt: readString4(entry, "resetsAt") ?? ""
+      resetsAt: readString5(entry, "resetsAt") ?? ""
     });
   }
   return { windows, error: serverError === "" ? void 0 : serverError };
@@ -54781,7 +55129,7 @@ function describeNonJsonResponse(status, text) {
 function readBool(source, key) {
   return source[key] === true;
 }
-function readNumber6(source, key) {
+function readNumber7(source, key) {
   const value = source[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) return Number(value);
@@ -54813,7 +55161,7 @@ async function fetchLobsteraiActivitySlot(credential, product, clientVersion, fe
   return {
     slotState: typeof envelope.data.slotState === "string" ? envelope.data.slotState : "",
     activityCode,
-    configRevision: readNumber6(activity, "configRevision")
+    configRevision: readNumber7(activity, "configRevision")
   };
 }
 async function fetchLobsteraiActivityContext(credential, product, slot2, fetcher = fetch) {
@@ -54891,7 +55239,7 @@ async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch)
     for (const item of items) {
       if (typeof item !== "object" || item === null) continue;
       const record = item;
-      const remaining = readNumber6(record, "creditsRemaining");
+      const remaining = readNumber7(record, "creditsRemaining");
       const type = typeof record.type === "string" ? record.type : "";
       const label = typeof record.label === "string" ? record.label : "";
       const expiresAt = typeof record.expiresAt === "string" ? record.expiresAt : "";
@@ -54931,7 +55279,7 @@ async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch)
       if (pkg.used <= 0) pkg.used = roundCredits2(Math.max(0, face - pkg.remaining));
     }
   }
-  const total = roundCredits2(Math.max(0, readNumber6(envelope.data, "totalCreditsRemaining")));
+  const total = roundCredits2(Math.max(0, readNumber7(envelope.data, "totalCreditsRemaining")));
   if (total === 0 && packages.length === 0) return null;
   const expiredTotal = roundCredits2(
     packages.reduce((sum, pkg) => sum + (pkg.active ? 0 : Math.max(0, pkg.remaining)), 0)
@@ -54940,199 +55288,6 @@ async function fetchLobsteraiCreditBalance(credential, product, fetcher = fetch)
 }
 function roundCredits2(value) {
   return Math.round(value * 100) / 100;
-}
-
-// vendor/channel-pack/src/trae-credits.ts
-function classifyTraeCheckinError(httpStatus, code) {
-  if (httpStatus === 200 && code === 1005) {
-    return { type: "PlanLimit", cooldownSecs: 43200 };
-  }
-  if (httpStatus === 429) {
-    return { type: "SoftRate", cooldownSecs: 60 };
-  }
-  if (httpStatus === 401) {
-    return { type: "SessionDead", cooldownSecs: -1 };
-  }
-  if (httpStatus === 404) {
-    return { type: "NotFound", cooldownSecs: 60 };
-  }
-  if (httpStatus >= 500 && httpStatus < 600) {
-    return { type: "Server", cooldownSecs: 600 };
-  }
-  if (httpStatus >= 400 && httpStatus < 500) {
-    return { type: "Client", cooldownSecs: 600 };
-  }
-  if (code !== void 0 && code !== 0) {
-    return { type: "BusinessError", cooldownSecs: 300 };
-  }
-  return { type: "Unknown", cooldownSecs: 0 };
-}
-function readNumber7(source, key) {
-  const value = source[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-function readString5(source, key) {
-  const value = source[key];
-  return typeof value === "string" ? value : "";
-}
-function readClaimCode(body) {
-  const raw = body.code;
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (typeof raw === "string" && /^-?\d+$/.test(raw.trim())) return Number(raw.trim());
-  return raw === void 0 ? 0 : -1;
-}
-async function postJson2(path2, credential, body, fetcher, userId) {
-  const uid = userId ?? credential.uid;
-  if (uid.length === 0) {
-    return { ok: false, message: "\u7F3A\u5C11 user_id\uFF0C\u65E0\u6CD5\u6784\u9020\u8BBE\u5907\u8EAB\u4EFD", httpStatus: 0 };
-  }
-  try {
-    const response = await fetcher(`https://api.trae.cn${path2}`, {
-      method: "POST",
-      headers: traeCheckinHeaders(credential, {}, uid),
-      body,
-      signal: AbortSignal.timeout(TRAE_REQUEST_TIMEOUT_MS)
-    });
-    const httpStatus = response.status;
-    const text = await response.text();
-    if (!response.ok) {
-      const snippet = text.trim().slice(0, 80).replace(/\s+/g, " ");
-      return { ok: false, message: `HTTP ${response.status}: ${snippet}`, httpStatus };
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return { ok: false, message: `\u975E JSON \u54CD\u5E94: ${text.trim().slice(0, 80)}`, httpStatus };
-    }
-    if (typeof parsed !== "object" || parsed === null) {
-      return { ok: false, message: "\u54CD\u5E94\u4E0D\u662F\u5BF9\u8C61", httpStatus };
-    }
-    return { ok: true, body: parsed, httpStatus };
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error), httpStatus: 0 };
-  }
-}
-async function fetchTraeCheckinStatus(credential, _product, fetcher = fetch) {
-  const result = await postJson2(TRAE_CHECKIN_STATUS_PATH, credential, "{}", fetcher, credential.uid);
-  if (!result.ok) return null;
-  const body = result.body;
-  const code = readClaimCode(body);
-  if (code !== 0) return null;
-  return {
-    active: body.enable === true,
-    todayCheckedIn: body.checked_in === true,
-    streakDays: readNumber7(body, "streak_days") || 0,
-    dailyCredit: readNumber7(body, "credits") || 0,
-    todayCredit: 0,
-    isStreakDay: false,
-    totalCredits: readNumber7(body, "total_credits") || 0,
-    checkinDates: [],
-    activityName: "",
-    themeName: "",
-    endTime: ""
-  };
-}
-async function claimTraeDailyCheckin(credential, product, fetcher = fetch, generation = 0, onRotate, userId, retryCount = 3) {
-  const uid = userId ?? credential.uid;
-  const doClaim = async () => {
-    let lastError = { ok: false, httpStatus: 0, message: "", code: 0 };
-    for (let attempt = 0; attempt <= Math.max(0, retryCount); attempt++) {
-      const result = await postJson2(TRAE_CHECKIN_CLAIM_PATH, credential, "{}", fetcher, uid);
-      if (result.ok) {
-        const c = readClaimCode(result.body);
-        return { ok: true, body: result.body, httpStatus: result.httpStatus, message: "", code: c };
-      }
-      lastError = { ok: false, httpStatus: result.httpStatus, message: result.message, code: 0 };
-      if (result.httpStatus > 0) {
-        return lastError;
-      }
-      if (attempt < retryCount) {
-        await new Promise((r) => setTimeout(r, 1e3));
-      }
-    }
-    return lastError;
-  };
-  const response = await doClaim();
-  if (!response.ok) {
-    return { kind: "failed", code: -1, message: response.message, errorType: "Unknown", cooldownSecs: 0 };
-  }
-  const body = response.body;
-  const code = readClaimCode(body);
-  if (code === 9074) {
-    return {
-      kind: "failed",
-      code: 9074,
-      message: readString5(body, "message") || readString5(body, "msg") || "\u7B7E\u5230\u4EBA\u6570\u8FC7\u591A\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5",
-      errorType: "BusinessError",
-      cooldownSecs: 300
-    };
-  }
-  const msg = readString5(body, "message") || readString5(body, "msg") || "";
-  if (code === 0) {
-    const status = await fetchTraeCheckinStatus(credential, product, fetcher);
-    return {
-      kind: "claimed",
-      credit: status?.dailyCredit ?? 0,
-      streakDays: status?.streakDays ?? 0,
-      isStreakDay: false
-    };
-  }
-  const { type, cooldownSecs } = classifyTraeCheckinError(response.httpStatus, code);
-  return {
-    kind: "failed",
-    code,
-    message: msg.length > 0 ? msg : `\u7B7E\u5230\u5931\u8D25\uFF08code=${code}\uFF09`,
-    errorType: type,
-    cooldownSecs
-  };
-}
-async function fetchTraeCreditBalance(credential, _product, fetcher = fetch) {
-  const result = await postJson2(
-    TRAE_ENT_USAGE_PATH,
-    credential,
-    JSON.stringify({ require_usage: true, req_source: 2 }),
-    fetcher,
-    credential.uid
-  );
-  if (!result.ok) return null;
-  const body = result.body;
-  const packList = body.user_entitlement_pack_list;
-  if (!Array.isArray(packList) || packList.length === 0) return null;
-  const packages = [];
-  let total = 0;
-  let expiredTotal = 0;
-  for (const item of packList) {
-    if (typeof item !== "object" || item === null) continue;
-    const entry = item;
-    const base = entry.entitlement_base_info;
-    if (typeof base !== "object" || base === null) continue;
-    const quota = base.quota;
-    if (typeof quota !== "object" || quota === null) continue;
-    const creditsLimit = readNumber7(quota, "credits_limit");
-    if (creditsLimit <= 0) continue;
-    const usage = entry.usage;
-    const used = typeof usage === "object" && usage !== null ? readNumber7(usage, "credits_amount") : 0;
-    const expireSec = readNumber7(entry, "expire_time");
-    const deductionEndMs = expireSec > 0 ? expireSec * 1e3 : void 0;
-    const pkg = {
-      // ⚠️ 包名用 `display_desc`（实测"每月登录赠送"/"签到奖励"/"免费"），
-      // 不是 `base.name` —— 后者实测为 undefined，旧代码全部回退成了"资源包"。
-      name: readString5(base, "display_desc") || readString5(entry, "display_desc") || "\u8D44\u6E90\u5305",
-      unit: "credits",
-      remaining: creditsLimit - used,
-      total: creditsLimit,
-      used,
-      active: true,
-      cycleStartTime: "",
-      cycleEndTime: "",
-      expiredTime: "",
-      ...deductionEndMs !== void 0 ? { deductionEndTime: deductionEndMs } : {}
-    };
-    packages.push(pkg);
-    total += pkg.remaining;
-  }
-  return { total, packages, expiredTotal };
 }
 
 // vendor/channel-pack/src/account-probe.ts
@@ -64792,8 +64947,53 @@ function apply(ctx, config = {}) {
   });
   const qoder = new QoderAuth(ctx);
   const activeQoderAccountId = /* @__PURE__ */ new Map();
+  const makeCreditRouting = (providerId, fetchBalance) => {
+    const resolveByRef = async (refName) => {
+      const resolved = await ctx.credentials.resolve(credentialRef14(refName));
+      if (!resolved) return void 0;
+      try {
+        return JSON.parse(resolved.value);
+      } catch {
+        return void 0;
+      }
+    };
+    const selector = new CreditBalanceSelector({
+      resolveCredential: resolveByRef,
+      fetchBalance
+    });
+    const candidatesFor = (modelId) => pool.listAccountsByProvider(providerId).filter((account) => account.enabled).filter((account) => {
+      if (modelId === void 0 || modelId.length === 0) return true;
+      if (!account.modelRateLimits) return true;
+      const resetAt = account.modelRateLimits[modelId];
+      return resetAt === void 0 || resetAt === 0 || Date.now() >= resetAt;
+    }).map((account) => ({ id: account.id, credentialRef: account.credentialRef }));
+    return { selector, candidatesFor };
+  };
+  const makeCreditNextAccount = (providerId, routing, parseCredential6) => async (modelId, tried) => {
+    const candidates = routing.candidatesFor(modelId).filter((account) => !tried.has(account.id));
+    const picked = await routing.selector.pick(candidates);
+    if (picked === void 0) return void 0;
+    const credential = await parseCredential6(picked.account.credentialRef);
+    if (credential === void 0) return void 0;
+    reportLedgerAccount(providerId, picked.account.id);
+    return { accountId: picked.account.id, credential };
+  };
   const qoderAdapter = registerQoderLlm(ctx, {
     credentialRef: credentialRef14(QODER.defaultCredentialRef),
+    // ★ 积分路由：额度/排队换号时按「临期优先」挑下一号（失败开放）。
+    nextAccount: makeCreditNextAccount(
+      QODER.id,
+      makeCreditRouting(QODER.id, (credential) => fetchQoderCreditBalance(credential, QODER)),
+      async (refName) => {
+        const resolved = await ctx.credentials.resolve(credentialRef14(refName));
+        if (!resolved) return void 0;
+        try {
+          return JSON.parse(resolved.value);
+        } catch {
+          return void 0;
+        }
+      }
+    ),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(QODER.id, modelId ?? "");
       if (available2) {
@@ -64842,6 +65042,21 @@ function apply(ctx, config = {}) {
   const qoderCn = new QoderAuth(ctx, { product: QODER_CN });
   const qoderCnAdapter = registerQoderLlm(ctx, {
     credentialRef: credentialRef14(QODER_CN.defaultCredentialRef),
+    // ★ 积分路由：与 qoder 同款（两站共用 QoderAdapter 类，只接一站是
+    // index.ts 既有注释点名的反例）。
+    nextAccount: makeCreditNextAccount(
+      QODER_CN.id,
+      makeCreditRouting(QODER_CN.id, (credential) => fetchQoderCreditBalance(credential, QODER_CN)),
+      async (refName) => {
+        const resolved = await ctx.credentials.resolve(credentialRef14(refName));
+        if (!resolved) return void 0;
+        try {
+          return JSON.parse(resolved.value);
+        } catch {
+          return void 0;
+        }
+      }
+    ),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(QODER_CN.id, modelId ?? "");
       if (available2) {
@@ -64889,6 +65104,20 @@ function apply(ctx, config = {}) {
   const trae = new TraeAuth(ctx);
   const traeAdapter = registerTraeLlm(ctx, {
     credentialRef: credentialRef14(TRAE.defaultCredentialRef),
+    // ★ 积分路由：额度/限流换号时按「临期优先」挑下一号（失败开放）。
+    nextAccount: makeCreditNextAccount(
+      TRAE.id,
+      makeCreditRouting(TRAE.id, (credential) => fetchTraeCreditBalance(credential, TRAE)),
+      async (refName) => {
+        const resolved = await ctx.credentials.resolve(credentialRef14(refName));
+        if (!resolved) return void 0;
+        try {
+          return JSON.parse(resolved.value);
+        } catch {
+          return void 0;
+        }
+      }
+    ),
     resolveCredential: async (modelId) => {
       const available2 = await pool.getAvailableAccount(TRAE.id, modelId ?? "");
       if (available2) {

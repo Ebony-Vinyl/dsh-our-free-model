@@ -16,6 +16,9 @@ import { LoomyAuth } from './loomy-auth.js'
 import { RaccoonAuth } from './raccoon-auth.js'
 import { LOOMY } from './loomy-product.js'
 import { LoomyBalanceSelector } from './loomy-balance-selector.js'
+import { CreditBalanceSelector, type CreditCandidateAccount } from './credit-balance-selector.js'
+import { fetchTraeCreditBalance } from './trae-credits.js'
+import { fetchQoderCreditBalance } from './qoder-credits.js'
 import { RACCOON } from './raccoon-product.js'
 import { ZcodeAuth } from './zcode-auth.js'
 import { registerZcodeLlm } from './zcode-adapter.js'
@@ -411,8 +414,105 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
    * 用 `Map` 按 provider 分开，国际版与中国版互不影响。
    */
   const activeQoderAccountId = new Map<string, string | undefined>()
+
+  /**
+   * ★ 积分路由（2026-11-13）：TRAE / Qoder / Qodercn 共用的选号器工厂。
+   *
+   * ## 为什么这三家（而不管其它渠道）
+   *
+   * - TRAE：每月登录赠送 500 + 签到包，条目级 `expire_time` 到期即焚；
+   * - Qoder（两站）：领取积分「30 天有效」、专用资源包带 `expiresAt`；
+   * - 三家都已有只读余额接口（`fetchTraeCreditBalance` /
+   *   `fetchQoderCreditBalance`，面板 credits.balances 在用），零新协议；
+   * - Loomy 已有等效实现（`LoomyBalanceSelector`），语义不同不共用；
+   *   其余渠道无积分概念。
+   *
+   * ## 失败开放（与 Loomy 的关键差异）
+   *
+   * Loomy 因「额度尽→静默扣永久分」必须前置阻断；这三家的额度耗尽都
+   * **显式报错**，适配器的反应式换号已兜住正确性。故本调度只重排候选
+   * （临期优先），选不出时返回 undefined，调用方退回既有
+   * `getAvailableAccount` / 单凭据路径 —— 最坏等于引入前的行为。
+   *
+   * ## 只接换号 hook，不动初始选号
+   *
+   * 初始选号若也查余额，每轮对话的首请求都要先付 N 次余额查询的延迟
+   * （缓存只有 60s，冷启动必慢）；而「临期先烧」的价值恰恰集中在
+   * **失败换号**时 —— 撞墙的账号被标记限流后，下一号选谁就是分档的
+   * 用武之地。故初始选号保持池序（零开销），hook 只在额度/排队换号
+   * 与排队轮换时生效。
+   *
+   * @param providerId 账号池的 provider id（QODER.id / QODER_CN.id / TRAE.id）。
+   * @param fetchBalance 该渠道的余额查询（吃凭据，返回 null = 查不到）。
+   */
+  const makeCreditRouting = (providerId: string, fetchBalance: (credential: unknown) => Promise<unknown>) => {
+    const resolveByRef = async (refName: string): Promise<unknown> => {
+      const resolved = await ctx.credentials.resolve(credentialRef(refName))
+      if (!resolved) return undefined
+      try {
+        return JSON.parse(resolved.value)
+      } catch {
+        return undefined
+      }
+    }
+    const selector = new CreditBalanceSelector({
+      resolveCredential: resolveByRef,
+      fetchBalance: fetchBalance as never,
+    })
+    /**
+     * 候选 = enabled + 未被该模型限流的账号（与 `getAvailableAccount` 的
+     * 过滤条件镜像；Loomy 接线的同款写法）。空 `modelId` 不过滤限流。
+     */
+    const candidatesFor = (modelId: string | undefined): CreditCandidateAccount[] =>
+      pool.listAccountsByProvider(providerId)
+        .filter(account => account.enabled)
+        .filter((account) => {
+          if (modelId === undefined || modelId.length === 0) return true
+          if (!account.modelRateLimits) return true
+          const resetAt = account.modelRateLimits[modelId]
+          return resetAt === undefined || resetAt === 0 || Date.now() >= resetAt
+        })
+        .map(account => ({ id: account.id, credentialRef: account.credentialRef }))
+    return { selector, candidatesFor }
+  }
+
+  /**
+   * 三实例的 `nextAccount` hook：候选按临期分档挑一个，解析其凭据。
+   * 返回 undefined（查不到余额/无更优候选/凭据解析失败）→ 适配器退回池路径。
+   *
+   * ⚠️ `providerId` 只用于账本回报（`reportLedgerAccount`），选号器本身
+   * 不感知 provider —— 候选已由 `candidatesFor` 过滤好。
+   */
+  const makeCreditNextAccount = <TCredential>(
+    providerId: string,
+    routing: { selector: CreditBalanceSelector; candidatesFor: (modelId: string | undefined) => CreditCandidateAccount[] },
+    parseCredential: (refName: string) => Promise<TCredential | undefined>,
+  ) => async (modelId: string, tried: ReadonlySet<string>): Promise<{ accountId: string; credential: TCredential } | undefined> => {
+    const candidates = routing.candidatesFor(modelId).filter(account => !tried.has(account.id))
+    const picked = await routing.selector.pick(candidates)
+    if (picked === undefined) return undefined
+    const credential = await parseCredential(picked.account.credentialRef)
+    if (credential === undefined) return undefined
+    reportLedgerAccount(providerId, picked.account.id)
+    return { accountId: picked.account.id, credential }
+  }
+
   const qoderAdapter = registerQoderLlm(ctx, {
     credentialRef: credentialRef(QODER.defaultCredentialRef),
+    // ★ 积分路由：额度/排队换号时按「临期优先」挑下一号（失败开放）。
+    nextAccount: makeCreditNextAccount<QoderCredential>(
+      QODER.id,
+      makeCreditRouting(QODER.id, credential => fetchQoderCreditBalance(credential as QoderCredential, QODER)),
+      async refName => {
+        const resolved = await ctx.credentials.resolve(credentialRef(refName))
+        if (!resolved) return undefined
+        try {
+          return JSON.parse(resolved.value) as QoderCredential
+        } catch {
+          return undefined
+        }
+      },
+    ),
     resolveCredential: async (modelId?: string) => {
       // 只从 Qoder 自己的账号池取账号，回退到自己的单凭据 ref，
       // 保证不会串用其它 provider 的凭据。
@@ -488,6 +588,21 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   const qoderCn = new QoderAuth(ctx, { product: QODER_CN })
   const qoderCnAdapter = registerQoderLlm(ctx, {
     credentialRef: credentialRef(QODER_CN.defaultCredentialRef),
+    // ★ 积分路由：与 qoder 同款（两站共用 QoderAdapter 类，只接一站是
+    // index.ts 既有注释点名的反例）。
+    nextAccount: makeCreditNextAccount<QoderCredential>(
+      QODER_CN.id,
+      makeCreditRouting(QODER_CN.id, credential => fetchQoderCreditBalance(credential as QoderCredential, QODER_CN)),
+      async refName => {
+        const resolved = await ctx.credentials.resolve(credentialRef(refName))
+        if (!resolved) return undefined
+        try {
+          return JSON.parse(resolved.value) as QoderCredential
+        } catch {
+          return undefined
+        }
+      },
+    ),
     resolveCredential: async (modelId?: string) => {
       // 只取中国版自己账号池的账号，回退到 QODERCN_ACCESS_TOKEN。
       // ⚠️ provider 实参必须是 QODER_CN.id：写死 'qoder' 会让中国版
@@ -551,6 +666,20 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
   const trae = new TraeAuth(ctx)
   const traeAdapter = registerTraeLlm(ctx, {
     credentialRef: credentialRef(TRAE.defaultCredentialRef),
+    // ★ 积分路由：额度/限流换号时按「临期优先」挑下一号（失败开放）。
+    nextAccount: makeCreditNextAccount<TraeCredential>(
+      TRAE.id,
+      makeCreditRouting(TRAE.id, credential => fetchTraeCreditBalance(credential as TraeCredential, TRAE)),
+      async refName => {
+        const resolved = await ctx.credentials.resolve(credentialRef(refName))
+        if (!resolved) return undefined
+        try {
+          return JSON.parse(resolved.value) as TraeCredential
+        } catch {
+          return undefined
+        }
+      },
+    ),
     resolveCredential: async (modelId?: string) => {
       // ⚠️ `modelId` 必须透传：限流是**按模型**记的（`modelRateLimits[model]`），
       // 传空串会让 `getAvailableAccount` 的限流过滤整体短路

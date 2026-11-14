@@ -223,6 +223,32 @@ export interface TraeAdapterOptions {
   resolveCredential: (modelId?: string) => Promise<TraeCredential | undefined>
   /** 静默续期凭据。 */
   refresh: (accountId?: string, reason?: 'auth') => Promise<void>
+  /**
+   * ★ 积分感知选号 hook（2026-11-13）：额度/限流换号时优先问它。
+   *
+   * ## 为什么存在
+   *
+   * TRAE 的积分（每月登录赠送 500、签到包）带条目级 `expire_time`，
+   * 到期即焚；而池的 `getAvailableAccount` 只按 `enabled` + 限流过滤，
+   * 不看余额 —— 临期积分会被手动顺序里靠前的常规号「挡住」，在沉默中
+   * 浪费。宿主（index.ts）在这里注入 `CreditBalanceSelector.pick` 的
+   * 包装：候选按「临期 → 常规」分档后返回第一个可用账号。
+   *
+   * ## 契约（与 `LoomyAdapterOptions.nextAccount` 同型）
+   *
+   * - 入参 `modelId` 必须参与候选过滤（限流按模型记）；`tried` 是本请求
+   *   已试过的账号 id，**必须**排除 —— 不排除会在 A/B 间反复空转
+   *   （`qoder-adapter.ts` 的 `switchAccountOnQuota` 注释记录过实测）；
+   * - 返回 `undefined` = 「按原逻辑从池里取」：选号器查不到余额
+   *   （失败开放）或没有更优候选时都返回 undefined，本适配器据此
+   *   **退回既有 `getAvailableAccount` 路径**，行为与引入 hook 前一致；
+   * - 抛错 = 选号器故障：同样退回池路径（本适配器捕获），不因一个
+   *   「本来是优化」的环节让请求失败。
+   */
+  nextAccount?: (
+    modelId: string,
+    tried: ReadonlySet<string>,
+  ) => Promise<{ accountId: string; credential: TraeCredential } | undefined>
   /** 动态拉取远端模型列表；失败时回退到 `product.fallbackModels`。 */
   fetchRemoteModels?: () => Promise<TraeRemoteModel[]>
   fetchImpl?: typeof fetch
@@ -1098,13 +1124,11 @@ export class TraeAdapter extends LlmAdapter {
               Date.now() + TRAE_RATE_LIMIT_FALLBACK_MS,
             )
           }
-          const next = await this.options.accountPool.getAvailableAccount(
-            this.product.id, options.model, tried,
-          )
-          if (!next || tried.has(next.entry.id)) break
-          tried.add(next.entry.id)
-          credential = next.credential as TraeCredential
-          currentAccountId = next.entry.id
+          const next = await this.nextAccountFor(options.model, tried)
+          if (next === undefined) break
+          tried.add(next.accountId)
+          credential = next.credential
+          currentAccountId = next.accountId
           response = await this.send(credential, body, options)
           if (response.ok) {
             yield* this.consumeSse(response, options)
@@ -1175,15 +1199,16 @@ export class TraeAdapter extends LlmAdapter {
           //   刚标记的账号立刻又被选中 —— 换号形同虚设；
           // - 不传 `tried` 会在 A/B 之间反复空转（Qoder 已踩过，见
           //   `qoder-adapter.ts` 的 `switchAccountOnQuota` 注释）。
-          const next = await this.options.accountPool.getAvailableAccount(
-            this.product.id, options.model, triedStreamAccounts,
-          )
-          if (next === null || next === undefined || triedStreamAccounts.has(next.entry.id)) {
+          //
+          // 积分感知 hook（nextAccount）优先；未提供或返回 undefined 时
+          // 退回池路径 —— 两条路都必须带上 `tried`，语义一致。
+          const next = await this.nextAccountFor(options.model, triedStreamAccounts)
+          if (next === undefined) {
             throw new LlmError(error.message, 'QUOTA_EXCEEDED')
           }
-          triedStreamAccounts.add(next.entry.id)
-          credential = next.credential as TraeCredential
-          currentAccountId = next.entry.id
+          triedStreamAccounts.add(next.accountId)
+          credential = next.credential
+          currentAccountId = next.accountId
           response = await this.send(credential, body, options)
           if (!response.ok) {
             const text = await response.text().catch(() => '')
@@ -1212,6 +1237,44 @@ export class TraeAdapter extends LlmAdapter {
   }
 
   /** 发起一次 chat 请求；网络失败映射为可重试的 TRANSPORT 错误。 */
+  /**
+   * 换号时的统一取号入口：积分感知 hook 优先，池路径兜底。
+   *
+   * ## 两层语义（HTTP 层与流内层共用，见各自调用点）
+   *
+   * 1. `options.nextAccount`（宿主注入的 `CreditBalanceSelector` 包装）
+   *    存在时**先问它**：返回的账号已按「临期积分优先」分档。抛错时
+   *    视为「选号器故障」—— 捕获后落到第 2 层（失败开放：一个
+   *    「本来是优化」的环节绝不能让换号失败）；
+   * 2. hook 未提供 / 返回 undefined / 抛错 → 既有 `getAvailableAccount`
+   *    池路径，逐字节保留原语义（手动顺序 + enabled + 模型限流过滤）。
+   *
+   * ⚠️ 返回形状统一为 `{ accountId, credential }`：hook 与池路径的
+   * 返回结构不同（池是 `{ entry, credential }`），在此收拢，两个调用
+   * 点不必各自做形状适配 —— 两处各写一遍必然漂移（`trae-errors.ts`
+   * 文件头的同款理由）。
+   *
+   * ⚠️ `tried` 原样透传给两层：不排除已试账号会在 A/B 间空转。
+   */
+  private async nextAccountFor(
+    model: string,
+    tried: ReadonlySet<string>,
+  ): Promise<{ accountId: string; credential: TraeCredential } | undefined> {
+    if (this.options.nextAccount !== undefined) {
+      try {
+        const picked = await this.options.nextAccount(model, tried)
+        if (picked !== undefined) return picked
+      } catch {
+        // 选号器故障不影响请求：落到池路径（见方法注释）。
+      }
+    }
+    const pool = this.options.accountPool
+    if (pool === undefined) return undefined
+    const next = await pool.getAvailableAccount(this.product.id, model, tried)
+    if (next === null || tried.has(next.entry.id)) return undefined
+    return { accountId: next.entry.id, credential: next.credential as TraeCredential }
+  }
+
   private async send(
     credential: TraeCredential,
     body: string,
