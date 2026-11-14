@@ -277,17 +277,69 @@ export function isCanonicalSession(id) {
 }
 
 /**
+ * Decode the minting clock phase (ms) carried by a canonical session id.
+ *
+ * The twelve hex digits are `~(ts_ms << 12 | counter)` inside a **48-bit
+ * frame**: `ts_ms * 0x1000` long since exceeds 2^48, so the encoded value
+ * wraps every 2^36 ms (≈ 18.25 h) and the decoded number is the clock's phase
+ * within the current frame, not an absolute epoch — the same layout the
+ * upstream has accepted from `mintSessionId()` all along. Returns `undefined`
+ * for anything that is not `ses_` + 12 hex.
+ */
+export const SESSION_WRAP_MS = 2 ** 36
+
+export function sessionClockMs(id) {
+  const match = /^ses_([0-9a-f]{12})/.exec(String(id ?? '').trim())
+  if (match === null) return undefined
+  const inverted = ~BigInt(`0x${match[1]}`) & 0xffffffffffffn
+  return Number(inverted >> 12n)
+}
+
+/** How long one upstream session stays usable before the quota window moves. */
+export const SESSION_TTL_MS = 2 * 60 * 60 * 1000
+/** Tolerance for a session minted by a peer whose clock runs a little ahead. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000
+
+/**
+ * Whether an id is canonical **and** carries a usable minting clock.
+ *
+ * The shape alone is not enough (measured 2026-11-14, 9router issue #65): the
+ * upstream decodes the embedded clock and refuses a session whose time is
+ * nonsense — the digest-derived ids `canonicalizeSession` used to mint pass the
+ * descending layout but carry random noise where the clock lives, and a live
+ * A/B answered 429 3/3 for them where current-clock ids answered 200 3/3. The
+ * 48-bit frame makes the stored value a phase ({@link SESSION_WRAP_MS}), so
+ * the closest unwrapped candidate to `now` decides: usable when it was minted
+ * within {@link SESSION_TTL_MS} and is no more than a {@link CLOCK_SKEW_MS}
+ * skew ahead.
+ */
+export function isUsableSession(id, now = Date.now()) {
+  if (!isCanonicalSession(id)) return false
+  const phase = sessionClockMs(id)
+  if (phase === undefined) return false
+  const base = now - (now % SESSION_WRAP_MS)
+  let best = Infinity
+  for (const candidate of [base + phase, base + phase - SESSION_WRAP_MS, base + phase + SESSION_WRAP_MS]) {
+    const distance = Math.abs(now - candidate)
+    if (distance < best) best = distance
+  }
+  return best <= SESSION_TTL_MS
+}
+
+/**
  * Re-encode any session id into the descending layout the gate accepts, keeping
  * one conversation pinned to one upstream session.
  *
- * The digest is the same `ses\0<signal>` sha256 the reference gateway uses, so a
- * given downstream conversation always maps to the same upstream id. Counter 1
- * keeps the low 12 bits at `0xffe`, inside the accepted window.
+ * The random half stays the same `ses\0<signal>` sha256 slice, so a given
+ * downstream conversation always maps to the same upstream id. The clock half
+ * is minted from `Date.now()` — a digest-derived clock decodes to a random time
+ * and the upstream answers the same 429 it uses for a spent quota (measured
+ * 2026-11-14). Counter 1 keeps the low 12 bits at `0xffe`, inside the accepted
+ * window.
  */
-export function canonicalizeSession(signal) {
+export function canonicalizeSession(signal, timestamp = Date.now()) {
   const digest = crypto.createHash('sha256').update(`ses\0${signal}`).digest()
-  const current = ((BigInt(digest[0]) << 28n | BigInt(digest[1]) << 20n | BigInt(digest[2]) << 12n |
-    BigInt(digest[3]) << 4n | BigInt(digest[4]) >> 4n) << 12n) | 1n
+  const current = BigInt(timestamp) * 0x1000n | 1n
   const inverted = ~current & 0xffffffffffffn
   const timeHex = inverted.toString(16).padStart(12, '0')
   return `ses_${timeHex}${base62Fixed(digest.subarray(6, 16), 14)}`
@@ -392,16 +444,22 @@ function rememberSession(seed, id) {
  * ascending `ts << 12` value, or any other random hex is refused with 403
  * FreeTierError even when every other header is right.
  *
+ * The embedded clock must also be current: a well-formed id minted long ago —
+ * or one whose clock is random noise — draws the same 429 the quota draws
+ * (measured 2026-11-14), so an id is only reused while it is fresh within
+ * {@link SESSION_TTL_MS}. Past that window the same seed re-mints on the new
+ * clock, keeping one session per conversation inside each quota window.
+ *
  * ⇒ A downstream-supplied id is only forwarded verbatim when it already carries
- * the accepted encoding ({@link isCanonicalSession}); anything else is
- * deterministically re-encoded into the descending layout, so a conversation
- * keeps one stable upstream session instead of drawing 403s.
+ * the accepted encoding *and* a usable clock ({@link isUsableSession});
+ * anything else is re-encoded, so a conversation keeps one stable upstream
+ * session instead of drawing 429s.
  */
 export function sessionForConversation(sessionId) {
-  if (typeof sessionId === 'string' && isCanonicalSession(sessionId)) return sessionId.trim()
+  if (typeof sessionId === 'string' && isUsableSession(sessionId)) return sessionId.trim()
   const seed = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : 'global'
   const remembered = loadSessions().get(seed)
-  if (remembered !== undefined && isCanonicalSession(remembered)) return remembered
+  if (remembered !== undefined && isUsableSession(remembered)) return remembered
   const minted = canonicalizeSession(seed)
   rememberSession(seed, minted)
   return minted
@@ -518,6 +576,85 @@ function noteInjectedTools(body, { claude, flat }, names) {
 }
 
 /**
+ * The `<env>` block the free lane's upstream requires inside the system prompt
+ * (2026-11 probe, 9router issue #65 / decolua#5128).
+ *
+ * Both lines are required: a block carrying only the working-directory line
+ * passed a live probe once but failed later requests, and the upstream reuses
+ * the same `429 FreeUsageLimitError` wording for this shape rejection as it
+ * does for a spent quota — which is why the lane read as "out of quota" while
+ * every session, IP and egress was fresh. Missing the block entirely answers
+ * 429 before the model ever runs.
+ */
+export const ENV_BLOCK = '<env>\n  Working directory: /workspace\n  Workspace root folder: /workspace\n</env>'
+
+/** Whether a text already carries the complete two-line `<env>` block. */
+export function hasCompleteEnvBlock(text) {
+  return typeof text === 'string' &&
+    /<env>[\s\S]*Working directory:[\s\S]*Workspace root folder:[\s\S]*<\/env>/.test(text)
+}
+
+/**
+ * Complete (or prepend) the `<env>` block in whichever field carries the system
+ * prompt for this wire's shape. Idempotent: a body that already carries the
+ * complete block is left untouched, so retries never stack copies. A partial
+ * `<env>` (the gate rejected the one-line variant, decolua#5128) is not "fixed"
+ * in place — the complete block is appended so the request carries one valid
+ * block regardless of what the partial held.
+ *
+ * Runs after {@link noteInjectedTools}, so the placeholder note and the env
+ * block land in the same system message.
+ */
+export function applyEnvBlock(body, style) {
+  const claude = style === 'claude'
+  const flat = style === true
+  if (claude) {
+    if (Array.isArray(body.system)) {
+      const joined = body.system.map(block => typeof block?.text === 'string' ? block.text : '').join('\n')
+      if (hasCompleteEnvBlock(joined)) return
+      const last = body.system[body.system.length - 1]
+      if (last !== undefined && typeof last?.text === 'string') last.text += `\n\n${ENV_BLOCK}`
+      else body.system.push({ type: 'text', text: ENV_BLOCK })
+      return
+    }
+    if (typeof body.system === 'string') {
+      if (!hasCompleteEnvBlock(body.system)) body.system = body.system === '' ? ENV_BLOCK : `${body.system}\n\n${ENV_BLOCK}`
+      return
+    }
+    body.system = ENV_BLOCK
+    return
+  }
+  if (flat) {
+    if (typeof body.instructions === 'string') {
+      if (!hasCompleteEnvBlock(body.instructions)) body.instructions = body.instructions === '' ? ENV_BLOCK : `${body.instructions}\n\n${ENV_BLOCK}`
+      return
+    }
+    body.instructions = ENV_BLOCK
+    return
+  }
+  // Chat wire: the system prompt is a `role:'system'` message. Content may be a
+  // string or an array of typed blocks; the block goes where the text lives.
+  const messages = Array.isArray(body.messages) ? body.messages : []
+  const index = messages.findIndex(message => message?.role === 'system')
+  if (index === -1) {
+    body.messages = [{ role: 'system', content: ENV_BLOCK }, ...messages]
+    return
+  }
+  const message = messages[index]
+  if (typeof message.content === 'string') {
+    if (!hasCompleteEnvBlock(message.content)) message.content = message.content === '' ? ENV_BLOCK : `${message.content}\n\n${ENV_BLOCK}`
+    return
+  }
+  if (Array.isArray(message.content)) {
+    const joined = message.content.map(block => typeof block?.text === 'string' ? block.text : '').join('\n')
+    if (hasCompleteEnvBlock(joined)) return
+    const last = message.content[message.content.length - 1]
+    if (last !== undefined && typeof last?.text === 'string') last.text += `\n\n${ENV_BLOCK}`
+    else message.content.push({ type: 'text', text: ENV_BLOCK })
+  }
+}
+
+/**
  * Satisfy the legacy free-tier fingerprint gate on `body.tools`, and give every
  * name that travels upstream a spelling the gate accepts.
  *
@@ -586,6 +723,10 @@ export function applyFingerprint(body, style) {
 
   body.tools = out
   if (injected.length > 0) noteInjectedTools(body, shape, injected)
+  // The upstream refuses a request whose system prompt lacks the two-line
+  // `<env>` block with the same 429 wording it uses for a spent quota, so the
+  // block rides along with the fingerprint that already mutates the body.
+  applyEnvBlock(body, style)
   return renameMap
 }
 

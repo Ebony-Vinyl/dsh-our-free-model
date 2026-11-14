@@ -23,7 +23,7 @@
  */
 
 import { CLIENT_UA, UPSTREAM_BASE, gatewayHeaders, truncateSession } from './upstream.js'
-import { egressFetch } from './egress.js'
+import { laneFetch } from './transport.js'
 import { dumpUpstream } from './debug-dump.js'
 import { applyRequestBudget } from './request-budget.js'
 
@@ -401,7 +401,10 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
   headers['user-agent'] = userAgentWith(attributionUserAgent)
   let response
   try {
-    response = await egressFetch(`${UPSTREAM_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body), redirect: 'error', signal })
+    // Through the Bun hop when it is up: the lane fingerprints the client
+    // transport, and Node/undici answers the quota's own 429 for it (see
+    // src/transport.js). Falls back to the direct stack per request.
+    response = await laneFetch(`${UPSTREAM_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body), redirect: 'error', signal })
   } catch (error) {
     // The signal's own reason is what fetch rejects with, and Node's is a
     // `TimeoutError`/user Error rather than `AbortError` — testing the name alone
@@ -586,7 +589,7 @@ export async function getJson(path, { session, attributionUserAgent, signal, tim
   const onCallerAbort = () => { callerAborted = true; controller.abort() }
   signal?.addEventListener('abort', onCallerAbort, { once: true })
   try {
-    const response = await egressFetch(`${UPSTREAM_BASE}${path}`, { headers, redirect: 'error', signal: controller.signal })
+    const response = await laneFetch(`${UPSTREAM_BASE}${path}`, { headers, redirect: 'error', signal: controller.signal })
     const text = await response.text()
     let payload
     try { payload = JSON.parse(text) } catch { payload = { error: { message: text.slice(0, 200) } } }

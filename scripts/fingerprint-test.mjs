@@ -58,7 +58,8 @@ console.log('\n=== 3. already declared gate names are not injected twice ===')
   const body = { tools: FINGERPRINT_TOOLS.map(name => chatTool(name)) }
   applyFingerprint(body, false)
   check('every gate name appears once', declared(body), FINGERPRINT_TOOLS)
-  check('no placeholder note is added', noteOf(body), '""')
+  check('no placeholder note is added', /placeholders that do nothing/.test(noteOf(body)), false)
+  check('the env block still rides along', /<env>/.test(noteOf(body)), true)
 }
 
 console.log('\n=== 4. tool_choice is left exactly as the caller sent it ===')

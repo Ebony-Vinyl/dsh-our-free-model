@@ -93,8 +93,16 @@ console.log('\n=== 3. the session id must carry the descending encoding the gate
   check('another conversation, another session', up.sessionForConversation('wire:other') !== id, true)
   const saved = JSON.parse(fs.readFileSync(path.join(scratch, 'our-free-model', 'session-map.json'), 'utf8'))
   check('session mapping is persisted outside the user directory', saved.sessions['wire:conversation'], id)
-  const caller = 'ses_ffffffffffffABCDEFGHIJKLMN'
-  check('a canonical caller id passes through', up.sessionForConversation(caller), caller)
+  // A caller id passes through only while its embedded clock is current: the
+  // upstream decodes the clock and refuses a stale one with the quota's own 429
+  // (measured 2026-11-14). A fresh mint passes; `0xffffffffffff` decodes to
+  // epoch 1970 and is re-encoded instead of forwarded.
+  const caller = up.mintSessionId()
+  check('a canonical caller id with a current clock passes through', up.sessionForConversation(caller), caller)
+  const stale = 'ses_ffffffffffffABCDEFGHIJKLMN'
+  const reminted = up.sessionForConversation(stale)
+  check('a stale-clock caller id is re-encoded', reminted === stale, false)
+  check('and the re-encoded id is canonical and fresh', up.isUsableSession(reminted), true)
   // A caller id with the right shape but the wrong encoding is a 403 upstream,
   // so it must be re-encoded rather than forwarded (probed live 2026-10-17).
   const ascending = 'ses_123456789abcABCDEFGHIJKLMN'

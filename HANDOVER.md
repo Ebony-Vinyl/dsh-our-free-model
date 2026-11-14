@@ -1155,3 +1155,72 @@ berlaku — kini menyamar sebagai 429 FreeUsageLimitError.
 - Working tree bersih (HEAD `ffce1ca`).
 - Tidak ada perubahan kode pada sesi ini (murni diagnosa).
 - Handover ini ditulis 2026-10-30.
+
+# SESI 16 — 2026-11-14 — Perbaikan 429 free lane (9router issue #65) + WARP terbukti gagal
+
+## 52. Konteks
+
+Laporan user: kuota ZEN dipangkas 1M → 200rb dan bisa diakali WARP IPv6/NAT64.
+Diungkap lewat issue 9router #65: **`429 FreeUsageLimitError` dipakai upstream
+untuk beberapa pemeriksaan berbeda**, bukan hanya kuota. Tiga pemicu ditemukan:
+
+1. **Blok `<env>` wajib** di system prompt — dua baris lengkap
+   (`Working directory: /workspace` + `Workspace root folder: /workspace`);
+   versi satu baris lolos probe awal tapi gagal request berikutnya (decolua#5128).
+2. **Transport check**: body + sesi + IP yang sama → Bun `fetch` = 200,
+   Node/undici dan curl = 429. OFM berjalan di Node → selalu 429.
+3. **Jam di dalam session id**: `canonicalizeSession` lama menurunkan timestamp
+   dari digest SHA-256 → jam acak → 429 3/3, sedangkan jam saat ini 200 3/3
+   (A/B live di issue). Reuse sesi berjam-jam tetap aman selama jamnya segar.
+
+## 53. Yang diubah (semua teruji offline, live menunggu reset kuota)
+
+| Berkas | Perubahan |
+|---|---|
+| `src/upstream.js` | `ENV_BLOCK` + `hasCompleteEnvBlock` + `applyEnvBlock` (3 shape: chat/claude/responses, idempotent, menangani blok parsial), dipanggil dari `applyFingerprint` setelah note. `canonicalizeSession(signal, timestamp)` kini memakai `Date.now()` (counter 1); `sessionClockMs` (fase 48-bit, wrap tiap 2^36 ms ≈ 18.25 jam — `ts*0x1000` tidak muat di 48 bit, sama seperti `mintSessionId` yang sudah diterima upstream); `SESSION_TTL_MS` (2 jam) + `isUsableSession`; `sessionForConversation` hanya memakai ulang id kanonikal berjam segar, sisanya di-mint ulang. |
+| `scripts/opencode-transport.mjs` (baru) | Sidecar Bun: `serve` 127.0.0.1 port ephemeral, token per-proses (argv), `/forward` meneruskan method/headers/body dan mengembalikan status/headers/body stream apa adanya (Retry-After included). Baris stdout pertama `{"port":N}`. |
+| `src/transport.js` (baru) | `laneFetch(url, init)`: spawn sidecar (kandidat: `OPENCODE_BUN_BIN`, `~/.bun/bin/bun.exe`, `%APPDATA%/npm/node_modules/bun/bin/bun.exe` — shim npm tidak bisa dieksekusi spawn, `bun` PATH), tunggu port (timeout 10 s), forward dengan token, 502/gagal → fallback `egressFetch`. `OPENCODE_TRANSPORT=off` mematikan; flag dibaca per-call. `child.unref` + stdout/stderr unref agar caller pendek tetap bisa exit. |
+| `src/http.js` | `postStreamed` & `getJson` memakai `laneFetch` (bukan `egressFetch`). |
+| `scripts/opencode-429-fix-test.mjs` (baru) | 33 check: env block 3 shape + idempotensi + parsial; jam sesi (fresh/stale 3 jam/ascending/digest-era), stability per percakapan; kontrak sidecar; `OPENCODE_TRANSPORT=off` → TRANSPORT di upstream mati. **Semua lolos.** |
+| `scripts/free-lane-wire-test.mjs`, `scripts/fingerprint-test.mjs` | Disesuaikan: id caller `ses_ffffffffffff…` (jam 1970) kini di-mint ulang — diganti mint fresh; "no note" kini dicek via regex karena system kini sah berisi env block. |
+| `scripts/ofm-live-zen-probe.mjs` (baru) | Probe live satu turn lewat pipeline penuh; menampilkan status transport. |
+
+Hasil test lama tetap hijau: fingerprint, free-lane-wire, truncation, projection,
+request-budget, freetier-gate, egress, forward, anthropic, effort, aggregate.
+
+## 54. Hasil live (2026-11-14 ±18.00 WIB) — masih 429, bukan karena perbaikan
+
+Bun **murni** (tanpa Node) + env block + sesi jam-segar dari mesin ini juga 429.
+Dengan sidecar aktif (`transport sidecar active`) pun 429. Kandidat penjelas:
+
+1. **Kuota harian sungguhan sedang habis** — issue #65 sendiri mencatat "a real
+   daily quota (Retry-After in hours, the official CLI hits the same window)".
+   `Retry-After` 47.841 s (±13,3 jam) pagi tadi → mengarah ke reset ± tengah
+   malam UTC. **Verifikasi ulang besok pagi lewat `scripts/ofm-live-zen-probe.mjs`.**
+2. Upstream menambah gate lagi sejak 5 Nov (tanggal A/B issue).
+
+## 55. WARP IPv6/NAT64 — teruji, TIDAK menolong
+
+Dipasang `Cloudflare.Warp` via winget (masih terinstall). Egress IPv4 berubah
+(`104.28.219.241`) dan IPv6 hidup (`2a09:bac5:…`), sesi fresh, UA v1 & v2,
+endpoint `/zen/v1` & `/inference/v1` — semua tetap 429. Kuota bukan per-IP.
+Blokir lamanya bukan `LANE_LOCKED` (bukan abusive-traffic) — ini limit identitas
+lain. WARP boleh di-uninstall bila ingin bersih.
+
+## 56. Fakta upstream terkini (2026-11-14)
+
+- `/inference/v1/models` resmi: `deepseek-v4.1-flash-free`, `big-pickle`,
+  `glm-5.3-flash-free` → `limit.context: 200000` (pangkasan tier free; varian
+  berbayar `deepseek-v4.1-flash` tetap 1.000.000). Laporan user terkonfirmasi.
+- `/zen/v1/models` GET tetap 200 (404 hanya di HEAD).
+- `ovh/Qwen3.8-27B` (8/8 ok), `llm7/*`, `nvidia/*:free` tetap jalan normal via
+  OpenRouter — jalur andalan selagi ZEN dibatasi.
+
+## 57. Status
+
+- Perbaikan ter-commit di sesi ini; gateway perlu **restart** agar memuat
+  `src/transport.js` + fingerprint baru (prosedur §7/§43.4).
+- Langkah berikut: probe ulang pagi hari (setelah reset kuota); kalau 200,
+  `deepseek-v4.1-flash-free`, `big-pickle`, `glm-5.3-flash-free` pulih tanpa
+  perubahan tambahan. Kalau masih 429 berjam segar + Bun → gate baru; telusuri
+  via MITM request OpenCode CLI resmi seperti pola §6 AGENTS.md-nya 9router.
