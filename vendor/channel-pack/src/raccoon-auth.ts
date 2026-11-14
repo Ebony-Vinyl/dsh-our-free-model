@@ -22,6 +22,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
 import type { AccountPool } from './account-pool.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { ClaimOutcome, CreditBalance } from './credits.js'
 import {
   isRaccoonExpired,
@@ -210,7 +211,7 @@ export class RaccoonAuth extends Service {
 
   /** 注入的 fetch（测试用）；默认为全局 fetch。 */
   private get fetchImpl(): typeof fetch {
-    return this.options.fetcher ?? fetch
+    return this.options.fetcher ?? createDomesticFetch()
   }
 
   /**

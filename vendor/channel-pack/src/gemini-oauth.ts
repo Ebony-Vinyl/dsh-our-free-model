@@ -21,6 +21,7 @@
 import { createServer, type Server } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import type { GeminiCredential } from './gemini.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 export const GEMINI_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const GEMINI_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -271,7 +272,7 @@ export async function exchangeGeminiCode(
   redirectUri: string,
   options: { fetcher?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<GeminiTokenGrant> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const payload = await postGeminiForm(
     GEMINI_TOKEN_ENDPOINT,
     {
@@ -298,7 +299,7 @@ export async function refreshGeminiCredential(
   options: { fetcher?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<GeminiTokenGrant> {
   if (refreshToken === '') throw new Error('没有 refresh_token，需要重新授权')
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const payload = await postGeminiForm(
     GEMINI_TOKEN_ENDPOINT,
     {
@@ -330,7 +331,7 @@ export async function fetchGeminiUserInfo(
     onFailure?: (reason: string) => void
   } = {},
 ): Promise<GeminiUserInfo> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const init: RequestInit = { headers: { Authorization: `Bearer ${accessToken}` } }
   if (options.signal !== undefined) init.signal = options.signal
   try {
@@ -358,7 +359,7 @@ export async function revokeGeminiToken(
   options: { fetcher?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<void> {
   if (token === '') return
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   try {
     await postGeminiForm(GEMINI_REVOKE_ENDPOINT, { token }, fetcher, options.signal)
   } catch {
@@ -509,7 +510,7 @@ export async function startGeminiOAuthFlow(
     )
   }
 
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const timeoutMs = options.timeoutMs ?? GEMINI_AUTH_FLOW_TIMEOUT_MS
 
   const result = Promise.race([

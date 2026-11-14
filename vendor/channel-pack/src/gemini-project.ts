@@ -40,6 +40,7 @@ import {
   geminiHeaders,
   type GeminiCredential,
 } from './gemini.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 探测结果。`error` 非空表示**探测失败**（不是「探测到空」）。 */
 export interface GeminiProjectProbe {
@@ -129,7 +130,7 @@ export async function resolveGeminiProject(
   }
 
   // 三级：现探
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const timeoutMs = options.timeoutMs ?? GEMINI_CREDITS_TIMEOUT_MS
   const endpoints = options.endpoints ?? [GEMINI_ENDPOINT_SANDBOX, GEMINI_ENDPOINT_DAILY]
   // 自带超时与调用方信号取交集（调用方的更短超时必须能提前打断）。

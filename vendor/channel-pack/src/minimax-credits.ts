@@ -31,6 +31,7 @@ import {
   type MinimaxProduct,
 } from './minimax-product.js'
 import { minimaxHeaders, type MinimaxCredential } from './minimax.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import { roundCredits, type CheckinStatus, type ClaimOutcome, type CreditBalance } from './credits.js'
 
 /** 单日状态（asar `SigninDayStatus`）。 */
@@ -341,7 +342,7 @@ function withTimezone(
 /** 查询签到状态；失败返回 `null`（不抛错）。 */
 export async function fetchMinimaxSigninStatus(
   credential: MinimaxCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<CheckinStatus | null> {
   const url = withTimezone(
@@ -365,7 +366,7 @@ export async function fetchMinimaxSigninStatus(
  */
 export async function claimMinimaxDailyCheckin(
   credential: MinimaxCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<ClaimOutcome> {
   const url = withTimezone(
@@ -437,7 +438,7 @@ export async function claimMinimaxDailyCheckin(
  */
 export async function fetchMinimaxCreditBalance(
   credential: MinimaxCredential,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<CreditBalance | null> {
   const url = `${product.apiHost}${MINIMAX_CREDIT_DETAILS_PATH}`

@@ -21,6 +21,7 @@
  */
 
 import type { LoomyCredential } from './loomy.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import type { LoomyProduct } from './loomy-product.js'
 import { fetchLoomyCreditDetail } from './loomy-credits.js'
 import {
@@ -157,7 +158,7 @@ export class LoomyBalanceSelector {
     const detail = await fetchLoomyCreditDetail(
       credential,
       this.deps.product,
-      this.deps.fetcher ?? fetch,
+      this.deps.fetcher ?? createDomesticFetch(),
     )
     if (detail === null) {
       return { id: account.id, ok: false, error: '余额查询失败（凭据失效或响应异常）' }

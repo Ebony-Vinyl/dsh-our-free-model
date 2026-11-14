@@ -28,6 +28,7 @@
 import { createServer, type Server } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import type { LoomyProduct } from './loomy-product.js'
+import { createDomesticFetch } from './domestic-direct.js'
 import {
   LOOMY_WECHAT_POLL_STATUS,
   fetchLoomyWechatQrImage,
@@ -113,7 +114,7 @@ interface FlowState {
 export async function startLoomyWechatLoginFlow(
   options: LoomyWechatLoginOptions,
 ): Promise<StartedLoomyWechatLoginFlow> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const product = options.product
   const state: FlowState = {
     uuid: '',

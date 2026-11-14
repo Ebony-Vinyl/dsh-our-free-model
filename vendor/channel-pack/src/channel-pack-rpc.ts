@@ -41,6 +41,18 @@ import { RACCOON } from './raccoon-product.js'
 import type { RaccoonAuth } from './raccoon-auth.js'
 import type { ZcodeAuth } from './zcode-auth.js'
 import { ZCODE } from './zcode-product.js'
+// WorkBuddy（国际版）恢复：余额查询需要产品配置与专属解析器。
+// `isSupportedProvider` 只认 `channel-pack-store.ts` 的前缀表；本文件内的
+// provider 分支（credits.balances 等）必须**逐个显式补**，否则会落到
+// `unsupported provider` 的兜底文案 —— 恢复渠道时踩过（同型第 5 次）。
+import { WORKBUDDY } from './product.js'
+import {
+  fetchCreditBalance,
+  fetchCheckinStatus,
+  claimDailyCheckin,
+  type CreditBalance as BuddyCreditBalance,
+} from './buddy-credits.js'
+import type { BuddyCredential } from './buddy.js'
 import type { ZcodeCredential } from './zcode.js'
 import { phoneFromUserId, isUsableZcodeCredential } from './zcode.js'
 import type { ZcodeBalanceResult } from './zcode-upstream.js'
@@ -59,6 +71,9 @@ import {
 import { GEMINI, geminiAccountLabel, geminiCredentialExpiresAtMs, isGeminiRefreshable } from './gemini.js'
 import type { GeminiCredential } from './gemini.js'
 import type { GeminiAuth, StartedGeminiLoginFlow } from './gemini-auth.js'
+import type { BuddyAuth } from './buddy-auth.js'
+import { fetchAuthState as fetchBuddyAuthState, decorateLoginUrl as decorateBuddyLoginUrl } from './buddy-oauth.js'
+import { credentialExpiresAtMs } from './buddy.js'
 import { fetchGeminiCreditBalance } from './gemini-credits.js'
 import { LOOMY_TASK_POINTS, LOOMY_TASK_TITLES } from './loomy-onboarding.js'
 import { LOBSTERAI } from './lobsterai-product.js'
@@ -769,6 +784,14 @@ export function registerChannelPackRpc(
    */
   gemini: GeminiAuth,
   /**
+   * WorkBuddy（国际版）认证实例。
+   *
+   * ⚠️ 必须排在 **gemini 之后**（即最后一个 provider 形参位）。本仓库全部
+   * `registerChannelPackRpc` 调用点都是**位置传参**，新 provider 一律**追加**
+   * 在末尾，历次因「少传/插队错位」复发 6 次（见 gemini 参数的注释）。
+   */
+  workbuddy: BuddyAuth,
+  /**
    * provider → 适配器实例（可选）。
    *
    * 用于「显示列表」拿到**不受用户黑名单影响**的全量目录（`listAllModels`），
@@ -781,7 +804,8 @@ export function registerChannelPackRpc(
   ctx.inject(['connection'], (connectionCtx) => {
     registerChannelPackEndpoints(
       connectionCtx as Context, pool, lobsterai,
-      qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, modelAdapters, config,
+      qoder, qoderCn, trae, cline, loomy, raccoon, minimax, zcode, gemini, workbuddy,
+      modelAdapters, config,
     )
   })
 }
@@ -891,6 +915,7 @@ function registerChannelPackEndpoints(
   minimax: MinimaxAuth,
   zcode: ZcodeAuth,
   gemini: GeminiAuth,
+  workbuddy: BuddyAuth,
   modelAdapters?: Readonly<Record<string, ModelCatalogSource>>,
   config: ChannelPackRpcConfig = {},
 ): void {
@@ -1760,6 +1785,86 @@ if (provider === LOBSTERAI.id) {
           })
 
           return { ok: true, value: { accountId: id, loginUrl: geminiStarted.loginUrl } }
+        } else if (provider === WORKBUDDY.id) {
+          /**
+           * WorkBuddy（国际版）：**两阶段**登录。
+           *
+           * ## 为什么不能像 codearts 那样 await 完整流程
+           *
+           * 前端（`client.js` 的 `startLogin`）在**点击的同一个事件循环里**先
+           * `window.open('about:blank')` 预留弹窗，然后才 await `account.create`。
+           * 它要的是**立刻**拿到 URL 去填那个弹窗 —— 迟到的 popup 会被浏览器
+           * 拦截。而 `runBuddyLoginFlow` 是**阻塞式**的（开浏览器 → 轮询 token
+           * → 轮询 account，最长 5 分钟），直接 await 会让弹窗永远空白。
+           *
+           * ⇒ 拆两步：这里只做 `fetchAuthState`（拿 state + authUrl，毫秒级），
+           * 立刻返回；完整轮询放后台，凭据落地后由 `login.poll` 发现。
+           *
+           * ## 占位条目必须**先**建
+           *
+           * `login.poll` 的判据是「条目存在 + 凭据已写入」，故占位条目要在返回
+           * 之前就 addAccount。失败时删掉，不留幽灵账号（与 gemini/zcode 同型）。
+           */
+          await pool.addAccount({
+            id,
+            provider: WORKBUDDY.id,
+            nickname: id,
+            enabled: true,
+            credentialRef: refName,
+            refreshable: false,
+            createdAt: Date.now(),
+          })
+          pendingLoginFailures.delete(id)
+
+          let authUrl: string
+          let loginState: string
+          try {
+            const state = await fetchBuddyAuthState(undefined, undefined, WORKBUDDY)
+            loginState = state.state
+            // 登录 URL 要追加 version 与 loginSessionId；platform/state/路径
+            // 全部由服务端下发的 authUrl 决定，**不得重新拼接**（见 buddy-oauth.ts）。
+            authUrl = decorateBuddyLoginUrl(state.authUrl, WORKBUDDY)
+          } catch (error) {
+            void pool.removeAccount(id).catch(() => {})
+            const reason = error instanceof Error ? error.message : String(error)
+            throw new Error(`无法启动 WorkBuddy 登录（获取授权地址失败）：${reason}`)
+          }
+
+          // 后台跑完整流程：传入已取得的 state，避免二次 fetchAuthState 换掉 state。
+          void workbuddy.login({
+            refName,
+            accountId: id,
+            pool,
+            state: loginState,
+            // 浏览器已在**前端**打开（它拿到 loginUrl 后自己 fill 弹窗），
+            // 故这里把 openBrowser 置空，否则会再弹一个窗口。
+            openBrowser: async () => {},
+          }).then(async (result) => {
+            // 回填展示名与有效期（昵称用账号邮箱/标签，比池 id 可辨认）。
+            // `parseCredential` 是 buddy-auth.ts 的**私有**函数，不导出；
+            // 这里只需读两个展示字段，直接解析 JSON 即可，不复制其校验逻辑。
+            let parsed: BuddyCredential | undefined
+            try {
+              parsed = JSON.parse(result.access) as BuddyCredential
+            } catch {
+              parsed = undefined
+            }
+            await pool.updateAccount(id, {
+              // 昵称优先用账号标签（邮箱），比池 id 可辨认。
+              // `BuddyCredential` 有 `nickname`（服务端下发的展示名），没有 account_label。
+              nickname: parsed?.nickname ?? parsed?.user_id ?? id,
+              expiresAt: parsed !== undefined ? (credentialExpiresAtMs(parsed) ?? undefined) : undefined,
+              refreshable: result.refreshable,
+            })
+            pendingLoginFailures.delete(id)
+          }).catch((error: unknown) => {
+            const reason = error instanceof Error ? error.message : String(error)
+            ctx.logger.warn(`[channel-pack] background ${WORKBUDDY.id} login failed for ${id}: ${reason}`)
+            pendingLoginFailures.set(id, reason.slice(0, 500))
+            void pool.removeAccount(id).catch(() => {})
+          })
+
+          return { ok: true, value: { accountId: id, loginUrl: authUrl } }
         } else {
           return { ok: false, error: { code: 'bad-request', message: `unknown provider: ${provider}` } }
         }
@@ -1882,6 +1987,19 @@ if (provider === LOBSTERAI.id) {
               // 账号池，否则 UI 一直显示「已过期」而实际能正常发消息。
               // ⚠️ Google 会**轮换 refresh_token**，`GeminiAuth` 内部已回写新值。
               await gemini.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+              break
+            case WORKBUDDY.id:
+              // WorkBuddy **有** refresh 端点（`POST /v2/plugin/auth/token/refresh`，
+              // 见 `buddy-auth.ts` 的 `refreshCredential`），这里是真续期。
+              //
+              // ⚠️ 同型第 **5** 次：恢复渠道时只接了注册、恢复表、probe 表与
+              // credits 三个分支，漏了本续期分派 → 账号卡片点「续期」必然抛
+              // `Unknown provider: workbuddy`（本 switch 的 default 分支）。
+              //
+              // ⚠️ 必须传 pool + entry.id —— 续期后要把新的 `expiresAt` 写回账号池，
+              // 否则 UI 一直显示「已过期」而实际能正常发消息
+              //（与 raccoon / minimax / gemini 同因，那三处注释都记着这条）。
+              await workbuddy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
               break
             default:
               throw new Error(`Unknown provider: ${entry.provider}`)
@@ -2383,6 +2501,23 @@ if (provider === LOBSTERAI.id) {
           )
           return { ok: true, value: { accounts: value } satisfies RpcCreditsStatusResponse }
         }
+        if (req.provider === WORKBUDDY.id) {
+          // WorkBuddy **有**独立的签到状态端点
+          //（`POST /v2/billing/meter/checkin-activity-status`，见 buddy-credits.ts）。
+          // 与 LobsterAI/TRAE/Cline 那些「如实返回 null」的 provider 不同，故真查。
+          //
+          // ⚠️ 必须查 `checkin-activity-status` 而不是 `checkin-status`：后者返回
+          // 占位数据（active:false、checkin_dates:null），会被误读成「活动未开启」。
+          const statusAccounts = await pool.listAccounts(req.provider)
+          const value = await collectCreditsStatus<BuddyCredential, typeof WORKBUDDY>(
+            statusAccounts, WORKBUDDY, {
+              resolve: (ref) => ctx.credentials.resolve(ref),
+              fetchStatus: (credential, product) => fetchCheckinStatus(credential, product),
+              warn: (msg) => ctx.logger?.warn?.(msg),
+            },
+          )
+          return { ok: true, value: { accounts: value } satisfies RpcCreditsStatusResponse }
+        }
         return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
       }
 
@@ -2589,6 +2724,27 @@ if (provider === LOBSTERAI.id) {
             ok: true,
             value: { results, summary: computeClaimSummary(outcomes) } satisfies RpcCreditsClaimAllResponse,
           }
+        }
+        if (req.provider === WORKBUDDY.id) {
+          // WorkBuddy 的每日签到：`POST /v2/billing/meter/daily-checkin`。
+          //
+          // ⚠️ **必须开状态预检**（`precheckStatus` 默认 true，别传 false）：
+          // 重复领取回 HTTP 400 + code 10001（「今天已签到」），那在 HTTP 层是可靠的；
+          // 但预检是第二道防线 —— 服务端若某天对已领账号也回成功码，
+          // 预检能靠 `todayCheckedIn` 先挡住，避免把「今天已领」报成「+积分」。
+          //
+          // `claimDailyCheckin` 内部已把「已领取 / 无资格 / 活动结束」分别归一成
+          // ClaimOutcome，故这里与其它 provider 走同一条 collectClaimResults 通路。
+          const claimAccounts = await pool.listAccounts(req.provider)
+          const value = await collectClaimResults<BuddyCredential, typeof WORKBUDDY>(
+            claimAccounts, WORKBUDDY, {
+              resolve: (ref) => ctx.credentials.resolve(ref),
+              fetchStatus: (credential, product) => fetchCheckinStatus(credential, product),
+              claim: (credential, product) => claimDailyCheckin(credential, product),
+              warn: (msg) => ctx.logger?.warn?.(msg),
+            },
+          )
+          return { ok: true, value: value satisfies RpcCreditsClaimAllResponse }
         }
         return { ok: false, error: { code: 'bad-request', message: `unsupported provider: ${req.provider}` } }
       }
@@ -2975,6 +3131,64 @@ if (provider === LOBSTERAI.id) {
                * 前端需要按模型逐行渲染、缺桶的模型显示占位。
                */
               balance: buildZcodeBalance(result),
+            })
+          }
+          return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }
+        }
+        if (req.provider === WORKBUDDY.id) {
+          /**
+           * WorkBuddy（国际版）余额来自 `POST /v2/billing/meter/...`（只读）。
+           *
+           * ⚠️ 同型第 **5** 次（本方法内已有 lobsterai/qoder/opencode/trae/
+           * minimax/gemini/cline/loomy/raccoon/zcode 共 10 个分支）：恢复渠道时
+           * 只接了注册与适配器，漏掉本分支 → 余额查询落到末尾的
+           * `unsupported provider: workbuddy`，面板显示「余额查询失败」。
+           *
+           * 口径：`total` 是**有效包本周期剩余之和**（与 IDE 顶部 Credits Balance
+           * 一致）；`expiredTotal` 单独给出（失效额度不可扣费，但服务端仍返回，
+           * 既不并进 total 也不丢弃）。查询失败返回 `null` → 这里转成「查不到」
+           * 而不是 0，避免把网络故障显示成「积分已用光」。
+           */
+          const values: RpcCreditsBalancesResponse['accounts'] = []
+          for (const account of accounts) {
+            const resolved = await ctx.credentials.resolve(credentialRef(account.credentialRef))
+            if (!resolved) {
+              values.push({
+                accountId: account.id, nickname: account.nickname,
+                balance: null, error: '凭据未配置',
+              })
+              continue
+            }
+            let credential: BuddyCredential
+            try {
+              credential = JSON.parse(resolved.value) as BuddyCredential
+            } catch {
+              values.push({
+                accountId: account.id, nickname: account.nickname,
+                balance: null, error: '凭据解析失败',
+              })
+              continue
+            }
+            const result = await fetchCreditBalance(credential, WORKBUDDY)
+            if (result === null) {
+              values.push({
+                accountId: account.id, nickname: account.nickname,
+                balance: null, error: '积分查询失败（凭据失效或响应异常）',
+              })
+              continue
+            }
+            values.push({
+              accountId: account.id, nickname: account.nickname,
+              // `buddy-credits.ts` 的 `CreditBalance` 与 `credits.ts` 的**结构完全一致**
+              //（同一份定义的两次落地，字段逐个相同），故直接透传，不做重映射 ——
+              // 重映射只会制造 drift 面：漏一个字段就静默丢数据（例如 `deductionEndTime`
+              // 被改写成 `expiresAt` 字符串后，面板再也算不出「N 天内到期」）。
+              //
+              // 保留一次 `as unknown as`：两个 interface 结构同构但**名义不同**，
+              // TS 的结构化比较在跨模块 interface 上仍会报不重叠。这不是掩盖问题 ——
+              // 若将来真的发生 drift，`satisfies BuddyCreditBalance` 这一侧会先失败。
+              balance: result satisfies BuddyCreditBalance as unknown as
+                RpcCreditsBalancesResponse['accounts'][number]['balance'],
             })
           }
           return { ok: true, value: { accounts: values } satisfies RpcCreditsBalancesResponse }

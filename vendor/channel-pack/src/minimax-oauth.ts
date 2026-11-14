@@ -24,6 +24,7 @@ import {
   decodeJwtSub,
   type MinimaxCredential,
 } from './minimax.js'
+import { createDomesticFetch } from './domestic-direct.js'
 
 /** 用户拒绝授权。 */
 export class MinimaxLoginCancelledError extends Error {
@@ -198,7 +199,7 @@ export function createMinimaxPkce(): { codeVerifier: string; codeChallenge: stri
 
 /** 申请设备码。 */
 export async function startMinimaxDeviceAuthorization(
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<MinimaxDeviceAuthorization> {
   const pkce = createMinimaxPkce()
@@ -239,7 +240,7 @@ export async function pollMinimaxDeviceToken(
   auth: MinimaxDeviceAuthorization,
   options: PollMinimaxOptions = {},
 ): Promise<MinimaxCredential> {
-  const fetcher = options.fetcher ?? fetch
+  const fetcher = options.fetcher ?? createDomesticFetch()
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const now = options.now ?? Date.now
   const product = options.product ?? MINIMAX
@@ -299,7 +300,7 @@ export async function pollMinimaxDeviceToken(
 /** 续期。 */
 export async function refreshMinimaxCredential(
   refreshToken: string,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = createDomesticFetch(),
   product: MinimaxProduct = MINIMAX,
 ): Promise<MinimaxCredential> {
   const response = await fetcher(`${product.accountHost}${MINIMAX_TOKEN_PATH}`, {
