@@ -1426,3 +1426,80 @@ waktu tunggu lebih panjang, bukan probe beruntun.
 3. Jangan sentuh WARP tanpa izin user; user sendiri yang mengaktifkannya.
 4. Kuota `big-pickle` dan `glm-5.3-flash-free` **belum pernah** terlihat 200;
    jangan klaim pulih sebelum terukur.
+
+# SESI 19 — 2026-11-15 — Auto-rotate WARP IPv6 (tooling ada, jatah TIDAK ikut)
+
+## 70. Cara merotasi IP WARP di mesin ini
+
+`warp-cli` **tidak** ada di PATH (WARP versi GUI/Flutter). Binernya:
+
+```
+C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe
+```
+
+Rotasi = `disconnect` lalu `connect`, tanpa perintah khusus "ganti IP" (WARP
+consumer memang tidak menyediakannya):
+
+```bash
+CLI="/c/Program Files/Cloudflare/Cloudflare WARP/warp-cli.exe"
+"$CLI" disconnect; sleep 2.5; "$CLI" connect; sleep 7
+```
+
+Terukur: alamat keluar IPv6 berubah pada **setiap** percobaan
+(`2a09:bac5:39e7:…` → `…39e2:…` → `…39e5:…` → `…39e3:…` → `…39e4:…`),
+hanya oktet subnet yang bergeser. Waktu total ±10 detik per rotasi.
+Catatan: antarmuka `CloudflareWARP` sendiri ber-alamat statis
+`2606:4700:110:…` (mesh internal) — IP publik tidak diset lokal, ditentukan
+Cloudflare.
+
+## 71. Perkakas baru: `scripts/warp-rotate.mjs`
+
+```bash
+node scripts/warp-rotate.mjs --rounds 3      # tiap rotasi: catat IP + 1 request
+node scripts/warp-rotate.mjs --no-rotate     # kontrol: tanpa ganti IP
+node scripts/warp-rotate.mjs --model big-pickle
+```
+
+Per rotasi mencetak `IP lama -> IP baru (berubah/TETAP) | hasil`, lalu
+meringkas `n/m IP berubah, k/m request berhasil`. Satu request per rotasi,
+jeda wajib — bukan probe beruntun.
+
+Juga baru: `scripts/ofm-live-zen-probe-fresh.mjs [model] [seed]` — probe dengan
+sesi **selalu baru** (seed unik → `canonicalizeSession` mint id dengan jam
+sekarang), untuk menguji dugaan "kuota per-sesi".
+
+## 72. Hasil pengukuran (2026-11-15, WARP IPv6 aktif)
+
+| Uji | Hasil |
+|---|---|
+| `warp-rotate --rounds 2` | **2/2 IP berubah**, **0/2** request 200 |
+| Sesi baru `a1` | **200**, 10 delta |
+| Sesi baru `a2`, `a3`, `a4` (jeda 4 s) | 429 semua |
+| Sesi lama (`live-zen-probe`) | 429 |
+| Reconnect WARP lalu request-1 | 429 |
+| request-2 setelahnya | 429 |
+
+Kesimpulan yang **bisa** ditegakkan:
+
+1. **Rotasi IP WARP mudah dan andal** (disconnect/connect), ±10 s.
+2. **Kuota ZEN bukan per-IP keluar** — IP berubah tiap putaran, jatah tidak.
+   Ini menutup jalur "auto-rotate biar dapat jatah baru".
+3. **Kuota bukan per-sesi** — sesi baru `a2`–`a4` tetap 429. Dugaan "sesi
+   terbakar" hanya benar untuk 200 pertama yang memang sudah kejadian.
+4. 200 yang muncul bersifat **sporadis** dan belum terikat variabel yang kita
+   kendalikan (IP, sesi, reconnect, jam). Kemungkinan besar kuota global/akun,
+   atau kelonggaran sesaat di upstream.
+
+Yang **tidak** boleh diklaim: bahwa rotasi IP menolong, atau bahwa
+`big-pickle`/`glm-5.3-flash-free` sudah pulih. Belum ada bukti 200 untuk
+keduanya.
+
+## 73. Langkah berikut (fokus DeepSeek)
+
+1. Jalankan `warp-rotate --rounds 5 --gap 600000` (jeda 10 menit) semalam untuk
+   melihat pola 200 di waktu panjang. Ini satu-satunya cara membedakan
+   "jatah kecil + jarang" dari "gate acak".
+2. Kalau 200 muncul tetap tanpa pola → terima bahwa lane ZEN tidak dapat
+   diandalkan, dan pakai `ovh/Qwen3.8-27B` / OpenRouter sebagai jalur kerja
+   (sudah stabil 200).
+3. Jangan buang waktu pada trik IP/UA/sesi lain sampai ada bukti 200 berulang.
