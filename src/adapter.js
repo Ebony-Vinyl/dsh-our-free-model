@@ -447,6 +447,9 @@ export class FreeModelAdapter {
           path: endpointFor(entry.id), body: payload, session,
           attributionUserAgent: snapshot.attributionUserAgent,
           bodyBudgetBytes: settings.requestBodyBudgetBytes,
+          // A first send may be sent again if the connection dies before the
+          // answer starts; a recovery attempt may not — its budget is spent.
+          retryOnDrop: !recovering,
           warn: this.deps.warn,
           signal: controller.signal,
           onData: value => channel.push(value),

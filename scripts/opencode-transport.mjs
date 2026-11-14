@@ -44,9 +44,13 @@ const server = Bun.serve({
     try {
       upstream = await fetch(target, { method: request.method, headers, body: request.body, redirect: 'error' })
     } catch (error) {
+      // The request may already have reached the upstream, so this is an
+      // upstream failure, not a broken hop: the parent must relay it instead of
+      // replaying the request on its own stack (a replay spends the free lane's
+      // quota twice and looks like abusive traffic).
       return new Response(JSON.stringify({ error: { message: `ofm-transport: upstream fetch failed: ${error?.message ?? error}` } }), {
         status: 502,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-ofm-upstream-failure': '1' },
       })
     }
     return new Response(upstream.body, { status: upstream.status, headers: upstream.headers })

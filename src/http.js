@@ -389,7 +389,21 @@ function userAgentWith(_attribution) {
   return CLIENT_UA
 }
 
-export async function postStreamed({ path, body, session, attributionUserAgent, signal, onData, timeoutMs = 300000, bodyBudgetBytes, warn }) {
+/**
+ * How many times one turn may be *sent* at most, and how long to wait before
+ * the second send.
+ *
+ * Only a failure that arrives before the first byte reaches the caller is
+ * retried: `ECONNRESET` while sniffing the first frames is the common one on
+ * this lane (the gateway drops idle keep-alives under load), and it used to
+ * surface as a 502 even though the identical request answered 200 a second
+ * later. Nothing is duplicated by retrying there — the caller has seen no
+ * token, no tool call and no finish event.
+ */
+export const STREAM_ATTEMPTS = 2
+export const STREAM_RETRY_DELAY_MS = 700
+
+export async function postStreamed({ path, body, session, attributionUserAgent, signal, onData, timeoutMs = 300000, bodyBudgetBytes, warn, retryOnDrop = true }) {
   // The upstream answers 400 ModelProtocolUnsupported above ~700 KB, and a Zed
   // session declaring every MCP tool ships ~950 KB before the chat grows. Trim
   // the exact body that is about to be serialized, and say so when it happens.
@@ -399,12 +413,39 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
   }
   const headers = gatewayHeaders({ session: truncateSession(session), stream: true })
   headers['user-agent'] = userAgentWith(attributionUserAgent)
+  // Serialized once: a retry must send byte-identical content, and JSON.stringify
+  // of the same object keeps key order, so the fingerprint stays the same either way.
+  const payloadText = JSON.stringify(body)
+  for (let attempt = 1; ; attempt += 1) {
+    let delivered = false
+    const deliver = (data) => { delivered = true; onData(data) }
+    try {
+      return await postStreamedOnce({ path, body, bodyText: payloadText, headers, signal, deliver, timeoutMs })
+    } catch (error) {
+      // Only the transport code, and only on a first send: a recovery attempt
+      // that drops means the recovery budget is spent, so it is reported rather
+      // than spent again (recovery-test: "恢复失败不触发整轮重发"). A quota wall
+      // (RATE_LIMIT), a lock (LANE_LOCKED) or a timeout is a verdict about this
+      // install, and re-sending spends the window it is measured in.
+      const worthRetrying = retryOnDrop === true && error?.code === CODE.transport && delivered !== true && signal?.aborted !== true
+      if (!worthRetrying || attempt >= STREAM_ATTEMPTS) throw error
+      warn?.(`our-free-model: the connection dropped before the answer started (${error?.message ?? error}); sending it once more`)
+      await new Promise(resolve => setTimeout(resolve, STREAM_RETRY_DELAY_MS))
+    }
+  }
+}
+
+/**
+ * One send. Anything it hands to `deliver` is the caller's already; the retry
+ * decision is made by the caller, which knows whether that happened.
+ */
+async function postStreamedOnce({ path, body, bodyText, headers, signal, deliver, timeoutMs }) {
   let response
   try {
     // Through the Bun hop when it is up: the lane fingerprints the client
     // transport, and Node/undici answers the quota's own 429 for it (see
     // src/transport.js). Falls back to the direct stack per request.
-    response = await laneFetch(`${UPSTREAM_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body), redirect: 'error', signal })
+    response = await laneFetch(`${UPSTREAM_BASE}${path}`, { method: 'POST', headers, body: bodyText, redirect: 'error', signal })
   } catch (error) {
     // The signal's own reason is what fetch rejects with, and Node's is a
     // `TimeoutError`/user Error rather than `AbortError` — testing the name alone
@@ -415,6 +456,16 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
 
   const setRetry = retryAfter(response.headers.get('retry-after'))
   if (!response.ok) {
+    // The hop's own 502 after it had already delivered the request upstream: the
+    // transport died, not the model. Classifying it as SERVER would tell the host
+    // to retry the whole turn, which on this lane spends the quota twice; a
+    // TRANSPORT code keeps the retry where it is safe (the caller's single
+    // pre-delivery re-send).
+    if (response.status === 502 && response.headers.get('x-ofm-upstream-failure') === '1') {
+      const text = await response.text().catch(() => '')
+      dumpUpstream(path, body, response.status, text, Object.fromEntries(response.headers))
+      throw new UpstreamError(`our-free-model: ${text.slice(0, 200) || 'upstream connection failed'}`, CODE.transport, { status: response.status })
+    }
     const text = await response.text().catch(() => '')
     // The free lane sometimes refuses with an empty body, so keep the exact
     // request/response pair on disk before classifying it.
@@ -432,7 +483,7 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
   const shape = sniffBody(head.text)
   if (shape === 'empty') throw new UpstreamError('our-free-model: upstream returned no body', CODE.empty)
   if (shape === 'sse') {
-    await readSse(replayStream(head), onData, signal, timeoutMs)
+    await readSse(replayStream(head), deliver, signal, timeoutMs)
     return { status: response.status, headers: response.headers }
   }
 
@@ -451,7 +502,7 @@ export async function postStreamed({ path, body, session, attributionUserAgent, 
     throw new UpstreamError(`our-free-model: unexpected non-SSE response: ${text.slice(0, 200)}`, CODE.server, { status: response.status })
   }
   if (payload.error) throw classifyFailure(response.status, payload, setRetry)
-  onData(JSON.stringify(payload))
+  deliver(JSON.stringify(payload))
   return { status: response.status, headers: response.headers }
 }
 

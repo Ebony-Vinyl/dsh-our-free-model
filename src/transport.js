@@ -139,12 +139,20 @@ export async function laneFetch(url, init = {}) {
       redirect: 'manual',
     })
     // A 502 from the hop itself means its own upstream fetch threw; answer with
-    // the direct stack rather than surfacing a synthetic failure.
-    if (response.status === 502) return egressFetch(url, init)
+    // the direct stack rather than surfacing a synthetic failure — but only when
+    // the hop failed *before* the upstream could have seen the request. A sidecar
+    // 502 tagged `x-ofm-upstream-failure` is the upstream's own failure (the
+    // request was already delivered), and replaying it here would send the same
+    // turn twice: on the free lane that spends the quota twice and reads as
+    // abusive traffic, and it broke the recovery rule that a failed continuation
+    // is reported rather than re-sent.
+    if (response.status === 502 && response.headers.get('x-ofm-upstream-failure') !== '1') return egressFetch(url, init)
     return response
   } catch {
-    // Body is a string or Buffer here (the lane always serializes before
-    // calling), so the fallback can replay it verbatim.
+    // The hop never accepted the request (sidecar gone, refused, aborted before
+    // it answered), so nothing reached the upstream and the direct stack is a
+    // replay of an unsent request. Body is a string or Buffer here (the lane
+    // always serializes before calling), so the fallback can replay it verbatim.
     return egressFetch(url, init)
   }
 }

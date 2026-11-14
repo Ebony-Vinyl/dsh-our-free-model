@@ -1224,3 +1224,151 @@ lain. WARP boleh di-uninstall bila ingin bersih.
   `deepseek-v4.1-flash-free`, `big-pickle`, `glm-5.3-flash-free` pulih tanpa
   perubahan tambahan. Kalau masih 429 berjam segar + Bun → gate baru; telusuri
   via MITM request OpenCode CLI resmi seperti pola §6 AGENTS.md-nya 9router.
+
+# SESI 17 — 2026-11-14 — Request terkirim dua kali (sidecar) + retry aman
+
+## 58. Ringkasan satu paragraf
+
+Sesi ini **bukan** menambah trik baru untuk menembus kuota ZEN. Sesi ini
+menemukan satu cacat nyata di jalur transport yang membuat setiap gangguan
+koneksi mengirim **request yang sama dua kali** ke upstream — dan pada lane
+gratis, tiap kiriman membakar kuota dua kali serta terbaca sebagai lalu lintas
+abusive. Cacat itu diperbaiki, ditambah satu aturan retry yang aman dan teruji.
+Status kuota ZEN sendiri belum berubah (masih 429 sampai reset).
+
+## 59. Temuan utama: `laneFetch` mengirim ulang request yang sudah terkirim
+
+Alur lama di `src/transport.js`:
+
+1. `laneFetch` meneruskan request ke sidecar Bun (`POST /forward`).
+2. Sidecar menjalankan `fetch` ke upstream. Kalau `fetch` itu **melempar**
+   (mis. `ECONNRESET` karena koneksi diputus), sidecar membalas **HTTP 502**.
+3. `laneFetch` melihat `502` dan menyimpulkan "hop-nya rusak", lalu **mengirim
+   ulang request yang sama lewat `egressFetch` (Node)**.
+
+Langkah 3 salah: pada titik itu request **sudah dikirim** ke upstream. Yang
+gagal adalah upstream/koneksinya, bukan hop lokal. Akibatnya satu turn bisa
+meninggalkan dua request di upstream.
+
+Bukti terukur: `node scripts/recovery-test.mjs`
+- dengan `OPENCODE_TRANSPORT=off` (Node langsung) → **131/131 lolos**;
+- dengan sidecar Bun aktif → **130/131**, gagal pada
+  `恢复失败 socket reset 不触发整轮重发 - 实际 HTTP 请求数` (**3 request, seharusnya 2**).
+
+Jadi selisih satu request itu persis kiriman ulang dari langkah 3.
+
+### Perbaikan
+| Berkas | Perubahan |
+|---|---|
+| `scripts/opencode-transport.mjs` | Saat `fetch` upstream melempar, balasan 502 kini diberi header penanda `x-ofm-upstream-failure: 1` — membedakan "hop gagal sebelum meneruskan" dari "upstream gagal setelah menerima". |
+| `src/transport.js` | `laneFetch` hanya fallback ke `egressFetch` bila 502 **tanpa** penanda itu (hop mati/refuse/URL hilang) atau `fetch` ke sidecar sendiri melempar (request tidak pernah sampai). 502 bertanda diteruskan apa adanya. |
+
+## 60. Temuan kedua: 502 transport tidak boleh jadi `SERVER`
+
+Karena 502 sekarang diteruskan, `classifyFailure` membacanya sebagai
+`SERVER` — kode yang oleh host dianggap boleh di-retry **seluruh turnnya**
+(aturan `providerRetryPolicy().retryableCodes`), yang di lane gratis berarti
+kuota dibakar lagi.
+
+| Berkas | Perubahan |
+|---|---|
+| `src/http.js` | `postStreamedOnce`: 502 dengan `x-ofm-upstream-failure: 1` dipetakan ke `CODE.transport` (bukan `SERVER`), body-nya tetap di-dump lewat `dumpUpstream`. |
+
+Efeknya: klasifikasi tetap jujur ("transport putus"), tapi retry-nya terjadi di
+tempat yang aman (lihat §61), bukan di tingkat host.
+
+## 61. Retry pre-delivery: sekali, di attempt pertama saja
+
+Gejala yang dilaporkan user: `ovh/Qwen3.8-27B` menjawab
+`502 STREAM_CUT — upstream stream read failed: terminated — read ECONNRESET`,
+padahal request identik langsung 200 beberapa detik kemudian. Penyebabnya:
+kegagalan terjadi di `readHead` — **sebelum satu byte pun diserahkan ke
+caller** — dan OFM tidak pernah mengulanginya.
+
+| Berkas | Perubahan |
+|---|---|
+| `src/http.js` | `postStreamed` dipecah: `postStreamed` (kebijakan retry) + `postStreamedOnce` (satu kiriman). Body di-`JSON.stringify` **sekali** di luar loop supaya retry mengirim byte identik. |
+| `src/http.js` | Retry hanya bila: kode `CODE.transport` **dan** belum ada payload yang diserahkan (`delivered === false`) **dan** tidak di-abort **dan** `retryOnDrop` aktif. `STREAM_ATTEMPTS = 2`, jeda `STREAM_RETRY_DELAY_MS = 700`. |
+| `src/adapter.js` | `postStreamed({ …, retryOnDrop: !recovering })` — attempt pemulihan (continuation) **tidak boleh** dikirim ulang; kalau gagal, dilaporkan. |
+
+Yang **tidak** di-retry, dan itu disengaja: `429 RATE_LIMIT` (verdict kuota;
+mengulang hanya memperbanyak panggilan di jendela yang sedang diukur), `403
+LANE_LOCKED`, `5xx`, `TIMEOUT`, dan apa pun setelah ada byte yang sampai ke
+caller (mengulang di situ akan menduplikasi teks/tool call).
+
+## 62. Test baru: `scripts/stream-retry-test.mjs` (18 check, semua lolos)
+
+Server HTTP tiruan yang bisa: memutus koneksi setelah status line + 1 byte
+(meniru `ECONNRESET` di `readHead`), memutus di tengah body, membalas 429/403/5xx,
+dan membalas JSON non-SSE. Yang dikunci:
+
+- koneksi putus sebelum jawaban → **dikirim ulang sekali** dan turn **sukses**;
+- koneksi yang tidak pernah pulih → tepat **2** kiriman, lalu `TRANSPORT`;
+- putus **setelah** byte pertama → **tidak** dikirim ulang;
+- 429 → 1 kiriman, tetap `RATE_LIMIT`; 403 → 1 kiriman, tetap `LANE_LOCKED`;
+- 5xx → 1 kiriman (retry host yang mengurus);
+- jawaban JSON buffered juga pulih dan tiba sebagai satu payload.
+
+Terdaftar di `scripts/test-all.mjs` sebagai `stream-retry`.
+
+Detail penting saat menulis test semacam ini: memutus socket **sebelum** status
+line membuat undici melakukan reconnect sendiri, dan server akan menghitung 2
+request untuk 1 kiriman lane. Karena itu byte pertama harus dikirim dulu.
+
+## 63. Hasil test suite
+
+| | Baseline (`8692a7e`) | Setelah sesi ini |
+|---|---|---|
+| Suite lolos | 58 / 74 | 59 / 75 |
+| `recovery` | **gagal** (130/131) | **lolos 131/131** |
+| `stream-retry` | belum ada | **lolos 18/18** |
+| `retry-safety` | lolos | lolos |
+| `sniff`, `picker`, `tui`, `catalog`, `vault`, `manifest`, `release`, `reload`, `standalone*`, `channel-source`, `forward-boot`, `opencode-parity`, `gateway-source` | gagal | gagal (sama, **bukan** dari sesi ini) |
+
+Kegagalan yang tersisa sudah ada di baseline sebelum sesi ini. `kilo` muncul
+gagal 3 check pada satu run penuh dan lolos di run lain (crash `timed out
+waiting for Kilo cache`), isinya soal cache discovery roster
+(`nvidia/nemotron-3.5-lightning:free`, `kilo-auto/free`) — di luar jalur yang
+diubah sesi ini; catat sebagai utang, jangan dikejar.
+
+## 64. Test agent (permintaan user: uji lewat pipeline OFM, bukan probe mentah)
+
+Gateway direstart (`wscript.exe ofm-standalone-hidden.vbs`, PID baru) agar
+`src/http.js`, `src/transport.js`, `scripts/opencode-transport.mjs` termuat.
+
+| Uji | Hasil |
+|---|---|
+| `node scripts/ofm-live-zen-probe.mjs deepseek-v4.1-flash-free` | `clock-ok true`, `transport sidecar active`, lalu `429 RATE_LIMIT` |
+| `POST /v1/chat/completions` model `deepseek-v4.1-flash-free` | `429`, **1,0 s** → tidak ada retry-storm |
+| `POST /v1/chat/completions` model `ovh/Qwen3.8-27B` | `200`, 2,7 s (`"siap"`) |
+
+## 65. Kuota ZEN: reset tengah malam UTC (bukan per-IP, bukan per-sesi)
+
+Dua pengukuran `retry-after` di jam berbeda, keduanya menunjuk **00:00 UTC**
+persis:
+
+- 10:42 UTC → `retry-after: 47841` s (13 j 17 m) → 24:00 UTC;
+- 15:19 UTC → `retry-after: 31521` s (8 j 45 m) → 24:00 UTC.
+
+Artinya jendela kuota direset **00:00 UTC = 07:00 WIB**, bukan per-IP dan bukan
+per-sesi. Ganti IP, ganti Wi-Fi, VPN, dan WARP (IPv4 maupun IPv6/NAT64) semuanya
+tetap 429 — sudah diuji, jangan diulang.
+
+Catatan WARP: saat sesi ini berjalan, WARP sempat `off` (IP ISP `182.8.227.211`)
+lalu menyala sendiri lagi lewat IPv6 (`2a09:bac5:…`, `warp=on`) — hasil 429 tidak
+berubah pada kedua kondisi. WARP masih terinstall dan tidak perlu.
+
+## 66. Status & langkah berikut
+
+- Working tree: 4 berkas diubah (`src/http.js`, `src/transport.js`,
+  `src/adapter.js`, `scripts/opencode-transport.mjs`), 1 test baru
+  (`scripts/stream-retry-test.mjs`), 1 pendaftaran test (`scripts/test-all.mjs`).
+- Gateway sudah direstart dan memakai kode ini.
+- **Belum** terverifikasi live: apakah `deepseek-v4.1-flash-free`,
+  `big-pickle`, `glm-5.3-flash-free` pulih setelah 07:00 WIB. Kalau 200 →
+  selesai, cabut penanda `· sementara` di picker Zed bila perlu.
+- Belum dikerjakan (rencana lama, masih berdiri): lane `/inference/v1` v2.1.4
+  di belakang env flag sebagai pembanding bentuk request. Berguna hanya kalau
+  jam 07:00 nanti jalur `/zen/v1` masih menolak.
+- Jangan sentuh: `forwardKey`, settings egress/aggregate OpenRouter, VPS
+  `103.141.234.177`, 9router, `D:\Aset\windus`.
