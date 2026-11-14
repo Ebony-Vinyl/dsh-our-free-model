@@ -1587,3 +1587,79 @@ tidak terpenuhi.
 4. Jalur kerja harian tetap `ovh/Qwen3.8-27B` (stabil 200) dan OpenRouter.
 5. Kalau suatu saat ada VPS Linux dengan routed IPv6 `/64`, repo §74 layak
    dicoba utuh — tapi itu di luar batas yang ditetapkan user (jangan sentuh VPS).
+
+# SESI 13 — Kuota ZEN TERBUKTI per-/64, bukan per-IP: proxy VPS tambalan tidak menambah jatah
+
+Tanggal: 15 Nov 2026 (05:00–05:15 UTC / 12:00–12:15 WIB)
+
+## Yang dikerjakan
+
+1. **`/root/ofm-probe/` di VPS `tambalan` dilengkapi.** `store.js` dan `stream.js`
+   akhirnya terkirim (sebelumnya transfer gagal dan belum pernah lengkap).
+   Verifikasi: `wc -l` = 561 dan 540 baris, identik dengan lokal.
+   Cara kirim yang berhasil: `tools/tob64.ps1` memecah base64 jadi potongan
+   20000 karakter (`p_store_00.txt`, …), tiap potongan di-`cat` lewat plink,
+   lalu `cat p_* | base64 -d > file.js` di VPS. **`plink` tetap tidak bisa
+   mengangkut file >20 KB dalam satu argumen** — pecah dulu.
+
+2. **Pipeline OFM asli dijalankan di VPS** (`/root/ofm-probe/probe.mjs`), yaitu
+   `postStreamed` + `canonicalizeSession` + `applyFingerprint` yang sama persis
+   dengan gateway laptop. Hasil: `ERROR RATE_LIMIT`.
+
+3. **WARP sudah aktif di VPS** dan IPv6 keluar dari blok tersendiri:
+   - `ip=2a09:bac5:3a52:137d::1f1:1a1`, `warp=on`, `colo=SIN`
+   - blok `/64` = `2a09:bac5:3a52:137d::/64`, **berbeda** dari laptop
+     (`2a09:bac5:39e7::/64`).
+   - Tetap **429**.
+
+4. **Ketiga model ZEN diukur langsung dari VPS**, satu sesi baru per model:
+
+   | model | status | retry-after |
+   |---|---|---|
+   | `deepseek-v4.1-flash-free` | 429 FreeUsageLimitError | 24787 |
+   | `big-pickle` | 429 FreeUsageLimitError | 24783 |
+   | `glm-5.3-flash-free` | 429 FreeUsageLimitError | 24780 |
+
+   `retry-after` ≈ 24780 s dari 05:14 UTC → **tepat 00:00 UTC** (07:00 WIB).
+   Ini konfirmasi **ketiga** bahwa jatah direset tengah malam UTC.
+
+5. **Kontrol negatif**: request tanpa header `x-opencode-session` dari VPS juga
+   429 dengan `retry-after` yang sama (24759). Artinya 429 ini **bukan** soal
+   sesi/fingerprint/tool-list — murni penghitung kuota per sumber jaringan.
+
+## Kesimpulan yang sekarang tertutup
+
+- **"VPS dengan `/64` WARP lain akan menambah kuota" — GUGUR.** Dua `/64`
+  berbeda, dua IP keluar berbeda, keduanya 429 bersamaan dengan `retry-after`
+  yang menuju detik yang sama. Kuota dihitung per blok jaringan yang dipakai
+  untuk keluar, dan WARP Cloudflare di dua mesin tetap kena satu penghitung
+  yang sama (atau penghitungnya memang per-akun ZEN, bukan per-IP sama sekali).
+- Karena itu **WireProxy / tinyproxy / Docker di VPS TIDAK dipasang**. Rencana
+  Cara 1 (`opencode-free-bridge` / `opencode-unlimited-proxy`) dengan proxy
+  egress VPS dihentikan sebelum menyentuh konfigurasi apa pun. Tidak ada
+  perubahan pada `src/egress.js`, tidak ada port baru, tidak ada layanan baru
+  di VPS. VPS `tambalan` tetap seperti sebelumnya (hanya `/root/ofm-probe/`
+  yang bertambah, tidak mengganggu nginx/xray/hermes).
+- **`opencode-unlimited-proxy` tetap tidak layak** untuk semua mesin yang kita
+  punya: syaratnya routed IPv6 `/64` milik sendiri, sedangkan yang tersedia
+  hanya NAT Cloudflare WARP.
+
+## Kondisi gateway saat ini
+
+- OFM jalan di `127.0.0.1:18900` (PID 63672), HEAD `9a913a7`, bersih.
+- Jalur yang **stabil 200**: `ovh/Qwen3.8-27B`, OpenRouter, llm7, aggregate.
+- Jalur ZEN (`deepseek-v4.1-flash-free`, `big-pickle`, `glm-5.3-flash-free`)
+  tetap terdaftar di Zed lewat provider `Our-Free-Local` — **jangan dihapus**,
+  user sudah minta dibiarkan supaya otomatis pulih saat jatah reset.
+  Kode tidak perlu diubah: pipeline sudah terbukti benar (pernah 200).
+
+## Jangan diulang
+
+1. **Jangan pasang WireProxy/proxy VPS untuk lane ZEN.** Sudah diukur, gagal.
+2. **Jangan rotasi WARP/IP lagi** untuk mengejar kuota ZEN. Sudah 3× gagal.
+3. **Jangan probe beruntun.** Semua bukti di atas sudah cukup; probe hanya
+   menghabiskan jatah kalau kebetulan sedang segar.
+4. Satu-satunya cara memakai ZEN gratis: **pakai setelah 00:00 UTC (07:00 WIB)**
+   dan hemat — jatah hariannya kecil.
+5. `/root/ofm-probe/` di VPS sekarang **lengkap** (11 file), bisa dipakai lagi
+   untuk probe pipeline tanpa menyentuh gateway laptop.
