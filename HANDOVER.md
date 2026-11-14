@@ -1503,3 +1503,87 @@ keduanya.
    diandalkan, dan pakai `ovh/Qwen3.8-27B` / OpenRouter sebagai jalur kerja
    (sudah stabil 200).
 3. Jangan buang waktu pada trik IP/UA/sesi lain sampai ada bukti 200 berulang.
+
+# SESI 20 — 2026-11-15 — Evaluasi ebouther/opencode-unlimited-proxy: TIDAK bisa diadopsi
+
+## 74. Apa yang repo itu lakukan
+
+`https://github.com/ebouther/opencode-unlimited-proxy` — gateway OpenAI-compatible
+untuk free tier OpenCode, dengan **pool exit WARP yang berotasi**. Isinya dua
+bagian:
+
+1. **Fingerprint** — mereproduksi bentuk request client resmi, dengan dua hal
+   yang paling sering terlewat: tool bernama **persis `read`** dan **`stream:
+   true` dipaksa**. (Kita sudah punya keduanya — lihat `src/upstream.js`.)
+2. **Pool egress** — banyak exit WARP, masing-masing berharap dapat blok jatah
+   sendiri. Mesinnya `ghcr.io/jasonxu114514/opencode2api` (GPL-3.0, image
+   publik, tidak di-vendor).
+
+## 75. Fakta kunci yang menjelaskan kegagalan rotasi kita
+
+Repo itu menyatakan kuota dimeter **per egress block**: `/64` pada IPv6, `/32`
+pada IPv4, **reset harian 00:00 UTC**. Kutipannya:
+
+> "Three exits behind one block are one budget, not three."
+
+Ini **menjelaskan** hasil `scripts/warp-rotate.mjs` (§72) yang tadinya
+membingungkan:
+
+| Rotasi | IP lama → baru | Blok /64 | Jatah |
+|---|---|---|---|
+| 1 | `2a09:bac5:39e7:25c3::3c3:16` → `…39e2:25c3::3c3:16` | sama | 429 |
+| 2 | `…39e3:2723::3e6:76` → `…39e4:25cd::3c4:4c` | sama | 429 |
+
+Yang berubah hanya satu hextet di dalam **`2a09:bac5:...::/64`** milik WARP.
+Satu blok = satu jatah, jadi rotasi IP di dalam blok yang sama tidak pernah
+menambah kuota. Dugaan §72 ("kuota global/akun") dikoreksi: kuota **per-/64**,
+dan kita tidak punya kontrol atas /64 itu.
+
+## 76. Kenapa tidak bisa diadopsi di mesin ini
+
+Tiga syarat keras repo (dari README bagian *"On macOS or Windows"*):
+
+| Syarat | Kondisi laptop ini | |
+|---|---|---|
+| Linux native, `network_mode: host` untuk pool WARP | Windows + Docker Desktop — repo sendiri mengatakan WARP mode **tidak jalan** di Docker Desktop | ❌ |
+| Outbound UDP 2408 | tersedia | ✅ |
+| **Routed IPv6 `/64` milik sendiri** (`WARP_SOURCE_IPV6`) | **tidak ada** — lihat §77 | ❌ |
+
+Mode yang *bisa* jalan di Windows hanya **bridge mode** (tanpa WARP), dan itu
+eksplisit **tidak merotasi**: "It does not rotate egress". Jadi adopsi tidak
+memberi apa pun untuk masalah kita.
+
+## 77. Bukti: ISP tidak memberi IPv6 publik
+
+```
+netsh interface ipv6 show address "Wi-Fi"
+  fd33:89c0:8d33:0:9e48:ded:1277:9f3b/64   ← ULA (fd00::/8), alamat privat
+  fd33:89c0:8d33:0:7084:b76e:14a9:ca4f/128 ← temporary
+  fd33:89c0:8d33::ee1                      ← dhcp
+```
+
+Tidak ada alamat IPv6 global-publik di Wi-Fi. Semua IPv6 publik yang keluar
+(`2a09:bac5:…`) berasal dari **WARP**, bukan dari ISP. Karena itu `source_ipv6`
+yang diwajibkan repo tidak bisa diisi, dan setiap exit WARP akan selalu berada
+di blok shared Cloudflare — satu keranjang jatah.
+
+## 78. Yang diambil, yang tidak
+
+**Diambil (gratis, tanpa risiko):** konfirmasi bahwa fingerprint kita sudah
+benar (`read` + `stream: true`) dan reset kuota 00:00 UTC. Tidak ada perubahan
+kode.
+
+**Tidak diambil:** pool WARP, engine `opencode2api`, dan seluruh stack Docker.
+Menerapkannya akan menyesatkan — tampak seperti solusi, padahal prasyaratnya
+tidak terpenuhi.
+
+## 79. Rekomendasi tegas untuk ke depan
+
+1. Berhenti mencoba menambah jatah ZEN lewat IP/rotasi/sesi. Secara teori
+   mentok: satu `/64` = satu jatah, dan `/64` itu milik WARP (shared).
+2. Cara satu-satunya untuk jatah baru: **tunggu reset 00:00 UTC (07:00 WIB)**.
+3. Setelah reset, **hemat**: jangan probe beruntun. Satu probe, lalu pakai
+   langsung dari Zed. Jatahnya kecil.
+4. Jalur kerja harian tetap `ovh/Qwen3.8-27B` (stabil 200) dan OpenRouter.
+5. Kalau suatu saat ada VPS Linux dengan routed IPv6 `/64`, repo §74 layak
+   dicoba utuh — tapi itu di luar batas yang ditetapkan user (jangan sentuh VPS).
