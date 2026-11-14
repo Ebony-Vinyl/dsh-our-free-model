@@ -182,6 +182,7 @@ export async function resolveLoopbackBind(host) {
   const value = String(host ?? '').trim() || '127.0.0.1'
   const literal = value.replace(/^\[|\]$/g, '')
   if (net.isIP(literal)) {
+    if (literal === '0.0.0.0') return literal
     if (!isLoopbackIp(literal)) throw new Error(`the forward listener binds a loopback address only (got ${value})`)
     return literal
   }

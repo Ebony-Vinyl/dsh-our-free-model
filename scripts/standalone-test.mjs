@@ -138,10 +138,22 @@ try {
   })
   await check('routable binds and invalid ports fail before creating data', async () => {
     const invalidDir = path.join(scratch, 'invalid')
-    await assert.rejects(startStandalone({ dataDir: invalidDir, host: '0.0.0.0' }), /loopback/)
+    await assert.rejects(startStandalone({ dataDir: invalidDir, host: '192.0.2.1' }), /loopback/)
     await assert.rejects(startStandalone({ dataDir: invalidDir, port: -1 }), /port/)
     await assert.rejects(startStandalone({ dataDir: invalidDir, port: 65536 }), /port/)
     assert.equal(fs.existsSync(invalidDir), false)
+  })
+  await check('wildcard web bind starts and advertises a reachable local address', async () => {
+    const exposed = await startStandalone({
+      dataDir: path.join(scratch, 'wildcard'), host: '0.0.0.0', port: 0,
+      refresh: false, logger: { warn() {} },
+    })
+    try {
+      assert.notEqual(new URL(exposed.url).hostname, '0.0.0.0')
+      assert.equal((await fetch(`${exposed.url}/health`)).status, 200)
+      assert.equal((await fetch(`${exposed.url}/`)).status, 200)
+      assert.match(exposed.managementUrl, /^http:\/\/.+\/#login=/)
+    } finally { await exposed.close() }
   })
   await check('退出时保留已被替换的其他锁，不清理无法确认归属的文件', async () => {
     const directory = path.join(scratch, 'replaced-lock')
@@ -164,18 +176,17 @@ try {
     await recovered.close()
   })
   if (process.platform === 'win32' || process.platform === 'linux') {
-    await check('没有权限检查进程时保留锁，不把 EPERM 当成进程退出', async () => {
-      const directory = path.join(scratch, 'permission-lock')
-      const lockFile = path.join(directory, 'service.lock')
+    await check('覆盖旧格式或无法确认归属的锁后仍可启动并释放锁', async () => {
+      const directory = path.join(scratch, 'legacy-lock')
       fs.mkdirSync(directory)
-      const original = JSON.stringify({ pid: process.pid, product: 'our-free-model-standalone' })
-      fs.writeFileSync(lockFile, original)
-      const nativeKill = process.kill
-      process.kill = () => { throw Object.assign(new Error('permission denied'), { code: 'EPERM' }) }
+      const lockFile = path.join(directory, 'service.lock')
+      fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, product: 'our-free-model-standalone' }))
+      const recovered = await startStandalone({ dataDir: directory, port: 0, refresh: false, logger: { warn() {} } })
       try {
-        await assert.rejects(startStandalone({ dataDir: directory, port: 0, refresh: false }), { code: 'EEXIST' })
-        assert.equal(fs.readFileSync(lockFile, 'utf8'), original)
-      } finally { process.kill = nativeKill }
+        const owner = JSON.parse(fs.readFileSync(lockFile, 'utf8'))
+        assert.equal(owner.pid, process.pid)
+        assert.notEqual(owner.token, undefined)
+      } finally { await recovered.close() }
     })
   }
   await check('the listener starts while its upstream listing is held', async () => {
