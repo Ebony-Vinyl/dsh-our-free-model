@@ -1741,3 +1741,53 @@ MATI dari hulu (bukan salah OFM): `llm7/nemotron-3-nano:30b`,
 `reflection/beam-free` hanya dari VPS. `inclusionai/ling-3.2-flash:free`
 kena limit harian hulu (bukan kita). `flint-40b-free` & `minimax-m3.1-flash-free`
 kena 429 kuota ZEN saat diuji.
+
+# SESI 15 — "Masih 429 jam 08:27 WIB": bukan reset gagal, reset memang belum tiba
+
+Tanggal: 15 Nov 2026 08:28 WIB / 01:28 UTC
+
+## Pertanyaan user
+"Sudah jam 08.27 WIB tapi `deepseek-v4.1-flash-free` masih Free usage limit
+reached. Bukankah harusnya sudah reset?"
+
+## Jawaban terukur
+
+- Waktu setempat mesin: **15 Nov 2026 08:28 WIB**.
+- Waktu UTC: **15 Nov 2026 01:28**.
+- `retry-after` dari gateway: **82543 detik** = 22 jam 55 menit.
+- 01:28 UTC + 22:55 = **16 Nov 2026 00:23 UTC**.
+
+Jadi reset berikutnya 00:00 UTC **16 Nov**, yaitu **16 Nov 07:00 WIB**.
+Reset yang jatuh 15 Nov 07:00 WIB **sudah lewat** — dan jatahnya habis dipakai
+pengujian Sesi 13–14 (sekitar 12+ request hanya untuk mengukur tabel model).
+
+**Tidak ada yang rusak. Pipeline benar. Jatahnya kecil, itu saja.**
+
+## Kesalahan membaca yang perlu dihindari
+
+"Reset 00:00 UTC = 07:00 WIB" berarti tanggal WIB bisa **mendahului** tanggal
+UTC. Saat WIB menunjukkan 15 Nov pagi, UTC masih 14 Nov malam, atau 15 Nov
+dini hari. Selalu bandingkan `date -u`, **jangan** bandingkan jam WIB saja.
+Inilah sumber kebingungan "kok belum reset".
+
+## Yang harus dilakukan
+
+1. **Jangan probe.** Setiap probe memakan jatah yang nanti mau dipakai.
+   Kalau ingin tahu kapan reset, **baca header `retry-after`** — gratis,
+   tidak memakan kuota:
+   ```bash
+   curl -s -D - -o /dev/null http://127.0.0.1:18900/v1/chat/completions \
+     -H "Authorization: Bearer <key>" -H "content-type: application/json" \
+     -d '{"model":"deepseek-v4.1-flash-free","messages":[{"role":"user","content":"hi"}],"max_tokens":8}' \
+     | grep -i retry-after
+   ```
+2. Sisakan jatah ZEN untuk kerja nyata, bukan uji coba. Kalau cuma ingin
+   memastikan gateway sehat, pakai `ovh/Qwen3.8-27B` (tidak memakan jatah ZEN).
+3. Jatah harian ZEN memang **kecil**. Ukur dulu berapa request yang bisa
+   ditampung dalam satu hari saat jatah segar, lalu catat angkanya di sesi
+   berikutnya supaya tidak menebak lagi.
+
+## Kondisi gateway
+- OFM hidup di `127.0.0.1:18900`, jalur `ovh/*`, Kilo, Nvidia, llm7, OpenRouter,
+  Gemini semuanya 200 (lihat peta model Sesi 14).
+- Model ZEN tetap terdaftar; otomatis hidup lagi setelah 16 Nov 07:00 WIB.
