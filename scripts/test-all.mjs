@@ -105,6 +105,8 @@ const suites = [
   ['feedback-server', 'feedback-server-test.mjs', []],
   ['feedback-proxy', 'feedback-proxy-test.mjs', []],
   ['feedback-e2e', 'feedback-e2e-test.mjs', []],
+  ['feedback-plugin', 'feedback-plugin-test.mjs', []],
+  ['feedback-plugin-ui', 'feedback-plugin-ui-test.mjs', []],
   ['bun-fetch', 'bun-fetch-test.mjs', []],
   ['free-lane-compat', 'free-lane-compat-test.mjs', []],
   ['stable-session', 'stable-session-test.mjs', []],

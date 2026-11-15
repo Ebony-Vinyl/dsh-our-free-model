@@ -2,10 +2,22 @@
  "$schema": "./announcements.schema.md",
  "announcements": [
   {
+   "id": "2026-11-15-v2.8.5-release",
+   "title": "v2.8.5：插件内新增「反馈与许愿」页，下线四个已无渠道支撑的模型",
+   "level": "update",
+   "pinned": true,
+   "createdAt": "2026-11-15T04:00:00Z",
+   "link": {
+    "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.5",
+    "label": "查看插件更新说明"
+   },
+   "html": "<p><b>插件设置页现在有「反馈与许愿」了</b>——第 14 个标签页，和独立端控制台里那个是同一个入口。用 GitHub 登录后可以报告问题或提功能愿望，提交时会自动带上你的版本与平台，方便定位。登录只索取公开身份，不请求任何仓库权限；令牌留在本机，页面拿不到，所以即便页面被注入脚本也偷不走凭据。</p><p><b>EAC 渠道下线了四个模型</b>：<code>opencode/flint-40b-free</code>、<code>opencode/nemotron-3.5-lightning-free</code>、<code>opencode/nemotron-3.5-super-vl-free</code>、<code>mimo-v2.6-flash-free</code>。它们原本只由 OpenCode 家宽车道提供，那条链路已停用；EAC 页的模型数从 19 变成 16。带 <b>高速</b> 与 <b>爆</b> 标记的两个 400K 模型不受影响——它们由 Dahl Inference 提供，仍在正常服务（近一小时 0% 错误、20ms 级延迟）。</p><p>模型广场（new-api）同步调整：这四个模型不再出卡片；广场现在把 Dahl 的消耗计入统计，之前因为定价设为 0 所以数字一直显示为 0。两个 400K 模型在广场上也补上了描述与标签。</p><p>npm 渠道同步发布 <b>@ebony-vinyl/dsh-our-free-model@2.8.5</b>；npm 上那个裸名的 dsh-our-free-model 仍是第三方打包，请勿安装。</p>"
+  },
+  {
    "id": "2026-11-15-v2.8.4-release",
    "title": "v2.8.4：EAC 两个 400K 高速模型的数据须知、模型工作台标注 magpie",
    "level": "update",
-   "pinned": true,
+   "pinned": false,
    "createdAt": "2026-11-15T01:00:00Z",
    "link": {
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model/releases/tag/v2.8.4",
@@ -23,7 +35,7 @@
     "url": "https://github.com/Ebony-Vinyl/dsh-our-free-model",
     "label": "反馈与许愿"
    },
-   "html": "<p>EAC 协付渠道里带 <b>高速</b> 与 <b>爆</b> 标记的两个 400K 上下文模型（DeepSeek V4 Flash 与 GLM 5.3 Flash），由上游提供商 Dahl Inference 提供服务。选择它们之前，请先读完下面四条——这些是上游自己的说明，不是本插件的判断：</p><ul><li><b>请求可能经过分布式网络中的独立计算运营方处理</b>，不是单一数据中心内的封闭链路。</li><li>上游<b>不承诺</b>标准服务具有零数据留存或端到端保密保障。</li><li>计算运营方在执行请求时<b>可能接触到请求内容</b>。</li><li>部分已完成的 API 请求可能经过脱敏后，<b>用于测试环境的负载与可靠性测试</b>。</li></ul><p>因此：<b>不要把密码、密钥、个人身份信息、商业机密或任何你不愿第三方处理的内容发给这两个模型</b>。需要处理敏感内容时，请改用你自己的付费 API（聚合渠道），或选择其它模型。插件本身不上传任何东西——用量、设置、转发 Key 都只落在本机，但发往模型的 prompt 与工具结果必然经过上游。</p><p><b>问题反馈与功能许愿</b>：独立端控制台左侧「项目支持 → 反馈与许愿」已上线该入口，用 GitHub 登录后即可提交（插件端目前没有这个页面，可在仓库的 Issues 页提）。遇到 OFM 的问题、或想加什么功能，都往那里提——它会带上你的版本与平台信息，方便定位。</p><p>另外，我们正在尝试基于 <a href=\"https://github.com/Ebony-Vinyl/EACbot\">EACbot</a> 搭建一套用于维护开源项目的全自动化工作流（问题归类、复现、回归与发布检查）。<b>EACbot 本身目前尚处于开发实验阶段</b>，还不稳定，暂不承接正式反馈——请仍通过上面的反馈入口提交，不要直接拿 EACbot 当问题渠道。</p>"
+   "html": "<p>EAC 协付渠道里带 <b>高速</b> 与 <b>爆</b> 标记的两个 400K 上下文模型（DeepSeek V4 Flash 与 GLM 5.3 Flash），由上游提供商 Dahl Inference 提供服务。选择它们之前，请先读完下面四条——这些是上游自己的说明，不是本插件的判断：</p><ul><li><b>请求可能经过分布式网络中的独立计算运营方处理</b>，不是单一数据中心内的封闭链路。</li><li>上游<b>不承诺</b>标准服务具有零数据留存或端到端保密保障。</li><li>计算运营方在执行请求时<b>可能接触到请求内容</b>。</li><li>部分已完成的 API 请求可能经过脱敏后，<b>用于测试环境的负载与可靠性测试</b>。</li></ul><p>因此：<b>不要把密码、密钥、个人身份信息、商业机密或任何你不愿第三方处理的内容发给这两个模型</b>。需要处理敏感内容时，请改用你自己的付费 API（聚合渠道），或选择其它模型。插件本身不上传任何东西——用量、设置、转发 Key 都只落在本机，但发往模型的 prompt 与工具结果必然经过上游。</p><p><b>问题反馈与功能许愿</b>：插件设置页的「反馈与许愿」标签页、以及独立端控制台左侧「项目支持 → 反馈与许愿」，都可以提交。用 GitHub 登录后即可填写，遇到 OFM 的问题、或想加什么功能，都往那里提——提交时会自动带上你的版本与平台信息，方便定位。</p><p>另外，我们正在尝试基于 <a href=\"https://github.com/Ebony-Vinyl/EACbot\">EACbot</a> 搭建一套用于维护开源项目的全自动化工作流（问题归类、复现、回归与发布检查）。<b>EACbot 本身目前尚处于开发实验阶段</b>，还不稳定，暂不承接正式反馈——请仍通过上面的反馈入口提交，不要直接拿 EACbot 当问题渠道。</p>"
   },
   {
    "id": "2026-11-08-v2.8.3-claude-tui-fix",

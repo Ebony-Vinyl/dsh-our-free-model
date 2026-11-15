@@ -372,6 +372,36 @@ window.__ModuleLoader__.load({
         'picks.title': '推荐项目',
         'picks.sub': '同一作者的一组开源项目：把 Agent 装进原生桌面、让上百个插件和谐共存、把视频和设计留在这台机器上。用得上，就顺手点个 Star。',
         'picks.foot': 'Star 是开源项目唯一的「工资条」——它决定作者还能投入多少时间。这里的项目都免费、开源、无广告，点一下就是最实在的支持。',
+        // ── 反馈与许愿 ────────────────────────────────────────────────────────
+        'nav.tab.feedback': '反馈与许愿',
+        'fb.title': '反馈与许愿',
+        'fb.sub': '报告一个问题，或告诉我们你想要什么功能',
+        'fb.signIn': '使用 GitHub 登录',
+        'fb.signOut': '退出 {login}',
+        'fb.gateTitle': '先登录再提交',
+        'fb.gateBody': '登录只用来确认这条反馈来自谁，方便我们在修好后回来找你。只索取 GitHub 的公开身份，不请求任何仓库权限，也不会发布到公开的 issue 列表。',
+        'fb.code': '在 GitHub 页面输入这串验证码',
+        'fb.openVerify': '打开 github.com/login/device',
+        'fb.waiting': '正在等待授权完成…',
+        'fb.opened': '已打开 GitHub 授权页。输入上面的验证码后回到这里。',
+        'fb.signedIn': '已登录 GitHub，可以提交反馈了。',
+        'fb.signedOut': '已退出反馈登录。',
+        'fb.kind.bug': '报告问题',
+        'fb.kind.wish': '功能许愿',
+        'fb.titleField': '标题',
+        'fb.titlePlaceholderBug': '一句话说明出了什么问题',
+        'fb.titlePlaceholderWish': '一句话说明你希望有什么',
+        'fb.detailField': '详细描述',
+        'fb.detailPlaceholderBug': '复现步骤、你期望的结果、实际发生了什么。有报错原文请一并贴上。',
+        'fb.detailPlaceholderWish': '你现在的做法是什么、卡在哪里、希望这个功能怎么用。',
+        'fb.submit': '提交反馈',
+        'fb.sent': '已提交，单号 {id}',
+        'fb.submitted': '反馈已提交，谢谢。',
+        'fb.expired': '验证码已过期，请重新发起登录。',
+        'fb.denied': 'GitHub 授权未完成。',
+        'fb.stale': '反馈登录已失效，请重新用 GitHub 登录后再次提交（正文已保留）。',
+        'fb.version': '版本',
+        'fb.note': '提交的内容会带上你的插件版本与操作系统，方便定位问题。除此之外不会读取本机的任何数据。',
         'picks.stars': 'Stars',
         'picks.forks': 'Forks',
         'picks.fork': 'Fork',
@@ -1261,6 +1291,35 @@ window.__ModuleLoader__.load({
         'picks.title': 'Recommended projects',
         'picks.sub': 'A set of open-source projects by the same author: bringing the agent to a native desktop, keeping hundreds of plugins working together, and keeping video and design work on this machine. If they are useful, a star is the thanks they understand.',
         'picks.foot': 'A star is the only payslip an open-source project gets — it decides how much more time the author can spend. Every project here is free, open source and ad-free; one click is the most concrete support there is.',
+        'nav.tab.feedback': 'Feedback',
+        'fb.title': 'Feedback & wishes',
+        'fb.sub': 'Report a problem, or tell us what you want to see',
+        'fb.signIn': 'Sign in with GitHub',
+        'fb.signOut': 'Sign out {login}',
+        'fb.gateTitle': 'Sign in to submit',
+        'fb.gateBody': 'Signing in only tells us who a report came from, so we can come back to you once it is fixed. It asks for your public GitHub identity only — no repository permissions, and nothing is posted to a public issue list.',
+        'fb.code': 'Enter this code on the GitHub page',
+        'fb.openVerify': 'Open github.com/login/device',
+        'fb.waiting': 'Waiting for authorization…',
+        'fb.opened': 'The GitHub page is open. Enter the code above, then come back here.',
+        'fb.signedIn': 'Signed in to GitHub — you can submit now.',
+        'fb.signedOut': 'Signed out of feedback.',
+        'fb.kind.bug': 'Report a problem',
+        'fb.kind.wish': 'Feature wish',
+        'fb.titleField': 'Title',
+        'fb.titlePlaceholderBug': 'One line on what went wrong',
+        'fb.titlePlaceholderWish': 'One line on what you would like to have',
+        'fb.detailField': 'Details',
+        'fb.detailPlaceholderBug': 'Steps to reproduce, what you expected, what actually happened. Paste the error text if you have it.',
+        'fb.detailPlaceholderWish': 'What you do today, where it breaks down, and how you would like this to work.',
+        'fb.submit': 'Submit',
+        'fb.sent': 'Submitted, reference {id}',
+        'fb.submitted': 'Feedback submitted — thank you.',
+        'fb.expired': 'The code expired. Please start the sign-in again.',
+        'fb.denied': 'GitHub authorization was not completed.',
+        'fb.stale': 'Your feedback sign-in has lapsed. Sign in with GitHub again to resubmit — your text is still here.',
+        'fb.version': 'Version',
+        'fb.note': 'A submission carries your plugin version and operating system so the report can be placed. Nothing else is read from this machine.',
         'picks.stars': 'Stars',
         'picks.forks': 'Forks',
         'picks.fork': 'Fork',
@@ -3004,6 +3063,25 @@ window.__ModuleLoader__.load({
 /* 封面淡入：字节到位前不占住卡片顶部的视觉重量 */
 .ofm_extcover img{opacity:0;transition:opacity .45s var(--ease-instrument)}
 .ofm_extcover img.ofm_loaded{opacity:1}
+/* ── 反馈与许愿 ──────────────────────────────────────────────────────────── */
+/* 设备码：等宽大字号 + 字距，用户要照着念到另一个窗口里 */
+.ofm_fbcode{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.ofm_fbcodeval{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:26px;font-weight:700;letter-spacing:.16em;line-height:1.2;padding:10px 16px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 70%,transparent);color:var(--dsw-alias-label-primary);user-select:all}
+.ofm_fbgate{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.ofm_fbgate h3{margin:0;font-size:15px;font-weight:650;color:var(--dsw-alias-label-primary)}
+.ofm_fbform{display:flex;flex-direction:column;gap:12px}
+.ofm_fbfield{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary)}
+.ofm_fbtext{resize:vertical;min-height:150px;line-height:1.6;font-weight:400}
+.ofm_fbfoot{align-items:center}
+.ofm_fbfoot .ofm_note{margin-left:auto;font-variant-numeric:tabular-nums}
+.ofm_fbreceipt{margin:0;font-size:12px;color:var(--dsw-alias-state-success-primary)}
+/* 类型切换：两枚等宽按钮，选中态用底色而不是描边，和导航的滑片语言一致 */
+.ofm_fbsegments{display:inline-flex;gap:4px;padding:3px;border-radius:11px;border:1px solid color-mix(in srgb,var(--dsw-alias-border-l2) 82%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 58%,transparent);align-self:flex-start}
+.ofm_fbseg{font:inherit;font-size:12px;font-weight:600;padding:6px 14px;border-radius:8px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:color .18s ease,background .18s ease}
+.ofm_fbseg[data-on="true"]{color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 16%,transparent)}
+.ofm_fbseg:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
+.ofm_fbseg:disabled{cursor:default;opacity:.6}
+.ofm_fbseg:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -4991,6 +5069,178 @@ window.__ModuleLoader__.load({
           })),
         picks.status === 'error' ? h('p', { className: 'ofm_reconote' }, t('picks.liveFailed')) : null,
         h('p', { className: 'ofm_reconote' }, t('picks.foot')))
+    }
+
+    // ── 反馈与许愿 ────────────────────────────────────────────────────────────
+    /**
+     * Sign in with GitHub, then file one problem report or feature wish.
+     *
+     * Sign-in is required rather than optional: an anonymous report cannot be
+     * followed up when the fix lands, and there is no way to tell one person's
+     * complaint from the same complaint arriving ten times.
+     *
+     * The token never reaches this page — every call goes through the host's
+     * `/feedback/*` routes, which keep it in the settings file on this machine
+     * and answer only `{signedIn, login}`. So even a script injected into the
+     * page cannot steal a credential that submits as the user.
+     */
+    function FeedbackPage(props) {
+      const { t } = props
+      const [auth, setAuth] = useState({ signedIn: false, login: '' })
+      const [login, setLogin] = useState(undefined)
+      const [kind, setKind] = useState('bug')
+      const [title, setTitle] = useState('')
+      const [detail, setDetail] = useState('')
+      const [busy, setBusy] = useState('')
+      const [error, setError] = useState('')
+      const [status, setStatus] = useState('')
+      const [sent, setSent] = useState('')
+      // 轮询定时器与"还挂在页面上吗"的标记：设备码轮询会跨越多秒，页面切走
+      // 之后 setState 属于泄漏的更新，清理函数必须把它们都停掉。
+      const pollTimer = useRef(undefined)
+      const live = useRef(true)
+      useEffect(() => () => { live.current = false; clearTimeout(pollTimer.current) }, [])
+
+      const readAuth = useCallback(async () => {
+        try {
+          const value = await api('/feedback')
+          if (live.current) setAuth(value)
+        } catch { /* 状态读取失败不该挡住表单；登录按钮会再报一次 */ }
+      }, [])
+      useEffect(() => { void readAuth() }, [readAuth])
+
+      const signIn = async () => {
+        if (busy) return
+        setBusy('signin'); setError(''); setStatus('')
+        try {
+          const value = await post('/feedback/start', undefined, 30_000)
+          if (!live.current) return
+          setLogin(value)
+          setStatus(t('fb.opened'))
+          // 授权页在新标签打开：本页要保持可见，验证码还要照着输。
+          try { window.open(value.verifyUrl, '_blank', 'noopener,noreferrer') } catch { /* 弹窗被拦，页面里还有链接 */ }
+        } catch (reason) { if (live.current) setError(String(reason?.message ?? reason)) }
+        finally { if (live.current) setBusy('') }
+      }
+
+      // 只在登录流程进行中轮询，成功后立刻停 —— 常驻轮询会让一台已经登录的机器
+      // 每隔几秒向外部服务发一次毫无意义的请求。
+      useEffect(() => {
+        if (login === undefined) return undefined
+        let cancelled = false
+        const tick = async () => {
+          try {
+            const value = await post('/feedback/poll', { session: login.session }, 30_000)
+            if (cancelled || !live.current) return
+            if (value.status === 'ok') {
+              setLogin(undefined); setAuth({ signedIn: true, login: value.login ?? '' })
+              setStatus(t('fb.signedIn')); return
+            }
+            if (value.status === 'expired') { setLogin(undefined); setError(t('fb.expired')); return }
+            if (value.status === 'denied') { setLogin(undefined); setError(t('fb.denied')); return }
+            pollTimer.current = setTimeout(() => { void tick() }, 3000)
+          } catch (reason) {
+            if (cancelled || !live.current) return
+            setLogin(undefined); setError(String(reason?.message ?? reason))
+          }
+        }
+        pollTimer.current = setTimeout(() => { void tick() }, 3000)
+        return () => { cancelled = true; clearTimeout(pollTimer.current) }
+      }, [login, t])
+
+      const signOut = async () => {
+        setBusy('signout'); setError(''); setStatus('')
+        try {
+          const value = await post('/feedback/signout')
+          if (live.current) { setAuth(value); setStatus(t('fb.signedOut')); setSent('') }
+        } catch (reason) { if (live.current) setError(String(reason?.message ?? reason)) }
+        finally { if (live.current) setBusy('') }
+      }
+
+      const submit = async () => {
+        if (busy) return
+        setBusy('submit'); setError(''); setStatus(''); setSent('')
+        try {
+          const result = await post('/feedback/submit', {
+            kind, title, detail, platform: navigator.platform, page: 'feedback',
+          }, 30_000)
+          if (!live.current) return
+          setTitle(''); setDetail(''); setSent(result.id)
+          setStatus(t('fb.submitted'))
+        } catch (reason) {
+          if (!live.current) return
+          // 401 是反馈令牌失效（收集端重启丢了内存会话，或到期），不是管理会话
+          // 失效：留在本页、把登录态重置，正文留在输入框里，不必重打一遍。
+          const stale = /登录已失效|sign-in has lapsed/.test(String(reason?.message ?? ''))
+          if (stale) {
+            setAuth({ signedIn: false, login: '' })
+            setError(t('fb.stale'))
+            return
+          }
+          setError(String(reason?.message ?? reason))
+        }
+        finally { if (live.current) setBusy('') }
+      }
+
+      const canSubmit = title.trim() !== '' && detail.trim() !== '' && busy === ''
+      return h('div', { className: 'ofm_page' },
+        h(PageHero, { title: t('fb.title'), sub: t('fb.sub') },
+          auth.signedIn
+            ? h(Button, { onClick: () => void signOut(), disabled: busy !== '' },
+              t('fb.signOut').replace('{login}', auth.login))
+            : h(Button, { onClick: () => void signIn(), disabled: busy !== '' },
+              t('fb.signIn'))),
+
+        error !== '' ? h('div', { className: 'ofm_callout ofm_error' }, h('div', null, error)) : null,
+        status !== '' ? h('div', { className: 'ofm_callout' }, h('div', null, status)) : null,
+
+        login !== undefined ? h('div', { className: 'ofm_panel ofm_fbcode' },
+          h('div', { className: 'ofm_fbcodeval' }, login.userCode),
+          h('p', { className: 'ofm_note' }, t('fb.code')),
+          h('a', { className: 'ofm_linkbtn', href: login.verifyUrl, target: '_blank', rel: 'noopener noreferrer' },
+            t('fb.openVerify')),
+          h('p', { className: 'ofm_note' }, t('fb.waiting'))) : null,
+
+        !auth.signedIn && login === undefined ? h('div', { className: 'ofm_panel ofm_fbgate' },
+          h('h3', null, t('fb.gateTitle')),
+          h('p', { className: 'ofm_note' }, t('fb.gateBody')),
+          h(Button, { onClick: () => void signIn(), disabled: busy !== '' }, t('fb.signIn'))) : null,
+
+        auth.signedIn ? h(Section, { title: t('fb.title'), hint: t('fb.note') },
+          h('div', { className: 'ofm_panel ofm_fbform' },
+            h('div', { className: 'ofm_row ofm_fbsegments', role: 'group', 'aria-label': t('fb.title') },
+              h('button', {
+                type: 'button', className: 'ofm_fbseg', 'data-on': kind === 'bug' ? 'true' : 'false',
+                'aria-pressed': kind === 'bug' ? 'true' : 'false', disabled: busy !== '',
+                onClick: () => setKind('bug'),
+              }, t('fb.kind.bug')),
+              h('button', {
+                type: 'button', className: 'ofm_fbseg', 'data-on': kind === 'wish' ? 'true' : 'false',
+                'aria-pressed': kind === 'wish' ? 'true' : 'false', disabled: busy !== '',
+                onClick: () => setKind('wish'),
+              }, t('fb.kind.wish'))),
+            h('label', { className: 'ofm_fbfield' },
+              h('span', null, t('fb.titleField')),
+              h('input', {
+                className: 'ofm_input', value: title, maxLength: 120, disabled: busy !== '',
+                placeholder: t(kind === 'bug' ? 'fb.titlePlaceholderBug' : 'fb.titlePlaceholderWish'),
+                onChange: event => setTitle(event.target.value),
+              })),
+            h('label', { className: 'ofm_fbfield' },
+              h('span', null, t('fb.detailField')),
+              h('textarea', {
+                className: 'ofm_input ofm_fbtext', rows: 9, value: detail, maxLength: 8000, disabled: busy !== '',
+                placeholder: t(kind === 'bug' ? 'fb.detailPlaceholderBug' : 'fb.detailPlaceholderWish'),
+                onChange: event => setDetail(event.target.value),
+              })),
+            h('div', { className: 'ofm_row ofm_fbfoot' },
+              h(Pill, null, `${t('fb.version')} v${props.version ?? ''}`),
+              h('span', { className: 'ofm_note' }, `${detail.length} / 8000`)),
+            sent !== '' ? h('p', { className: 'ofm_fbreceipt', role: 'status' },
+              t('fb.sent').replace('{id}', sent)) : null,
+            h('div', { className: 'ofm_row' },
+              h(Button, { onClick: () => void submit(), disabled: !canSubmit },
+                busy === 'submit' ? '…' : t('fb.submit'))))) : null)
     }
 
     // ── EAC router ────────────────────────────────────────────────────────
@@ -7478,7 +7728,7 @@ window.__ModuleLoader__.load({
     // upgrader triggers — comes back to the page the user was reading.
     const EFFECTS_KEY = 'ofm.visualEffects'
     const TAB_KEY = 'ofm.tab'
-    const TABS = ['free', 'eac', 'channels', 'aggregate', 'workspace', 'extensions', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks']
+    const TABS = ['free', 'eac', 'channels', 'aggregate', 'workspace', 'extensions', 'saver', 'routing', 'ledger', 'logs', 'gateway', 'upgrade', 'picks', 'feedback']
     const WORKSPACE_CSS = `
       .who{min-width:0}
       .who .name,.nm .n,.lib-path{white-space:normal!important;overflow-wrap:anywhere;overflow:visible!important;text-overflow:clip!important}
@@ -7783,6 +8033,7 @@ window.__ModuleLoader__.load({
         ['gateway', t('nav.tab.gateway'), null],
         ['upgrade', t('nav.tab.upgrade'), null],
         ['picks', t('nav.tab.picks'), null],
+        ['feedback', t('nav.tab.feedback'), null],
       ]
       const nav = h('nav', { className: 'ofm_nav' },
         h('span', { className: 'ofm_navbrand' },
@@ -7832,6 +8083,8 @@ window.__ModuleLoader__.load({
                       ? h(UpgradePage, { t, settings: data.settings, onApply: apply, busy })
                     : tab === 'picks'
                       ? h(PicksPage, { t, effects })
+                    : tab === 'feedback'
+                      ? h(FeedbackPage, { t, version: data.version })
                     : tab === 'eac'
                       ? h(EacPage, { t, data, counts, summary, stats, eacAuth, setEacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe })
                       : h(FreePage, { t, data, counts, summary, stats, eacAuth, eacLogin, busy, catalogBusy, apply, bench, benches, refresh, reprobe })
@@ -8896,7 +9149,7 @@ window.__ModuleLoader__.load({
     exports.inject = inject
     exports.name = 'our-free-model'
     // Headless test seams use the same stub React as scripts/client-lint.mjs.
-    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, DICT, useChannelRpc, Shell, SubscriptionsPage, Disclaimer, CSS, reloadNoticePlan, announceReloadNotice }
+    exports.__test = { parseSafeHtml, safeUrl, sanitizeStyle, htmlToDom, buildHeatCells, Heatmap, ChannelsPage, UpgradePanel, useEacLogin, EacAuth, PicksPage, RecoCard, FeedbackPage, DICT, useChannelRpc, Shell, SubscriptionsPage, Disclaimer, CSS, reloadNoticePlan, announceReloadNotice }
     return module.exports
   },
 })

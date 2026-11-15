@@ -44,7 +44,7 @@ import { createEacLoginPoller } from './src/eac-login.js'
 import { unlockSealedLane } from './src/vault.js'
 import { DEFAULT_LEVEL, budgetLadder, hasDeclaredEffortMenu } from './src/effort.js'
 import { readPerf, readSeries, siteRootFor, modelAvailability } from './src/model-test.js'
-import { AnnouncementFeed } from './src/feed.js'
+import { AnnouncementFeed, createFeedback } from './src/feed.js'
 import { createPickStats } from './src/picks.js'
 import { PluginUpdater, installationIsManaged } from './src/updater.js'
 import { selfReload, watchPackage, isReloading, canSafelyHotReload } from './src/reload.js'
@@ -389,6 +389,19 @@ export function apply(ctx, config) {
   const picks = createPickStats({
     cacheFile: path.join(dataDir, 'picks.json'),
     log: message => logger.info?.(message),
+  })
+
+  // The feedback form's server half: device-flow sign-in against the project's
+  // collector, and submission of one problem report or feature wish. It lives
+  // beside the feed because both are "one remote endpoint, fail-soft, validated
+  // on the way in", and because a shipped module of its own would break the
+  // 80-file release-set ceiling that older upgraders enforce.
+  //
+  // `persist` writes through the settings store, so the token survives a restart
+  // on this machine only — it is never sent back to the page.
+  const feedback = createFeedback({
+    settings: () => settings.get(),
+    persist: patch => { settings.update(patch); settings.flush() },
   })
 
   /**
@@ -1157,6 +1170,7 @@ export function apply(ctx, config) {
     pool: fetchPoolSnapshot,
     eacAuth,
     picks,
+    feedback,
     magpieEngine,
     magpieModels,
     onEngineStarted: () => {
@@ -2108,6 +2122,41 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/picks') {
         return send(200, await deps.picks.view())
+      }
+      // ── 反馈与许愿 ──────────────────────────────────────────────────────────
+      // The page talks to these five routes and nothing else. Two properties are
+      // load-bearing and easy to lose in a refactor:
+      //
+      //  · the sign-in token never appears in any response — `status` answers
+      //    only `{signedIn, login}`, and the token itself stays in this process;
+      //  · a failed submission is never reported as success. The proxy already
+      //    refuses a missing receipt id, and a 401 from the collector is turned
+      //    into a 401 here so the page can drop to "signed out" and keep the
+      //    text the user typed.
+      if (routePath === '/feedback' || routePath.startsWith('/feedback/')) {
+        if (deps.feedback === undefined) return send(503, { error: '反馈服务不可用' })
+        const action = routePath.slice('/feedback'.length)
+        if (method === 'GET' && action === '') return send(200, deps.feedback.status())
+        if (method === 'POST' && action === '/start') return send(200, await deps.feedback.start())
+        if (method === 'POST' && action === '/poll') {
+          const body = await readJson(req)
+          return send(200, await deps.feedback.poll(body))
+        }
+        if (method === 'POST' && action === '/signout') return send(200, deps.feedback.signOut())
+        if (method === 'POST' && action === '/submit') {
+          const body = await readJson(req)
+          if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+            return send(400, { error: 'the request body must be a JSON object' })
+          }
+          // The version is stamped here rather than trusted from the page: a
+          // report is only actionable if it names the build that produced it.
+          return send(200, await deps.feedback.submit({
+            ...body,
+            version: deps.meta?.().version ?? '',
+            platform: typeof body.platform === 'string' ? body.platform : '',
+          }))
+        }
+        return send(404, { error: 'not found' })
       }
       if (method === 'POST' && routePath === '/announcements/ack') {
         const body = await readJson(req)

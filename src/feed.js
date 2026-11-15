@@ -1,5 +1,5 @@
 /**
- * The remote announcement feed.
+ * The remote announcement feed, plus the feedback form that reports against it.
  *
  * The repository owner publishes announcements by editing one JSON document in
  * the plugin's own GitHub repository — no server, no deploy step. Every running
@@ -14,6 +14,13 @@
  * This module is transport and validation only. What a user has acknowledged
  * and what has already raised a toast is state the caller owns, so that a feed
  * refresh never rewrites acknowledgement history.
+ *
+ * The feedback client lives here instead of in a module of its own because the
+ * signed release set is pinned at the 80-file ceiling that older upgraders
+ * enforce (`MAX_FILES` in the 1.3.1 / 2.5.9 readers): adding a shipped file
+ * would make the release un-installable for every user still on those versions.
+ * It has the same shape as the feed — one remote endpoint, fail-soft, validated
+ * on the way in and out — so folding it in costs nothing but this paragraph.
  *
  * @module src/feed.js
  */
@@ -312,5 +319,183 @@ export class AnnouncementFeed {  /**
       error: this.error,
       lastError: this.error,
     }
+  }
+}
+
+// ── the feedback form ────────────────────────────────────────────────────────
+//
+// Same reasoning as `packages/standalone/feedback.mjs`, which this mirrors: the
+// browser never talks to the collector directly. Two reasons, both load-bearing.
+//
+//  1. The settings page is served from a loopback origin, so a direct call is
+//     blocked by same-origin policy and the page cannot read the answer.
+//  2. The login token must stay on this machine (`settings.feedbackAuth`). The
+//     page is told *who* is signed in and never receives the token, so a script
+//     injected into the page cannot steal a credential that submits as the user.
+//
+// It is deliberately not shared with `src/eac-login.js`. Both speak device flow,
+// but that one is bound to the paid EAC gateway and validates a star; a change
+// made for feedback must never be able to break the paid lane.
+
+const FEEDBACK_DEFAULT_BASE = 'https://ourfreemodel.beichenapi.com/feedback'
+const FEEDBACK_MAX_TITLE = 120
+const FEEDBACK_MAX_DETAIL = 8000
+const FEEDBACK_KINDS = new Set(['bug', 'wish'])
+
+const feedbackFail = (statusCode, message) => Object.assign(new Error(message), { statusCode })
+
+/**
+ * The collector's base address: origin *and* path, never just the origin.
+ *
+ * The service is mounted under `/feedback/*` by the reverse proxy, which strips
+ * that prefix before forwarding. Keeping the pathname is therefore mandatory;
+ * an earlier version returned `parsed.origin` and dropped it, so every request
+ * landed on `/api/*` at the panel root and answered 404 — sign-in and submit
+ * were both dead while the health check still looked fine.
+ *
+ * https only, except loopback http, which never leaves the machine and is what
+ * lets a local collector (and the test suites) work.
+ */
+export function feedbackBaseOf(settings) {
+  const raw = typeof settings()?.feedbackUrl === 'string' ? settings().feedbackUrl.trim() : ''
+  const value = raw || FEEDBACK_DEFAULT_BASE
+  let parsed
+  try { parsed = new URL(value) } catch { throw feedbackFail(400, '反馈服务器地址无效') }
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
+  if (parsed.protocol !== 'https:' && !(loopback && parsed.protocol === 'http:')) {
+    throw feedbackFail(400, '反馈服务器必须是 https 地址（本机调试可用 http）')
+  }
+  if (parsed.username || parsed.password) throw feedbackFail(400, '反馈服务器地址不能包含凭据')
+  if (parsed.search || parsed.hash) throw feedbackFail(400, '反馈服务器地址不能带查询串或片段')
+  // Trailing slashes dropped; `/api/...` is appended at each call site.
+  return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
+}
+
+async function feedbackCall(url, init = {}, fetchImpl = fetch) {
+  let response
+  try {
+    response = await fetchImpl(url, {
+      ...init,
+      headers: { accept: 'application/json', ...(init.headers ?? {}) },
+      signal: AbortSignal.timeout(20_000),
+    })
+  } catch { throw feedbackFail(502, '反馈服务器暂时无法连接，请稍后重试') }
+  const body = await response.json().catch(() => null)
+  if (!response.ok) {
+    // The server's own short code travels; the response body does not, because
+    // a collector may echo request content back in it.
+    const code = typeof body?.error === 'string' ? body.error.slice(0, 40) : `HTTP ${response.status}`
+    // Two codes the collector returns have a meaning the user can act on, and
+    // neither reads as an action in its raw form. `unconfigured` is an operator
+    // problem (the collector has no GitHub OAuth App, so device flow can never
+    // start), and `device_flow_disabled` is the one setting GitHub only exposes
+    // in its own web UI. Saying "错误：unconfigured" to a user hides both.
+    if (code === 'unconfigured') {
+      throw Object.assign(feedbackFail(502, '反馈服务尚未启用 GitHub 登录，请联系维护者配置后再试'), { upstreamStatus: response.status })
+    }
+    if (code === 'device_flow_disabled') {
+      throw Object.assign(feedbackFail(502, '反馈服务的 GitHub 应用未启用 Device Flow，请联系维护者'), { upstreamStatus: response.status })
+    }
+    // The upstream status is tagged for the caller: a 401 there means *this*
+    // install's feedback token is stale, not that the management session died.
+    throw Object.assign(feedbackFail(502, `反馈服务器返回错误：${code}`), { upstreamStatus: response.status })
+  }
+  return body ?? {}
+}
+
+/**
+ * @param {object} deps
+ * @param {() => {feedbackUrl?: string, feedbackAuth?: object|null}} deps.settings
+ * @param {(patch: object) => void} deps.persist - merge into the settings store
+ * @param {typeof fetch} [deps.fetch] - injection point for the test suites
+ */
+export function createFeedback({ settings, persist, fetch: fetchImpl = fetch }) {
+  const call = (url, init) => feedbackCall(url, init, fetchImpl)
+  const token = () => {
+    const value = settings()?.feedbackAuth
+    return value !== null && typeof value === 'object' && typeof value.token === 'string' && value.token !== '' ? value : null
+  }
+  return {
+    /** Current sign-in state. The token itself never leaves this process. */
+    status() {
+      const value = token()
+      return value === null ? { signedIn: false, login: '' } : { signedIn: true, login: String(value.login ?? '') }
+    },
+    /** Begin device flow: the user code and verification URL go to the page; the token is collected by `poll`. */
+    async start() {
+      const body = await call(`${feedbackBaseOf(settings)}/api/auth/start`, { method: 'POST' })
+      if (typeof body.session !== 'string' || typeof body.userCode !== 'string') {
+        throw feedbackFail(502, '反馈服务器返回了无法识别的登录响应')
+      }
+      return {
+        session: body.session,
+        userCode: body.userCode,
+        verifyUrl: typeof body.verifyUrl === 'string' ? body.verifyUrl : 'https://github.com/login/device',
+        expiresIn: Number(body.expiresIn) || 900,
+      }
+    },
+    /** Poll the authorization; on success the token is written to this machine's settings. */
+    async poll({ session } = {}) {
+      if (typeof session !== 'string' || session === '' || session.length > 200) throw feedbackFail(400, '登录会话无效')
+      const body = await call(`${feedbackBaseOf(settings)}/api/auth/poll`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session }),
+      })
+      if (body.status === 'ok') {
+        if (typeof body.token !== 'string' || body.token === '') throw feedbackFail(502, '反馈服务器未返回登录令牌')
+        persist({ feedbackAuth: { token: body.token, login: String(body.login ?? ''), at: Date.now() } })
+        return { status: 'ok', login: String(body.login ?? '') }
+      }
+      if (body.status === 'pending') return { status: 'pending' }
+      if (body.status === 'expired') return { status: 'expired' }
+      if (body.status === 'denied') return { status: 'denied', error: String(body.error ?? '') }
+      throw feedbackFail(502, '反馈服务器返回了无法识别的登录状态')
+    },
+    /** Sign out locally only. The collector's token expires on its own; there is no remote revoke to call. */
+    signOut() {
+      persist({ feedbackAuth: null })
+      return { signedIn: false, login: '' }
+    },
+    /** Submit one report. Anonymous reports are refused: an unreachable reporter cannot be followed up. */
+    async submit(patch) {
+      const auth = token()
+      if (auth === null) throw feedbackFail(401, '请先用 GitHub 登录再提交反馈')
+      const kind = typeof patch?.kind === 'string' ? patch.kind : ''
+      const title = typeof patch?.title === 'string' ? patch.title.trim() : ''
+      const detail = typeof patch?.detail === 'string' ? patch.detail.trim() : ''
+      if (!FEEDBACK_KINDS.has(kind)) throw feedbackFail(400, '请选择反馈类型')
+      if (title === '') throw feedbackFail(400, '请填写标题')
+      if (title.length > FEEDBACK_MAX_TITLE) throw feedbackFail(400, `标题不能超过 ${FEEDBACK_MAX_TITLE} 字`)
+      if (detail === '') throw feedbackFail(400, '请描述你遇到的问题或想要的功能')
+      if (detail.length > FEEDBACK_MAX_DETAIL) throw feedbackFail(400, `描述不能超过 ${FEEDBACK_MAX_DETAIL} 字`)
+      let body
+      try {
+        body = await call(`${feedbackBaseOf(settings)}/api/feedback`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${auth.token}` },
+          body: JSON.stringify({
+            kind, title, detail,
+            version: String(patch?.version ?? '').slice(0, 64),
+            platform: String(patch?.platform ?? '').slice(0, 64),
+            page: String(patch?.page ?? '').slice(0, 64),
+          }),
+        })
+      } catch (error) {
+        // The collector no longer recognizes this token (it restarted and lost
+        // its in-memory sessions, or the 7-day window lapsed). Clear the local
+        // copy so the page falls back to "signed out" and the next click starts
+        // a fresh device flow, instead of leaving a submit button that can only
+        // ever fail.
+        if (error?.upstreamStatus === 401) {
+          persist({ feedbackAuth: null })
+          throw feedbackFail(401, '反馈登录已失效，请重新用 GitHub 登录。')
+        }
+        throw error
+      }
+      // No id means it was not stored: a proxy's 200 HTML error page lands here
+      // too, and returning an empty receipt would clear the user's text while
+      // handing them nothing to follow up with.
+      if (typeof body.id !== 'string' || body.id === '') throw feedbackFail(502, '反馈服务器没有返回单号，请稍后重试')
+      return { id: body.id }
+    },
   }
 }

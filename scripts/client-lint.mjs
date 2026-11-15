@@ -90,6 +90,11 @@ const INDIRECT = new Set([
   'state.available', 'state.region-blocked', 'state.throttled', 'state.unavailable', 'state.unknown',
   'ann.preamble', 'ann.models', 'ann.steps', 'ann.features', 'ann.updates',
   'level.info', 'level.update', 'level.warn', 'level.urgent',
+  // The feedback form picks its placeholder from the selected report kind
+  // (`t(kind === 'bug' ? 'fb.titlePlaceholderBug' : …)`), so the two pairs only
+  // ever reach `t` through a ternary rather than as literals.
+  'fb.titlePlaceholderBug', 'fb.titlePlaceholderWish',
+  'fb.detailPlaceholderBug', 'fb.detailPlaceholderWish',
 ])
 
 for (const language of ['zh', 'en']) {
