@@ -1,7 +1,7 @@
 {
   "version": "2.8.5",
   "base": "../",
-  "publishedAt": "2026-11-15T03:13:41.578Z",
+  "publishedAt": "2026-11-15T03:18:58.427Z",
   "notes": "",
   "files": [
     {
@@ -405,5 +405,5 @@
       "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ],
-  "signature": "eJNfwRhVmtvO/zPASVq5XPeHfwLJFjiixRh/z6hM1+nMX+iJ5p7emOEWWzVRlsPRYk5EhhP9da9CuhlHv5EYBQ=="
+  "signature": "mLVd1nVL9jVl8adl9SLgT34LwD/o22PEU87UypJfxoZlrPnJgx7kJRUM9Q8WUFoNSQWOSW6XGW0qUtmjqenqAQ=="
 }
