@@ -1,0 +1,27 @@
+[
+  {
+    "model": "ovh/Qwen3.8-27B",
+    "lulus": "2/4",
+    "totalMs": 9083,
+    "rerataMs": 4542,
+    "token": null,
+    "prosa": 0,
+    "gagalTask": [
+      "bugfix",
+      "sql"
+    ]
+  },
+  {
+    "model": "ovh/Qwen3.5-397B-A17B",
+    "lulus": "1/4",
+    "totalMs": 131592,
+    "rerataMs": 32898,
+    "token": null,
+    "prosa": 0,
+    "gagalTask": [
+      "regex",
+      "bugfix",
+      "sql"
+    ]
+  }
+]

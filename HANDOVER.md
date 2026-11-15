@@ -1791,3 +1791,75 @@ Inilah sumber kebingungan "kok belum reset".
 - OFM hidup di `127.0.0.1:18900`, jalur `ovh/*`, Kilo, Nvidia, llm7, OpenRouter,
   Gemini semuanya 200 (lihat peta model Sesi 14).
 - Model ZEN tetap terdaftar; otomatis hidup lagi setelah 16 Nov 07:00 WIB.
+
+# SESI 16 — Pasang 4 skill caveman + benchmark tugas sulit
+
+Tanggal: 15 Nov 2026
+
+## Skill caveman (di luar repo, di ~/.agents/skills/)
+
+Sumber `https://github.com/JuliusBrussee/caveman` (lihat juga
+skills.sh/juliusbrussee/caveman). Paketnya 25 skill; yang dipasang hanya 4:
+
+| Skill | Kegunaan |
+|---|---|
+| `caveman` | gaya jawab ringkas, hemat token |
+| `investigate-first` | diagnosa dulu sebelum ubah kode |
+| `verify-and-stop` | buktikan hasil, jangan melebar |
+| `surgical-patch` | patch di lapisan tersempit |
+
+Alasan hanya 4: setiap skill ikut masuk daftar pilihan model tiap giliran,
+jadi 25 skill memperberat dan memperbesar salah pilih. Sisanya bisa ditambah
+kapan saja dengan mengambil satu folder `skills/<nama>/SKILL.md` dari repo.
+
+Format paket ini **sudah cocok dengan Zed apa adanya** (frontmatter `name` +
+`description`), tidak perlu konversi. Asal-usul & cara update dicatat di
+`~/.agents/skills/CAVEMAN-SOURCE.txt`.
+
+Catatan: skill `caveman` berbahasa Inggris dan menyuruh memampatkan GAYA,
+bukan bahasa. Bahasa jawaban tetap Indonesia. Aturan "When to break the
+rules" menjamin peringatan keamanan, tindakan tak bisa dibatalkan, urutan
+langkah, dan saat user bingung tetap memakai kalimat penuh.
+
+Total skill di `~/.agents/skills/` sekarang **42** (38 lama + 4 baru).
+
+## Benchmark tugas sulit (baru, di repo)
+
+`tools/ofm-bench-hard.mjs` — menguji tugas yang jawabannya BISA DIPERIKSA
+mesin, bukan sekadar "bisa jawab" seperti `ofm-bench.mjs` lama:
+
+| Tugas | Yang diuji |
+|---|---|
+| `algo` | jendela geser; solusi naif O(n·k) harus GAGAL |
+| `regex` | validasi email; ada kasus harus lulus DAN harus ditolak |
+| `bugfix` | temukan bug mutasi-saat-iterasi, perbaikan harus benar |
+| `sql` | window function; GROUP BY biasa harus GAGAL |
+
+`tools/ofm-bench-selftest.mjs` menguji pemeriksanya sendiri dengan jawaban
+benar/salah yang khas. **13/13 lulus.** Self-test ini menemukan bug nyata:
+solusi naif sempat LULUS karena `k=1000` pada n=200k masih di bawah 1 detik.
+Diperbaiki jadi `k=100000` dengan batas 800ms — jarak orde besaran.
+
+## Temuan penting saat benchmark
+
+1. **OVH punya rate limit per MENIT**, bukan kuota harian. Terukur: 2 request
+   `ovh/Qwen3.8-27B` lalu `429 API rate limit exceeded`, pulih setelah 60 dtk.
+   Default jeda benchmark dinaikkan ke 20 detik (`OFM_GAP_MS`).
+2. `ovh/Qwen3.5-397B-A17B` **menghabiskan seluruh token untuk thinking**
+   (3 dari 4 tugas tidak menghasilkan teks). Jangan dipakai untuk tugas yang
+   butuh jawaban cepat; `ovh/Qwen3.8-27B` jauh lebih hemat dan rapi.
+3. Hasil parsial tersimpan di `tools/ofm-bench-hard-results.json`.
+
+## Status benchmark: BELUM SELESAI
+
+Benchmark baru berjalan sebagian (2 model) lalu dihentikan user. **Belum ada
+kesimpulan "model mana paling rapi dan cepat"** — jangan mengarang.
+
+Lanjutkan dengan:
+```
+OFM_MAX_TOKENS=6000 OFM_GAP_MS=25000 node tools/ofm-bench-hard.mjs \
+  "ovh/Qwen3.8-27B" "kilo-auto/free" "nvidia/nemotron-3.5-super-vl:free"
+```
+Kandidat hemat: `kilo-auto/free`, `longcat-2.5-free`, `iceman-free`,
+`nvidia/nemotron-3.5-lightning:free`. **Jangan pakai model ZEN** untuk
+benchmark — jatahnya kecil dan sedang dihemat.
