@@ -468,12 +468,21 @@ async function toMessages(
     }
     if (type === 'function_call_output') {
       const callId = nonEmptyString(raw.call_id)
-      if (callId === undefined) throw new OpenAiGatewayError('function_call_output requires call_id')
-      // 与 Chat 端点同形，由当前宿主工厂选择新旧工具消息格式。
-      messages.push(createGatewayToolMessage(
-        callId,
-        await outputParts(raw.output, bridge, limits),
-      ))
+      const output = await outputParts(raw.output, bridge, limits)
+      if (callId !== undefined) {
+        // 与 Chat 端点同形，由当前宿主工厂选择新旧工具消息格式。
+        messages.push(createGatewayToolMessage(callId, output))
+        continue
+      }
+      // Codex Desktop 的 Page 上下文或子任务回执会以「没有调用、只有回执」的形式
+      // 写进历史（如 codex_apps_open_page、selected_page_part_*、外部任务结果等）：
+      // 这些项确实没有 call_id，既不能伪造 tool 结果（空 tool_call_id 对上游是 400），
+      // 也不能丢掉（上下文会丢失），更不能硬抛 400 导致会话中断。
+      // 对所有无 call_id 的回执统一按用户指令或上下文注入。
+      const toolName = typeof raw.name === 'string' && raw.name ? String(raw.name) : 'tool'
+      messages.push(createGatewayMessage('user', [
+        { type: 'text', text: `Tool ${toolName} output:\n` }, ...output,
+      ], { kind: 'user' }))
       continue
     }
     if (type === 'reasoning') {
@@ -760,6 +769,7 @@ function restoreToolName(
 function outputItemJson(
   item: ResponsesItemState,
   nsMap?: Map<string, { namespace: string; name: string }>,
+  hasTools?: boolean,
 ): Record<string, unknown> {
   if (item.kind === 'reasoning') {
     const text = finalText(item)
@@ -786,6 +796,7 @@ function outputItemJson(
     type: 'message',
     status: 'completed',
     role: 'assistant',
+    phase: hasTools === true ? 'commentary' : 'final_answer',
     content: [{ type: 'output_text', text: finalText(item), annotations: [], logprobs: [] }],
   }
 }
@@ -855,12 +866,13 @@ function outputOf(
   items: readonly ResponsesItemState[],
   nsMap?: Map<string, { namespace: string; name: string }>,
 ): Record<string, unknown>[] {
+  const hasTools = items.some(it => it.kind === 'function_call')
   const output = [...items]
     .sort((a, b) => a.outputIndex - b.outputIndex)
     .filter(hasContent)
-    .map(item => outputItemJson(item, nsMap))
+    .map(item => outputItemJson(item, nsMap, hasTools))
   // 空回复：保留一个空 message 项 —— 客户端不认空的 `output[]`。
-  if (output.length === 0) output.push(outputItemJson(newItem(-1, 0, 'message')))
+  if (output.length === 0) output.push(outputItemJson(newItem(-1, 0, 'message'), nsMap, false))
   return output
 }
 
@@ -1005,6 +1017,7 @@ export async function* toResponsesSse(
   const closed = new Set<number>()
   let outputIndex = 0
   let sequence = 0
+  let hasTools = false
   // 摊平名 → `{namespace, name}`：`function_call` 事件必须还原成客户端认的形态
   // （Codex 的工具表按 `(namespace, name)` 索引，只给扁平名它配不上任何工具）。
   const nsMap = responsesNamespaceToolMap(request)
@@ -1018,6 +1031,7 @@ export async function* toResponsesSse(
 
   /** 打开一个输出项，并补齐 `output_item.added` 与相应 part 的 `added`。 */
   const openItem = (index: number, kind: ResponsesItemKind, seed?: { callId?: string; name?: string }): string[] => {
+    if (kind === 'function_call') hasTools = true
     const item = newItem(index, outputIndex++, kind)
     if (seed?.callId !== undefined) item.callId = seed.callId
     if (seed?.name !== undefined) item.name = seed.name
@@ -1107,7 +1121,7 @@ export async function* toResponsesSse(
     // `added` 与 `done` 必须成对：客户端按 added 建行、按 done 定稿，
     // 只发 added 会留下一个永远「进行中」的空项。空内容的项由 `outputOf`
     // 挡在 `response.completed` 之外，不必在这里另做一套判据。
-    events.push(emit('response.output_item.done', { output_index: item.outputIndex, item: outputItemJson(item, nsMap) }))
+    events.push(emit('response.output_item.done', { output_index: item.outputIndex, item: outputItemJson(item, nsMap, hasTools) }))
     closed.add(item.index)
     items.push(item)
     return events

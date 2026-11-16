@@ -73,6 +73,18 @@ async function verifyGateway(target, converters, serializeMessages, normalizeHar
     { role: 'system', content: 'response system' }, { role: 'developer', content: 'response developer' },
     { role: 'user', content: 'hello' },
   ] }, signal)
+  // Codex Desktop injects Page context as a function_call_output without a
+  // matching call. The gateway must keep that text (dropping it loses the Page
+  // context) without emitting an empty tool_call_id upstream.
+  const orphanOutput = await toResponsesGenerateOptions({ model: 'test/model', input: [
+    { type: 'function_call_output', id: 'fco_page', name: 'codex_apps_open_page', output: '{"page_id":null}' },
+  ] }, signal)
+  assert.equal(orphanOutput.messages.length, 1)
+  assert.equal(orphanOutput.messages[0].role, 'user')
+  assert.deepEqual(orphanOutput.messages[0].source, { kind: 'user' })
+  assert.deepEqual(orphanOutput.messages[0].content, [
+    { type: 'text', text: 'Tool codex_apps_open_page output:\n' }, { type: 'text', text: '{"page_id":null}' },
+  ])
   const systemMessages = [...chat.messages, ...responses.messages].filter(m => m.role === 'system')
   assert.equal(systemMessages.length, 5)
   for (const message of systemMessages) assert.deepEqual(message.source, { kind: 'plugin:dsh-openai-gateway' })
