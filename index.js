@@ -1113,7 +1113,14 @@ export function apply(ctx, config) {
    * — while the service is missing, which is what makes the fence fall through to
    * its own structural check instead of reading as "admitted".
    */
-  const fenceConnection = connectionAdmissionView(() => optional('connection'))
+  let admittedConnection
+  ctx.inject(['connection', 'connection.authentication'], scoped => {
+    scoped.effect(() => {
+      admittedConnection = typeof scoped.get === 'function' ? scoped.get('connection') : undefined
+      return () => { admittedConnection = undefined }
+    }, 'our-free-model: connection trust')
+  })
+  const fenceConnection = connectionAdmissionView(() => admittedConnection ?? optional('connection'))
   // ── the absorbed free-channel pack ──────────────────────────────────────────
   /**
    * The 白嫖 channels — LobsterAI
