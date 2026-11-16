@@ -581,6 +581,66 @@ await checkAsync('responses streaming gives text and calls distinct output index
   }
 })
 
+await checkAsync('responses streams reasoning as a summary item and keeps item ids unique across turns', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({
+    chunks: [
+      { type: 'reasoning-delta', index: 0, text: 'checking the request' },
+      { type: 'text-delta', index: 1, text: 'answer' },
+      { type: 'tool-call-delta', index: 2, id: 'call_a', name: 'mytool', argumentsDelta: '{}' },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+    outcome: { text: 'answer', toolCalls: [{ slot: 2, id: 'call_a', name: 'mytool', arguments: '{}' }] },
+  })
+  const first = await authFetch(base, '/v1/responses', { model: 'muse-spark-1.3-contributor-free', input: 'one', stream: true })
+  const firstBody = await first.text()
+  const second = await authFetch(base, '/v1/responses', { model: 'muse-spark-1.3-contributor-free', input: 'two', stream: true })
+  const secondBody = await second.text()
+  for (const body of [firstBody, secondBody]) {
+    assert.ok(body.includes('event: response.reasoning_summary_part.added'))
+    assert.ok(body.includes('event: response.reasoning_summary_text.delta'))
+    assert.ok(body.includes('event: response.reasoning_summary_text.done'))
+    const frames = body.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+    const reasoningAdded = frames.find(frame => frame.type === 'response.output_item.added' && frame.item.type === 'reasoning')
+    const reasoningDone = frames.find(frame => frame.type === 'response.output_item.done' && frame.item.type === 'reasoning')
+    assert.equal(reasoningAdded.item.id, reasoningDone.item.id)
+    assert.deepEqual(reasoningDone.item.summary, [{ type: 'summary_text', text: 'checking the request' }])
+    assert.ok(frames.some(frame => frame.type === 'response.output_text.delta' && frame.delta === 'answer'))
+    assert.ok(frames.some(frame => frame.type === 'response.function_call_arguments.delta'))
+    const completed = frames.find(frame => frame.type === 'response.completed')
+    assert.deepEqual(completed.response.output.map(item => item.type), ['reasoning', 'message', 'function_call'])
+    assert.equal(completed.response.output[1].phase, 'commentary')
+  }
+  const itemIds = body => body.split('\n').filter(line => line.startsWith('data: ')).flatMap(line => {
+    const frame = JSON.parse(line.slice(6))
+    if (frame.type === 'response.output_item.added') return [frame.item.id]
+    if (frame.type === 'response.output_item.done') return [frame.item.id]
+    if (frame.type === 'response.created') return [frame.response.id]
+    return []
+  })
+  const firstIds = new Set(itemIds(firstBody))
+  assert.ok(itemIds(secondBody).every(item => !firstIds.has(item)), 'a new response must not reuse output item ids')
+})
+
+await checkAsync('responses JSON carries reasoning and marks the terminal message final', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({
+    chunks: [],
+    outcome: {
+      text: 'final answer', reasoning: 'short thought', toolCalls: [],
+      usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
+    },
+  })
+  const response = await authFetch(base, '/v1/responses', { model: 'muse-spark-1.3-contributor-free', input: 'hi' })
+  const payload = await response.json()
+  assert.deepEqual(payload.output.map(item => item.type), ['reasoning', 'message'])
+  assert.deepEqual(payload.output[0].summary, [{ type: 'summary_text', text: 'short thought' }])
+  assert.equal(payload.output[1].phase, 'final_answer')
+  assert.equal(payload.output[1].content[0].text, 'final answer')
+})
+
 await checkAsync('responses endpoint reports an incomplete turn after a cut', async () => {
   const lane = makeLane()
   const base = await serve(lane)
@@ -589,6 +649,66 @@ await checkAsync('responses endpoint reports an incomplete turn after a cut', as
   const payload = await response.json()
   assert.equal(payload.status, 'incomplete')
   assert.deepEqual(payload.incomplete_details, { reason: 'max_output_tokens' })
+})
+
+await checkAsync('responses endpoint restores namespace tools on streaming and JSON output', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  const longNs = 'very_long_namespace_identifier_that_exceeds_limit'
+  const longTool = 'very_long_subagent_tool_name_exceeds_limit'
+  const { flatNamespaceToolName } = await import('../src/messages.js')
+  const longFlat = flatNamespaceToolName(longNs, longTool)
+  assert.ok(longFlat.length <= 64)
+
+  const tools = [
+    {
+      type: 'namespace',
+      name: 'multi_agent_v1',
+      tools: [{ type: 'function', name: 'spawn_agent', parameters: { type: 'object', properties: {} } }],
+    },
+    {
+      type: 'namespace',
+      name: longNs,
+      tools: [{ type: 'function', name: longTool, parameters: { type: 'object', properties: {} } }],
+    },
+  ]
+
+  lane.script = () => ({
+    chunks: [
+      { type: 'tool-call-delta', index: 0, id: 'call_ns_1', name: 'multi_agent_v1__spawn_agent', argumentsDelta: '{"message":"hi"}' },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+    outcome: { text: '', toolCalls: [{ slot: 0, id: 'call_ns_1', name: 'multi_agent_v1__spawn_agent', arguments: '{"message":"hi"}' }] },
+  })
+  const streamRes = await authFetch(base, '/v1/responses', {
+    model: 'muse-spark-1.3-contributor-free', input: 'hi', stream: true, tools,
+  })
+  assert.equal(streamRes.status, 200)
+  const frames = (await streamRes.text()).split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)))
+  const added = frames.find(frame => frame.type === 'response.output_item.added')
+  const argsDone = frames.find(frame => frame.type === 'response.function_call_arguments.done')
+  const itemDone = frames.find(frame => frame.type === 'response.output_item.done')
+  const completed = frames.find(frame => frame.type === 'response.completed')
+  assert.equal(added.item.name, 'spawn_agent')
+  assert.equal(added.item.namespace, 'multi_agent_v1')
+  assert.equal(argsDone.name, 'spawn_agent')
+  assert.equal(argsDone.namespace, 'multi_agent_v1')
+  assert.equal(itemDone.item.name, 'spawn_agent')
+  assert.equal(itemDone.item.namespace, 'multi_agent_v1')
+  assert.equal(completed.response.output[0].name, 'spawn_agent')
+  assert.equal(completed.response.output[0].namespace, 'multi_agent_v1')
+
+  lane.script = () => ({
+    chunks: [],
+    outcome: { text: '', toolCalls: [{ slot: 0, id: 'call_ns_2', name: longFlat, arguments: '{}' }] },
+  })
+  const jsonRes = await authFetch(base, '/v1/responses', {
+    model: 'muse-spark-1.3-contributor-free', input: 'hi', tools,
+  })
+  assert.equal(jsonRes.status, 200)
+  const payload = await jsonRes.json()
+  assert.equal(payload.output[0].name, longTool)
+  assert.equal(payload.output[0].namespace, longNs)
 })
 
 // ── caller tools survive the round trip (#26) ────────────────────────────────

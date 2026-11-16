@@ -35,6 +35,7 @@ import dns from 'node:dns'
 import crypto from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { baseModelId, FINGERPRINT_TOOLS } from './upstream.js'
+import { flattenResponsesTools, restoreResponsesToolName } from './messages.js'
 import { anthropicFrames, anthropicMessage, countTokens, foldAnthropicOutcome, fromAnthropicRequest } from './anthropic.js'
 import { toMessagesResponse, tryOptimizations } from './local-optimize.js'
 import { carryFailure, forwardFailure } from './failure.js'
@@ -760,9 +761,8 @@ function createToolWire(body) {
   // call to a decoy the model should never have dialed — it is suppressed on
   // the wire instead of handed over as a tool the caller cannot run.
   const declared = new Set()
-  for (const tool of Array.isArray(body?.tools) ? body.tools : []) {
-    const name = tool?.function?.name ?? tool?.name
-    if (typeof name === 'string' && name !== '') declared.add(name)
+  for (const tool of flattenResponsesTools(body?.tools).tools) {
+    declared.add(tool.name)
   }
   const slots = new Map()
   let nextIndex = 0
@@ -1045,12 +1045,41 @@ async function responsesEndpoint(req, res, complete, options = {}) {
   }
 
   const tools = createToolWire(openAi)
+  const { nsMap } = flattenResponsesTools(body.tools)
+  const restoreCall = name => restoreResponsesToolName(name, nsMap)
   const status = outcome => outcome.truncated === true ? 'incomplete' : 'completed'
   const incompleteDetails = outcome => outcome.truncated === true ? { reason: 'max_output_tokens' } : undefined
-  const outputRows = outcome => [
-    ...(outcome.text ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: outcome.text }] }] : []),
-    ...executableCalls(outcome, tools).map(call => ({ type: 'function_call', call_id: call.id, name: call.name, arguments: call.arguments })),
-  ]
+  const outputRows = outcome => {
+    const calls = executableCalls(outcome, tools)
+    const suffix = id.slice('resp-'.length)
+    let outputIndex = 0
+    const rows = []
+    if (outcome.reasoning) {
+      rows.push({
+        id: `rs_${suffix}_${outputIndex++}`, type: 'reasoning', status: status(outcome),
+        summary: [{ type: 'summary_text', text: outcome.reasoning }],
+      })
+    }
+    if (outcome.text) {
+      rows.push({
+        id: `msg_${suffix}_${outputIndex++}`, type: 'message', status: status(outcome), role: 'assistant',
+        // Codex uses this to separate mid-turn progress from the terminal
+        // answer. A response that still calls tools is by definition not final.
+        phase: calls.length > 0 ? 'commentary' : 'final_answer',
+        content: [{ type: 'output_text', text: outcome.text }],
+      })
+    }
+    for (const call of calls) {
+      const restored = restoreCall(call.name)
+      rows.push({
+        id: `fc_${suffix}_${outputIndex++}`, type: 'function_call', status: status(outcome),
+        call_id: call.id, name: restored.name,
+        ...(restored.namespace === undefined ? {} : { namespace: restored.namespace }),
+        arguments: call.arguments,
+      })
+    }
+    return rows
+  }
 
   if (body.stream === true) {
     openStreamHeaders(res, options.heartbeatMs)
@@ -1076,23 +1105,56 @@ async function responsesEndpoint(req, res, complete, options = {}) {
     // matched its position in the completed output. The final array below
     // replays the announcement order, so a client accumulating by index sees
     // exactly what the completed response lists.
+    // Item ids are client-thread identities, not positions within this one
+    // response. The old positional `msg_0` / `fc_1` spelling made every tool
+    // round reuse the ids from the previous round; Codex then treated later
+    // commentary as an update to the earlier card. Prefixing the response id
+    // keeps added/delta/done stable while guaranteeing uniqueness across turns.
     let nextOutputIndex = 0
     let messageIndex
+    let reasoningIndex
+    let reasoningText = ''
     const callIndexes = new Map()
+    const itemIndexes = new Map()
     const order = []
+    const responseSuffix = id.slice('resp-'.length)
+    const itemId = kind => `${kind}_${responseSuffix}_${nextOutputIndex - 1}`
     const announceMessage = () => {
       if (messageIndex !== undefined) return
       messageIndex = nextOutputIndex++
+      const item = { id: itemId('msg'), type: 'message', status: 'in_progress', role: 'assistant', content: [] }
       order.push('message')
-      say('response.output_item.added', { output_index: messageIndex, item: { id: `msg_${messageIndex}`, type: 'message', status: 'in_progress', role: 'assistant', content: [] } })
-      say('response.content_part.added', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } })
+      itemIndexes.set('message', item)
+      say('response.output_item.added', { output_index: messageIndex, item })
+      say('response.content_part.added', { item_id: item.id, output_index: messageIndex, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } })
+    }
+    // Responses represents visible thinking as a first-class `reasoning` item.
+    // This path used to discard `reasoning-delta`, leaving Codex no item to
+    // fold as "Worked for …" while usage still reported reasoning tokens.
+    const announceReasoning = () => {
+      if (reasoningIndex !== undefined) return
+      reasoningIndex = nextOutputIndex++
+      const item = { id: itemId('rs'), type: 'reasoning', summary: [] }
+      order.push('reasoning')
+      itemIndexes.set('reasoning', item)
+      say('response.output_item.added', { output_index: reasoningIndex, item })
+      say('response.reasoning_summary_part.added', { item_id: item.id, output_index: reasoningIndex, summary_index: 0, part: { type: 'summary_text', text: '' } })
     }
     const announceCall = (openAiIndex, name) => {
       if (callIndexes.has(openAiIndex)) return
       const index = nextOutputIndex++
+      const restored = restoreCall(name)
+      const item = {
+        id: itemId('fc'), type: 'function_call', status: 'in_progress', call_id: '',
+        name: restored.name,
+        ...(restored.namespace === undefined ? {} : { namespace: restored.namespace }),
+        arguments: '',
+      }
+      item.call_id = item.id
       callIndexes.set(openAiIndex, index)
+      itemIndexes.set(openAiIndex, item)
       order.push(openAiIndex)
-      say('response.output_item.added', { output_index: index, item: { id: `fc_${index}`, type: 'function_call', status: 'in_progress', call_id: `fc_${index}`, name, arguments: '' } })
+      say('response.output_item.added', { output_index: index, item })
     }
     let usage
     let outcome
@@ -1101,14 +1163,20 @@ async function responsesEndpoint(req, res, complete, options = {}) {
         if (res.destroyed) return
         if (chunk.type === 'text-delta') {
           announceMessage()
-          say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, delta: chunk.text })
+          say('response.output_text.delta', { item_id: itemIndexes.get('message').id, output_index: messageIndex, content_index: 0, delta: chunk.text })
+          return
+        }
+        if (chunk.type === 'reasoning-delta') {
+          reasoningText += chunk.text
+          announceReasoning()
+          say('response.reasoning_summary_text.delta', { item_id: itemIndexes.get('reasoning').id, output_index: reasoningIndex, summary_index: 0, delta: chunk.text })
           return
         }
         if (chunk.type === 'tool-call-delta') {
           const action = tools.admit(chunk)
           if (action.kind === 'drop') return
           announceCall(action.openAiIndex, action.name ?? '')
-          say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(action.openAiIndex)}`, output_index: callIndexes.get(action.openAiIndex), delta: action.args })
+          say('response.function_call_arguments.delta', { item_id: itemIndexes.get(action.openAiIndex).id, output_index: callIndexes.get(action.openAiIndex), delta: action.args })
           return
         }
         if (chunk.type === 'usage') {
@@ -1150,16 +1218,23 @@ async function responsesEndpoint(req, res, complete, options = {}) {
     const finalCalls = executableCalls(outcome, tools)
     if (messageIndex === undefined && outcome.text) {
       announceMessage()
-      say('response.output_text.delta', { item_id: `msg_${messageIndex}`, output_index: messageIndex, content_index: 0, delta: outcome.text })
+      say('response.output_text.delta', { item_id: itemIndexes.get('message').id, output_index: messageIndex, content_index: 0, delta: outcome.text })
     }
-    const announcedCalls = order.filter(entry => entry !== 'message').length
+    const announcedCalls = order.filter(entry => entry !== 'message' && entry !== 'reasoning').length
     for (let position = announcedCalls; position < finalCalls.length; position++) {
       const row = finalCalls[position]
       const openAiIndex = `outcome:${position}`
       announceCall(openAiIndex, row.name)
-      say('response.function_call_arguments.delta', { item_id: `fc_${callIndexes.get(openAiIndex)}`, output_index: callIndexes.get(openAiIndex), delta: row.arguments })
+      say('response.function_call_arguments.delta', { item_id: itemIndexes.get(openAiIndex).id, output_index: callIndexes.get(openAiIndex), delta: row.arguments })
     }
-    const messageRow = outcome.text ? { id: `msg_${messageIndex}`, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: outcome.text, annotations: [] }] } : undefined
+    const messageRow = outcome.text ? {
+      ...itemIndexes.get('message'), status: status(outcome),
+      // Tool-bearing assistant text is progress narration; the terminal text
+      // is what Codex shows before its "Worked for …" completion footer.
+      phase: finalCalls.length > 0 ? 'commentary' : 'final_answer',
+      content: [{ type: 'output_text', text: outcome.text, annotations: [] }],
+    } : undefined
+    const reasoningRow = reasoningText ? { ...itemIndexes.get('reasoning'), summary: [{ type: 'summary_text', text: reasoningText }] } : undefined
     const output = []
     let callPos = 0
     for (const entry of order) {
@@ -1172,12 +1247,32 @@ async function responsesEndpoint(req, res, complete, options = {}) {
         }
         continue
       }
+      if (entry === 'reasoning') {
+        if (reasoningRow !== undefined) {
+          output.push(reasoningRow)
+          say('response.reasoning_summary_text.done', { item_id: reasoningRow.id, output_index: reasoningIndex, summary_index: 0, text: reasoningText })
+          say('response.reasoning_summary_part.done', { item_id: reasoningRow.id, output_index: reasoningIndex, summary_index: 0, part: reasoningRow.summary[0] })
+          say('response.output_item.done', { output_index: reasoningIndex, item: reasoningRow })
+        }
+        continue
+      }
       const row = finalCalls[callPos++]
       if (row !== undefined) {
         const index = callIndexes.get(entry)
-        const item = { id: `fc_${index}`, type: 'function_call', status: 'completed', call_id: `fc_${index}`, name: row.name, arguments: row.arguments }
+        const restored = restoreCall(row.name)
+        const item = {
+          ...itemIndexes.get(entry), status: 'completed',
+          name: restored.name,
+          ...(restored.namespace === undefined ? {} : { namespace: restored.namespace }),
+          arguments: row.arguments,
+        }
         output.push(item)
-        say('response.function_call_arguments.done', { item_id: item.id, output_index: index, name: row.name, arguments: row.arguments })
+        say('response.function_call_arguments.done', {
+          item_id: item.id, output_index: index,
+          name: restored.name,
+          ...(restored.namespace === undefined ? {} : { namespace: restored.namespace }),
+          arguments: row.arguments,
+        })
         say('response.output_item.done', { output_index: index, item })
       }
     }
