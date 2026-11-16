@@ -12,7 +12,32 @@ const cleanups = []
 const adapters = new Map()
 const routes = new Map()
 const controllers = new Map()
+const aliasMap = new Map()
 let closed = false
+
+function friendlyModelId(name) {
+  if (!name) return ''
+  let clean = String(name).trim()
+  const idx = clean.indexOf(' · ')
+  if (idx >= 0) clean = clean.slice(0, idx).trim()
+  return clean.replace(/\s+/g, '-')
+}
+
+async function getModelAdapterId(provider, model) {
+  const key = `${provider}/${model}`.toLowerCase()
+  if (aliasMap.has(key)) return aliasMap.get(key)
+  try {
+    const list = await ctx.llm.listModels(provider)
+    for (const row of list) {
+      aliasMap.set(`${provider}/${row.id}`.toLowerCase(), row.id)
+      const friendly = friendlyModelId(row.name)
+      if (friendly) {
+        aliasMap.set(`${provider}/${friendly}`.toLowerCase(), row.id)
+      }
+    }
+  } catch {}
+  return aliasMap.get(key) ?? model
+}
 const send = message => parentPort.postMessage(message)
 const logger = Object.fromEntries(['info', 'warn', 'error'].map(level => [level, message => send({ type: 'log', level, message: String(message) })]))
 const credentials = createCredentials(workerData.dataDir)
@@ -74,11 +99,34 @@ async function models() {
       return info
     },
   }, groups, onError)
-  const rows = toOpenAiModels(groups, views).map(row => ({
-    ...row, channel: row.owned_by, vision: row.input?.includes('image') === true,
-    context_window: row.context_window ?? infos.get(row.id)?.context?.contextWindow,
-    max_tokens: row.max_tokens ?? infos.get(row.id)?.defaultMaxTokens,
-  }))
+  const rows = toOpenAiModels(groups, views).flatMap(row => {
+    const slash = row.id.indexOf('/')
+    const provider = slash >= 0 ? row.id.slice(0, slash) : row.owned_by
+    const rawModel = slash >= 0 ? row.id.slice(slash + 1) : row.id
+
+    const baseRow = {
+      ...row,
+      channel: row.owned_by,
+      vision: row.input?.includes('image') === true,
+      context_window: row.context_window ?? infos.get(row.id)?.context?.contextWindow,
+      max_tokens: row.max_tokens ?? infos.get(row.id)?.defaultMaxTokens,
+    }
+
+    if (provider === 'qodercn' || provider === 'qoder') {
+      aliasMap.set(`${provider}/${rawModel}`.toLowerCase(), rawModel)
+      const friendly = friendlyModelId(row.name)
+      if (friendly && friendly.toLowerCase() !== rawModel.toLowerCase()) {
+        aliasMap.set(`${provider}/${friendly}`.toLowerCase(), rawModel)
+        const friendlyRow = {
+          ...baseRow,
+          id: `${provider}/${friendly}`,
+        }
+        return [friendlyRow, baseRow]
+      }
+    }
+
+    return [baseRow]
+  })
   return { rows, sources }
 }
 
@@ -111,10 +159,11 @@ function harnessBody(request) {
 async function complete(request, id, signal) {
   const slash = request.model.indexOf('/')
   const provider = request.model.slice(0, slash)
-  const model = request.model.slice(slash + 1)
+  const incomingModel = request.model.slice(slash + 1)
+  const model = await getModelAdapterId(provider, incomingModel)
   // 禁用模型和供应商必须同时影响统一 API，不能只隐藏页面。
   if (!(await ctx.llm.listModels(provider)).some(row => row.id === model)) throw Object.assign(new Error('模型不存在或已停用'), { statusCode: 404 })
-  const body = { ...(request.responsesBody ?? request.openAi ?? harnessBody(request)), model: request.model }
+  const body = { ...(request.responsesBody ?? request.openAi ?? harnessBody(request)), model: `${provider}/${model}` }
   const resolved = await ctx.llm.resolveModel(provider, model, signal)
   const effort = normalizeReasoningEffort(request.responses ? responsesReasoningEffort(body) : body.reasoning_effort, resolved, provider, model,
     notice => logger.info(`${request.model}：思考档位 ${notice.requested} ${notice.applied ? `映射为 ${notice.applied}` : '使用模型默认'}`))
@@ -122,6 +171,7 @@ async function complete(request, id, signal) {
   const maxTokens = typeof requested === 'number' ? normalizeMaxTokens(requested, provider, model) : undefined
   const convert = request.responses ? toResponsesGenerateOptions : toGenerateOptions
   const options = await convert(body, signal, effort, maxTokens, { bridge: attachments }, dropped => logger.warn(`忽略无法表达的工具类型：${dropped.type}`))
+  options.model = model
   options.sessionId = `standalone:${String(body.user ?? body.conversation ?? 'shared')}`
   for await (const chunk of ctx.llm.stream(markGatewayChannel(options))) {
     if (signal.aborted) throw new Error('请求已取消')
