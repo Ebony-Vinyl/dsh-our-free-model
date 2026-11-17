@@ -772,17 +772,28 @@ DeepSeek Harness 桌面端（Electron 壳）与 DSH Tauri：使用内核提供�
 
 ## 许可证
 
-MIT，见 LICENSE。
+本仓库自己的代码是 MIT，见 LICENSE。第三方组件和数据的许可证见下一节「致谢」。
 
 本项目为独立插件，与任何模型提供方无隶属、认可或赞助关系。使用该插件访问免费额度受各提供方
 自身条款约束；在超出个人机器的场景中部署前，请先确认这些条款。
 
 ## 致谢
 
-感谢 [Jet（iJetLi）](https://gitee.com/iJetLi) 的渠道包（`vendor/channel-pack/`，MIT）——
-十个内置账号渠道的登录、账号池与本地网关都出自这里，许可证与出处见该目录下的 LICENSE 与 NOTICE.md；
-也感谢 [opencode2api](https://github.com/jasonxu114514/opencode2api)（`src/o2a/`，GPL-3.0）——
-免费车道的请求整形移植自它，逐文件对照表见 `src/o2a/SYNC.md`。
+感谢 Jet（iJetLi）的渠道包（`vendor/channel-pack/`，MIT；上游仓库 [dsh-providers-hub](https://github.com/iJetLi/dsh-providers-hub)）——
+十个内置账号渠道的登录、账号池与本地网关都出自这里，许可证与出处见该目录下的 LICENSE 与 NOTICE.md。
+
+也感谢这些项目的代码或数据：
+
+- [opencode2api](https://github.com/jasonxu114514/opencode2api)（GPL-3.0）：免费车道的请求整形移植自它，逐文件对照表见 `src/o2a/SYNC.md`。
+- [free-claude-code](https://github.com/Alishahryar1/free-claude-code)（AGPL-3.0-only）：`src/providers/registry.json` 的 60 条提供商数据，以及 `src/local-optimize.js` 的五个本地应答。
+- [9router](https://github.com/decolua/9router)（MIT）：部分提供商目录，以及免费车道的请求形状参考。
+- [models.dev](https://github.com/anomalyco/models.dev)（MIT）：模型窗口、输出上限与思考档位。
+- [trae-mate](https://github.com/luckymiaow/trae-mate)（MIT）：TRAE 签到流程参考。
+- [dsh-cline-pass](https://github.com/codeOct/dsh-cline-pass)（MIT）：Cline 额度与请求记录参考。
+- [rtk](https://github.com/rtk-ai/rtk)（CLI Apache-2.0，engine BUSL-1.1）：`src/token-saver/rtk/` 的工具输出过滤器；具体移植范围和许可证需要按上游确认。
+- [magpie-muse-web](https://github.com/JohnWangggg/magpie-muse-web)（上游未声明 SPDX 许可证）：`muse-web` 桥接扩展的上游。
+
+根目录的 MIT 只覆盖 OFM 自己写的代码；上面这些组件和数据按各自许可证提供，完整条款以上游 LICENSE 为准。这份名单是来源记录，不改变任何组件的许可证。
 
 ## Star 趋势
 
