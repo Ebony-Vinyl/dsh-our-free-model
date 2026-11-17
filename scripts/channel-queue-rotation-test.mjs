@@ -376,6 +376,182 @@ export async function verifyChannelQueueRotation() {
     assert.ok(nextCalls > 0, '排队换号必须沿用渠道选号策略')
     console.log(`ok  channel queue ${provider}: ${quotaFirst ? 'quota → queue keeps actual account' : locked ? 'permanent credits locked' : 'permanent credits allowed'}`)
   }
+
+  // ── Raccoon #782/#805：429（短时限流）必须换号，且只写短冷却 ──────────
+  //
+  // 旧实现把 429 归成 `RATE_LIMIT`，但 catch 只处理 `QUOTA_EXCEEDED`，于是
+  // 429 直接抛出：既不写冷却，也不换号。这里按真实上游形态回归四条路径。
+  {
+    const { registerRaccoonLlm } = await import('../vendor/channel-pack/src/raccoon-adapter.ts')
+    const { nextUtc8DayStartMs } = await import('../vendor/channel-pack/src/model-queue.ts')
+
+    const recordingPool = ids => {
+      const pool = makePool('raccoon', ids), marked = []
+      pool.updateModelRateLimit = async (id, model, resetAt) => {
+        marked.push([id, resetAt])
+        pool.rows.find(row => row.entry.id === id).entry.modelRateLimits[model] = resetAt
+      }
+      return { pool, marked }
+    }
+    const mountRaccoon = (pool, upstream) => {
+      let mounted
+      const adapter = registerRaccoonLlm({ llm: { registerAdapter(_ids, value) { mounted = value } } }, {
+        credentialRef: 'fixture-ref',
+        accountPool: pool,
+        resolveCredential: async () => pool.rows[0].credential,
+        refresh: async id => pool.resolveCredentialForAccount(id ?? 'a'),
+        nextAccount: async (model, tried) => {
+          const next = await pool.getAvailableAccount('raccoon', model, tried)
+          return next === null ? undefined : { accountId: next.entry.id, credential: next.credential }
+        },
+        fetchImpl: upstream,
+      })
+      const model = adapter.listAllModels()[0].id
+      return {
+        model,
+        async *stream() {
+          const call = await mounted.prepareCall('raccoon', model)
+          yield* call.stream({ model, messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }] })
+        },
+      }
+    }
+    const rateLimited = (message = '您的模型请求频率超限，请稍后重试') => ({
+      error: { code: 'user_model_rate_limited', message, type: 'rate_limit_error' },
+    })
+    const accountOf = init => new Headers(init.headers).get('authorization').slice(7)
+
+    // 1. 429 无 Retry-After：换到 B，A 写 60s 短冷却（远小于次日）。
+    {
+      const { pool, marked } = recordingPool(['a', 'b']), sent = []
+      const start = Date.now()
+      const gate = mountRaccoon(pool, async (_url, init) => {
+        const id = accountOf(init)
+        sent.push(id)
+        return id === 'a'
+          ? Response.json(rateLimited(), { status: 429 })
+          : success('raccoon')
+      })
+      const chunks = await collect(gate.stream())
+      const end = Date.now()
+      assert.deepEqual(sent, ['a', 'b'], '429 rotates to the next account')
+      assert.ok(chunks.some(chunk => chunk.text === 'ok' || chunk.delta === 'ok'), '备用账号的回复到达调用方')
+      assert.deepEqual(marked.map(([id]) => id), ['a'], '短冷却记在实际失败的账号上')
+      const dayStart = nextUtc8DayStartMs(start)
+      assert.ok(marked[0][1] > start, '冷却必须在未来')
+      assert.ok(marked[0][1] - start <= 61_000, '必须是一小段冷却，而不是次日')
+      // 只在没有贴近 UTC+8 零点时比较，避免测试恰好跨日时误判。
+      if (dayStart - start > 5 * 60_000) assert.ok(marked[0][1] < dayStart, '冷却远小于次日')
+      assert.ok(marked[0][1] >= start + 59_000 && marked[0][1] <= end + 60_000, '无 Retry-After 时默认约 60s')
+    }
+
+    // 2. Retry-After: 2 → 冷却约等于 now + 2000ms。
+    {
+      const { pool, marked } = recordingPool(['a', 'b']), sent = []
+      const start = Date.now()
+      const gate = mountRaccoon(pool, async (_url, init) => {
+        const id = accountOf(init)
+        sent.push(id)
+        return id === 'a'
+          ? Response.json(rateLimited(), { status: 429, headers: { 'retry-after': '2' } })
+          : success('raccoon')
+      })
+      await collect(gate.stream())
+      assert.deepEqual(sent, ['a', 'b'], 'Retry-After 429 still rotates')
+      const wait = marked[0][1] - start
+      assert.ok(wait >= 1_900 && wait <= 3_000, `Retry-After: 2 should cool about 2000ms, got ${wait}ms`)
+    }
+
+    // 2b. HTTP-date 形式与上限：日期按绝对时刻解析，异常大的值夹到 15 分钟。
+    {
+      const { pool, marked } = recordingPool(['a'])
+      const start = Date.now()
+      const gate = mountRaccoon(pool, async () => Response.json(rateLimited(), {
+        status: 429, headers: { 'retry-after': new Date(start + 3_000).toUTCString() },
+      }))
+      await assert.rejects(async () => {
+        for await (const _chunk of gate.stream()) { /* drain */ }
+      }, error => error.code === 'RATE_LIMIT')
+      const wait = marked[0][1] - start
+      assert.ok(wait >= 1_500 && wait <= 4_500, `HTTP-date Retry-After should cool about 3s, got ${wait}ms`)
+    }
+    {
+      const { pool, marked } = recordingPool(['a'])
+      const start = Date.now()
+      const gate = mountRaccoon(pool, async () => Response.json(rateLimited(), {
+        status: 429, headers: { 'retry-after': '86400' },
+      }))
+      let failure
+      await assert.rejects(async () => {
+        for await (const _chunk of gate.stream()) { /* drain */ }
+      }, error => { failure = error; return error.code === 'RATE_LIMIT' })
+      const wait = marked[0][1] - start
+      assert.ok(wait >= 14 * 60_000 && wait <= 15 * 60_000 + 1_000, `cooldown must cap at 15min, got ${wait}ms`)
+      assert.equal(failure.failure?.providerRetryAfterMs, 15 * 60_000, 'providerRetryAfterMs is capped too')
+    }
+
+    // 3. 402 仍写次日 UTC+8 零点，不能被 429 的短冷却逻辑混用。
+    {
+      const { pool, marked } = recordingPool(['a', 'b']), sent = []
+      const expectedBefore = nextUtc8DayStartMs()
+      const gate = mountRaccoon(pool, async (_url, init) => {
+        const id = accountOf(init)
+        sent.push(id)
+        return id === 'a'
+          ? Response.json({ code: 402, message: '积分不足' }, { status: 402 })
+          : success('raccoon')
+      })
+      await collect(gate.stream())
+      const expectedAfter = nextUtc8DayStartMs()
+      assert.deepEqual(sent, ['a', 'b'], '402 rotates as before')
+      assert.equal(marked.length, 1)
+      assert.ok(marked[0][1] === expectedBefore || marked[0][1] === expectedAfter, '402 仍写次日 UTC+8 零点')
+    }
+
+    // 4. 已经输出 chunk 后再遇到 429：不得换号重放。
+    {
+      const { pool, marked } = recordingPool(['a', 'b']), sent = []
+      const encoder = new TextEncoder()
+      const midStream = new LlmError('raccoon: rate limited mid-stream', 'RATE_LIMIT', {
+        status: 429, providerRetryAfterMs: 2_000,
+      })
+      const gate = mountRaccoon(pool, async (_url, init) => {
+        sent.push(accountOf(init))
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'))
+          },
+          pull(controller) { controller.error(midStream) },
+        }), { headers: { 'content-type': 'text/event-stream' } })
+      })
+      const chunks = []
+      await assert.rejects(async () => {
+        for await (const chunk of gate.stream()) chunks.push(chunk)
+      }, error => error === midStream)
+      assert.ok(chunks.length > 0, '部分输出已经交付')
+      assert.deepEqual(sent, ['a'], '输出后遇到 429 不得再请求备用账号')
+      assert.deepEqual(marked.map(([id]) => id), ['a'], '仍记录真实失败的账号')
+    }
+
+    // 5. 没有下一个账号：保留 RATE_LIMIT / status / providerRetryAfterMs，
+    //    交给宿主按可重试处理（不能伪装成 QUOTA_EXCEEDED）。
+    {
+      const { pool, marked } = recordingPool(['a']), sent = []
+      const gate = mountRaccoon(pool, async (_url, init) => {
+        sent.push(accountOf(init))
+        return Response.json(rateLimited(), { status: 429, headers: { 'retry-after': '2' } })
+      })
+      await assert.rejects(async () => {
+        for await (const _chunk of gate.stream()) { /* drain */ }
+      }, error => error instanceof LlmError
+        && error.code === 'RATE_LIMIT'
+        && error.failure?.status === 429
+        && error.failure?.providerRetryAfterMs === 2_000)
+      assert.deepEqual(sent, ['a'], '没有备用号时不再发请求')
+      assert.equal(marked.length, 1, '仍给当前账号写短冷却')
+    }
+
+    console.log('ok  channel queue raccoon: 429 rotates with short cooldown, Retry-After honoured, 402 stays next-day, emitted output never replayed')
+  }
   const { LoomyAdapter } = await import('../vendor/channel-pack/src/loomy-adapter.ts')
   const { LOOMY } = await import('../vendor/channel-pack/src/loomy-product.ts')
   const { LoomyBalanceSelector } = await import('../vendor/channel-pack/src/loomy-balance-selector.ts')

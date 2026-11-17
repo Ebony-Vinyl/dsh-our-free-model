@@ -12,7 +12,7 @@ import { LobsteraiAuth } from './lobsterai-auth.js'
 import { QoderAuth } from './qoder-auth.js'
 import { TraeAuth } from './trae-auth.js'
 import { ClineAuth } from './cline-auth.js'
-import { LoomyAuth } from './loomy-auth.js'
+import { LoomyAuth, LoomyProbeUnavailableError } from './loomy-auth.js'
 import { RaccoonAuth } from './raccoon-auth.js'
 import { LOOMY } from './loomy-product.js'
 import { LoomyBalanceSelector } from './loomy-balance-selector.js'
@@ -778,8 +778,27 @@ export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?
       const entry = accountId === undefined ? undefined
         : pool.listAccountsByProvider(LOOMY.id).find(account => account.id === accountId)
       if (accountId !== undefined && entry === undefined) throw new Error('loomy: account no longer exists')
-      if (entry) await loomy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
-      else await loomy.refresh()
+      try {
+        if (entry) await loomy.refreshAccountCredential(entry.credentialRef, pool, entry.id)
+        else await loomy.refresh()
+      } catch (error) {
+        /**
+         * 探测“暂时无法判定”（网络 / 5xx / 非 JSON / 408 / 429）**不是**
+         * “凭据已失效”（issue #752）。这里只吞掉专用的探测不可用错误，
+         * 把已有凭据原样交给 adapter 去发真正的 chat 请求：
+         * - 上游 chat 自己 5xx → adapter 抛 `SERVER`，宿主按既有策略重试；
+         * - 上游 chat 401/403 → adapter 走它自己的认证失败分支；
+         * - `100002` / 401/403 的探测结论仍会原样上抛，不会被这里吞掉。
+         *
+         * ⚠️ 不更新账号池有效期、不写凭据 —— 返回已有凭据只是“让上游判定”，
+         * 不是“已续期”（Loomy 也没有续期端点）。
+         */
+        if (!(error instanceof LoomyProbeUnavailableError)) throw error
+        ctx.logger?.warn?.(
+          '[loomy] 凭据探测暂时不可用，保留已有凭据交给 chat 请求判定：'
+          + error.message,
+        )
+      }
       const resolved = await ctx.credentials.resolve(credentialRef(entry?.credentialRef ?? LOOMY.defaultCredentialRef))
       if (!resolved) throw new Error('loomy: credential no longer exists')
       return JSON.parse(resolved.value) as LoomyCredential
