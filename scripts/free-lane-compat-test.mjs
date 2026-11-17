@@ -6,7 +6,7 @@ import { startEgressRelay, egressFetch } from '../src/egress.js'
 
 const body = { messages: [{ role: 'system', content: 'Original caller rules' }, { role: 'user', content: 'ping' }] }
 applyFingerprint(body, false)
-assert.ok(body.messages[0].content.startsWith('You are opencode, an interactive CLI tool'))
+assert.ok(body.messages[0].content.startsWith("You are assisting with a user's software project through OFM."))
 assert.ok(body.messages[0].content.includes('Original caller rules'))
 assert.ok(body.messages[0].content.includes(`Working directory: ${process.cwd()}`))
 assert.ok(body.messages[0].content.includes(`Platform: ${process.platform}`))
@@ -19,7 +19,7 @@ assert.deepEqual(existing.messages, [{ role: 'developer', content: '<env>Caller 
 const flat = { instructions: 'Original instructions' }
 applyFingerprint(flat, true)
 // v1.4.6 injects the official CLI prompt first; the caller's instructions fold after it.
-assert.ok(flat.instructions.startsWith('You are opencode, an interactive CLI tool'))
+assert.ok(flat.instructions.startsWith("You are assisting with a user's software project through OFM."))
 assert.ok(flat.instructions.includes('Original instructions'))
 assert.ok(flat.instructions.includes('<env>'))
 const block = { type: 'text', text: 'Original block', cache_control: { type: 'ephemeral' } }
@@ -27,14 +27,14 @@ const claude = { system: [block] }
 applyFingerprint(claude, 'claude')
 // The official prompt is prepended as its own text block; the caller's block
 // (with its cache_control) follows untouched.
-assert.equal(claude.system[0].text.startsWith('You are opencode, an interactive CLI tool'), true)
+assert.equal(claude.system[0].text.startsWith("You are assisting with a user's software project through OFM."), true)
 assert.equal(claude.system[1], block)
 assert.ok(claude.system.some(b => b.text.includes('<env>')))
 const chat = { messages: [{ role: 'system', content: [block] }] }
 applyFingerprint(chat, false)
 // Chat folds into the first system message, prepending the official prompt and
 // keeping every caller block (identity and cache_control included).
-assert.equal(chat.messages[0].content[0].text.startsWith('You are opencode, an interactive CLI tool'), true)
+assert.equal(chat.messages[0].content[0].text.startsWith("You are assisting with a user's software project through OFM."), true)
 assert.equal(chat.messages[0].content[1], block)
 assert.ok(chat.messages[0].content.some(b => b.text.includes('<env>')))
 const escaped = {}

@@ -1,0 +1,18 @@
+{
+  "provider": "llm7",
+  "url": "https://api.llm7.io/v1/models",
+  "status": 200,
+  "totalModels": 77,
+  "matched": [
+    "claude-opus-5",
+    "kimi-k3"
+  ],
+  "missing": [
+    "gpt-5.5",
+    "deepseek-v4-flash",
+    "grok-4.5",
+    "default",
+    "fast",
+    "pro"
+  ]
+}

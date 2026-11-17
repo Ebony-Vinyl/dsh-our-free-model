@@ -1,0 +1,395 @@
+[
+  {
+    "id": "deepseek",
+    "url": "https://api.deepseek.com/models",
+    "checkedAt": "2026-11-17T15:17:30.514Z",
+    "status": 401
+  },
+  {
+    "id": "agnes",
+    "url": "https://apihub.agnes-ai.com/v1/models",
+    "checkedAt": "2026-11-17T15:17:30.453Z",
+    "status": 401
+  },
+  {
+    "id": "cline_pass",
+    "url": "https://api.cline.bot/api/v1/ai/cline/recommended-models",
+    "checkedAt": "2026-11-17T15:17:30.512Z",
+    "status": 200,
+    "returnedCount": 0,
+    "matched": [],
+    "unmatched": [
+      "cline-pass/glm-5.2",
+      "cline-pass/kimi-k2.7-code",
+      "cline-pass/kimi-k2.6",
+      "cline-pass/deepseek-v4-pro",
+      "cline-pass/deepseek-v4-flash",
+      "cline-pass/mimo-v2.5",
+      "cline-pass/mimo-v2.5-pro",
+      "cline-pass/minimax-m3",
+      "cline-pass/qwen3.7-max",
+      "cline-pass/qwen3.7-plus",
+      "cline-pass/kimi-k3"
+    ]
+  },
+  {
+    "id": "cerebras",
+    "url": "https://api.cerebras.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:30.511Z",
+    "status": 403
+  },
+  {
+    "id": "chutes",
+    "url": "https://llm.chutes.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:30.512Z",
+    "status": 200,
+    "returnedCount": 19,
+    "matched": [],
+    "unmatched": [
+      "Qwen/Qwen3-32B-TEE"
+    ]
+  },
+  {
+    "id": "cohere",
+    "url": "https://api.cohere.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:30.513Z",
+    "status": 403
+  },
+  {
+    "id": "deepinfra",
+    "url": "https://api.deepinfra.com/models/list",
+    "checkedAt": "2026-11-17T15:17:30.513Z",
+    "status": 200,
+    "returnedCount": 411,
+    "matched": [
+      "deepseek-ai/DeepSeek-V4-Flash"
+    ],
+    "unmatched": []
+  },
+  {
+    "id": "featherless",
+    "url": "https://api.featherless.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:30.514Z",
+    "status": 404
+  },
+  {
+    "id": "fireworks",
+    "url": "https://api.fireworks.ai/inference/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.862Z",
+    "status": 401
+  },
+  {
+    "id": "kimi_code",
+    "url": "https://api.kimi.com/coding/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.864Z",
+    "status": 401
+  },
+  {
+    "id": "minimax",
+    "url": "https://api.minimax.io/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.864Z",
+    "status": 401
+  },
+  {
+    "id": "groq",
+    "url": "https://api.groq.com/openai/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.863Z",
+    "status": 403
+  },
+  {
+    "id": "nararoute",
+    "url": "https://router.bynara.id/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.865Z",
+    "status": 200,
+    "returnedCount": 42,
+    "matched": [],
+    "unmatched": [
+      "kimi-k3-free"
+    ]
+  },
+  {
+    "id": "kimi",
+    "url": "https://api.moonshot.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.864Z",
+    "status": 401
+  },
+  {
+    "id": "mistral",
+    "url": "https://api.mistral.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.865Z",
+    "error": "fetch failed"
+  },
+  {
+    "id": "llm7",
+    "url": "https://api.llm7.io/v1/models",
+    "checkedAt": "2026-11-17T15:17:35.864Z",
+    "error": "fetch failed"
+  },
+  {
+    "id": "qwencloud_coding",
+    "url": "https://coding-intl.dashscope.aliyuncs.com/v1/models",
+    "checkedAt": "2026-11-17T15:17:46.389Z",
+    "status": 200,
+    "returnedCount": 6,
+    "matched": [
+      "qwen3.5-plus",
+      "kimi-k2.5",
+      "glm-5",
+      "MiniMax-M2.5"
+    ],
+    "unmatched": [
+      "qwen3-coder-next",
+      "qwen3-coder-plus",
+      "glm-4.7"
+    ]
+  },
+  {
+    "id": "sambanova",
+    "url": "https://api.sambanova.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:46.390Z",
+    "status": 200,
+    "returnedCount": 5,
+    "matched": [
+      "Meta-Llama-3.3-70B-Instruct"
+    ],
+    "unmatched": []
+  },
+  {
+    "id": "nebius",
+    "url": "https://api.tokenfactory.nebius.com/v1/models?verbose=true",
+    "checkedAt": "2026-11-17T15:17:46.385Z",
+    "status": 401
+  },
+  {
+    "id": "opper",
+    "url": "https://api.opper.ai/v3/models",
+    "checkedAt": "2026-11-17T15:17:46.388Z",
+    "status": 200,
+    "returnedCount": 50,
+    "matched": [],
+    "unmatched": [
+      "claude-sonnet-4-6"
+    ]
+  },
+  {
+    "id": "novita",
+    "url": "https://api.novita.ai/openai/v1/models",
+    "checkedAt": "2026-11-17T15:17:46.387Z",
+    "status": 200,
+    "returnedCount": 103,
+    "matched": [
+      "deepseek/deepseek-v4-flash-0731"
+    ],
+    "unmatched": []
+  },
+  {
+    "id": "scaleway",
+    "url": "https://api.scaleway.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:46.390Z",
+    "status": 401
+  },
+  {
+    "id": "orcarouter",
+    "url": "https://api.orcarouter.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:46.388Z",
+    "status": 200,
+    "returnedCount": 215,
+    "matched": [
+      "deepseek/deepseek-v4-flash-free"
+    ],
+    "unmatched": []
+  },
+  {
+    "id": "poolside",
+    "url": "https://inference.poolside.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:46.389Z",
+    "status": 401
+  },
+  {
+    "id": "zai_api",
+    "url": "https://api.z.ai/api/paas/v4/models",
+    "checkedAt": "2026-11-17T15:17:49.477Z",
+    "status": 401
+  },
+  {
+    "id": "nvidia_nim",
+    "url": "https://integrate.api.nvidia.com/v1/models",
+    "checkedAt": "2026-11-17T15:17:49.477Z",
+    "status": 200,
+    "returnedCount": 32,
+    "matched": [
+      "nvidia/nemotron-3-ultra-550b-a55b"
+    ],
+    "unmatched": [
+      "minimaxai/minimax-m2.7",
+      "minimaxai/minimax-m3",
+      "z-ai/glm-5.2",
+      "deepseek-ai/deepseek-v4-pro",
+      "deepseek-ai/deepseek-v4-flash",
+      "moonshotai/kimi-k2.6",
+      "nvidia/nemotron-3-super-120b-a12b"
+    ]
+  },
+  {
+    "id": "kilo",
+    "url": "https://ai-gateway.kilo.ai/api/v1/models",
+    "checkedAt": "2026-11-17T15:17:49.477Z",
+    "status": 200,
+    "returnedCount": 469,
+    "matched": [
+      "kilo-auto/free",
+      "nvidia/nemotron-3.5-super-vl:free",
+      "reflection/beam-free",
+      "stealth/glyph-cluster",
+      "dots-studio/dots-3-note-preview:free",
+      "nvidia/nemotron-3.5-lightning:free",
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "openrouter/free"
+    ],
+    "unmatched": [
+      "stealth/crouton-alpha"
+    ]
+  },
+  {
+    "id": "tokenrouter",
+    "url": "https://api.tokenrouter.com/v1/models",
+    "checkedAt": "2026-11-17T15:17:49.476Z",
+    "status": 401
+  },
+  {
+    "id": "ollama_cloud",
+    "url": "https://ollama.com/api/tags",
+    "checkedAt": "2026-11-17T15:17:49.477Z",
+    "status": 200,
+    "returnedCount": 24,
+    "matched": [
+      "gpt-oss:120b",
+      "minimax-m3"
+    ],
+    "unmatched": [
+      "kimi-k2.5",
+      "glm-5",
+      "minimax-m2.5",
+      "glm-4.7-flash",
+      "qwen3.5",
+      "deepseek-v4.1-flash:cloud",
+      "qwen3-coder:480b"
+    ]
+  },
+  {
+    "id": "siliconflow",
+    "url": "https://api.siliconflow.com/v1/models",
+    "checkedAt": "2026-11-17T15:17:49.474Z",
+    "status": 401
+  },
+  {
+    "id": "together",
+    "url": "https://api.together.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:49.475Z",
+    "status": 403
+  },
+  {
+    "id": "xai",
+    "url": "https://api.x.ai/v1/models",
+    "checkedAt": "2026-11-17T15:17:49.477Z",
+    "error": "fetch failed"
+  },
+  {
+    "id": "opencode_zen",
+    "url": "https://opencode.ai/zen/v1/models",
+    "checkedAt": "2026-11-17T15:17:59.983Z",
+    "status": 200,
+    "returnedCount": 86,
+    "matched": [
+      "claude-fable-5",
+      "claude-fable-5-1",
+      "claude-opus-5",
+      "claude-opus-4-8",
+      "claude-opus-4-7",
+      "claude-opus-4-6",
+      "claude-opus-4-5",
+      "claude-sonnet-5",
+      "claude-sonnet-4-6",
+      "claude-sonnet-4-5",
+      "claude-haiku-4-5",
+      "gemini-3.6-flash",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash",
+      "gpt-6-astra",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.5",
+      "gpt-5.5-pro",
+      "gpt-5.4",
+      "gpt-5.4-pro",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
+      "gpt-5.3-codex-spark",
+      "gpt-5.3-codex",
+      "gpt-5.2",
+      "gpt-5.2-codex",
+      "gpt-5.1",
+      "gpt-5.1-codex-max",
+      "gpt-5.1-codex",
+      "gpt-5.1-codex-mini",
+      "gpt-5",
+      "gpt-5-codex",
+      "gpt-5-nano",
+      "grok-build-0.1",
+      "grok-4.6",
+      "grok-4.5",
+      "muse-spark-1.3",
+      "muse-spark-1.2",
+      "qwen3.6-plus",
+      "qwen3.5-plus",
+      "deepseek-v4-pro",
+      "glm-5.3-flash",
+      "glm-5.3",
+      "glm-5.2",
+      "glm-5.1",
+      "glm-5",
+      "minimax-m3",
+      "minimax-m2.7",
+      "minimax-m2.5",
+      "kimi-k3",
+      "kimi-k2.7-code",
+      "kimi-k2.6",
+      "kimi-k2.5",
+      "big-pickle",
+      "mimo-v2.6-flash-free",
+      "nemotron-3.5-lightning-free"
+    ],
+    "unmatched": [
+      "claude-sonnet-4",
+      "gemini-3.1-pro",
+      "gemini-3-flash",
+      "deepseek-v4-flash",
+      "deepseek-v4-flash-vision-exp",
+      "union-alpha",
+      "deepseek-v4-flash-free",
+      "mimo-v2.5-free",
+      "ling-3.0-flash-fin-free",
+      "nemotron-3-ultra-free",
+      "muse-spark-1.3-contributor-free",
+      "muse-spark-1.2-contributor-free",
+      "jev-1.13",
+      "jev-1.13-free"
+    ]
+  },
+  {
+    "id": "open_router",
+    "url": "https://openrouter.ai/api/v1/models",
+    "checkedAt": "2026-11-17T15:17:59.980Z",
+    "status": 200,
+    "returnedCount": 470,
+    "matched": [
+      "openrouter/free"
+    ],
+    "unmatched": []
+  }
+]

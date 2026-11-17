@@ -1,64 +1,45 @@
-/**
- * Compact Cursor's Glob result list.
- *
- * Shape: a "Result of search in '...' (total N files):" header followed by
- * "- path" lines. The total in the header is kept even when the body is capped,
- * so the model still learns how many matches exist and can narrow the glob
- * instead of trusting an incomplete list. Grouping by parent directory mirrors
- * the find compactor, because the same reasoning applies: the repetition is the
- * cost, the tree shape is the information.
- *
- * @module src/token-saver/rtk/filters/searchList.js
- */
-
+/** Summarize glob listings with bounded samples and complete counts. */
 import { SEARCH_LIST_PER_DIR_MAX, SEARCH_LIST_TOTAL_DIR_MAX } from '../constants.js'
 
-const HEADER_RE = /^Result of search in '[^']*' \(total (\d+) files?\):/
+export const SEARCH_LIST_HEADER_RE = /^Result of search in '[^']*' \(total (\d+) files?\):/
 
 export function searchList(input) {
-  const lines = input.split('\n')
-  if (lines.length === 0) return input
-
-  // First line must be the header (validated by autodetect too)
-  const header = lines[0] || ''
-  const rest = lines.slice(1)
-
-  const paths = []
-  for (const raw of rest) {
-    const t = raw.trim()
-    if (!t.startsWith('- ')) continue
-    paths.push(t.slice(2))
-  }
-  // A header with no list is not this shape; rewriting it would only mangle it.
-  if (paths.length === 0) return input
-
-  const byDir = new Map()
-  for (const p of paths) {
-    const slash = p.lastIndexOf('/')
-    const dir = slash === -1 ? '.' : (p.slice(0, slash) || '/')
-    const name = slash === -1 ? p : p.slice(slash + 1)
-    if (!byDir.has(dir)) byDir.set(dir, [])
-    byDir.get(dir).push(name)
-  }
-
-  const dirs = Array.from(byDir.keys()).sort()
-  let out = `${header}\n${paths.length} files in ${dirs.length} dirs:\n\n`
-
-  for (const dir of dirs.slice(0, SEARCH_LIST_TOTAL_DIR_MAX)) {
-    const names = byDir.get(dir)
-    out += `${dir}/ (${names.length}):\n`
-    for (const n of names.slice(0, SEARCH_LIST_PER_DIR_MAX)) out += `  ${n}\n`
-    if (names.length > SEARCH_LIST_PER_DIR_MAX) {
-      out += `  +${names.length - SEARCH_LIST_PER_DIR_MAX}\n`
+  const firstBreak = input.indexOf('\n')
+  if (firstBreak < 0) return input
+  const groups = new Map()
+  let total = 0
+  let offset = firstBreak + 1
+  while (offset <= input.length) {
+    const newline = input.indexOf('\n', offset)
+    const end = newline < 0 ? input.length : newline
+    const row = input.slice(offset, end).trim()
+    if (row.startsWith('- ')) {
+      const path = row.slice(2)
+      const slash = path.lastIndexOf('/')
+      const directory = slash < 0 ? '.' : path.slice(0, slash) || '/'
+      let group = groups.get(directory)
+      if (!group) {
+        group = { count: 0, names: [] }
+        groups.set(directory, group)
+      }
+      total++
+      group.count++
+      if (group.names.length < SEARCH_LIST_PER_DIR_MAX) group.names.push(path.slice(slash + 1))
     }
-    out += '\n'
+    if (newline < 0) break
+    offset = newline + 1
   }
-  if (dirs.length > SEARCH_LIST_TOTAL_DIR_MAX) {
-    out += `+${dirs.length - SEARCH_LIST_TOTAL_DIR_MAX} more dirs\n`
+  if (!total) return input
+  const output = [input.slice(0, firstBreak), `${total} files in ${groups.size} dirs:`, '']
+  for (const directory of [...groups.keys()].sort().slice(0, SEARCH_LIST_TOTAL_DIR_MAX)) {
+    const { count, names } = groups.get(directory)
+    output.push(`${directory}/ (${count}):`)
+    for (const name of names) output.push(`  ${name}`)
+    if (count > names.length) output.push(`  +${count - names.length}`)
+    output.push('')
   }
-
-  return out.replace(/\n+$/, '')
+  if (groups.size > SEARCH_LIST_TOTAL_DIR_MAX) output.push(`+${groups.size - SEARCH_LIST_TOTAL_DIR_MAX} more dirs`)
+  return output.join('\n').replace(/\n+$/, '')
 }
 
 searchList.filterName = 'search-list'
-export const SEARCH_LIST_HEADER_RE = HEADER_RE
