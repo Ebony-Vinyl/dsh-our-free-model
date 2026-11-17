@@ -729,6 +729,85 @@ ${paths.length} files in ${dirs.length} dirs:
 searchList.filterName = "search-list";
 var SEARCH_LIST_HEADER_RE = HEADER_RE;
 
+// src/token-saver/rtk/filters/jsonDoc.js — auto-shrink machine JSON payloads
+var JSON_MAX_ARRAY_ITEMS = 12;
+var JSON_MAX_STRING = 160;
+var JSON_MAX_DEPTH = 6;
+var ELLIPSIS_MARKER_PREFIX = String.fromCharCode(8230) + " +";
+function jsonDoc(input) {
+  const trimmed = input.trim();
+  if (trimmed.length < 512) return input;
+  if (!/^[[{]/.test(trimmed)) return input;
+  let value;
+  try { value = JSON.parse(trimmed); } catch { return input; }
+  const cut = { arrays: 0, items: 0, strings: 0 };
+  const walk = (node, depth) => {
+    if (node === null || typeof node !== 'object') {
+      if (typeof node === 'string' && node.length > JSON_MAX_STRING) {
+        cut.strings += 1;
+        return '<str ' + node.length + ' ch>';
+      }
+      return node;
+    }
+    if (depth >= JSON_MAX_DEPTH) return '<…>';
+    if (Array.isArray(node)) {
+      // A prior pass left its ellipsis marker as the last element: treat the
+      // array as already summarized and keep it verbatim, so a second run is
+      // byte-identical to the first (RTK filters must be idempotent).
+      const priorMarker = node.length > 0 && typeof node[node.length - 1] === 'string'
+        && node[node.length - 1].startsWith(ELLIPSIS_MARKER_PREFIX);
+      if (priorMarker) return node.map(entry => walk(entry, depth + 1));
+      if (node.length > JSON_MAX_ARRAY_ITEMS) {
+        cut.arrays += 1;
+        cut.items += node.length - JSON_MAX_ARRAY_ITEMS;
+        return node.slice(0, JSON_MAX_ARRAY_ITEMS).map(entry => walk(entry, depth + 1))
+          .concat(['… +' + (node.length - JSON_MAX_ARRAY_ITEMS) + ' more']);
+      }
+      return node.map(entry => walk(entry, depth + 1));
+    }
+    const out = {};
+    for (const key of Object.keys(node)) out[key] = walk(node[key], depth + 1);
+    return out;
+  };
+  const shrunk = walk(value, 0);
+  if (JSON.stringify(shrunk) === trimmed) return input; // already compact & shrunk
+  const pretty = JSON.stringify(shrunk, undefined, 1);
+  if (pretty === trimmed) return input; // already pretty & shrunk
+  return pretty.length < trimmed.length ? pretty : JSON.stringify(shrunk);
+}
+jsonDoc.filterName = "json-doc";
+
+// src/token-saver/rtk/filters/base64Blob.js — opaque base64 walls
+var BASE64_MIN = 4096;
+var RE_BASE64_BLOB = /^[A-Za-z0-9+/]+=*$/;
+function base64Blob(input) {
+  const trimmed = input.trim();
+  if (trimmed.length < BASE64_MIN || !RE_BASE64_BLOB.test(trimmed)) return input;
+  return '<base64 blob, ' + trimmed.length + ' chars>';
+}
+base64Blob.filterName = "base64-blob";
+
+// src/token-saver/rtk/filters/htmlDoc.js — strip markup, keep text
+var HTML_MIN = 2048;
+function htmlDoc(input) {
+  const trimmed = input.trim();
+  if (trimmed.length < HTML_MIN) return input;
+  if (!/<[a-z!][\s\S]*>/i.test(trimmed.slice(0, 1024))) return input;
+  let out = trimmed
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<!--([\s\S]*?)-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]{1,300}>/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n\s*\n\s*\n+/g, '\n\n')
+    .trim();
+  if (out.length >= trimmed.length) return input;
+  return out;
+}
+htmlDoc.filterName = "html-doc";
+
 // src/token-saver/rtk/autodetect.js
 var RE_GIT_DIFF = /^diff --git /m;
 var RE_GIT_DIFF_HUNK = /^@@ /m;
@@ -770,6 +849,12 @@ function autoDetectFilter(text) {
   if (lines.length >= SMART_TRUNCATE_MIN_LINES && isLineNumbered(lines)) {
     return readNumbered;
   }
+  // Machine-shaped payloads first: JSON, base64 walls and HTML have their own
+  // filters, and running them before the line-count fallbacks keeps single-line
+  // outputs (which dedupLog/smartTruncate never see) inside the same budget.
+  if (jsonDoc(text) !== text) return jsonDoc;
+  if (base64Blob(text) !== text) return base64Blob;
+  if (htmlDoc(text) !== text) return htmlDoc;
   if (nonEmpty.length >= 5) return dedupLog;
   if (text.split("\n").length >= SMART_TRUNCATE_MIN_LINES) return smartTruncate;
   return null;
@@ -840,13 +925,13 @@ function compressText(text, stats, shape) {
   stats.hits.push({ shape, filter: fn.filterName || fn.name, saved: bytesIn - out.length });
   return out;
 }
-function compressRequest(payload, wire, options = true) {
+function compressRequest(payload, wire, options = true, knob = {}) {
   const enabled = resolveEnabled(options);
   const stats = { enabled, bytesBefore: 0, bytesAfter: 0, saved: 0, hits: [] };
   if (!enabled) return { payload, stats };
   if (payload === null || typeof payload !== "object") return { payload, stats };
   try {
-    if (wire === "chat") compressChatPayload(payload, stats);
+    if (wire === "chat") compressChatPayload(payload, stats, knob);
     else if (wire === "messages") compressMessagesPayload(payload, stats);
     else if (wire === "responses") compressResponsesPayload(payload, stats);
   } catch (error) {
@@ -856,8 +941,36 @@ function compressRequest(payload, wire, options = true) {
   stats.saved = stats.bytesBefore - stats.bytesAfter;
   return { payload, stats };
 }
-function compressChatPayload(payload, stats) {
+// src/token-saver/history-reasoning.js — drop stale chain-of-thought from history
+// Forwarded Chat requests keep each prior assistant turn's reasoning_content
+// (src/messages.js preserves it verbatim). Providers never need a *previous*
+// turn's chain of thought to answer the next one, and thinking models pay for
+// it as input tokens every single request. Keep only the newest assistant
+// reasoning: some gateways pair a reasoning block with the tool call that
+// follows it, so stripping that one would break the call sequence. Stripping
+// is deterministic and idempotent — the same history always ships the same
+// bytes, so upstream prompt caches stay intact.
+function stripHistoryReasoning(payload, stats) {
   const items = Array.isArray(payload.messages) ? payload.messages : [];
+  let newestAssistant = -1;
+  for (let i = 0; i < items.length; i += 1) {
+    if (items[i]?.role === 'assistant') newestAssistant = i;
+  }
+  for (let i = 0; i < items.length; i += 1) {
+    const msg = items[i];
+    if (!msg || msg.role !== 'assistant' || i === newestAssistant) continue;
+    if (typeof msg.reasoning_content !== 'string' || msg.reasoning_content === '') continue;
+    stats.bytesBefore += msg.reasoning_content.length;
+    stats.bytesAfter += 0;
+    stats.saved += msg.reasoning_content.length;
+    stats.hits.push({ shape: 'openai-history-reasoning', filter: 'strip-history-reasoning', saved: msg.reasoning_content.length });
+    msg.reasoning_content = '';
+  }
+}
+
+function compressChatPayload(payload, stats, knob = {}) {
+  const items = Array.isArray(payload.messages) ? payload.messages : [];
+  if (knob.stripHistoryReasoning !== false) stripHistoryReasoning(payload, stats);
   for (const msg of items) {
     if (!msg) continue;
     if (msg.role !== "tool") continue;
@@ -1183,6 +1296,7 @@ function saverConfig(settings) {
   return {
     enabled: section.enabled !== false,
     rtk: section.rtk !== false,
+    stripHistoryReasoning: section.stripHistoryReasoning !== false,
     caveman: PROMPT_FAMILIES.includes("caveman") ? String(prompts.caveman ?? "off") : "off",
     ponytail: String(prompts.ponytail ?? "off")
     /** Per-request header/query opt-out is handled by the caller; this is the
@@ -1207,7 +1321,7 @@ function applyTokenSavers(payload, wire, config) {
   }
   if (config.rtk !== false) {
     try {
-      const result2 = compressRequest(payload, wire, true);
+      const result2 = compressRequest(payload, wire, true, config);
       report.rtk = result2.stats;
       report.saved = Number(result2.stats?.saved) || 0;
       report.bytesBefore = Number(result2.stats?.bytesBefore) || 0;
