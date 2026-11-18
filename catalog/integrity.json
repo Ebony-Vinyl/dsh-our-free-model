@@ -49,8 +49,8 @@
     },
     {
       "path": "package.json",
-      "size": 5208,
-      "sha256": "107350b8d664109bbf5dd7e3070e8f64796de33157f0598cbd87d9720106d8b6"
+      "size": 5263,
+      "sha256": "83f3086d1c2292bdeaad13878bc8582b9434d3e2dd6515e6dd758fc05d18901c"
     },
     {
       "path": "src/adapter.js",
@@ -94,8 +94,8 @@
     },
     {
       "path": "src/core.js",
-      "size": 36039,
-      "sha256": "6b5c0b19ae9c156ef2d6a60def5f8cdafa7b3195a1fa9299f69fdfcdb5a290e2"
+      "size": 36087,
+      "sha256": "9e528edf0fb83f6cde795f871018897e8838f55d1d0c5e93e8d6a5125b6d95c5"
     },
     {
       "path": "src/deferred-response.js",
@@ -119,8 +119,8 @@
     },
     {
       "path": "src/eac.js",
-      "size": 18722,
-      "sha256": "3b250bd8f689a1d2fc95a704d1ec4b9c32cd257a306bb64f6e62cd9045b42503"
+      "size": 18435,
+      "sha256": "846423f1316ef18da4c7f857a9f0033a9410deefd206df326b4e0701a0477e22"
     },
     {
       "path": "src/effort.js",
@@ -129,8 +129,8 @@
     },
     {
       "path": "src/egress.js",
-      "size": 52017,
-      "sha256": "4f32d0db1861165d77b3f8c38d9926b9461e96545077cbaa63230863b0ec2935"
+      "size": 52024,
+      "sha256": "e046b395b0b9dc1ba2dbbfa85654ac18d235763980588fc0dc966fb816dc0c32"
     },
     {
       "path": "src/engine-parts/win32-x64.000.part",
@@ -189,8 +189,8 @@
     },
     {
       "path": "src/forward.js",
-      "size": 64454,
-      "sha256": "7f0d6fa748985bda19eb6536d444eea5151ac243a33f6b2883292d249867e1b6"
+      "size": 68667,
+      "sha256": "6f9205c503e3ff39da7a3be8163bc575afb8c528cd4e1b9f5263b750da93255f"
     },
     {
       "path": "src/gemini.js",
@@ -239,8 +239,8 @@
     },
     {
       "path": "src/messages.js",
-      "size": 19185,
-      "sha256": "217fd90273824f135ed0b5417c8ea48089f5f78cdcf2cc6436008cb017997421"
+      "size": 22391,
+      "sha256": "f49d952e2283c5d4b2afbf6b0f29d8bffca8cd9c6ae0584b6f7d58556ae8b749"
     },
     {
       "path": "src/model-test.js",
@@ -379,8 +379,8 @@
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2847331,
-      "sha256": "df0047685e14d1e4f75aa16f07e6f26258d991c923ff40f199dbb453c0096fd6"
+      "size": 2847715,
+      "sha256": "5cdc0fec92787eba99ae07490451fc60be8c795960ec41247c736ae790e58937"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
