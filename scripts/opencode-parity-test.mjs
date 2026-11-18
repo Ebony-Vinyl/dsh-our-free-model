@@ -77,20 +77,17 @@ try {
   check('the lane declares the full official set', V2_OFFICIAL_TOOL_ORDER.every(name => laneTools.some(tool => tool.name === name)), true)
   check('the lane declares the pack’s gate names', ['read', 'shell'].every(name => laneTools.some(tool => tool.name === name)), true)
 
-  console.log('\n=== 2. the injected definitions are identical, verbatim ===')
+  console.log('\n=== 2. authored descriptions retain compatible parameter contracts ===')
   for (const name of ['read', 'shell']) {
     const lane = laneTools.find(tool => tool.name === name)
     const pack = packTools.find(tool => tool.name === name)
-    // The shell description names the shell the host actually has: the
-    // reference (and this lane) rewrites bash → powershell on a Windows host,
-    // where the pack keeps the captured Unix wording.
-    const sameDescription = name === 'shell' && process.platform === 'win32'
-      ? lane.description === pack.description.replace('on Linux using bash', 'on Windows using powershell')
-      : pack.description === lane.description
-    check(`${name}: description`, sameDescription, true)
-    // The gate compares definitions semantically; the two copies render their
-    // schemas in their own key orders, so compare order-insensitively.
-    check(`${name}: parameters`, canonical(pack.parameters), canonical(lane.parameters))
+    const authored = JSON.parse(fs.readFileSync(new URL('../src/o2a/assets/ofm-tool-contracts.json', import.meta.url), 'utf8'))[name]
+    const description = name === 'shell' && process.platform === 'win32'
+      ? authored.description.replace('on Linux using bash', 'on Windows using powershell') : authored.description
+    check(`${name}: authored description`, lane.description, description)
+    // Descriptive prose is intentionally replaced; accepted argument shapes must agree.
+    const contract = schema => JSON.parse(JSON.stringify(schema, (key, value) => key === 'description' && typeof value === 'string' ? undefined : value))
+    check(`${name}: parameters`, canonical(contract(pack.parameters)), canonical(contract(lane.parameters)))
   }
 
   console.log('\n=== 3. the User-Agent is the canonical v2 shape on both sides ===')

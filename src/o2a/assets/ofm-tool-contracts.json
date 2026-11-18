@@ -1,0 +1,328 @@
+{
+  "edit": {
+    "description": "Replace an exact text match in a file. Read the current file before editing.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "oldString": {
+          "type": "string"
+        },
+        "newString": {
+          "type": "string"
+        },
+        "replaceAll": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "oldString",
+        "newString"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "execute": {
+    "description": "Run code through the host execution capability when available.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "glob": {
+    "description": "List matching paths under a directory.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "grep": {
+    "description": "Search file content and return matching locations.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string"
+        },
+        "include": {
+          "type": "string"
+        },
+        "caseSensitive": {
+          "type": "boolean"
+        },
+        "literal": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "question": {
+    "description": "Request a user decision using concise questions and options.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string"
+              },
+              "header": {
+                "type": "string"
+              },
+              "multiple": {
+                "type": "boolean"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "question",
+              "header",
+              "options"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "questions"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "read": {
+    "description": "Read file content, optionally selecting an offset and length.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "shell": {
+    "description": "Run a command on Linux using bash. Respect the host working directory and execution permissions.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "workdir": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "background": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "skill": {
+    "description": "Load a skill explicitly made available by the host.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "subagent": {
+    "description": "Delegate a scoped task to an available agent when authorized.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "background": {
+          "type": "boolean"
+        },
+        "model": {
+          "type": "string"
+        },
+        "sessionID": {
+          "type": "string",
+          "pattern": "^ses"
+        }
+      },
+      "required": [
+        "agent",
+        "description",
+        "prompt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "webfetch": {
+    "description": "Retrieve a public URL in the selected representation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "markdown",
+            "html"
+          ]
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "websearch": {
+    "description": "Search public web information for the supplied query.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "write": {
+    "description": "Write the supplied content to a file within the authorized task scope.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "content"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "patch": {
+    "description": "Apply the supplied patch through the host file editing capability.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "patchText": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "patchText"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "checkedDate": "2026-11-18",
+  "authentication": "none",
+  "results": [
+    {
+      "id": "experiential",
+      "url": "https://api.experientiallabs.ai/v1/models",
+      "error": "HTTP Error 401: Unauthorized"
+    },
+    {
+      "id": "nararoute",
+      "url": "https://router.bynara.id/v1/models",
+      "status": 200,
+      "match": false,
+      "returnedCount": 42
+    },
+    {
+      "id": "scaleway",
+      "url": "https://api.scaleway.ai/v1/models",
+      "error": "HTTP Error 401: Unauthorized"
+    }
+  ]
+}

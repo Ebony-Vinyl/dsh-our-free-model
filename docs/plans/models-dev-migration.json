@@ -1,0 +1,2014 @@
+{
+  "agnes": {
+    "providerSource": "providers/agnes/provider.toml",
+    "models": [
+      {
+        "id": "agnes-2.0-flash",
+        "path": "providers/agnes/models/agnes-2.0-flash.toml",
+        "sha256": "923beb08bca04561d54433b801dbb96066847498d7b77f90a3b9efe73433728c",
+        "status": "deprecated"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "cline_pass": {
+    "providerSource": "providers/cline-pass/provider.toml",
+    "models": [
+      {
+        "id": "cline-pass/glm-5.2",
+        "path": "providers/cline-pass/models/cline-pass/glm-5.2.toml",
+        "sha256": "f65949ee453b41262bb6c349f968ffc5a9d241d70925d3182c05f47a6a95725c",
+        "status": "deprecated"
+      },
+      {
+        "id": "cline-pass/kimi-k2.7-code",
+        "path": "providers/cline-pass/models/cline-pass/kimi-k2.7-code.toml",
+        "sha256": "0321ea38c8a43dd239a31c7e7b2358911251d7434e637edd29672875722b4b7f",
+        "status": "deprecated"
+      },
+      {
+        "id": "cline-pass/kimi-k2.6",
+        "path": "providers/cline-pass/models/cline-pass/kimi-k2.6.toml",
+        "sha256": "ef12c4a2620b698c14fb623bc1dacb4a28da2c01f470ba348f9fbd7bd886ef61",
+        "status": "deprecated"
+      },
+      {
+        "id": "cline-pass/deepseek-v4-pro",
+        "path": "providers/cline-pass/models/cline-pass/deepseek-v4-pro.toml",
+        "sha256": "f7da9816cfe1dcd0b9fcbbdac6b92285f1ba515f3cd897496b64cfb1b2575bb2",
+        "status": "unspecified"
+      },
+      {
+        "id": "cline-pass/deepseek-v4-flash",
+        "path": "providers/cline-pass/models/cline-pass/deepseek-v4-flash.toml",
+        "sha256": "b9a5355cceb9c1280a385f5102b44394e28d189de1629fb61a2debadea8fa142",
+        "status": "deprecated"
+      },
+      {
+        "id": "cline-pass/mimo-v2.5",
+        "path": "providers/cline-pass/models/cline-pass/mimo-v2.5.toml",
+        "sha256": "e72561a2d3dc19d0ea5a75316736129d306c31fe2986d8692edafb8ab1d59acc",
+        "status": "deprecated"
+      },
+      {
+        "id": "cline-pass/mimo-v2.5-pro",
+        "path": "providers/cline-pass/models/cline-pass/mimo-v2.5-pro.toml",
+        "sha256": "77a8a054491ca3c9d8643410bfc51bf3e356f0a75730baf092b5d92ce19d5e61",
+        "status": "deprecated"
+      },
+      {
+        "id": "cline-pass/minimax-m3",
+        "path": "providers/cline-pass/models/cline-pass/minimax-m3.toml",
+        "sha256": "d88d8103f8475e61e8ef9baa1b53b08f7091d8eed7fe883f805c7a8b924f0af3",
+        "status": "unspecified"
+      },
+      {
+        "id": "cline-pass/qwen3.7-max",
+        "path": "providers/cline-pass/models/cline-pass/qwen3.7-max.toml",
+        "sha256": "8c631d08244409efceb3c169203c5105a3e9f8bc8651958870334130c1d913ad",
+        "status": "unspecified"
+      },
+      {
+        "id": "cline-pass/qwen3.7-plus",
+        "path": "providers/cline-pass/models/cline-pass/qwen3.7-plus.toml",
+        "sha256": "e72bc5881d73af80d581e9c0a3952c6e87cec5bc077657a95be92b0577dca011",
+        "status": "unspecified"
+      },
+      {
+        "id": "cline-pass/kimi-k3",
+        "path": "providers/cline-pass/models/cline-pass/kimi-k3.toml",
+        "sha256": "7ad68472db85112d384bfc779086a190027e3383e978676295edb1cae2c7aae8",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "cohere": {
+    "providerSource": "providers/cohere/provider.toml",
+    "models": [
+      {
+        "id": "command-r-plus-08-2024",
+        "path": "providers/cohere/models/command-r-plus-08-2024.toml",
+        "sha256": "dc489a856c973d955757053048bcae39b5ccf9d7425c76b756003cd626ffdece",
+        "status": "unspecified"
+      },
+      {
+        "id": "command-r-08-2024",
+        "path": "providers/cohere/models/command-r-08-2024.toml",
+        "sha256": "1716e5feb537b0421e898bc9c55ccbb862d4660e2efe6222915a3964bde92900",
+        "status": "unspecified"
+      },
+      {
+        "id": "command-a-03-2025",
+        "path": "providers/cohere/models/command-a-03-2025.toml",
+        "sha256": "a220703124b4b6a1017d24473e920c1783cb90021f9a8fa30827f3b7f394a307",
+        "status": "unspecified"
+      },
+      {
+        "id": "command-a-plus-05-2026",
+        "path": "providers/cohere/models/command-a-plus-05-2026.toml",
+        "sha256": "738988680b57ca69b1fa6fb667b86c8973d90f972e0488a592e371d7e5be56a9",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "opper": {
+    "providerSource": "providers/opper/provider.toml",
+    "models": [
+      {
+        "id": "claude-sonnet-4-6",
+        "path": "providers/opper/models/claude-sonnet-4-6.toml",
+        "sha256": "afc62c53c05d7fbcef80cf2b432189a8440a01e479919fea6da42f3428cf883e",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "poolside": {
+    "providerSource": "providers/poolside/provider.toml",
+    "models": [
+      {
+        "id": "poolside/laguna-s-2.1",
+        "path": "providers/poolside/models/poolside/laguna-s-2.1.toml",
+        "sha256": "03056349eb98a87fdf5b0e8399f6ac8ef572eb4e89160f47d8a68db2b119a309",
+        "status": "unspecified"
+      },
+      {
+        "id": "poolside/laguna-xs-2.1",
+        "path": "providers/poolside/models/poolside/laguna-xs-2.1.toml",
+        "sha256": "ce41fb08563bb357f57c2455267a41cbabf80fba12477f5f5ec53eaee3cb9d0a",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "qwencloud": {
+    "providerSource": "providers/alibaba-token-plan/provider.toml",
+    "models": [
+      {
+        "id": "qwen3.8-max-preview",
+        "path": "providers/alibaba-token-plan/models/qwen3.8-max-preview.toml",
+        "sha256": "f38ee220f4763a1c42680a1de45709db2ef245ae654a35e929cd51bac4cf420d",
+        "status": "deprecated"
+      },
+      {
+        "id": "qwen3.7-max",
+        "path": "providers/alibaba-token-plan/models/qwen3.7-max.toml",
+        "sha256": "ee8c07d41fd78686cd0194687b930e36787dae5ba16f0bf415ae3809d80b253e",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.7-plus",
+        "path": "providers/alibaba-token-plan/models/qwen3.7-plus.toml",
+        "sha256": "85cdc5a81a25aaf82d65bd3a0d2e95a3f40001c960210f9b24a3eeaa9c564522",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.6-flash",
+        "path": "providers/alibaba-token-plan/models/qwen3.6-flash.toml",
+        "sha256": "b8942bf5ae934f31f06e8ff8c4e960dfc94453b1a48da34f10678242e9773796",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.2",
+        "path": "providers/alibaba-token-plan/models/glm-5.2.toml",
+        "sha256": "5e513ee2d0e59d9ca891b8295509261fefeb15e1da8bea98bcdc342afa637ee2",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "path": "providers/alibaba-token-plan/models/deepseek-v4-pro.toml",
+        "sha256": "51b317d685758ee56ba056f1b63cd359ea5c3d493c902c665bfb5affec7d6e91",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "qwencloud_coding": {
+    "providerSource": "providers/alibaba-coding-plan/provider.toml",
+    "models": [
+      {
+        "id": "qwen3.5-plus",
+        "path": "providers/alibaba-coding-plan/models/qwen3.5-plus.toml",
+        "sha256": "bb8372bb4bab0dc8a79808c1d17f571c0517ca31cf5c0d34bf429995a1ac084e",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k2.5",
+        "path": "providers/alibaba-coding-plan/models/kimi-k2.5.toml",
+        "sha256": "03091dffdc31557b234c2f7fd2b1e0d2bb47955a2d7494bdfb0f817ad67eb988",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5",
+        "path": "providers/alibaba-coding-plan/models/glm-5.toml",
+        "sha256": "cec2498c10d5fa46879820cb819a62d7bd47eb1b17df197e82bd0b0ce52d8755",
+        "status": "unspecified"
+      },
+      {
+        "id": "MiniMax-M2.5",
+        "path": "providers/alibaba-coding-plan/models/MiniMax-M2.5.toml",
+        "sha256": "6b6dc7b9a79a2e2bde98ee9eeeceeec3c7d5e720a5c536b97813d520908b8db5",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3-coder-next",
+        "path": "providers/alibaba-coding-plan/models/qwen3-coder-next.toml",
+        "sha256": "7fe7712430859464153f6e042083f8c24022b9a7e2b9215164646d18883b8bb9",
+        "status": "deprecated"
+      },
+      {
+        "id": "qwen3-coder-plus",
+        "path": "providers/alibaba-coding-plan/models/qwen3-coder-plus.toml",
+        "sha256": "3df4d3e252b6860fc97d846f764eeee96d8c1105104a56b96060b35b5174e6cd",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-4.7",
+        "path": "providers/alibaba-coding-plan/models/glm-4.7.toml",
+        "sha256": "64810bb30947888c67cf1d714c1bf46eb78694618a359fb2b5d0106421d10997",
+        "status": "deprecated"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "siliconflow": {
+    "providerSource": "providers/siliconflow/provider.toml",
+    "models": [
+      {
+        "id": "deepseek-ai/DeepSeek-V4-Pro",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-V4-Pro.toml",
+        "sha256": "14f9bc3b75a9922ea284cc797773b4c347480ba04e22be4f88e45f6124d6113a",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-V4-Flash",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-V4-Flash.toml",
+        "sha256": "17b749b864162e2f2404a8ac0adf170cff0f53750f3e5f6e45521a8dfd1e269f",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-V3.2",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-V3.2.toml",
+        "sha256": "4e25c48ad86ab524bbe80685f43cd5291526b32e035d7f5b4895771b8cc9f72d",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-V3.2-Exp",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-V3.2-Exp.toml",
+        "sha256": "5f1043dbd51aaa1c127f571d36cf972e6648b365422836eb9bf12dc44d50b684",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-V3.1",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-V3.1.toml",
+        "sha256": "b762f91863216f9c8affb63d1fad82abff5c0285a54e2ec932af252add938ca4",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-V3.1-Terminus",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-V3.1-Terminus.toml",
+        "sha256": "7e2ffe26fced48179a9998e2dfd31ec67296d793a1ad23d763c55b5461fb067f",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-R1",
+        "path": "providers/siliconflow/models/deepseek-ai/DeepSeek-R1.toml",
+        "sha256": "1a13882dd244588a50e86c8ce4b159602d5665ecc54d43274e1f173c72e08779",
+        "status": "unspecified"
+      },
+      {
+        "id": "Qwen/Qwen3.5-397B-A17B",
+        "path": "providers/siliconflow/models/Qwen/Qwen3.5-397B-A17B.toml",
+        "sha256": "f92d6aeb3f653d34b86d90057b45c657b5048973464852cba7c2b756360e2645",
+        "status": "deprecated"
+      },
+      {
+        "id": "Qwen/Qwen3.5-122B-A10B",
+        "path": "providers/siliconflow/models/Qwen/Qwen3.5-122B-A10B.toml",
+        "sha256": "d5995fa536b24436b3bb48c85b97318dc2c2413525173db72b9adcf1f318a5a3",
+        "status": "unspecified"
+      },
+      {
+        "id": "zai-org/GLM-5.1",
+        "path": "providers/siliconflow/models/zai-org/GLM-5.1.toml",
+        "sha256": "65fe30fd45ce13490a383a3ed0adfb737466f1eaac00280fe9c023b00d57de4b",
+        "status": "unspecified"
+      },
+      {
+        "id": "zai-org/GLM-5",
+        "path": "providers/siliconflow/models/zai-org/GLM-5.toml",
+        "sha256": "8ecd165512dc3052a6d9aa81f35ff593bbbba12311edea0c4b27148db789df4c",
+        "status": "unspecified"
+      },
+      {
+        "id": "moonshotai/Kimi-K2.6",
+        "path": "providers/siliconflow/models/moonshotai/Kimi-K2.6.toml",
+        "sha256": "063a6a45c01bdee4d5c961df5e80743aadcc0b6c41d6c182d01aebf9b6f0f1a4",
+        "status": "unspecified"
+      },
+      {
+        "id": "moonshotai/Kimi-K2.5",
+        "path": "providers/siliconflow/models/moonshotai/Kimi-K2.5.toml",
+        "sha256": "783d17b6fb73a35f13b11a7d06a4c92664ae9cce7a3472e5f82163e5b209406c",
+        "status": "unspecified"
+      },
+      {
+        "id": "openai/gpt-oss-120b",
+        "path": "providers/siliconflow/models/openai/gpt-oss-120b.toml",
+        "sha256": "cf29900c9c9fc5957c294d0322b36fa9e43375e6d64128ce2a13ac67d05c46d2",
+        "status": "unspecified"
+      },
+      {
+        "id": "MiniMaxAI/MiniMax-M2.5",
+        "path": "providers/siliconflow/models/MiniMaxAI/MiniMax-M2.5.toml",
+        "sha256": "109dc11c21c4af8b385c84ed2e8c1b8d43744d180e0154b0f8994898ac404fbf",
+        "status": "deprecated"
+      },
+      {
+        "id": "inclusionAI/Ling-flash-2.0",
+        "path": "providers/siliconflow/models/inclusionAI/Ling-flash-2.0.toml",
+        "sha256": "7429feeddaaf6731f8094a981816b7f5f6d724f4b6dcb48f9823dc5a62f20ffb",
+        "status": "unspecified"
+      },
+      {
+        "id": "Qwen/Qwen3-32B",
+        "path": "providers/siliconflow/models/Qwen/Qwen3-32B.toml",
+        "sha256": "f1b90d8e6c14fc576bdd827b06bada144cf39cae36f456f8d76552f633a5e370",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "vercel": {
+    "providerSource": "providers/vercel/provider.toml",
+    "models": [
+      {
+        "id": "openai/gpt-5.5",
+        "path": "providers/vercel/models/openai/gpt-5.5.toml",
+        "sha256": "8c3bf72a8103e0cbfb6a40c785e8a157ef7bd6eba02cde77455358b7ff41218c",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "wafer": {
+    "providerSource": "providers/wafer.ai/provider.toml",
+    "models": [
+      {
+        "id": "DeepSeek-V4-Pro",
+        "path": "providers/wafer.ai/models/DeepSeek-V4-Pro.toml",
+        "sha256": "8933e23a31a3cd8cc77f9fa6e93fb9a91006f847daebb7103af4f269332e9eb1",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "wandb": {
+    "providerSource": "providers/wandb/provider.toml",
+    "models": [
+      {
+        "id": "openai/gpt-oss-20b",
+        "path": "providers/wandb/models/openai/gpt-oss-20b.toml",
+        "sha256": "1e2ef7021fb30cb876afab803098d25417ed1a5156b70ea1bd87b8b606e3cdae",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "zai_api": {
+    "providerSource": "providers/zai/provider.toml",
+    "models": [
+      {
+        "id": "glm-5.3",
+        "path": "providers/zai/models/glm-5.3.toml",
+        "sha256": "74f939f3743d9d7c3591856dc7d22ef4baa62f8392e50f593b4c9df93e7cfaa2",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.3-flash",
+        "path": "providers/zai/models/glm-5.3-flash.toml",
+        "sha256": "f8f5b14964f989374268bcc5ec00f15d088e1603f4155d098b2db3a47846bd26",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.2",
+        "path": "providers/zai/models/glm-5.2.toml",
+        "sha256": "a6600d42b682643f6fbc2779d51e0335f0552217623f4191fad1a018b080e070",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.1",
+        "path": "providers/zai/models/glm-5.1.toml",
+        "sha256": "a76b9c24b3ab5975a4ac0777361c944e04d2a79b406e2522c160a96e9d33e5da",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5-turbo",
+        "path": "providers/zai/models/glm-5-turbo.toml",
+        "sha256": "63ea8caea2d04083230ffd85578c57cfd83ead71695e6b66175dff8b46672104",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5",
+        "path": "providers/zai/models/glm-5.toml",
+        "sha256": "ed49e7c0fb538f6e67f22f6ec16501bbbb02db8662262ab19eb6113a7704a8f4",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-4.7",
+        "path": "providers/zai/models/glm-4.7.toml",
+        "sha256": "fb23f6bb5b176af21f92efd19f6a9b2e9c9f261f8718c77c5ca54376c0dd39ae",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-4.6v",
+        "path": "providers/zai/models/glm-4.6v.toml",
+        "sha256": "3693b677f75ee6a16b1b7e038787a3d90a243cc28ec95087d36c27e612398b18",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-4.7-flash",
+        "path": "providers/zai/models/glm-4.7-flash.toml",
+        "sha256": "6ccd2e78bd15e2b9340f549b219cc8659a6555534d71d4dcbe9e58a385c76747",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "gemini": {
+    "providerSource": "providers/google/provider.toml",
+    "models": [
+      {
+        "id": "gemini-3.8-flash",
+        "path": "providers/google/models/gemini-3.8-flash.toml",
+        "sha256": "e83d60ae4089a89d58e824d32ecba24628f72dd2d8ee352799f33db93c3daa56",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.7-flash",
+        "path": "providers/google/models/gemini-3.7-flash.toml",
+        "sha256": "15aaf2e8eb60719cf89e92a3b6ab83dab163c510257c85052d6c44fb920db0ff",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.6-flash",
+        "path": "providers/google/models/gemini-3.6-flash.toml",
+        "sha256": "2d6ec5770d4df46871a3fb10c61afd0b2d38192fa22cd8ce5db8f86929bb27d7",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.5-flash-lite",
+        "path": "providers/google/models/gemini-3.5-flash-lite.toml",
+        "sha256": "97892dbad0a03b1bd6cc18c987a5d62861f344f130a51becef03860a4ff6354d",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.1-pro-preview",
+        "path": "providers/google/models/gemini-3.1-pro-preview.toml",
+        "sha256": "7598f8b41a4251453f5d85987956c02031add0c4f6f77a8350ee01299cefccec",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.1-flash-lite-preview",
+        "path": "providers/google/models/gemini-3.1-flash-lite-preview.toml",
+        "sha256": "1e0a1b2d7829888482de4ca8afffce3770c5b4d47154c256d6615050878a9463",
+        "status": "deprecated"
+      },
+      {
+        "id": "gemini-3-flash-preview",
+        "path": "providers/google/models/gemini-3-flash-preview.toml",
+        "sha256": "8e5eb06065cccde84a27972f1107a59f4b750e6d4ff92125cf08ae96b76c44cd",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-2.5-pro",
+        "path": "providers/google/models/gemini-2.5-pro.toml",
+        "sha256": "0d250263ddec549ad36c1cd1341938a14fa403ccc5aa1c6bed204c597ed5cf9b",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-2.5-flash",
+        "path": "providers/google/models/gemini-2.5-flash.toml",
+        "sha256": "efe190947a7dda3d8c708617c92825123304bd996c689623dae60daff5da1483",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-2.5-flash-lite",
+        "path": "providers/google/models/gemini-2.5-flash-lite.toml",
+        "sha256": "dcb648725eed51f18a96f99aa0287d54f0b84f90c0f9ba4549975e73cee15af9",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemma-4-31b-it",
+        "path": "providers/google/models/gemma-4-31b-it.toml",
+        "sha256": "f6455fc27897ec8869dd25e7d4da8d766a414830e27d02198ba780b475bc7d77",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM provider id, auth setting names, format and endpoint configuration retained; capability fields remain unknown."
+  },
+  "minimax": {
+    "providerSource": "providers/minimax/provider.toml",
+    "models": [
+      {
+        "id": "MiniMax-M3",
+        "path": "providers/minimax/models/MiniMax-M3.toml",
+        "ref": "dev",
+        "sha256": "15e38b01280c542a34e41742e3617d845afa4e05de1c6274884ead26dc5e2453",
+        "status": "unspecified"
+      },
+      {
+        "id": "MiniMax-M2.7",
+        "path": "providers/minimax/models/MiniMax-M2.7.toml",
+        "ref": "dev",
+        "sha256": "83d33b528c26556c3406375d44d3a074d8fb457112836de3a60514eccf4179c3",
+        "status": "deprecated"
+      },
+      {
+        "id": "MiniMax-M2.5",
+        "path": "providers/minimax/models/MiniMax-M2.5.toml",
+        "ref": "dev",
+        "sha256": "b1fd349615dd3dd4b3b39133a78a00c27f7d96330f77a34e5c2d2856b43cfb2a",
+        "status": "deprecated"
+      },
+      {
+        "id": "MiniMax-M2.1",
+        "path": "providers/minimax/models/MiniMax-M2.1.toml",
+        "ref": "dev",
+        "sha256": "5393b5002e66e7079a629ecc696229140c4a06dee46741001aae27c86350fd3c",
+        "status": "deprecated"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint and auth configuration retained; includes historical identifiers, not a current availability guarantee."
+  },
+  "anthropic": {
+    "providerSource": "providers/anthropic/provider.toml",
+    "models": [
+      {
+        "id": "claude-sonnet-4-20250514",
+        "path": "providers/anthropic/models/claude-sonnet-4-20250514.toml",
+        "ref": "281cb7db5c0f6eb9fd20db1fc13e0cfb94ec8ac5",
+        "sha256": "67956900cf5af361cf09c2b2e65e7854a25107fdc25b2cb17818ba9aaf33cf50",
+        "status": "historical"
+      },
+      {
+        "id": "claude-opus-4-20250514",
+        "path": "providers/anthropic/models/claude-opus-4-20250514.toml",
+        "ref": "281cb7db5c0f6eb9fd20db1fc13e0cfb94ec8ac5",
+        "sha256": "d2002a4ca3340167f0189bab8def67a529ab10dfa355e2b64496e4ed3f458e13",
+        "status": "historical"
+      },
+      {
+        "id": "claude-3-5-sonnet-20241022",
+        "path": "providers/anthropic/models/claude-3-5-sonnet-20241022.toml",
+        "ref": "281cb7db5c0f6eb9fd20db1fc13e0cfb94ec8ac5",
+        "sha256": "af304c3b133eea5058fdfd68243582b8448ddd5fbdc98b00641128c419a440a7",
+        "status": "deprecated"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint and auth configuration retained; includes historical identifiers, not a current availability guarantee."
+  },
+  "openai_api": {
+    "providerSource": "providers/openai/provider.toml",
+    "models": [
+      {
+        "id": "gpt-5.5",
+        "path": "providers/openai/models/gpt-5.5.toml",
+        "ref": "dev",
+        "sha256": "0e274ad6f0f34e1bbaef5a026d63ce3bcb7c51a2db2ccad0d53b3637cc3c8700",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4",
+        "path": "providers/openai/models/gpt-5.4.toml",
+        "ref": "dev",
+        "sha256": "01f01d595eb059c091a698c32461fecc0d31c1bd700ffc87b3c6a47a4a3e6a51",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4-mini",
+        "path": "providers/openai/models/gpt-5.4-mini.toml",
+        "ref": "dev",
+        "sha256": "b47bf747cb57294e16f99cb1eda615993f3e949ecc7867b6ebcdcdd635fb99d3",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4-nano",
+        "path": "providers/openai/models/gpt-5.4-nano.toml",
+        "ref": "dev",
+        "sha256": "07313e11fa8abd611a12a29c593b465e0116426e078eb3b92b9e4861b876f712",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.2",
+        "path": "providers/openai/models/gpt-5.2.toml",
+        "ref": "dev",
+        "sha256": "11b5c48ba13e77a44634244622a0e18cf54532ae6e2cd9eea37d179c3f5b5998",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.1",
+        "path": "providers/openai/models/gpt-5.1.toml",
+        "ref": "dev",
+        "sha256": "447d9d7924818f3b3738bb829899bbf8dea2c2f52ab35cedeff47dc1ab8cb1e6",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5",
+        "path": "providers/openai/models/gpt-5.toml",
+        "ref": "dev",
+        "sha256": "4ee73b07882f27569531d04878e36f0b128a30568a62d2ebf32be25290985dd7",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5-mini",
+        "path": "providers/openai/models/gpt-5-mini.toml",
+        "ref": "dev",
+        "sha256": "000634569f43f961043b2f3e9df1a5867fa736f11452d69d301356c582b14376",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5-nano",
+        "path": "providers/openai/models/gpt-5-nano.toml",
+        "ref": "dev",
+        "sha256": "db0a0d83d15aa8b2f409960e17e4227b7a9cc8ca9a14b5ff06a01f197a5a9fbd",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-4o",
+        "path": "providers/openai/models/gpt-4o.toml",
+        "ref": "dev",
+        "sha256": "0e606c2af4d9f1ded72d4a827ed093017bf0b1fbf7581b51f84024ee4a6e6b07",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-4o-mini",
+        "path": "providers/openai/models/gpt-4o-mini.toml",
+        "ref": "dev",
+        "sha256": "53551f7b22c5d600ed154cc2bbc42d1e0f2b6e99f73d032323b2185d8cb6c2a5",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-4-turbo",
+        "path": "providers/openai/models/gpt-4-turbo.toml",
+        "ref": "dev",
+        "sha256": "0102b9c8fece10cbe017ea78328d6ab71e2295111b17629cc296d208d4b4ae6e",
+        "status": "deprecated"
+      },
+      {
+        "id": "gpt-4.1",
+        "path": "providers/openai/models/gpt-4.1.toml",
+        "ref": "dev",
+        "sha256": "138b18301feff5beda20ce256f91cfad6dbd5f5764e31bf5132e8c5adfc29aec",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-4.1-mini",
+        "path": "providers/openai/models/gpt-4.1-mini.toml",
+        "ref": "dev",
+        "sha256": "6b9929373af9d8385244b2cd86dda143c5c413be519595bc52b14b4e59e5ec03",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-4.1-nano",
+        "path": "providers/openai/models/gpt-4.1-nano.toml",
+        "ref": "dev",
+        "sha256": "942e411771f8d94c9e25d5a00e7b69bcbadf7425fcd1a0b04d145d369c2acf0b",
+        "status": "deprecated"
+      },
+      {
+        "id": "o3",
+        "path": "providers/openai/models/o3.toml",
+        "ref": "dev",
+        "sha256": "ef6ead943ef871f3b5cc95025c9dc6ad5278fb40a7a614339111273fea7728b5",
+        "status": "unspecified"
+      },
+      {
+        "id": "o3-mini",
+        "path": "providers/openai/models/o3-mini.toml",
+        "ref": "dev",
+        "sha256": "665baa14d987e36e621491733e6cab5c70c9283f57795b87d9a0e51c30cdf29e",
+        "status": "deprecated"
+      },
+      {
+        "id": "o3-pro",
+        "path": "providers/openai/models/o3-pro.toml",
+        "ref": "dev",
+        "sha256": "725270db1c1885e87fba6e7729055bf86c1a80e217915999b399e8a7178e0943",
+        "status": "unspecified"
+      },
+      {
+        "id": "o4-mini",
+        "path": "providers/openai/models/o4-mini.toml",
+        "ref": "dev",
+        "sha256": "d7f0b4aa001b512c756792e4dd6247297c2bd414e290ec2cae8b817a038cd1d5",
+        "status": "deprecated"
+      },
+      {
+        "id": "o1",
+        "path": "providers/openai/models/o1.toml",
+        "ref": "dev",
+        "sha256": "54368f5786d2147856053697c211831fc1fb38473c7d5543512cf2a12039d493",
+        "status": "deprecated"
+      },
+      {
+        "id": "o1-mini",
+        "path": "providers/openai/models/o1-mini.toml",
+        "ref": "fe7927f2dd5e0a5c576b490af9a69ffc4a7d070b",
+        "sha256": "92ff9909443919778950b35c558ab29a891950989e0021d6a2d4db69c03444f8",
+        "status": "deprecated"
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "path": "providers/openai/models/gpt-5.6-sol.toml",
+        "ref": "dev",
+        "sha256": "1dcf244ad26f05966ab61c2b7a05d79a1249e0bc48280291d73fed132377ac55",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint and auth configuration retained; includes historical identifiers, not a current availability guarantee."
+  },
+  "opencode_go": {
+    "providerSource": "providers/opencode-go/provider.toml",
+    "models": [
+      {
+        "id": "deepseek-flash",
+        "path": "providers/opencode-go/models/deepseek-flash.toml",
+        "ref": "2858118c7109c87cdaaeeb6db35d8e6a10f3ea46",
+        "sha256": "eec72e8cdd8df4e8321918ac35dd0f22acbf840f68372ec814d49de428d2fa5c",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-5.3-flash",
+        "path": "providers/opencode-go/models/glm-5.3-flash.toml",
+        "ref": "dev",
+        "sha256": "6c7af08d4ebcc1f9078c26162c302c72b9a86b68c0b80d4802f7bf2c88be29ce",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.3",
+        "path": "providers/opencode-go/models/glm-5.3.toml",
+        "ref": "dev",
+        "sha256": "690f35816f72175ef51e145d057acda1a98bc68e13cf0a62c5316d7c99074175",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.2",
+        "path": "providers/opencode-go/models/glm-5.2.toml",
+        "ref": "dev",
+        "sha256": "d6b75b59fec5f90233788365351ebea18c78a4073e87402bbdb0f78d335ea371",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.1",
+        "path": "providers/opencode-go/models/glm-5.1.toml",
+        "ref": "f95f1ba7d2a56661cd3dedbbe6aa7e87b6f40482",
+        "sha256": "fbcd871997402e906f42a2f30c9fdf7a150ef412e72a7d9d037e5af19579c96d",
+        "status": "historical"
+      },
+      {
+        "id": "kimi-k2.7-code",
+        "path": "providers/opencode-go/models/kimi-k2.7-code.toml",
+        "ref": "dev",
+        "sha256": "2f7d4c3b19dadf618c22519b5ddea2ad7e5ab5c680a2497dd0ca5dab94c7c2b5",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k2.6",
+        "path": "providers/opencode-go/models/kimi-k2.6.toml",
+        "ref": "dd8ad847383fb9116a0857a604dca7e1192749b0",
+        "sha256": "13660bfdccd469124e930b8392e51d5dcdf7964cd2517d5e8ed26f63f5eaefc3",
+        "status": "deprecated"
+      },
+      {
+        "id": "kimi-k3",
+        "path": "providers/opencode-go/models/kimi-k3.toml",
+        "ref": "dev",
+        "sha256": "18046a5146cb07ef2a08151a0f73edc644e1b868effca59516b42d1076e0f589",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "path": "providers/opencode-go/models/deepseek-v4-pro.toml",
+        "ref": "dev",
+        "sha256": "708f32e89eddf83738281ac46ec6421bafc7fb6b9c68408f668c3bc7c70a6c59",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-v4-flash",
+        "path": "providers/opencode-go/models/deepseek-v4-flash.toml",
+        "ref": "dd8ad847383fb9116a0857a604dca7e1192749b0",
+        "sha256": "abf4291b411850eecc7d44dda07112b24cb749a24f3f3f1de2f6da3800eff653",
+        "status": "deprecated"
+      },
+      {
+        "id": "deepseek-v4-flash-vision-exp",
+        "path": "providers/opencode-go/models/deepseek-v4-flash-vision-exp.toml",
+        "ref": "dd8ad847383fb9116a0857a604dca7e1192749b0",
+        "sha256": "5f5ec58894c57fed63558a5f3f42b9ef1550c8f5e65008e3dbab90dbc708d085",
+        "status": "deprecated"
+      },
+      {
+        "id": "longcat-2.0",
+        "path": "providers/opencode-go/models/longcat-2.0.toml",
+        "ref": "dev",
+        "sha256": "6fc4232b6964cae1ee256124e138633ccec18a5cb43e591ac277427aebf198e6",
+        "status": "unspecified"
+      },
+      {
+        "id": "mimo-v2.5",
+        "path": "providers/opencode-go/models/mimo-v2.5.toml",
+        "ref": "dev",
+        "sha256": "e9fd99fb9d7d4dc3116d382e441bc649caba8e7734152cca871cb8c6079ccafe",
+        "status": "unspecified"
+      },
+      {
+        "id": "mimo-v2.5-pro",
+        "path": "providers/opencode-go/models/mimo-v2.5-pro.toml",
+        "ref": "dev",
+        "sha256": "96e155c2d6b76228b4ecd09e85ee517aacd8c71b27551726fac055da497b1756",
+        "status": "unspecified"
+      },
+      {
+        "id": "minimax-m3",
+        "path": "providers/opencode-go/models/minimax-m3.toml",
+        "ref": "dev",
+        "sha256": "28c002850d35305284220c52b3b22cc171e764cf6ca54d2afe3b5f51589e0306",
+        "status": "unspecified"
+      },
+      {
+        "id": "minimax-m2.7",
+        "path": "providers/opencode-go/models/minimax-m2.7.toml",
+        "ref": "dev",
+        "sha256": "59faeddbdfe586d64a055792392b7c1daba2abaceacd959983f81be0ff6cec14",
+        "status": "deprecated"
+      },
+      {
+        "id": "minimax-m2.5",
+        "path": "providers/opencode-go/models/minimax-m2.5.toml",
+        "ref": "f95f1ba7d2a56661cd3dedbbe6aa7e87b6f40482",
+        "sha256": "f09314f6fd41152a25ae17b4ba4e7115b42af472a4868a97bf96c16934e6632a",
+        "status": "deprecated"
+      },
+      {
+        "id": "qwen3.8-max",
+        "path": "providers/opencode-go/models/qwen3.8-max.toml",
+        "ref": "dev",
+        "sha256": "496066deb7a6398a97af1f223e74c370ab58f5aac71e3eb629d7567359b61ddf",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.8-flash",
+        "path": "providers/opencode-go/models/qwen3.8-flash.toml",
+        "ref": "dev",
+        "sha256": "1250e1bbc83a592ee1362f1f820e2aadb933d802acfc351b2661fb76970219c4",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.7-max",
+        "path": "providers/opencode-go/models/qwen3.7-max.toml",
+        "ref": "dd8ad847383fb9116a0857a604dca7e1192749b0",
+        "sha256": "2bd28458c70271b1747a39904b6b747c2e02692fe97f86280fca86a770a99890",
+        "status": "deprecated"
+      },
+      {
+        "id": "qwen3.7-plus",
+        "path": "providers/opencode-go/models/qwen3.7-plus.toml",
+        "ref": "dev",
+        "sha256": "b6922c909dbd4ec1a125fdb690818102542fb3b29b2e5d621fb256664074b1e2",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.6-plus",
+        "path": "providers/opencode-go/models/qwen3.6-plus.toml",
+        "ref": "dd8ad847383fb9116a0857a604dca7e1192749b0",
+        "sha256": "98f9194d2dac24a42692b8b9281a110df7b0e514bb6c958b6890816ed02b2811",
+        "status": "deprecated"
+      },
+      {
+        "id": "hy4-preview",
+        "path": "providers/opencode-go/models/hy4-preview.toml",
+        "ref": "dev",
+        "sha256": "d436a00778b03e71071577e361163fa2ddfa7035266d23b3ed1c9f234d3bfb52",
+        "status": "unspecified"
+      },
+      {
+        "id": "hy3",
+        "path": "providers/opencode-go/models/hy3.toml",
+        "ref": "dev",
+        "sha256": "cf4b47c1c0f2e7371ee725a7bed1e23b21a956c225641f6f9d4f3b97006a9797",
+        "status": "unspecified"
+      },
+      {
+        "id": "grok-4.6",
+        "path": "providers/opencode-go/models/grok-4.6.toml",
+        "ref": "dd8ad847383fb9116a0857a604dca7e1192749b0",
+        "sha256": "9746028e019f916917bb8206259b38f74b8d77479b754adf4fbcbd8d1cfe533d",
+        "status": "historical"
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "path": "providers/opencode-go/models/gpt-5.6-luna.toml",
+        "ref": "dev",
+        "sha256": "10d8c01738d31a18469b25360bbc6f565a1c52a12ac513d58357ad5fb4640189",
+        "status": "unspecified"
+      },
+      {
+        "id": "muse-spark-1.2-contributor",
+        "path": "providers/opencode-go/models/muse-spark-1.2-contributor.toml",
+        "ref": "dev",
+        "sha256": "d1e74f9ccc262e01c138e88ee0d2c76514c20019f8fec808bcf788c5b17939bf",
+        "status": "unspecified"
+      },
+      {
+        "id": "muse-spark-1.3-contributor",
+        "path": "providers/opencode-go/models/muse-spark-1.3-contributor.toml",
+        "ref": "dev",
+        "sha256": "a331dfcf561b34a8557483d5fdc0b992a9f005a5caa4ff9f4a3cd802552b84a5",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint and auth configuration retained; includes historical identifiers, not a current availability guarantee."
+  },
+  "zai": {
+    "providerSource": "providers/zai-coding-plan/provider.toml",
+    "models": [
+      {
+        "id": "glm-5.3",
+        "path": "providers/zai-coding-plan/models/glm-5.3.toml",
+        "ref": "dev",
+        "sha256": "eb56192d79682f33cc309d459e008a125fd1a034cffbafb566892f20b3a8f668",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.3-flash",
+        "path": "providers/zai-coding-plan/models/glm-5.3-flash.toml",
+        "ref": "dev",
+        "sha256": "3a292edecdd429a31846e409c0de9ff045dfbd451633bfe7472eb212afc3c9ca",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.2",
+        "path": "providers/zai-coding-plan/models/glm-5.2.toml",
+        "ref": "dev",
+        "sha256": "3253c8beb59869ff8dd1a2586ec43bfbf0ec9d9270659223efeef404c230ea02",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-5.1",
+        "path": "providers/zai-coding-plan/models/glm-5.1.toml",
+        "ref": "19b8a2fba6cff8786fab1af67fa1bcd8303bda68",
+        "sha256": "7fb14272b0f063b7f37f81fa9b23df63eecf1980a1261a1ab49bf09292db43d1",
+        "status": "historical"
+      },
+      {
+        "id": "glm-5-turbo",
+        "path": "providers/zai-coding-plan/models/glm-5-turbo.toml",
+        "ref": "dev",
+        "sha256": "2203102f9231f052c59a8052cde8bfc90ef57fda56399b30e5637c8af3ba4d6c",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-5",
+        "path": "providers/zai-coding-plan/models/glm-5.toml",
+        "ref": "fee96c27b994a8bb76a776a7c60bb7044684ede5",
+        "sha256": "80011dc10c726e2abd1cfca60bc6ff15eb592f7276cb7b451745e4f82130f17a",
+        "status": "historical"
+      },
+      {
+        "id": "glm-4.7",
+        "path": "providers/zai-coding-plan/models/glm-4.7.toml",
+        "ref": "dev",
+        "sha256": "ea978b01a66e90c7b61b1ac13ee80ac28c8dcbcf973094c1bb394aeeceab2413",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-4.6v",
+        "path": "providers/zai-coding-plan/models/glm-4.6v.toml",
+        "ref": "fee96c27b994a8bb76a776a7c60bb7044684ede5",
+        "sha256": "2b3cd1d3132368acf4f78ce661d4fc12439b3315b7a5d3701417a1d2aed14780",
+        "status": "historical"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint and auth configuration retained; includes historical identifiers, not a current availability guarantee."
+  },
+  "opencode_zen": {
+    "providerSource": "providers/opencode/provider.toml",
+    "models": [
+      {
+        "id": "claude-fable-5",
+        "path": "providers/opencode/models/claude-fable-5.toml",
+        "ref": "dev",
+        "sha256": "708bb746660230c87c60190c8c410f301f090d181b74cb582b7aa2837adadb35",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-fable-5-1",
+        "path": "providers/opencode/models/claude-fable-5-1.toml",
+        "ref": "dev",
+        "sha256": "25ba11bc01782d9ac3ca119ac9fefc0dd7ceda365d7f5c13cc8e6c0f9262f5a9",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-opus-5",
+        "path": "providers/opencode/models/claude-opus-5.toml",
+        "ref": "dev",
+        "sha256": "014842cb0602d64f5403912bc95b6189d868c6072077b3f9474a4df953ee3626",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-opus-4-8",
+        "path": "providers/opencode/models/claude-opus-4-8.toml",
+        "ref": "dev",
+        "sha256": "fb0f23dd07cfdf4c87b14ebc6995af513580c71c1eb8096c640243408b347c0b",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-opus-4-7",
+        "path": "providers/opencode/models/claude-opus-4-7.toml",
+        "ref": "dev",
+        "sha256": "6781ff25e67bc8181dde0d2814eb368bcae73b0a5ec2e9f410019d8957afde94",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-opus-4-6",
+        "path": "providers/opencode/models/claude-opus-4-6.toml",
+        "ref": "dev",
+        "sha256": "6f16c8b25a5530c1345887ce05e07a9053f850ce9407f4c3f18321cc4d5ad76b",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-opus-4-5",
+        "path": "providers/opencode/models/claude-opus-4-5.toml",
+        "ref": "dev",
+        "sha256": "5f36883fc571011be30b7bad37f88eba821554441095af63eb3bb58d96875f66",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-sonnet-5",
+        "path": "providers/opencode/models/claude-sonnet-5.toml",
+        "ref": "dev",
+        "sha256": "467ab66032ad9451785b060b8b786443ba547c051b7cb118b308889b0f428c99",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-sonnet-4-6",
+        "path": "providers/opencode/models/claude-sonnet-4-6.toml",
+        "ref": "dev",
+        "sha256": "f70f10c7bfb4a93bf7f8abc7ec672c0d536452356695146fe93b4d1e5f438752",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-sonnet-4-5",
+        "path": "providers/opencode/models/claude-sonnet-4-5.toml",
+        "ref": "dev",
+        "sha256": "5058f28e7f4cb9f426a4f00dfe786acf189bbb34a134bfbe8dffe1337132e266",
+        "status": "unspecified"
+      },
+      {
+        "id": "claude-sonnet-4",
+        "path": "providers/opencode/models/claude-sonnet-4.toml",
+        "ref": "dev",
+        "sha256": "b1d6e2fc6e5edbb72ad769d73ecdc5fdeb4844cb54570bfbcbeffb5388c61f3c",
+        "status": "deprecated"
+      },
+      {
+        "id": "claude-haiku-4-5",
+        "path": "providers/opencode/models/claude-haiku-4-5.toml",
+        "ref": "dev",
+        "sha256": "6d03cedd86db0b19eba66d98d00b43bee20c2762ed92e94650e8bf91d48e2e23",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.6-flash",
+        "path": "providers/opencode/models/gemini-3.6-flash.toml",
+        "ref": "dev",
+        "sha256": "17b78030bd0c084f939b592ac372d04e51100766f48cbc39814f45f99fae0200",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.8-flash",
+        "path": "providers/opencode/models/gemini-3.8-flash.toml",
+        "ref": "dev",
+        "sha256": "c666a65002520e0126193a75ac310a0ffdd371578a3a7b2d1ff9d1ab3b169810",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.7-flash",
+        "path": "providers/opencode/models/gemini-3.7-flash.toml",
+        "ref": "dev",
+        "sha256": "e7b8572718c556e26ce2338951ff6c0256e4157145757a6fa451ffb7d233e83a",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.5-flash-lite",
+        "path": "providers/opencode/models/gemini-3.5-flash-lite.toml",
+        "ref": "dev",
+        "sha256": "fa26a5434920ca5e93504ddb616897e00baf0e75e46800efad359b8f59865801",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.5-flash",
+        "path": "providers/opencode/models/gemini-3.5-flash.toml",
+        "ref": "dev",
+        "sha256": "b23f3ea2f6669493328d2f7fa3c8ba9a7583dc524fe80338b2e19bf054c7be10",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3.1-pro",
+        "path": "providers/opencode/models/gemini-3.1-pro.toml",
+        "ref": "dev",
+        "sha256": "43402d95afc6164d8e948cd32d585b7bf6745c7ce66f9a0ca32f2fca267ab9eb",
+        "status": "unspecified"
+      },
+      {
+        "id": "gemini-3-flash",
+        "path": "providers/opencode/models/gemini-3-flash.toml",
+        "ref": "dev",
+        "sha256": "d12cd4fffcad86a10dca5b85a4f7971de02a3112bd456746541aaccc07e9db7f",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-6-astra",
+        "path": "providers/opencode/models/gpt-6-astra.toml",
+        "ref": "dev",
+        "sha256": "3496eff44d13c863be49511ab200ea2d6ebc572f376db12d1cdd54187bc1b4a2",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "path": "providers/opencode/models/gpt-5.6-sol.toml",
+        "ref": "dev",
+        "sha256": "ac5963b4f513224ce6ef791911000aa014dfb6b3b1d0a351ed85c3936a62f891",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "path": "providers/opencode/models/gpt-5.6-terra.toml",
+        "ref": "dev",
+        "sha256": "a6ba6e8e5d3d8d139901d3c220fe985efdea2b84628557cb57aa16ebf344981a",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "path": "providers/opencode/models/gpt-5.6-luna.toml",
+        "ref": "dev",
+        "sha256": "cc320b0dcaf434af21b495f950f4142b016c1379d4971cc622411308fb6aa6f9",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.5",
+        "path": "providers/opencode/models/gpt-5.5.toml",
+        "ref": "dev",
+        "sha256": "ee18986d2d5af1ba4262f6cff60e9b34f22ec86673dd99c8bd313eccfb9f0ecf",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.5-pro",
+        "path": "providers/opencode/models/gpt-5.5-pro.toml",
+        "ref": "dev",
+        "sha256": "8f0fcb95c15d6ecf8cea244d834b04a4303010c83d630c8d2664bcefe6a5b975",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4",
+        "path": "providers/opencode/models/gpt-5.4.toml",
+        "ref": "dev",
+        "sha256": "9fc1c34992081381b9db8a993c52b0c26f9a780232a3bc36d7a03a78cb64f384",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4-pro",
+        "path": "providers/opencode/models/gpt-5.4-pro.toml",
+        "ref": "dev",
+        "sha256": "ca81a4f2b5d0a58125b501f3e849aaa130495aead16bba0c639cd7b8d2d2f7b0",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4-mini",
+        "path": "providers/opencode/models/gpt-5.4-mini.toml",
+        "ref": "dev",
+        "sha256": "489e6668961e6413b5ecda6c015a68007c15214456c79797d9a89ec1b6de1673",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.4-nano",
+        "path": "providers/opencode/models/gpt-5.4-nano.toml",
+        "ref": "dev",
+        "sha256": "0f5022ef8dee37e44af5cab396a4ebd6d984976e12dbd838c196816c97cf2c70",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.3-codex-spark",
+        "path": "providers/opencode/models/gpt-5.3-codex-spark.toml",
+        "ref": "dev",
+        "sha256": "702bc57f75bd17256e3035eba0f87c52ed17952236d1ccd611a1a03de7299c12",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.3-codex",
+        "path": "providers/opencode/models/gpt-5.3-codex.toml",
+        "ref": "dev",
+        "sha256": "2e642b637aea8e29f618399082ddd001548fd852e989c3c6e2895042630831bd",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.2",
+        "path": "providers/opencode/models/gpt-5.2.toml",
+        "ref": "dev",
+        "sha256": "8e97dd6024efbc1a3b6aba9997e6a7c6709892c50a85360ca55f43eb322de928",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.2-codex",
+        "path": "providers/opencode/models/gpt-5.2-codex.toml",
+        "ref": "dev",
+        "sha256": "912009eb5f2f2daa40fedcb503f0fceb76773dc7032e67a709b1a7def975c521",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.1",
+        "path": "providers/opencode/models/gpt-5.1.toml",
+        "ref": "dev",
+        "sha256": "f30f2791a5e4a21b99b0cb4d64fd211b1f473719cb4d683b14b6f0193c7f95b1",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.1-codex-max",
+        "path": "providers/opencode/models/gpt-5.1-codex-max.toml",
+        "ref": "dev",
+        "sha256": "a09d5f7a8b93ecd873570ca36399bb4df5b5894633546e6608511c69c801645c",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.1-codex",
+        "path": "providers/opencode/models/gpt-5.1-codex.toml",
+        "ref": "dev",
+        "sha256": "ab3ad30160c695b285699aad2c03c372db4e5194f57e7218276535c85662223e",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5.1-codex-mini",
+        "path": "providers/opencode/models/gpt-5.1-codex-mini.toml",
+        "ref": "dev",
+        "sha256": "52d54b6480d1d7c58bd1242f5fbbcbb4c28ce2708426858a56310b52ab8952f2",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5",
+        "path": "providers/opencode/models/gpt-5.toml",
+        "ref": "dev",
+        "sha256": "c9a2e23234059503f7f40c0906e300b1fb83ce08daf2fa471f1fd940d6091b03",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5-codex",
+        "path": "providers/opencode/models/gpt-5-codex.toml",
+        "ref": "dev",
+        "sha256": "f0ccc5e23c26a770bc7e2c260d946063180ff4fdd3c49343c58633c4f10d8e7f",
+        "status": "unspecified"
+      },
+      {
+        "id": "gpt-5-nano",
+        "path": "providers/opencode/models/gpt-5-nano.toml",
+        "ref": "dev",
+        "sha256": "57b26d82aef934a3a86bb1905edd4be4fee37583c83a08540ee958c84d27e311",
+        "status": "unspecified"
+      },
+      {
+        "id": "grok-build-0.1",
+        "path": "providers/opencode/models/grok-build-0.1.toml",
+        "ref": "dev",
+        "sha256": "968f7e604d2dcf67b7b0ac1e5945cb097e69624e1a703da6bdc40f1158c4b260",
+        "status": "unspecified"
+      },
+      {
+        "id": "grok-4.6",
+        "path": "providers/opencode/models/grok-4.6.toml",
+        "ref": "dev",
+        "sha256": "762dc554328e858be4fc40fcb0606ebdc01c50824a3f2323fe3c3e8ea51645fe",
+        "status": "unspecified"
+      },
+      {
+        "id": "grok-4.5",
+        "path": "providers/opencode/models/grok-4.5.toml",
+        "ref": "dev",
+        "sha256": "6728aec6ee010070c6b3a189ab2645f94ebb62e050b176e0de9cd77007992d54",
+        "status": "unspecified"
+      },
+      {
+        "id": "muse-spark-1.3",
+        "path": "providers/opencode/models/muse-spark-1.3.toml",
+        "ref": "dev",
+        "sha256": "9dc542955331aa230e228c7e29cef5fd829f8ce78d30284538ea2d7f126aab32",
+        "status": "unspecified"
+      },
+      {
+        "id": "muse-spark-1.2",
+        "path": "providers/opencode/models/muse-spark-1.2.toml",
+        "ref": "dev",
+        "sha256": "f7f65c45caa9326e8b4bb0cbcde7ff0193a88e211f0ce8ddf33115379b0bd6bd",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.6-plus",
+        "path": "providers/opencode/models/qwen3.6-plus.toml",
+        "ref": "dev",
+        "sha256": "dab47d92f1b47910b214b9820e48a0ce2539e7aedbd5781cbd22d407f455bf14",
+        "status": "unspecified"
+      },
+      {
+        "id": "qwen3.5-plus",
+        "path": "providers/opencode/models/qwen3.5-plus.toml",
+        "ref": "dev",
+        "sha256": "e5243f570c6f1ab465d736d67cda9fcf1a809f602b800004528101353b108df8",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "path": "providers/opencode/models/deepseek-v4-pro.toml",
+        "ref": "dev",
+        "sha256": "ac5e76b89ecd3a737bcd48c4199dc3c462a96af5916ba840584b3b11829a0c78",
+        "status": "unspecified"
+      },
+      {
+        "id": "deepseek-v4-flash",
+        "path": "providers/opencode/models/deepseek-v4-flash.toml",
+        "ref": "dev",
+        "sha256": "da72f8294c9d2e9a7d3addb29614e0508f614303dd85f4a1dc7a758b7c3f1b4f",
+        "status": "deprecated"
+      },
+      {
+        "id": "deepseek-v4-flash-vision-exp",
+        "path": "providers/opencode/models/deepseek-v4-flash-vision-exp.toml",
+        "ref": "dev",
+        "sha256": "20a53d1506935c420c2d9563db0333c274faf7dd42940e652608ff77352ddb4a",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-5.3-flash",
+        "path": "providers/opencode/models/glm-5.3-flash.toml",
+        "ref": "dev",
+        "sha256": "a8f7381b117089999ff7836c7dba52d52cfe9a64d503b96fd18d6b9f34358550",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.3",
+        "path": "providers/opencode/models/glm-5.3.toml",
+        "ref": "dev",
+        "sha256": "f847a0eb43a99627ea2f3e189ed7de8896dce48b76b4111d4d015cffd8888c36",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.2",
+        "path": "providers/opencode/models/glm-5.2.toml",
+        "ref": "dev",
+        "sha256": "060da2193075620ea33ca2d7e60500ceef17244db04d9a1a8cd1adf3f9eb3f22",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5.1",
+        "path": "providers/opencode/models/glm-5.1.toml",
+        "ref": "dev",
+        "sha256": "2ab41b5f0b7a8b1f72d693a9e7a14800eb8fc4a7ff54f704b0099b58382c7bfa",
+        "status": "unspecified"
+      },
+      {
+        "id": "glm-5",
+        "path": "providers/opencode/models/glm-5.toml",
+        "ref": "dev",
+        "sha256": "56b26f8c8e93d6e109beeb5b08df1669f37cabd918876057d6225b9e29bc68f1",
+        "status": "unspecified"
+      },
+      {
+        "id": "minimax-m3",
+        "path": "providers/opencode/models/minimax-m3.toml",
+        "ref": "dev",
+        "sha256": "e7a151fccbda6fb441c73f0deeef069ca164941bc95affe7446a4e4ddac1b7d6",
+        "status": "unspecified"
+      },
+      {
+        "id": "minimax-m2.7",
+        "path": "providers/opencode/models/minimax-m2.7.toml",
+        "ref": "dev",
+        "sha256": "e0415dbe72a47345117779ac574bfad6f9a5b3d8ca0e23ba8be8ff0048e4eba6",
+        "status": "unspecified"
+      },
+      {
+        "id": "minimax-m2.5",
+        "path": "providers/opencode/models/minimax-m2.5.toml",
+        "ref": "dev",
+        "sha256": "82dc3a941ef8ac704d9c7bac2b0d93e22485e076ef1ed5607df49c697152d6a2",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k3",
+        "path": "providers/opencode/models/kimi-k3.toml",
+        "ref": "dev",
+        "sha256": "1701eea59f07e027392b18904bb224af7ac1efce1fe41d979cc8321ded6b702e",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k2.7-code",
+        "path": "providers/opencode/models/kimi-k2.7-code.toml",
+        "ref": "dev",
+        "sha256": "7a2da9edd6c7347c852751b58646a8b30d1991c0237a7547dcc022fefd2561a0",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k2.6",
+        "path": "providers/opencode/models/kimi-k2.6.toml",
+        "ref": "dev",
+        "sha256": "2a0191694c35611bbdf0b8ca13ca5a3b15126ae96824926f4ff90b11ea3d70d5",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k2.5",
+        "path": "providers/opencode/models/kimi-k2.5.toml",
+        "ref": "dev",
+        "sha256": "caaa7dc04a231feef99a8d64b38db146885639c39d42be96a70d39d7edc6b9d3",
+        "status": "unspecified"
+      },
+      {
+        "id": "big-pickle",
+        "path": "providers/opencode/models/big-pickle.toml",
+        "ref": "dev",
+        "sha256": "13cc7e917ae4b8f22806c40a7999bb5a7c0896da894878c209c8ed1f62813611",
+        "status": "unspecified"
+      },
+      {
+        "id": "union-alpha",
+        "path": "providers/opencode/models/union-alpha.toml",
+        "ref": "a4dd2b42be3558bf514a8a56011a2257a25522ea",
+        "sha256": "645e8054c65da6e11159fd02e5d0665ed58d56fe1dc2306e7bfa8cd241eb89aa",
+        "status": "historical"
+      },
+      {
+        "id": "deepseek-v4-flash-free",
+        "path": "providers/opencode/models/deepseek-v4-flash-free.toml",
+        "ref": "dev",
+        "sha256": "1576d28c625748528ef0fe7707763649e006692c619c4a1e757467f248aa2940",
+        "status": "deprecated"
+      },
+      {
+        "id": "mimo-v2.6-flash-free",
+        "path": "providers/opencode/models/mimo-v2.6-flash-free.toml",
+        "ref": "dev",
+        "sha256": "cd86f7f997241f5e5f93fb2080b00e3767662b27dc0dff3b6a551cb81a15f526",
+        "status": "unspecified"
+      },
+      {
+        "id": "mimo-v2.5-free",
+        "path": "providers/opencode/models/mimo-v2.5-free.toml",
+        "ref": "dev",
+        "sha256": "7b03093a428e13e1354afaf5bdfac746b538f837be605692129b2eed109eed93",
+        "status": "deprecated"
+      },
+      {
+        "id": "ling-3.0-flash-fin-free",
+        "path": "providers/opencode/models/ling-3.0-flash-fin-free.toml",
+        "ref": "dev",
+        "sha256": "1822739070e774868f3bb27d22c8833c7848e993ddb7b7100344d3f175f6e110",
+        "status": "deprecated"
+      },
+      {
+        "id": "nemotron-3-ultra-free",
+        "path": "providers/opencode/models/nemotron-3-ultra-free.toml",
+        "ref": "dev",
+        "sha256": "97fd8be441771c9d8e7dded58878820f44079db99b7046865b6042e31fb8460c",
+        "status": "deprecated"
+      },
+      {
+        "id": "nemotron-3.5-lightning-free",
+        "path": "providers/opencode/models/nemotron-3.5-lightning-free.toml",
+        "ref": "dev",
+        "sha256": "bd8ebce929e219aed44c8707311e9b08521ead4a0dd604eca777787515875136",
+        "status": "unspecified"
+      },
+      {
+        "id": "muse-spark-1.3-contributor-free",
+        "path": "providers/opencode/models/muse-spark-1.3-contributor-free.toml",
+        "ref": "dev",
+        "sha256": "57934ae7d04d2916eed9b2d8a08c9d335556c1a592ae595b796b8eecfd155db4",
+        "status": "deprecated"
+      },
+      {
+        "id": "muse-spark-1.2-contributor-free",
+        "path": "providers/opencode/models/muse-spark-1.2-contributor-free.toml",
+        "ref": "dev",
+        "sha256": "a536ec9d5b5fdcffc3176996a04e6ed0dc1af0580648a0d4c4ec61d7420e824f",
+        "status": "deprecated"
+      },
+      {
+        "id": "jev-1.13",
+        "path": "providers/opencode/models/jev-1.13.toml",
+        "ref": "dev",
+        "sha256": "e11f140d173b0a91cfc2465e3a0a3efc61704fc6fec7a21e87f23d1823be3032",
+        "status": "unspecified"
+      },
+      {
+        "id": "jev-1.13-free",
+        "path": "providers/opencode/models/jev-1.13-free.toml",
+        "ref": "dev",
+        "sha256": "57c67bae78f891ca8a320369778353047ea5771ad405027b448fabc1bbfb0bb3",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint and auth configuration retained; includes historical identifiers, not a current availability guarantee."
+  },
+  "nvidia_nim": {
+    "providerSource": "providers/nvidia/provider.toml",
+    "models": [
+      {
+        "id": "minimaxai/minimax-m2.7",
+        "path": "providers/nvidia/models/minimaxai/minimax-m2.7.toml",
+        "sha256": "662855869db7baaf7a7055cafccd7dddc641db083e5085d78d2a1d5572340659",
+        "status": "deprecated",
+        "ref": "84c099a7160e08e2af524214b33848a8d753cc7a"
+      },
+      {
+        "id": "minimaxai/minimax-m3",
+        "path": "providers/nvidia/models/minimaxai/minimax-m3.toml",
+        "sha256": "3525895d9ee2d4d15487339cac6261f958b4113119daa7b79857ab07469afe3f",
+        "status": "deprecated",
+        "ref": "84c099a7160e08e2af524214b33848a8d753cc7a"
+      },
+      {
+        "id": "z-ai/glm-5.2",
+        "path": "providers/nvidia/models/z-ai/glm-5.2.toml",
+        "sha256": "718673048ad168df8cf6d15a7e9d56ce025962c6340d033dccc5025b83ff3e49",
+        "status": "deprecated",
+        "ref": "84c099a7160e08e2af524214b33848a8d753cc7a"
+      },
+      {
+        "id": "deepseek-ai/deepseek-v4-pro",
+        "path": "providers/nvidia/models/deepseek-ai/deepseek-v4-pro.toml",
+        "sha256": "7546d17b5a5202f790ab612b165429176e75d72bc9ea34136e2cce637d0db9b9",
+        "status": "deprecated",
+        "ref": "84c099a7160e08e2af524214b33848a8d753cc7a"
+      },
+      {
+        "id": "deepseek-ai/deepseek-v4-flash",
+        "path": "providers/nvidia/models/deepseek-ai/deepseek-v4-flash.toml",
+        "sha256": "187f4dd7e17f64d7e4efdb5d2282d37cc4dae763fd25ea2d7d4069bb4faf0fc2",
+        "status": "deprecated",
+        "ref": "84c099a7160e08e2af524214b33848a8d753cc7a"
+      },
+      {
+        "id": "moonshotai/kimi-k2.6",
+        "path": "providers/nvidia/models/moonshotai/kimi-k2.6.toml",
+        "sha256": "eb4189c523e2533d6382dc768fe94e7e343e6ebfec81e5830c269e1ffe04389f",
+        "status": "deprecated"
+      },
+      {
+        "id": "nvidia/nemotron-3-ultra-550b-a55b",
+        "path": "providers/nvidia/models/nvidia/nemotron-3-ultra-550b-a55b.toml",
+        "sha256": "79550613e7a144e0aea3f7a76e08e2c390c424229491c6e1706d1989929a10c0",
+        "status": "unspecified"
+      },
+      {
+        "id": "nvidia/nemotron-3-super-120b-a12b",
+        "path": "providers/nvidia/models/nvidia/nemotron-3-super-120b-a12b.toml",
+        "sha256": "a542f733e79e7a656df884dac461587e4af70c1398cfc6ffd8477d9a3ec2609e",
+        "status": "unspecified",
+        "ref": "9b2add1d24bce13ccc42becc9223e75c981dd6e7"
+      }
+    ],
+    "compatibility": "OFM provider id, auth settings, wire and endpoint retained. Unknown capability fields remain null. The existing 131072-token OFM cap for nemotron-3-super is retained below the historical source limit of 262144; it is a local compatibility cap, not a claim about the provider maximum."
+  },
+  "kilo": {
+    "providerSource": "providers/kilo/provider.toml",
+    "models": [
+      {
+        "id": "kilo-auto/free",
+        "path": "providers/kilo/models/kilo-auto/free.toml",
+        "sha256": "c67e201d10135df5f7e1ff1bd46e8ea7b96ca78b4f6d1d5109b2df96faffbbfc",
+        "status": "unspecified"
+      },
+      {
+        "id": "nvidia/nemotron-3.5-super-vl:free",
+        "path": "providers/kilo/models/nvidia/nemotron-3.5-super-vl:free.toml",
+        "sha256": "190e06cfd7b95456ede789b4188d7e26964e10553c0aecbe773c675ad16a5699",
+        "status": "unspecified",
+        "baseModel": {
+          "path": "models/nvidia/nemotron-3.5-super-vl-120b-a12b.toml",
+          "sha256": "3c1b2f98280ad147d376f36e1838df66cc94c731b5e0e85d3d6b6b69fdaf3c6d"
+        }
+      },
+      {
+        "id": "reflection/beam-free",
+        "path": "providers/kilo/models/reflection/beam-free.toml",
+        "sha256": "55093975e7778cc7e441097355638c92108574bdad5826c6bf4d42a0a2158959",
+        "status": "unspecified"
+      },
+      {
+        "id": "stealth/glyph-cluster",
+        "path": "providers/kilo/models/stealth/glyph-cluster.toml",
+        "sha256": "5dca152a56560684c40f7acc3374cc669f4beffbe94f219eafdd57c83b2c824c",
+        "status": "unspecified"
+      },
+      {
+        "id": "stealth/crouton-alpha",
+        "path": "providers/kilo/models/stealth/crouton-alpha.toml",
+        "sha256": "83baad8fd101fbe346d7a07d3d1b5191ea8185b25789694f92de56dac56ac628",
+        "status": "unspecified",
+        "ref": "564ba01323a897bd13e8654cc11d9ebab9f71388"
+      },
+      {
+        "id": "dots-studio/dots-3-note-preview:free",
+        "path": "providers/kilo/models/dots-studio/dots-3-note-preview:free.toml",
+        "sha256": "f917d1c3ea7e81576dd89f2b83799bbe3a9fbd6295366df67418b09e31291b42",
+        "status": "unspecified"
+      },
+      {
+        "id": "nvidia/nemotron-3.5-lightning:free",
+        "path": "providers/kilo/models/nvidia/nemotron-3.5-lightning:free.toml",
+        "sha256": "2d2fcf48a5fac5ad5a05c1bf38e09d6faf74de1a427a8e6bcfa2eda456450eb3",
+        "status": "unspecified",
+        "baseModel": {
+          "path": "models/nvidia/nemotron-3.5-lightning.toml",
+          "sha256": "5468913dba4a4f047e9eabcd51e2155dbc72809507da9b8fa438175d43b34590"
+        }
+      },
+      {
+        "id": "cohere/north-mini-code:free",
+        "path": "providers/kilo/models/cohere/north-mini-code:free.toml",
+        "sha256": "a7eebc7ab507961a71a0e99baf85acb63992854108a38bc31fc4009ee2882e11",
+        "status": "unspecified",
+        "baseModel": {
+          "path": "models/cohere/north-mini-code-1-0.toml",
+          "sha256": "662f4f1129adc647514caaa2e6f4b6a4f1cfeff2c9f48a78abf5aef3d2041f86"
+        }
+      },
+      {
+        "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "path": "providers/kilo/models/nvidia/nemotron-3-ultra-550b-a55b:free.toml",
+        "sha256": "14e11629acae602c4bf17bcd89445b01429561d09bee12fcc151e948ba797508",
+        "status": "unspecified",
+        "baseModel": {
+          "path": "models/nvidia/nemotron-3-ultra-550b-a55b.toml",
+          "sha256": "5ae0221d989f9db32a8d5acd08d2df58b57c667dbc132025854ad77950a20ac8"
+        }
+      },
+      {
+        "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "path": "providers/kilo/models/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free.toml",
+        "sha256": "5f1180a8be0e94da79fe8e8c07d526ee9a75c4af7c31616e142a21c0fd79354f",
+        "status": "unspecified",
+        "baseModel": {
+          "path": "models/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning.toml",
+          "sha256": "c6b2e9afc04f7402a47746ab67e6a7940ef18e89e7ab0a137b2d314d1b966af8"
+        }
+      },
+      {
+        "id": "openrouter/free",
+        "path": "providers/kilo/models/openrouter/free.toml",
+        "sha256": "d87acf5aa7a1599505600b26bfd88f878648f08cc92d880f23bca10a84961cdd",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "Existing OFM endpoint, key settings and all model capability values preserved. Capability fields independently reconstructed from provider overrides and referenced MIT base models; historical crouton-alpha remains for saved configurations, not a promise of current availability."
+  },
+  "mistral_codestral": {
+    "providerSource": "https://mistral.ai/news/codestral/",
+    "endpointSource": "https://docs.continue.dev/customize/model-providers/more/mistral",
+    "models": [
+      {
+        "id": "codestral-latest",
+        "path": "providers/mistral/models/codestral-latest.toml",
+        "sha256": "7b5dfa08a8a8d0c3c4fc0e140c70661b932433bcf39888756e708ac4f4510fbe",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "Dedicated endpoint and CODESTRAL_API_KEY retained; model metadata from MIT models.dev, unknown capabilities unchanged. Documentation verifies endpoint configuration, not authenticated generation."
+  },
+  "cerebras": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/cerebras",
+    "additionalSource": "https://inference-docs.cerebras.ai/support/deprecation",
+    "models": [
+      {
+        "id": "gpt-oss-120b",
+        "path": "providers/cerebras/models/gpt-oss-120b.toml",
+        "sha256": "7da0956a40620ce481d58c3ed61a6aec581ac47a1ace752222c677eb32c5eb6f",
+        "status": "unspecified"
+      },
+      {
+        "id": "zai-glm-4.7",
+        "path": "providers/cerebras/models/zai-glm-4.7.toml",
+        "sha256": "719a07f743068de6a05f13ecd0845d8fe2d6dae6e2641ba716fe74053ce61873",
+        "status": "beta",
+        "ref": "714fb037788ea85c12425491469feb42f1d8bbca"
+      },
+      {
+        "id": "llama-3.3-70b",
+        "url": "https://inference-docs.cerebras.ai/support/deprecation",
+        "status": "deprecated"
+      },
+      {
+        "id": "llama-4-scout-17b-16e-instruct",
+        "url": "https://inference-docs.cerebras.ai/support/deprecation",
+        "status": "deprecated"
+      },
+      {
+        "id": "qwen-3-235b-a22b-instruct-2507",
+        "path": "providers/cerebras/models/qwen-3-235b-a22b-instruct-2507.toml",
+        "sha256": "9520fe4aaed581340420455cf8f482adbcf55b5cf59ed0d01def21d26425fa89",
+        "status": "unspecified",
+        "ref": "ec4ec6d44137a2cd3baf25e078de7022713a2ccc"
+      },
+      {
+        "id": "qwen-3-32b",
+        "url": "https://inference-docs.cerebras.ai/support/deprecation",
+        "status": "deprecated"
+      }
+    ],
+    "compatibility": "OFM endpoint, auth settings, wire and saved model IDs retained. Model names rebuilt from MIT catalog or documented identifiers; unknown capability fields remain null. Historical listings do not establish current inference availability."
+  },
+  "fireworks": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/fireworks-ai",
+    "additionalSource": "https://fireworks.ai/models/fireworks/llama-v3p3-70b-instruct",
+    "models": [
+      {
+        "id": "accounts/fireworks/models/deepseek-v3p1",
+        "path": "providers/fireworks-ai/models/accounts/fireworks/models/deepseek-v3p1.toml",
+        "sha256": "1c90e504d2febaa0dfdebdb7bea26ee3eea645054eb70be88544c092edc44271",
+        "status": "unspecified",
+        "ref": "26b05268aec2d55e51b047edb7bd7ae6936905d6"
+      },
+      {
+        "id": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+        "url": "https://fireworks.ai/models/fireworks/llama-v3p3-70b-instruct",
+        "status": "on-demand deployment only"
+      },
+      {
+        "id": "accounts/fireworks/models/qwen3-235b-a22b",
+        "path": "providers/fireworks-ai/models/accounts/fireworks/models/qwen3-235b-a22b.toml",
+        "sha256": "2a2ce976b3fe9ef599d3889d98cc83fddecebf0559db1da5830e39dff3cdc94d",
+        "status": "unspecified",
+        "ref": "89486ec7055c539d1a2770a9a43cfe6290295ae3"
+      }
+    ],
+    "compatibility": "OFM endpoint, auth settings, wire and saved model IDs retained. Model names rebuilt from MIT catalog or documented identifiers; unknown capability fields remain null. Historical listings do not establish current inference availability."
+  },
+  "nebius": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/nebius",
+    "models": [
+      {
+        "id": "meta-llama/Llama-3.3-70B-Instruct",
+        "path": "providers/nebius/models/meta-llama/Llama-3.3-70B-Instruct.toml",
+        "sha256": "d29bc90272a6150c937556043c8d6cd4951a274d42237b3e084d390368d5d11e",
+        "status": "unspecified",
+        "ref": "7a3b1bb2355797f7c940a3c0903b61e0c8a74c46"
+      },
+      {
+        "id": "Qwen/Qwen3-30B-A3B",
+        "url": "https://nebius.com/blog/posts/launch-production-agents-at-scale",
+        "status": "documented identifier; current account availability unverified"
+      }
+    ],
+    "compatibility": "OFM endpoint, auth settings, wire and saved model IDs retained. Names rebuilt from MIT catalog or official identifiers; unknown capability fields remain null. Nebius official historical example confirms the exact model ID, not current account availability."
+  },
+  "together": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/togetherai",
+    "models": [
+      {
+        "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "path": "providers/togetherai/models/meta-llama/Llama-3.3-70B-Instruct-Turbo.toml",
+        "sha256": "cd23db204c6d72b29670bfefb9419296e6f64e33d1946dbcd4dad6bb94c7a332",
+        "status": "deprecated"
+      },
+      {
+        "id": "deepseek-ai/DeepSeek-R1",
+        "path": "providers/togetherai/models/deepseek-ai/DeepSeek-R1.toml",
+        "sha256": "278b0ad5c3aa52034e2e25a6ecaea8c94123632aeb2d316ec567308d13c7f602",
+        "status": "deprecated"
+      },
+      {
+        "id": "Qwen/Qwen3-235B-A22B",
+        "url": "https://www.together.ai/blog/fine-tuning-updates-sept-2025",
+        "status": "documented identifier; current account availability unverified"
+      },
+      {
+        "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+        "url": "https://www.together.ai/models/llama-4-maverick",
+        "status": "documented identifier; current account availability unverified"
+      },
+      {
+        "id": "zai-org/GLM-5.2",
+        "path": "providers/togetherai/models/zai-org/GLM-5.2.toml",
+        "sha256": "33a3bdf90c44c99b6aadec99e8b36edbed6f7accafe2707744b9ff18e58db7e3",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM endpoint, auth settings, wire and saved model IDs retained. Names rebuilt from MIT catalog or official identifiers; unknown capability fields remain null. Together Qwen3-235B evidence is for fine-tuning and dedicated deployment, not a verified shared inference endpoint."
+  },
+  "xai": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/xai",
+    "models": [
+      {
+        "id": "grok-4.6",
+        "path": "providers/xai/models/grok-4.6.toml",
+        "sha256": "c0f06e423da61ca350a2f781a3a961d82c4b06fa37ec1d09f6e526d16d9a52d9",
+        "status": "unspecified"
+      },
+      {
+        "id": "grok-4.5",
+        "path": "providers/xai/models/grok-4.5.toml",
+        "sha256": "25b213bac99ce0865ec0d82c6dd9fd632ed9b888e075e998a6f7abf8b630aa4c",
+        "status": "unspecified"
+      },
+      {
+        "id": "grok-4",
+        "path": "providers/xai/models/grok-4.toml",
+        "sha256": "085d0a47569aca8fd9dd76fe2fc85b6d799167272ae6293eab86675d9b91c4ee",
+        "status": "unspecified",
+        "ref": "e283875ce72e6786874280550a91c453012120cb"
+      },
+      {
+        "id": "grok-4-fast-reasoning",
+        "url": "https://docs.x.ai/developers/migration/may-15-retirement",
+        "status": "retired; provider redirects to grok-4.3 with low reasoning effort"
+      },
+      {
+        "id": "grok-code-fast-1",
+        "path": "providers/xai/models/grok-code-fast-1.toml",
+        "sha256": "16c88af0cd97891a741246074bb517dc1bf08615738d2cc4d4a35927a5732b46",
+        "status": "unspecified",
+        "ref": "e283875ce72e6786874280550a91c453012120cb"
+      },
+      {
+        "id": "grok-3",
+        "path": "providers/xai/models/grok-3.toml",
+        "sha256": "bf5ae7b660ddc07e9426e2b6c2e59a4c30bb97327affed65de83411e707175ec",
+        "status": "unspecified",
+        "ref": "e283875ce72e6786874280550a91c453012120cb"
+      }
+    ],
+    "compatibility": "OFM endpoint, auth settings, wire and model IDs retained; unknown capabilities remain null. Provider-side retirement redirects are documented, not implemented by OFM, and are not equivalent to the original models."
+  },
+  "cloudflare": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/cloudflare-workers-ai",
+    "models": [
+      {
+        "id": "@cf/meta/llama-3.2-1b-instruct",
+        "path": "providers/cloudflare-workers-ai/models/@cf/meta/llama-3.2-1b-instruct.toml",
+        "sha256": "1ea8efa80c80ebd5e07371c46e9f2a1b519152669f727dd43e985b2e31063edb",
+        "status": "deprecated"
+      },
+      {
+        "id": "@cf/meta/llama-3.2-3b-instruct",
+        "path": "providers/cloudflare-workers-ai/models/@cf/meta/llama-3.2-3b-instruct.toml",
+        "sha256": "e99b941bdffdf4d0c8064fdbbbf65e48ec808b4a70df39d9b45c9f3acfe76f03",
+        "status": "deprecated"
+      },
+      {
+        "id": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+        "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "status": "listed in pricing; current inference unverified"
+      },
+      {
+        "id": "@cf/meta/llama-3.1-8b-instruct-awq",
+        "path": "providers/cloudflare-workers-ai/models/@cf/meta/llama-3.1-8b-instruct-awq.toml",
+        "sha256": "02754c01566800f580a4468355db27d78657e3656e5b25786f2901693297bf9f",
+        "status": "unspecified",
+        "ref": "d1a8dbcdde3b3865f07f04446241038d0c293528"
+      },
+      {
+        "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "path": "providers/cloudflare-workers-ai/models/@cf/mistralai/mistral-small-3.1-24b-instruct.toml",
+        "sha256": "a1760a86e7a88b276f424bb1e7df13ecce229493dee89dac8c2cd1c7782be068",
+        "status": "unspecified"
+      },
+      {
+        "id": "@cf/meta/llama-3.1-70b-instruct-fp8-fast",
+        "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "status": "listed in pricing; current inference unverified"
+      },
+      {
+        "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        "path": "providers/cloudflare-workers-ai/models/@cf/meta/llama-3.3-70b-instruct-fp8-fast.toml",
+        "sha256": "67ee2bbdb886a35a00d1b215b9a0590d82156663bd754fc98dfdc5d40e5deced",
+        "status": "unspecified"
+      },
+      {
+        "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+        "path": "providers/cloudflare-workers-ai/models/@cf/deepseek-ai/deepseek-r1-distill-qwen-32b.toml",
+        "sha256": "01037dc10db872bc2cf85c07e78c94551e020b68d9d22c38cc0d68602f9f638a",
+        "status": "deprecated"
+      },
+      {
+        "id": "@cf/moonshotai/kimi-k2.5",
+        "path": "providers/cloudflare-workers-ai/models/@cf/moonshotai/kimi-k2.5.toml",
+        "sha256": "156f017d3c7013dd9fc0f6842fc0f1fec0ce2053f2cb31507a2e43d9c4440be3",
+        "status": "unspecified",
+        "ref": "d1a8dbcdde3b3865f07f04446241038d0c293528"
+      },
+      {
+        "id": "@cf/moonshotai/kimi-k2.6",
+        "path": "providers/cloudflare-workers-ai/models/@cf/moonshotai/kimi-k2.6.toml",
+        "sha256": "50cdf1995f3d46b0c0c6773ad1473950b0eddcc153d304530a3870aaa94f49df",
+        "status": "deprecated"
+      },
+      {
+        "id": "@cf/zai-org/glm-4.7-flash",
+        "path": "providers/cloudflare-workers-ai/models/@cf/zai-org/glm-4.7-flash.toml",
+        "sha256": "0e15860cdcbf9cd99e7dbd97a5c4577b68032d81fbbc91cdd615fc5bb36bad0d",
+        "status": "unspecified"
+      },
+      {
+        "id": "@cf/qwen/qwq-32b",
+        "path": "providers/cloudflare-workers-ai/models/@cf/qwen/qwq-32b.toml",
+        "sha256": "206a69e6b6b35c04fbefda4281d1ab5d8cda21c15620a830e6a3cea18f26110e",
+        "status": "deprecated"
+      },
+      {
+        "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "path": "providers/cloudflare-workers-ai/models/@cf/qwen/qwen2.5-coder-32b-instruct.toml",
+        "sha256": "24e7e09fc16d030815ef282d8c1c0fee78eddebc81320e4dae642628524b8bd8",
+        "status": "unspecified"
+      }
+    ],
+    "compatibility": "OFM account endpoint template, auth settings, wire and model IDs retained; unknown capabilities remain null. Two legacy identifiers verified in official pricing, not through authenticated inference."
+  },
+  "vertex": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/google-vertex",
+    "models": [
+      {
+        "id": "gemini-3.1-pro-preview",
+        "path": "providers/google-vertex/models/gemini-3.1-pro-preview.toml",
+        "sha256": "1cc9a9ae80297e4d69a3bb0305b54186b1a0f5ea8cd637223bd86952fe94a29e",
+        "status": "beta"
+      },
+      {
+        "id": "gemini-3.1-flash-lite-preview",
+        "path": "providers/google-vertex/models/gemini-3.1-flash-lite-preview.toml",
+        "sha256": "a15f5498d30814f9b360d7a451e92e9d414e24d5e67f6c25fa74d91b784d5352",
+        "status": "deprecated",
+        "ref": "6e0395f4f0edeabfa67b80772a96cdadd4f16ed2"
+      },
+      {
+        "id": "gemini-3-flash-preview",
+        "path": "providers/google-vertex/models/gemini-3-flash-preview.toml",
+        "sha256": "052c01ac8a39926dc3ede587c19b695a9c18c4b25c8502537b4b11ab86a27ebb",
+        "status": "beta"
+      },
+      {
+        "id": "gemini-2.5-flash",
+        "path": "providers/google-vertex/models/gemini-2.5-flash.toml",
+        "sha256": "cb817daea64662addab7f90c157bf1f645574648fcb7576c4e4d5cab6d24c193",
+        "status": "deprecated"
+      },
+      {
+        "id": "google/gemini-3.5-flash",
+        "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai",
+        "status": "documented OpenAI-compatible model ID"
+      }
+    ],
+    "compatibility": "Existing project/location endpoint template and ADC setting names retained. Google official OpenAI compatibility documentation confirms the endpoint and prefixed Gemini model ID. Unknown capability fields remain null; authenticated generation not verified."
+  },
+  "alibaba_cloud": {
+    "providerSource": "https://github.com/anomalyco/models.dev/tree/dev/providers/alibaba",
+    "models": [
+      {
+        "id": "qwen3.5-plus",
+        "path": "providers/alibaba/models/qwen3.5-plus.toml",
+        "sha256": "c6ccc2877da0561d923106389a7267dd12835257c09168782ed876bf5952995d",
+        "status": "unspecified"
+      },
+      {
+        "id": "kimi-k2.5",
+        "url": "https://www.alibabacloud.com/help/en/model-studio/kimi-api",
+        "status": "documented Model Studio ID; regional endpoint access unverified"
+      },
+      {
+        "id": "glm-5",
+        "url": "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
+        "status": "documented Model Studio ID; regional endpoint access unverified"
+      },
+      {
+        "id": "MiniMax-M2.5",
+        "url": "https://docs.modelstudio.console.alibabacloud.com/en/model-studio/minimax-api",
+        "status": "documented Model Studio ID; regional endpoint access unverified"
+      },
+      {
+        "id": "qwen3-coder-next",
+        "url": "https://www.alibabacloud.com/en/notice/model_studio_notice_on_the_postponed_retirement_of_selected_legacy_models_7d0",
+        "status": "documented Model Studio ID; regional endpoint access unverified"
+      },
+      {
+        "id": "qwen3-coder-plus",
+        "path": "providers/alibaba/models/qwen3-coder-plus.toml",
+        "sha256": "1e29c448c55139493517b9c5131f8e3e46ec0bde7bbd1bb6c48fad5f5fb528e1",
+        "status": "deprecated"
+      },
+      {
+        "id": "glm-4.7",
+        "url": "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
+        "status": "documented Model Studio ID; regional endpoint access unverified"
+      }
+    ],
+    "compatibility": "Existing OFM international endpoint, auth settings and IDs retained. Official Model Studio pages independently confirm IDs, but regional availability is not established for every model. Unknown capability fields remain null."
+  }
+}

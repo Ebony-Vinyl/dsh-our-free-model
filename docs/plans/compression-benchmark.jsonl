@@ -1,0 +1,12 @@
+{"name":"buildOutput","baseline":"4530975","inputBytes":3288911,"beforeMs":9.466666999999973,"afterMs":5.997417000000041,"reductionPercent":36.64700575186538}
+{"name":"gitLog","baseline":"4530975","inputBytes":2888889,"beforeMs":11.007041999999956,"afterMs":6.732500000000073,"reductionPercent":38.83461151506372}
+{"name":"ls","baseline":"4530975","inputBytes":5488889,"beforeMs":62.01662499999975,"afterMs":56.257958000000144,"reductionPercent":9.28568266976738}
+{"name":"gitDiff","baseline":"4530975","inputBytes":1188941,"beforeMs":3.258625000000393,"afterMs":2.67699999999968,"reductionPercent":17.848785914324072}
+{"name":"gitStatus","baseline":"4530975","inputBytes":1988897,"beforeMs":11.146832999999788,"afterMs":8.604541000000609,"reductionPercent":22.80730320440997}
+{"name":"dedupLog","baseline":"4530975","inputBytes":1388999,"beforeMs":6.086790999999721,"afterMs":4.923291000000063,"reductionPercent":19.115162653025397}
+{"name":"find","baseline":"4530975","inputBytes":2568889,"beforeMs":16.2739160000001,"afterMs":11.910917000000154,"reductionPercent":26.80976723733808}
+{"name":"grep","baseline":"4530975","inputBytes":3968894,"beforeMs":33.54199999999946,"afterMs":22.22937499999989,"reductionPercent":33.726745572714066}
+{"name":"searchList","baseline":"4530975","inputBytes":2768938,"beforeMs":17.479416999999557,"afterMs":11.419832999999926,"reductionPercent":34.66696858367636}
+{"name":"tree","baseline":"4530975","inputBytes":2288889,"beforeMs":5.747208999999202,"afterMs":3.809000000001106,"reductionPercent":33.72435211592906}
+{"name":"smartTruncate","baseline":"4530975","inputBytes":1888889,"beforeMs":2.0337079999990237,"afterMs":1.243332999998529,"reductionPercent":38.86374051736405}
+{"name":"readNumbered","baseline":"4530975","inputBytes":2088894,"beforeMs":2.126624999998967,"afterMs":1.2320830000007845,"reductionPercent":42.06392758472307}
