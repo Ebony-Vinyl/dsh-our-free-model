@@ -72,7 +72,7 @@
 - **十个账号渠道，一体接入**——LobsterAI（有道）、Qoder / Qoder 中国版（阿里系）、TRAE（字节）、Cline、Loomy（讯飞）、Raccoon（商汤）、MiniMax Code、ZCode（智谱）、Gemini（Google Code Assist）十个账号渠道开箱即用，外加 Kilo 免费车道与原匿名免费通道；OpenCode 账号渠道在本插件中默认停用。各渠道的登录流程、账号池、每日积分领取、模型黑名单与其本地 OpenAI 网关（Chat Completions + Responses，默认 `127.0.0.1:8326`）原样挂载与运行；凭据只写入宿主凭据库，浏览器永远拿不到明文。
 - **视觉特效按需开启**——设置页顶部“视觉特效”开关默认关闭，鱼缸和业务功能始终保留；开启后恢复背景光晕、毛玻璃与装饰动画，选择仅保存在当前浏览器。
 - **OFM 插件中心：渠道 / 增强 / 页面统一市场**——新仓库 [Ebony-Vinyl/ofm-extensions](https://github.com/Ebony-Vinyl/ofm-extensions) 承载社区插件：Ed25519 签名索引、安装即校验 SHA-256 与静态扫描、运行在 Worker VM 沙箱（唯一 import 是受控的 `ofm:sdk`，网络只放行 manifest 声明的域名，密钥只进不出，每个 hook 带超时熔断）。渠道插件装上即出现在模型选择器（支持 `replaces` 接管内置车道），增强插件以 `onRequest`/`onModels`/`onUsage` 挂进请求链；页面插件在侧边栏贡献一个沙箱 iframe 页面，只能通过受控消息桥读写自己的配置与存储。清单 v1 与 v2 双兼容；内置账号渠道包、聚合渠道目录、客户端启动器、资源库格式与模型工作台也以 built-in 描述符登记在同一插件中心，不可卸载但可查看贡献。发现、安装、更新、启停、配置、密钥、自检、卸载全部在控制台「插件中心」完成；开发者模式可安装本地未签名包（显式风险确认、未验证徽标、同一沙箱）。市场页另带封面横幅、类型色带与骨架屏，详情弹层含签名源码直达链接、发布说明（changelog）与权限清单；索引由宿主后台定时刷新，已装插件的清单可一键导出 / 导入（JSON，不含密钥）用于迁移。模型工作台（magpie）车道的推理请求也接入同一增强钩子链（onRequest），并默认经宿主可替换的 fetch 出站，本机代理类插件（如上下文扩展）重新可见；OFM_ENGINE_PRIVATE_FETCH=1 可回到私有直连。
-- **免费车道额度断路器与出口代理（issue #708/#767 的完整回答）**——上游按出口 IP 计免费配额，一次真实 429 即开窗（`Retry-After` 缺省 6 小时），窗口内本插件本地拒绝新回合、不再向墙上送请求；`FreeTierError` 单独锁道。手动测试全部保留（清单刷新/单模型检测/测速），自动探测依旧禁用——状态从真实回合被动学习。车道可配独立出口代理（http/https/socks5），也认 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` 环境变量；「换出口后重试一次」一键清窗，「测试出口」打第三方回显不花配额。请求形状对齐官方 2.2.3 客户端（`traceparent`/`b3`/通配 `accept`），并移植 opencode2api v1.4.7 的工具名绑定、幽灵调用清理与标题请求免整形。
+- **免费车道额度断路器与出口代理（issue #708/#767 的完整回答）**——上游按出口 IP 计免费配额，一次真实 429 即开窗（`Retry-After` 缺省 6 小时），窗口内本插件本地拒绝新回合、不再向墙上送请求；`FreeTierError` 单独锁道。手动测试全部保留（清单刷新/单模型检测/测速），自动探测依旧禁用——状态从真实回合被动学习。车道可配独立出口代理（http/https/socks5），也认 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` 环境变量；「换出口后重试一次」一键清窗，「测试出口」打第三方回显不花配额。请求形状对齐官方 2.2.3 客户端（`traceparent`/`b3`/通配 `accept`），保留工具名绑定、无对应声明的历史工具调用清理及标题请求免整形；请求适配实现见 `src/o2a/SYNC.md`。
 - **十三页毛玻璃界面**——设置页顶部导航扩为十一个页面：原有六页（**免费模型**（鱼缸水位 = 可用模型占比）、**EAC 模型**（鱼缸水位 = 协付池压力）、**白嫖模型接入**（十张渠道卡：登录、账号、模型开关、一键领取积分）、**数据看板**（今日/全部 Token 消耗、平均生成速度、缓存命中率、成功率，账号透视与模型性能表、最近请求总览）、**运行日志**（逐请求明细：结果、耗时、首字、速度、Token 细分，失败原因悬停可见）与**网关设置**（网关开关/端点/密钥；局域网转发中继：监听地址、端口与独立中继密钥）），新增**聚合渠道**（提供商注册表、Key、测试、发现模型、Base URL 与模型清单覆盖）、**省 Token**（压缩开关、两族提示词档位、五个本地应答与节省统计）、**路由**（降级链编辑器）、**插件升级**（版本检查、一键升级与热重载）与**推荐项目**（EAC-Desktop / EAC-Pack / EAC-design-world 三张卡片：简介、直达链接与 Star 按钮，Star / Fork / 最近提交数实时取自 GitHub，取不到就整块不显示）五页；网关设置页另增「接入客户端」分区。页面切换与卡片入场为 150–250 ms 短动效，`prefers-reduced-motion` 下整体关闭。每页都有直达 GitHub 仓库的 Star 按钮。
 - **局域网转发中继**——渠道网关本身只监听本机（上游的安全选择）；本插件提供自己的转发门：调用方用插件签发与轮换的中继密钥，转发跳由宿主换用网关凭据（凭据不出宿主进程），仅放行 `/v1/*` 模型接口并带环路保护。
 
@@ -328,7 +328,7 @@ Windows 自动检测只支持手动代理，不执行 PAC 自动配置脚本；�
 
 ### 聚合渠道：自带 Key 的 76 家提供商
 
-设置页的**聚合渠道**一页把第三方端点接进同一条模型清单。提供商注册表内置 76 家（`src/providers/registry.json`，分类为 `free | free-tier | apikey | oauth | local`），包括 NVIDIA NIM、OpenRouter、Groq、Cerebras、SambaNova、Gemini、DeepSeek、Mistral、Together、Fireworks、SiliconFlow、Nebius、Chutes、Hugging Face、Cloudflare、Z.ai、Kimi、MiniMax、QwenCloud/Alibaba、Bedrock、Vertex、Vercel AI Gateway、Azure OpenAI、FleetRelay Gateway，以及本机、无需账号的 Ollama、LM Studio、llama.cpp。注册表数据来自 free-claude-code 的提供商目录、9router 的提供商注册表，以及本项目新增的自定义中转。FleetRelay Gateway 当前公开 `deepseek-v4.1-flash-free` 与 `gpt-6-astra`；其第三方 T1 候选池尚未获分发授权，因此保持禁用。
+设置页的**聚合渠道**一页把第三方端点接进同一条模型清单。提供商注册表内置 76 家（`src/providers/registry.json`，分类为 `free | free-tier | apikey | oauth | local`），包括 NVIDIA NIM、OpenRouter、Groq、Cerebras、SambaNova、Gemini、DeepSeek、Mistral、Together、Fireworks、SiliconFlow、Nebius、Chutes、Hugging Face、Cloudflare、Z.ai、Kimi、MiniMax、QwenCloud/Alibaba、Bedrock、Vertex、Vercel AI Gateway、Azure OpenAI、FleetRelay Gateway，以及本机、无需账号的 Ollama、LM Studio、llama.cpp。注册表使用供应商官方资料、models.dev、9router 及 OFM 维护的记录。曾参考 free-claude-code 的历史配置按原 ID 保留，详见[兼容限制](docs/provider-compatibility.md)。FleetRelay Gateway 当前公开 `deepseek-v4.1-flash-free` 与 `gpt-6-astra`；其第三方 T1 候选池尚未获分发授权，因此保持禁用。
 
 写入 Key（本机免账号的提供商不需要）后，该提供商的每个模型以 `provider/model` 成为清单行：在选择器里可选，也可经本地网关调用。三种线协议按提供商各自声明：OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages（后两者用于只提供这两种协议的上游）。
 
@@ -342,7 +342,7 @@ Key 只写入插件自己的 0600 `settings.json`，接口永不回显——页�
 
 **节省统计** 显示压缩前字节 → 压缩后字节、节省字节、节省比例、压缩块数与统计调用数——数据取自用量图表所用的同一批统计行。
 
-**五个本地应答**（自 free-claude-code 移植，各自独立开关，默认全开）不调用任何提供商：额度探测（`max_tokens:1` + "quota" → `Quota check passed.`）、shell 命令前缀识别（`<policy_spec>` + `Command:` → 前缀，检测到命令注入时拒绝）、会话标题生成（→ `Conversation`）、建议模式（→ 空字符串）与文件路径提取（→ `<filepaths>` 块）。它们由本地网关在进程内直接应答。
+**五个本地应答**（各自独立开关，默认全开）不调用任何提供商：额度探测（`max_tokens:1` + "quota" → `Quota check passed.`）、shell 命令前缀识别（`<policy_spec>` + `Command:` → 前缀，检测到命令注入时拒绝）、会话标题生成（→ `Conversation`）、建议模式（→ 空字符串）与文件路径提取（→ `<filepaths>` 块）。它们由本地网关在进程内直接应答。
 
 ### 路由：命名降级链（combo）
 
@@ -352,7 +352,7 @@ Key 只写入插件自己的 0600 `settings.json`，接口永不回显——页�
 
 新增端点 `POST /v1/messages`（流式与非流式，`message_start` / `content_block_*` / `message_delta` / `message_stop` 正确成帧，含 `thinking` 块、`tool_use` 块、真实 `stop_reason`，以及响应头发出之后才失败时的流内 `error` 事件）与 `POST /v1/messages/count_tokens`（本地估算——插件不含 tokenizer）。Claude Code 与 Anthropic 各 SDK 因此可以直接指向本插件。原有的 `/v1/chat/completions` 与 `/v1/responses` 不变，`/v1/models` 现在广播全部车道，含聚合行与链路。网关页新增「接入客户端」分区，按实际绑定的端口与真实要求的密钥生成可复制的配方：Claude Code 环境变量、Codex `config.toml`、OpenAI SDK、Anthropic SDK、curl，以及中继开启时的局域网版本。
 
-顺带修掉一个假成功：一轮只产出了一个调用方从未声明的工具调用时，过去会以干净的空成功收尾；现在会如实报告发生了什么——压缩器自己追加的 `[full diff: rtk git diff --no-compact]` 提示就可能让模型去调一个调用方没有的工具。
+顺带修掉一个假成功：一轮只产出了一个调用方从未声明的工具调用时，过去会以干净的空成功收尾；现在会如实报告发生了什么——旧压缩提示曾可能让模型去调用未声明的 RTK CLI。新版提示请用户关闭工具输出压缩后重新获取差异。
 
 
 ## 实现结构
@@ -784,13 +784,13 @@ DeepSeek Harness 桌面端（Electron 壳）与 DSH Tauri：使用内核提供�
 
 也感谢这些项目的代码或数据：
 
-- [opencode2api](https://github.com/jasonxu114514/opencode2api)（GPL-3.0）：免费车道的请求整形移植自它，逐文件对照表见 `src/o2a/SYNC.md`。
-- [free-claude-code](https://github.com/Alishahryar1/free-claude-code)（AGPL-3.0-only）：`src/providers/registry.json` 的 60 条提供商数据，以及 `src/local-optimize.js` 的五个本地应答。
+- [opencode2api](https://github.com/jasonxu114514/opencode2api)（GPL-3.0）：历史免费车道请求整形来源；2.8.6 的实现变化和已删除资产见 [维护说明](src/o2a/SYNC.md)。
+- [free-claude-code](https://github.com/Alishahryar1/free-claude-code)（AGPL-3.0-only）：历史供应商目录及五个本地应答的来源；2.8.6 重写本地应答并重建目录，历史 ID 的处理见 [兼容说明](docs/provider-compatibility.md)。
 - [9router](https://github.com/decolua/9router)（MIT）：部分提供商目录，以及免费车道的请求形状参考。
 - [models.dev](https://github.com/anomalyco/models.dev)（MIT）：模型窗口、输出上限与思考档位。
 - [trae-mate](https://github.com/luckymiaow/trae-mate)（MIT）：TRAE 签到流程参考。
 - [dsh-cline-pass](https://github.com/codeOct/dsh-cline-pass)（MIT）：Cline 额度与请求记录参考。
-- [rtk](https://github.com/rtk-ai/rtk)（CLI Apache-2.0，engine BUSL-1.1）：`src/token-saver/rtk/` 的工具输出过滤器；具体移植范围和许可证需要按上游确认。
+- [rtk](https://github.com/rtk-ai/rtk)（CLI Apache-2.0，engine BUSL-1.1）：工具输出过滤器的历史参考；2.8.6 的替换范围和行为对照见 [验证记录](docs/verification/2026-11-18-independent-core.md)。
 - [magpie-muse-web](https://github.com/JohnWangggg/magpie-muse-web)（上游未声明 SPDX 许可证）：`muse-web` 桥接扩展的上游。
 
 根目录的 MIT 只覆盖 OFM 自己写的代码；上面这些组件和数据按各自许可证提供，完整条款以上游 LICENSE 为准。这份名单是来源记录，不改变任何组件的许可证。
