@@ -1,0 +1,170 @@
+{
+  "decision": "用户于 2026-11-18 明确选择保留旧 ID 并标注限制；不自动换模型或协议。",
+  "providers": [
+    {
+      "id": "deepseek",
+      "endpointEvidence": "https://api-docs.deepseek.com/",
+      "retainedModelIds": [
+        "deepseek-v4-pro",
+        "deepseek-v4-pro-max",
+        "deepseek-v4-pro-none",
+        "deepseek-v4.1-flash",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ],
+      "restriction": "保留旧 API 模型 ID 供已有配置继续使用；部分后缀可能表示历史思考档位而非当前独立模型，当前支持范围以账号模型目录为准。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "experiential",
+      "endpointEvidence": "https://platform.experientiallabs.ai/docs/openai-compatibility",
+      "retainedModelIds": [
+        "union-alpha"
+      ],
+      "restriction": "union-alpha 作为旧配置标识保留；公开模型接口要求认证，尚未确认该标识当前可调用。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "kimi_code",
+      "endpointEvidence": "https://www.kimi.com/code/docs/en/kimi-code/models.html",
+      "retainedModelIds": [
+        "kimi-k3",
+        "k3",
+        "kimi-for-coding",
+        "kimi-for-coding-highspeed",
+        "kimi-k2.7-code",
+        "kimi-k2.7-code-highspeed",
+        "kimi-k2.6",
+        "kimi-k2.5",
+        "kimi-k2.5-thinking",
+        "kimi-latest"
+      ],
+      "restriction": "保留旧编程套餐 ID；官方协议 ID 与产品版本名并不等同，部分旧 ID 可能被上游回落到其他模型。不会在本地自动改名；调用成功也不保证上游实际使用旧 ID 指向的模型。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "llm7",
+      "endpointEvidence": "https://llm7.io/",
+      "retainedModelIds": [
+        "gpt-5.5",
+        "claude-opus-5",
+        "deepseek-v4-flash",
+        "grok-4.5",
+        "kimi-k3",
+        "default",
+        "fast",
+        "pro"
+      ],
+      "restriction": "保留历史 ID 和上下文预算供配置兼容；最近公开列表仅匹配 claude-opus-5、kimi-k3，default/fast/pro 是主页描述的路由别名，其他旧 ID 的当前服务状态未确认。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "nararoute",
+      "endpointEvidence": "https://router.bynara.id/",
+      "retainedModelIds": [
+        "kimi-k3-free"
+      ],
+      "restriction": "保留 kimi-k3-free 旧 ID；最近公开模型列表未包含该标识，免费标签不是当前可用或免额度承诺。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "scaleway",
+      "endpointEvidence": "https://www.scaleway.com/en/docs/generative-apis/reference-content/supported-models/",
+      "retainedModelIds": [
+        "deepseek/deepseek-v4-flash"
+      ],
+      "restriction": "保留旧 deepseek/deepseek-v4-flash 标识；官方当前列出带版本后缀的模型，未自动映射到不同版本，旧别名是否仍可调用未确认。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "tokenrouter",
+      "endpointEvidence": "https://www.tokenrouter.com/models/",
+      "retainedModelIds": [
+        "anthropic/claude-haiku-4.5",
+        "anthropic/claude-sonnet-4.6",
+        "anthropic/claude-opus-4.8",
+        "anthropic/claude-opus-4.8-fast",
+        "openai/gpt-5.4",
+        "openai/gpt-5.4-mini",
+        "openai/gpt-5.4-pro",
+        "openai/gpt-5.5",
+        "openai/gpt-5.6-sol",
+        "google/gemini-3.5-flash",
+        "google/gemini-3.6-flash",
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-pro",
+        "qwen/qwen3-coder-next",
+        "qwen/qwen3.7-max",
+        "qwen/qwen3.8-max",
+        "moonshotai/kimi-k2.7-code",
+        "moonshotai/kimi-k3-free",
+        "z-ai/glm-5.3-free",
+        "z-ai/glm-5.2",
+        "z-ai/glm-5-turbo",
+        "x-ai/grok-4.5"
+      ],
+      "restriction": "保留历史模型 ID 与 Chat 接入方式；官方目录对不同模型列出不同 API formats，尚未确认所有旧 ID 均支持此 Chat 端点，不自动切换协议或模型。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "ollama_cloud",
+      "endpointEvidence": "https://docs.ollama.com/api/openai-compatibility",
+      "retainedModelIds": [
+        "gpt-oss:120b",
+        "kimi-k2.5",
+        "glm-5",
+        "minimax-m2.5",
+        "glm-4.7-flash",
+        "qwen3.5",
+        "minimax-m3",
+        "deepseek-v4.1-flash:cloud",
+        "qwen3-coder:480b"
+      ],
+      "restriction": "保留旧云端 ID；本地 :cloud 标签与直接云端 API 模型名不一定等价，部分旧模型已弃用或未确认，实际权限与可用 ID 以云端账号为准。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "github_copilot",
+      "endpointEvidence": "https://docs.github.com/en/copilot/how-tos/copilot-sdk/auth/authenticate",
+      "retainedModelIds": [
+        "gpt-5.2",
+        "gpt-5.2-codex",
+        "gpt-5.3-codex",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "claude-haiku-4.5",
+        "claude-opus-4.5",
+        "claude-sonnet-4.5",
+        "claude-sonnet-4.6",
+        "claude-opus-4.6",
+        "claude-opus-4.7",
+        "gemini-2.5-pro",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview",
+        "grok-code-fast-1",
+        "oswe-vscode-prime",
+        "goldeneye-free-auto"
+      ],
+      "restriction": "保留旧订阅模型 ID；模型和内部别名随套餐及账号变化，goldeneye-free-auto 等旧别名的当前语义未确认，不自动迁移到其他付费模型。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    },
+    {
+      "id": "openai",
+      "endpointEvidence": "https://github.com/openai/codex",
+      "retainedModelIds": [
+        "gpt-6-astra",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.3-codex-spark"
+      ],
+      "restriction": "保留旧 ChatGPT 订阅模型 ID 和 Responses 接入方式；历史 ID 不等同于账号当前可用模型，未确认的 ID 不保证生成成功，不自动更换模型。",
+      "origin": "Historical OFM compatibility contract; earlier catalog referenced free-claude-code. Not an independent official model listing."
+    }
+  ]
+}

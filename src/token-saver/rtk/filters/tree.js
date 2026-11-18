@@ -1,42 +1,27 @@
-/**
- * Compact `tree` output.
- *
- * The glyphs and indentation *are* the information here — they show the nesting
- * a model reasons about — so almost nothing is dropped. What goes is the
- * trailing "N directories, M files" summary (whose counts the model can derive
- * from the listing itself) and blank padding. The line cap is a JS-only
- * safeguard against a tree of a build directory; the Rust original has none.
- *
- * @module src/token-saver/rtk/filters/tree.js
- */
-
+/** Retain tree structure with bounded storage; count omitted rows exactly. */
 import { TREE_MAX_LINES } from '../constants.js'
 
 export function tree(input) {
-  const lines = input.split('\n')
-  if (lines.length === 0) return input
-
-  const filtered = []
-  for (const line of lines) {
-    // Drop "X directories, Y files" summary
-    if (line.includes('director') && line.includes('file')) continue
-    // Drop leading blanks
-    if (line.trim() === '' && filtered.length === 0) continue
-    filtered.push(line)
+  const retained = []
+  let count = 0
+  let lastContent = 0
+  let offset = 0
+  while (offset <= input.length) {
+    const newline = input.indexOf('\n', offset)
+    const end = newline < 0 ? input.length : newline
+    const row = input.slice(offset, end)
+    const content = row.trim() !== ''
+    if (!(row.includes('director') && row.includes('file')) && (count > 0 || content)) {
+      count++
+      if (content) lastContent = count
+      if (retained.length < TREE_MAX_LINES) retained.push(row)
+    }
+    if (newline < 0) break
+    offset = newline + 1
   }
-
-  // Drop trailing blanks
-  while (filtered.length > 0 && filtered[filtered.length - 1].trim() === '') {
-    filtered.pop()
-  }
-
-  // Cap overly long trees (JS-only safeguard; Rust has no cap)
-  if (filtered.length > TREE_MAX_LINES) {
-    const cut = filtered.length - TREE_MAX_LINES
-    return filtered.slice(0, TREE_MAX_LINES).join('\n') + `\n... +${cut} more lines`
-  }
-
-  return filtered.join('\n')
+  retained.length = Math.min(retained.length, lastContent)
+  if (lastContent > TREE_MAX_LINES) retained.push(`... +${lastContent - TREE_MAX_LINES} more lines`)
+  return retained.join('\n')
 }
 
 tree.filterName = 'tree'

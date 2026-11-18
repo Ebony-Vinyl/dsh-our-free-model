@@ -7,7 +7,7 @@
  * their own key, or, for the keyless and local ones, with no account at all.
  * The data lives in `registry.json` so a provider can be added, corrected or
  * dropped in one diffable file; nothing in this module reaches the network, and
- * a record's `source` field names which of the two vetted catalogs it came from.
+ * a record's `source` and optional `sourceUrl` identify its catalog or documentation.
  *
  * Composite ids are `provider/model`, e.g. `nvidia_nim/nvidia/nemotron-3-super-120b-a12b`
  * (model ids may themselves contain slashes — `openai/gpt-oss-20b` is one model).

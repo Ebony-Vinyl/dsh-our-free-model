@@ -9,7 +9,7 @@ import type { Host } from './types'
 
 interface Provider {
   id: string; name: string; category: string; format: string; authKind: string
-  baseUrl: string; modelCount: number; models?: string[]
+  baseUrl: string; modelCount: number; models?: string[]; notes: string
 }
 interface Configuration {
   enabled: boolean; hasKey: boolean; keyHint?: string; baseUrl: string; models: string[]
@@ -81,6 +81,7 @@ function ProviderEditor({ provider, configuration, onClose, onSaved }: {
   return <WorkbenchDialog title={`${provider.name} · ${saved ? '渠道配置' : '连接渠道'}`} onClose={onClose} busy={!!busy}>
     <form className="wb-form" onSubmit={event => { event.preventDefault(); void run('save') }}>
       <div className="wb-form-meta"><Badge tone="blue">{provider.format}</Badge><Badge>{provider.category}</Badge><span>{provider.authKind}</span></div>
+      {provider.notes && <p className="wb-form-notes">{provider.notes}</p>}
       <label>API 地址<Input required type="url" value={baseUrl} disabled={!!busy} onChange={event => change(() => setBaseUrl(event.target.value))} /></label>
       <label>API Key<Input type="password" autoComplete="new-password" spellCheck={false} value={key}
         placeholder={hasKey ? '已保存密钥；留空保留' : '输入 API Key'} disabled={!!busy}
