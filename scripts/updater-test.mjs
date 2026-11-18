@@ -1024,6 +1024,47 @@ check('scoped layout: .modules.yaml hoistedLocations is read beside the profile 
     assert.equal(isPackageManagerOwned(pkg, '@ebony-vinyl/dsh-our-free-model'), true)
   } finally { fs.rmSync(profile, { recursive: true, force: true }) }
 })
+check('cross-importer: a workspace sub-package entry is not the profile ownership', () => {
+  // The profile's own importer only declares another plugin; a workspace
+  // sub-package declares ours. Its bytes are not installed into the profile's
+  // node_modules, so the profile never handed this install to pnpm.
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-cross-import-'))
+  const pkg = path.join(profile, 'node_modules', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'", '',
+      'importers:', '',
+      '  .:', '    dependencies:',
+      '      some-other-plugin:', '        specifier: 1.0.0', '        version: 1.0.0', '',
+      '  packages/app:', '    dependencies:',
+      '      dsh-our-free-model:', '        specifier: file:./vendor/x.tgz', '        version: file:./vendor/x.tgz', '',
+    ].join('\n'))
+    assert.equal(isPackageManagerOwned(pkg), false, 'a sub-package importer must not decide profile ownership')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('root importer: a specifier in the profile importer still marks ownership', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-root-import-'))
+  const pkg = path.join(profile, 'node_modules', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), PNPM_LOCKFILE)
+    assert.equal(isPackageManagerOwned(pkg), true)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('v6 lockfile: top-level dependencies still count as the root scope', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-v6-'))
+  const pkg = path.join(profile, 'node_modules', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '6.0'", '',
+      'dependencies:', '  dsh-our-free-model:',
+      '    specifier: file:./vendor/x.tgz', '    version: file:./vendor/x.tgz', '',
+    ].join('\n'))
+    assert.equal(isPackageManagerOwned(pkg), true)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
 check('a plain distribution: self install is not pnpm-owned', () => {
   const { profile, pkg } = makeProfilePackage()
   try {
