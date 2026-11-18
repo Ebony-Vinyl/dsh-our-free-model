@@ -36,7 +36,7 @@ const hooks = registerHooks({
     if (url === packUrl) return {
       format: 'module', shortCircuit: true,
       source: fs.readFileSync(fileURLToPath(url), 'utf8')
-        + '\nexport { toGenerateOptions, toResponsesGenerateOptions, createGatewayToolMessage };\n',
+        + '\nexport { toGenerateOptions, toResponsesGenerateOptions, toResponsesSse, createGatewayToolMessage };\n',
     }
     if (url.startsWith(sourceRoot) && url.endsWith('.ts')) return {
       format: 'module', shortCircuit: true,
@@ -46,7 +46,7 @@ const hooks = registerHooks({
   },
 })
 async function verifyGateway(target, converters, serializeMessages, normalizeHarnessMessages) {
-  const { toGenerateOptions, toResponsesGenerateOptions, createGatewayToolMessage } = converters
+  const { toGenerateOptions, toResponsesGenerateOptions, toResponsesSse, createGatewayToolMessage } = converters
   const label = `${host}/${target}`
   const toolResult = (message, callId) => {
     assert.equal(message.role, legacy ? 'user' : 'tool', `${label}: result must match the host role`)
@@ -73,6 +73,27 @@ async function verifyGateway(target, converters, serializeMessages, normalizeHar
     { role: 'system', content: 'response system' }, { role: 'developer', content: 'response developer' },
     { role: 'user', content: 'hello' },
   ] }, signal)
+  const orphanOutput = await toResponsesGenerateOptions({ model: 'test/model', input: [
+    { type: 'function_call_output', id: 'fco_page', name: 'codex_apps_open_page', output: '{"page_id":null}' },
+    { role: 'user', content: 'hello' },
+  ] }, signal)
+  assert.equal(orphanOutput.messages.length, 1)
+  assert.deepEqual(orphanOutput.messages[0].content, [{ type: 'text', text: 'hello' }])
+  async function* textThenTool() {
+    yield { type: 'text-delta', index: 0, text: 'Checking' }
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Checking' } }
+    yield { type: 'tool-call-delta', index: 1, id: 'call-1', name: 'read', argumentsDelta: '{}' }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  }
+  const events = []
+  for await (const event of toResponsesSse(textThenTool(), 'resp_1', 'test/model', {})) {
+    events.push(JSON.parse(event.split('\n')[1].slice('data: '.length)))
+  }
+  const messageDone = events.find(event => event.type === 'response.output_item.done' && event.item.type === 'message')
+  const messageFinal = events.at(-1).response.output.find(item => item.type === 'message')
+  assert.equal(messageDone.item.phase, 'commentary')
+  assert.deepEqual(messageDone.item, messageFinal)
+
   const systemMessages = [...chat.messages, ...responses.messages].filter(m => m.role === 'system')
   assert.equal(systemMessages.length, 5)
   for (const message of systemMessages) assert.deepEqual(message.source, { kind: 'plugin:dsh-openai-gateway' })
