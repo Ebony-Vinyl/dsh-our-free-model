@@ -1,6 +1,6 @@
 {
   "name": "our-free-model-standalone",
-  "version": "2.8.2",
+  "version": "2.8.6",
   "private": true,
   "type": "module",
   "description": "Our Free Model 独立本地服务，无需安装 DSH",
@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start": "node cli.mjs",
+    "start:env": "node --env-file=.env cli.mjs",
     "build": "node ../../scripts/build-standalone-ui.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

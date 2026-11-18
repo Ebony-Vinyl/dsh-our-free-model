@@ -4,6 +4,9 @@
 已提供独立 HTTP 服务、网页管理、EAC 和十个账号渠道；独立安装制品尚未发布。
 本阶段从完整仓库运行，暂不能仅复制本目录或将它单独作为 npm 包安装。
 
+中文快速上手（环境要求、配置、启动、基本流程与常见问题）见
+[独立服务中文使用指南](../../docs/standalone-quickstart-zh.md)。
+
 ## 启动
 
 需要符合仓库 `engines` 要求的 Node.js。在仓库根目录执行：
@@ -16,6 +19,14 @@ npm run start:standalone
 
 ```powershell
 npm run start:standalone -- --port 18900 --data-dir F:\ofm-data
+```
+
+如需用环境变量指定数据目录或代理，复制 `.env.example` 为 `.env` 后执行：
+Node 不会自动加载 `.env`，必须使用带 `--env-file` 的脚本。
+
+```powershell
+copy .env.example .env
+npm --prefix packages/standalone run start:env
 ```
 
 启动打印管理页面的一次性登录链接、实际 API 地址与密钥文件位置，不打印 API Key。

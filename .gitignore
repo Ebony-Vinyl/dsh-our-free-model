@@ -23,6 +23,11 @@ worker/.env
 c3099.txt
 stats.json
 
+# Standalone runtime env files (may contain proxy credentials / data paths).
+# Copy packages/standalone/.env.example instead of committing the real .env.
+.env
+packages/standalone/.env
+
 # 本地代码索引及工具状态，不进入仓库。
 .aoci/
 /aoci.txt
