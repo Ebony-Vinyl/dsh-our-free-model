@@ -1,52 +1,41 @@
-/**
- * Compact `grep -rn` output ("file:lineno:content").
- *
- * The raw form repeats the full path on every match, so a symbol found 40 times
- * in one file costs 40 path repetitions. This filter groups by file, keeps the
- * first 10 matches per file with their line numbers, and says how many were
- * dropped. A model that sees "+30" knows the symbol is dense in that file and
- * can read the file; one shown all 40 lines learns nothing extra and pays for
- * the paths.
- *
- * Ported from the Rust `grep_wrapper` (splitn(3, ':') semantics).
- *
- * @module src/token-saver/rtk/filters/grep.js
- */
-
+/** Summarize validated search hits with bounded samples per file. */
 import { GREP_PER_FILE_MAX } from '../constants.js'
-import { parseGrepOutput } from '../hitLine.js'
+import { splitGrepHit } from '../hitLine.js'
 
 export function grep(input) {
-  // Direct callers need the same whole-output safety as autodetection.
-  const hits = parseGrepOutput(input)
-  if (hits === null) return input
-  const byFile = new Map()
-  const total = hits.length
-  for (const { file, line: lineNumStr, content } of hits) {
-    if (!byFile.has(file)) byFile.set(file, [])
-    byFile.get(file).push([lineNumStr, content])
-  }
-
-  // Rust: files.sort_by_key(|(f, _)| *f) — stable ordering matters so the same
-  // search produces the same prompt bytes twice.
-  const files = Array.from(byFile.keys()).sort()
-  let out = `${total} matches in ${files.length}F:\n\n`
-
-  for (const file of files) {
-    const matches = byFile.get(file)
-    out += `[file] ${file} (${matches.length}):\n`
-    const show = matches.slice(0, GREP_PER_FILE_MAX)
-    for (const [lineNum, content] of show) {
-      // Rust: format!("  {:>4}: {}", line_num, content.trim())
-      out += `  ${lineNum.padStart(4)}: ${content.trim()}\n`
+  const groups = new Map()
+  let total = 0
+  let offset = 0
+  while (offset <= input.length) {
+    const newline = input.indexOf('\n', offset)
+    const end = newline < 0 ? input.length : newline
+    const row = input.slice(offset, end)
+    if (row.trim()) {
+      const hit = splitGrepHit(row)
+      if (!hit || !hit.file.trim() || !/^\d+$/.test(hit.line)) return input
+      total++
+      let group = groups.get(hit.file)
+      if (!group) {
+        group = { count: 0, samples: [] }
+        groups.set(hit.file, group)
+      }
+      group.count++
+      if (group.samples.length < GREP_PER_FILE_MAX) {
+        group.samples.push(`  ${hit.line.padStart(4)}: ${hit.content.trim()}\n`)
+      }
     }
-    if (matches.length > GREP_PER_FILE_MAX) {
-      out += `  +${matches.length - GREP_PER_FILE_MAX}\n`
-    }
-    out += '\n'
+    if (newline < 0) break
+    offset = newline + 1
   }
-
-  return out
+  if (!total) return input
+  const output = [`${total} matches in ${groups.size}F:\n\n`]
+  for (const file of [...groups.keys()].sort()) {
+    const { count, samples } = groups.get(file)
+    output.push(`[file] ${file} (${count}):\n`, ...samples)
+    if (count > samples.length) output.push(`  +${count - samples.length}\n`)
+    output.push('\n')
+  }
+  return output.join('')
 }
 
 grep.filterName = 'grep'
