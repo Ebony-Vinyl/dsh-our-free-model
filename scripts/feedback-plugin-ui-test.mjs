@@ -20,9 +20,14 @@ import { createApiRoutes } from '../index.js'
 import { createFeedback } from '../src/feed.js'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const require = createRequire(import.meta.url)
 const uiRequire = createRequire(new URL('../packages/standalone/package.json', import.meta.url))
-const { chromium } = require(process.env.OFM_PLAYWRIGHT_MODULE ?? 'D:/Cache/npm-global/node_modules/playwright')
+import { loadChromium } from './lib/playwright.mjs'
+
+const chromium = loadChromium()
+if (chromium === null) {
+  console.log('skip feedback-plugin-ui: playwright or its browser is not installed')
+  process.exit(0)
+}
 const { build } = uiRequire('esbuild')
 
 const react = await build({

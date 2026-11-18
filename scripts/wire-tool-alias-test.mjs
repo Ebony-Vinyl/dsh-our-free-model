@@ -49,15 +49,15 @@ for (const style of [false, true, 'claude']) {
     assert.equal(body.input[1].call_id, 'call1')
     assert.equal(body.input[1].output, 'result')
     assert.equal(body.tool_choice.name, WIRE.subagent_fork)
-    // v1.4.6 injects the official CLI prompt first; the caller's text is folded after it.
-    assert.ok(body.instructions.startsWith('You are opencode, an interactive CLI tool'))
+    // OFM context precedes the preserved caller instructions.
+    assert.ok(body.instructions.startsWith("You are assisting with a user's software project through OFM."))
     assert.ok(body.instructions.includes('Preserve caller instructions'))
   } else if (style === 'claude') {
     assert.equal(body.messages[0].content[0].name, WIRE.working_directory)
     assert.equal(body.messages[1].content[0].tool_use_id, 'call1')
     assert.equal(body.tool_choice.name, WIRE.working_directory)
-    // The official prompt is prepended as its own text block; the caller's block follows.
-    assert.equal(body.system[0].text.startsWith('You are opencode, an interactive CLI tool'), true)
+    // OFM context occupies its own block; the caller block follows.
+    assert.equal(body.system[0].text.startsWith("You are assisting with a user's software project through OFM."), true)
     assert.equal(body.system[1].text, 'Preserve caller instructions')
   } else {
     const history = body.messages.find(m => m.tool_calls)
