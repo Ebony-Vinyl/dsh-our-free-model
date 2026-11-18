@@ -3,6 +3,7 @@ import { ROUTE_MAIN, ROUTE_REGION } from "./adapter.js";
 import { toOpenAiUsage } from "./forward.js";
 import { carryFailure } from "./failure.js";
 import { effortsFor, defaultEffortFor } from "./effort.js";
+import { flattenResponsesTools, flatNamespaceToolName, normalizeToolName } from "./messages.js";
 function routableModelIds(snapshot) {
   const membership = new Set(snapshot.membership[ROUTE_MAIN] ?? []);
   if (snapshot.settings.exposeRegionModels !== false) {
@@ -37,10 +38,10 @@ function createForwardCompletion({ adapter, state, signal }) {
     }
     const openAi = request.openAi ?? {};
     const messages = Array.isArray(request.messages) ? request.messages : fromOpenAiMessages(openAi, request.responses === true, entry.id);
-    const tools = Array.isArray(request.tools) ? request.tools : (openAi.tools ?? []).map(normalizeTool).filter(Boolean);
+    const tools = Array.isArray(request.tools) ? request.tools : flattenResponsesTools(openAi.tools).tools;
     const handler = typeof onChunk === "function" ? onChunk : () => {
     };
-    const outcome = { text: "", toolCalls: [], usage: void 0, truncated: false, error: void 0 };
+    const outcome = { text: "", reasoning: "", toolCalls: [], usage: void 0, truncated: false, error: void 0 };
     const maxTokens = Number.isFinite(request.maxTokens) ? request.maxTokens : Number.isFinite(openAi.max_tokens) ? openAi.max_tokens : void 0;
     const temperature = Number.isFinite(request.temperature) ? request.temperature : Number.isFinite(openAi.temperature) ? openAi.temperature : void 0;
     const reasoningEffort = typeof request.reasoningEffort === "string" ? request.reasoningEffort : typeof openAi.reasoning_effort === "string" ? openAi.reasoning_effort : void 0;
@@ -120,21 +121,23 @@ function normaliseResponsesInput(input) {
   if (!Array.isArray(input)) return [];
   return input.map((row) => {
     if (typeof row === "string") return { role: "user", content: row };
-    if (row.type === "function_call") return { role: "assistant", content: [], tool_calls: [{ id: row.call_id, function: { name: row.name, arguments: row.arguments } }] };
+    if (row.type === "function_call") {
+      const bare = normalizeToolName(row.name) ?? "";
+      const ns = normalizeToolName(row.namespace);
+      const name = bare !== "" && ns !== void 0 ? flatNamespaceToolName(ns, bare) : row.name ?? "";
+      return { role: "assistant", content: [], tool_calls: [{ id: row.call_id, function: { name, arguments: row.arguments } }] };
+    }
     if (row.type === "function_call_output") return { role: "tool", content: String(row.output ?? ""), tool_call_id: row.call_id };
     return row;
   });
-}
-function normalizeTool(tool) {
-  const name = tool?.name ?? tool?.function?.name;
-  if (typeof name !== "string" || name.trim() === "") return null;
-  const parameters = tool?.parameters ?? tool?.function?.parameters ?? { type: "object", properties: {} };
-  return { name, description: String(tool?.description ?? tool?.function?.description ?? ""), parameters };
 }
 function foldForwardOutcome(outcome, chunk) {
   switch (chunk.type) {
     case "text-delta":
       outcome.text += chunk.text;
+      break;
+    case "reasoning-delta":
+      outcome.reasoning = (outcome.reasoning ?? "") + chunk.text;
       break;
     case "tool-call-delta": {
       let call = outcome.toolCalls.find((candidate) => candidate.slot === chunk.index);

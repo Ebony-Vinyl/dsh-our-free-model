@@ -10,6 +10,7 @@
  * @module src/messages.js
  */
 
+import crypto from 'node:crypto'
 import { MAX_TOOL_NAME_LEN, baseModelId, restoreToolName } from './upstream.js'
 
 /** Content types an image lane can carry, matched against the verified media type. */
@@ -396,10 +397,84 @@ export function toResponseInput(messages, resolveImage, warnings) {
   return out
 }
 
+/** Normalise a Responses tool/namespace name: trim and reject empty strings. */
+export function normalizeToolName(value) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+/** Deterministic flat name for a namespaced Responses function tool (<= 64 chars). */
+export function flatNamespaceToolName(namespace, name) {
+  const flat = `${namespace}__${name}`
+  if (flat.length <= 64) return flat
+  const digest = crypto.createHash('sha256').update(flat).digest('hex').slice(0, 8)
+  return `${flat.slice(0, 55)}_${digest}`
+}
+
+/**
+ * Flatten Responses `type: 'namespace'` tool groups into top-level function
+ * declarations and return the reverse lookup map back to `{ namespace, name }`.
+ */
+export function flattenResponsesTools(tools) {
+  const list = []
+  const nsMap = new Map()
+  const used = new Set()
+  const pushTool = (name, source) => {
+    if (used.has(name)) return false
+    used.add(name)
+    const parameters = source?.parameters && typeof source.parameters === 'object' && !Array.isArray(source.parameters)
+      ? source.parameters
+      : { type: 'object', properties: {} }
+    const description = typeof source?.description === 'string' ? source.description : ''
+    list.push({ name, description, parameters })
+    return true
+  }
+  for (const entry of Array.isArray(tools) ? tools : []) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    if (entry.type === 'namespace') {
+      const namespace = normalizeToolName(entry.name)
+      if (namespace === undefined || !Array.isArray(entry.tools)) continue
+      for (const child of entry.tools) {
+        if (!child || typeof child !== 'object' || Array.isArray(child)) continue
+        if (child.type !== undefined && child.type !== 'function') continue
+        const source = child.function && typeof child.function === 'object' && !Array.isArray(child.function)
+          ? child.function
+          : child
+        const childName = normalizeToolName(source?.name)
+        if (childName === undefined) continue
+        const flat = flatNamespaceToolName(namespace, childName)
+        if (pushTool(flat, source)) nsMap.set(flat, { namespace, name: childName })
+      }
+      continue
+    }
+    if (typeof entry.type === 'string' && entry.type !== '' && entry.type !== 'function') continue
+    const source = entry.function && typeof entry.function === 'object' && !Array.isArray(entry.function)
+      ? entry.function
+      : entry
+    const name = normalizeToolName(source?.name)
+    if (name === undefined) continue
+    pushTool(name, source)
+  }
+  return { tools: list, nsMap }
+}
+
+/** Restore a flattened namespace tool call back to `{ name, namespace? }`. */
+export function restoreResponsesToolName(name, nsMap) {
+  if (typeof name !== 'string' || name === '') return { name: '' }
+  const entry = nsMap?.get(name)
+  return entry === undefined ? { name } : { name: entry.name, namespace: entry.namespace }
+}
+
 /** Harness tool schemas -> the shape each provider expects. */
 export function toToolDefs(tools, style) {
   const list = []
+  const expanded = []
   for (const tool of tools ?? []) {
+    if (tool?.type === 'namespace') expanded.push(...flattenResponsesTools([tool]).tools)
+    else expanded.push(tool)
+  }
+  for (const tool of expanded) {
     // Both spellings have to work here. The harness hands over flat
     // `{name, description, parameters}` defs, but a caller that already speaks
     // OpenAI — the forward listener's own caller, or anything re-feeding this
