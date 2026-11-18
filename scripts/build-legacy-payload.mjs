@@ -50,8 +50,8 @@ const o2aInlineAssets = {
       loader: 'js',
       contents: [
         '// 由 scripts/build-legacy-payload.mjs 生成：发布 bundle 的内联资产；开发形态见 src/o2a/asset-source.js。',
-        `export const OFFICIAL_PROMPT_V2 = ${JSON.stringify(fs.readFileSync(path.join(root, 'src/o2a/assets/opencode_prompt_v2.txt'), 'utf8'))}`,
-        `export const OFFICIAL_TOOLS_V2 = ${JSON.stringify(fs.readFileSync(path.join(root, 'src/o2a/assets/opencode_tools.json'), 'utf8'))}`,
+        `export const OFFICIAL_PROMPT_V2 = ${JSON.stringify(fs.readFileSync(path.join(root, 'src/o2a/assets/ofm-agent-context.txt'), 'utf8'))}`,
+        `export const OFFICIAL_TOOLS_V2 = ${JSON.stringify(fs.readFileSync(path.join(root, 'src/o2a/assets/ofm-tool-contracts.json'), 'utf8'))}`,
         'export function officialPromptText() { return OFFICIAL_PROMPT_V2 }',
         'export function officialToolsText() { return OFFICIAL_TOOLS_V2 }',
       ].join('\n'),

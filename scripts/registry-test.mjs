@@ -91,7 +91,8 @@ check('every record has the required fields with valid enum values', () => {
     assert.ok(nonEmpty(provider.notes), `${provider.id}: notes`)
     assert.ok(nonEmpty(provider.website), `${provider.id}: website`)
     assert.equal(typeof provider.local, 'boolean', `${provider.id}: local`)
-    assert.ok(['fcc', '9router', 'custom'].includes(provider.source), `${provider.id}: source ${provider.source}`)
+    assert.ok(['fcc', '9router', 'custom', 'official', 'models.dev'].includes(provider.source), `${provider.id}: source ${provider.source}`)
+    if (['official', 'models.dev'].includes(provider.source)) assert.ok(provider.sourceUrl?.startsWith('https://'), `${provider.id}: official evidence URL`)
     assert.equal(provider.local, provider.category === 'local', `${provider.id}: local must track category "local"`)
   }
 })

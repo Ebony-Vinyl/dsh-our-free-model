@@ -687,6 +687,7 @@
   color: var(--fg-2);
 }
 .wb-form :is(input:not([type="file"]), select, textarea) { width: 100%; }
+.wb-form-notes { margin: 0; color: var(--fg-2); font-size: 11.5px; line-height: 1.65; }
 .wb-form textarea {
   min-height: 90px;
   max-height: 260px;
