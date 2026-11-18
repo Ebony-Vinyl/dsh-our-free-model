@@ -147,7 +147,7 @@ function normaliseResponsesInput(input) {
 export function foldForwardOutcome(outcome, chunk) {
   switch (chunk.type) {
     case 'text-delta': outcome.text += chunk.text; break
-    case 'reasoning-delta': outcome.reasoning += chunk.text; break
+    case 'reasoning-delta': outcome.reasoning = (outcome.reasoning ?? '') + chunk.text; break
     case 'tool-call-delta': {
       let call = outcome.toolCalls.find(candidate => candidate.slot === chunk.index)
       if (call === undefined) { call = { slot: chunk.index, id: chunk.id ?? '', name: chunk.name ?? '', arguments: chunk.argumentsDelta ?? '' }; outcome.toolCalls.push(call) }

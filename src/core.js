@@ -137,7 +137,7 @@ function foldForwardOutcome(outcome, chunk) {
       outcome.text += chunk.text;
       break;
     case "reasoning-delta":
-      outcome.reasoning += chunk.text;
+      outcome.reasoning = (outcome.reasoning ?? "") + chunk.text;
       break;
     case "tool-call-delta": {
       let call = outcome.toolCalls.find((candidate) => candidate.slot === chunk.index);
