@@ -1,8 +1,8 @@
 {
-  "version": "2.8.5",
+  "version": "2.8.6",
   "base": "../",
-  "publishedAt": "2026-11-15T03:18:58.427Z",
-  "notes": "",
+  "publishedAt": "2026-11-18T00:01:59.038Z",
+  "notes": "重写请求适配、工具输出压缩、本地应答和失败分类，重建供应商目录并保留旧ID及配置。历史模型可能退役或被上游回落，不自动换模型。社区桥需单独迁移；详见2.8.6说明。",
   "files": [
     {
       "path": "adapter/dsh-llm.d.ts",
@@ -36,8 +36,8 @@
     },
     {
       "path": "LICENSE",
-      "size": 1068,
-      "sha256": "4d5f97c83545b2159926df06d3210a266d2b7f900e27f7b3e8e576caf753e828"
+      "size": 2242,
+      "sha256": "5b00d8a4ca8071523249cd19a2c88dd1c8d703013c4041bb2c279c4189616a66"
     },
     {
       "path": "locale/en.json",
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 5208,
-      "sha256": "bd96d8ae7431a07d0012e9ed0661aac78fcb1b2134bacf1847ac63e18d2ca461"
+      "sha256": "107350b8d664109bbf5dd7e3070e8f64796de33157f0598cbd87d9720106d8b6"
     },
     {
       "path": "src/adapter.js",
@@ -216,8 +216,8 @@
     },
     {
       "path": "src/local-optimize.js",
-      "size": 17562,
-      "sha256": "9cda533778c6d91090180d6dad3d861d21c1f484bb371bf3f69de0f3653f5fb2"
+      "size": 6898,
+      "sha256": "b7d07a15f547fbc1eceed771d2dead0f8887a7ad6bd1f4c844fbdc5642ff2717"
     },
     {
       "path": "src/loopback-fetch.js",
@@ -251,8 +251,8 @@
     },
     {
       "path": "src/o2a.js",
-      "size": 59531,
-      "sha256": "fb6475bbb2f308250537b09c41892378294eeb298a018dbaa911495a8d814afb"
+      "size": 32188,
+      "sha256": "65e3805db556b61dfd61c2d881433a577b137c6aec1a5753d7abe7bbd3bbdd25"
     },
     {
       "path": "src/open-external.js",
@@ -276,13 +276,13 @@
     },
     {
       "path": "src/providers/index.js",
-      "size": 9780,
-      "sha256": "f8a08a3520f0ed71aafac891eb96ddd26b50a53f9a5d2738e1994afe031af578"
+      "size": 9785,
+      "sha256": "a294b96d5cadb99e8c71293a255add117ac54f528e02a7b8e92579833c0d09ef"
     },
     {
       "path": "src/providers/registry.json",
-      "size": 127050,
-      "sha256": "13fe0a60438465cf5c3440f411aefd707804229584bcda8e73951d13dc8948f5"
+      "size": 137887,
+      "sha256": "234102ceda21c1b673ca41c60749a65858da65495c816a06ecfc7564eed90ce3"
     },
     {
       "path": "src/push.js",
@@ -301,8 +301,8 @@
     },
     {
       "path": "src/route/classify.js",
-      "size": 28738,
-      "sha256": "9123be50f8284a9a8735abac7c0e541e726fdfdce1de9aab841e4e5bbe348e17"
+      "size": 10482,
+      "sha256": "713b1acd60639900b3a21c99e5925744d51a28c2adbcf49b56e8be7ba9023c52"
     },
     {
       "path": "src/semver.js",
@@ -336,8 +336,8 @@
     },
     {
       "path": "src/token-saver.js",
-      "size": 45049,
-      "sha256": "d2b5e9fe295657fe1cd276f33c8fbb24c541a3fdc70c6adf4bd4f4fa1ef8e830"
+      "size": 36560,
+      "sha256": "5386b54ffe224e28ee1ec355618bcd015f7b691a476662058e70b507b9c21d90"
     },
     {
       "path": "src/trust.js",
@@ -351,8 +351,8 @@
     },
     {
       "path": "src/upstream.js",
-      "size": 25718,
-      "sha256": "af686d1c27293b51f47727551de52f7e8101afb2b29bfa6778768bfc10aa8b30"
+      "size": 20968,
+      "sha256": "4ba4b634c5d5cad6425879290a5364b076abeff456ce96ba81d2cfbfdcb7d116"
     },
     {
       "path": "src/vault-anchor.js",
@@ -405,5 +405,5 @@
       "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ],
-  "signature": "mLVd1nVL9jVl8adl9SLgT34LwD/o22PEU87UypJfxoZlrPnJgx7kJRUM9Q8WUFoNSQWOSW6XGW0qUtmjqenqAQ=="
+  "signature": "FXhAdHBoFBFhOUTkfnq596U7dQSMPnZzWfVdk8nelTLZCtJueriec1dY5lOEQqeGS6ZSHnxCT8d0E/006PnfCA=="
 }

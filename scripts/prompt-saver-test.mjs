@@ -6,9 +6,7 @@
  * that carries them. Both are checked against the failure modes that would
  * reach a user as a wrong answer or a broken request:
  *
- * - every level returns the exact upstream text — a distinctive substring *and*
- *   the full length are asserted, so a silent truncation or a well-meaning
- *   paraphrase fails here instead of shipping;
+ * - authored levels remain distinct, concise and preserve functional boundaries;
  * - `off` returns null, and `activePrompts` composes exactly the active
  *   families;
  * - injection lands in the right place on each of the three wires this plugin
@@ -53,83 +51,29 @@ const CAVEMAN = cavemanPrompt('full')
 const PONYTAIL = ponytailPrompt('ultra')
 
 // ── the prompt families ──────────────────────────────────────────────────────
-// Expected total lengths, measured against the upstream sources
-// (open-sse/rtk/cavemanPrompts.js, open-sse/rtk/ponytailPrompt.js). A length
-// check is what catches a silent truncation; the substrings below catch an
-// edit that keeps the size but changes the wording.
+// Authored prompt contracts replace upstream verbatim-length checks.
 
-const CAVEMAN_LENGTHS = { lite: 1736, full: 1834, ultra: 1678, 'wenyan-lite': 1704, wenyan: 1795, 'wenyan-ultra': 1705 }
-const PONYTAIL_LENGTHS = { lite: 1560, full: 1566, ultra: 1610 }
-
-/** Each level's opening instruction — the one line its intensifier changes. */
-const CAVEMAN_MARKERS = {
-  lite: 'Respond tersely. Keep grammar and full sentences but drop filler, hedging and pleasantries',
-  full: 'Respond like terse caveman. All technical substance stay exact, only fluff die.',
-  ultra: 'Respond ultra-terse. Maximum compression. Telegraphic.',
-  'wenyan-lite': 'Respond semi-classical. Drop filler/hedging but keep grammar structure, classical register.',
-  wenyan: 'Respond classical Chinese (文言文). Maximum classical terseness. 80-90% character reduction.',
-  'wenyan-ultra': 'Respond extreme classical compression (文言文 ultra). Maximum compression, ultra terse.',
+const answerBoundaries = ['Keep code, identifiers, paths, commands, error text and URLs unchanged.', 'security guidance, irreversible decisions and ordered procedures', 'Do not invent abbreviations.', "Follow the user's language", 'classical Chinese level', 'Do not announce this style', 'decorative emoji', 'throughout the conversation']
+const codeBoundaries = ['Implement only the requested behavior.', 'standard libraries and installed dependencies', 'validation at trust boundaries', 'data-loss prevention, security, accessibility', 'focused runnable check', 'across turns']
+for (const [family, levels, lookup, boundaries] of [
+  ['caveman', CAVEMAN_LEVELS, cavemanPrompt, answerBoundaries],
+  ['ponytail', PONYTAIL_LEVELS, ponytailPrompt, codeBoundaries],
+]) {
+  check(`${family}: authored levels are distinct, concise and retain functional boundaries`, () => {
+    const seen = new Set()
+    for (const level of levels) {
+      const text = lookup(level)
+      if (level === 'off') { assert.equal(text, null); continue }
+      assert.equal(typeof text, 'string')
+      assert.ok(text.length > 100 && text.length < 1200, `${level}: bounded complete directive`)
+      assert.ok(!text.includes('\n'))
+      assert.ok(!seen.has(text), `${level}: intensity must differ`)
+      seen.add(text)
+      for (const boundary of boundaries) assert.ok(text.includes(boundary), `${level}: ${boundary}`)
+      if (level.startsWith('wenyan')) assert.match(text, /classical Chinese|classical register/)
+    }
+  })
 }
-const PONYTAIL_MARKERS = {
-  lite: "Lite: build what's asked, but name the lazier alternative in one line. User picks.",
-  full: 'Full: the ladder enforced. Stdlib and native first. Shortest diff, shortest explanation.',
-  ultra: 'Ultra: YAGNI extremist. Deletion before addition.',
-}
-
-/** Boundaries every level of a family must keep, whatever the intensifier. */
-const CAVEMAN_BOUNDARIES = [
-  'Code blocks, file paths, commands, errors, URLs: keep exact.',
-  'Security warnings, irreversible action confirmations, multi-step ordered sequences: write normal.',
-  'Auto-Clarity: drop caveman for security warnings, irreversible actions',
-  "Preserve the user's dominant language.",
-  'Wenyan/classical-Chinese levels override this language-preservation rule.',
-  'No invented abbreviations.',
-  'No self-reference. Do not name or announce the style',
-  'No decorative emoji.',
-  'ACTIVE EVERY RESPONSE.',
-]
-const PONYTAIL_BOUNDARIES = [
-  'You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.',
-  '1) Does this need to exist at all? (YAGNI)',
-  'Never simplify away: input validation at trust boundaries',
-  'ACTIVE EVERY RESPONSE.',
-]
-
-check('every caveman level returns the exact upstream text', () => {
-  for (const level of CAVEMAN_LEVELS) {
-    if (level === 'off') {
-      assert.equal(cavemanPrompt(level), null, 'off must not carry a prompt')
-      continue
-    }
-    const text = cavemanPrompt(level)
-    assert.equal(typeof text, 'string', `${level} must resolve to text`)
-    assert.equal(text.length, CAVEMAN_LENGTHS[level],
-      `${level} length changed — the prompt was edited or truncated`)
-    assert.ok(text.includes(CAVEMAN_MARKERS[level]), `${level} lost its opening instruction`)
-    for (const boundary of CAVEMAN_BOUNDARIES) {
-      assert.ok(text.includes(boundary), `${level} lost a shared boundary: ${boundary}`)
-    }
-    assert.ok(!text.includes('\n'), `${level} must stay a single line — the injector appends it as one segment`)
-  }
-})
-
-check('every ponytail level returns the exact upstream text', () => {
-  for (const level of PONYTAIL_LEVELS) {
-    if (level === 'off') {
-      assert.equal(ponytailPrompt(level), null, 'off must not carry a prompt')
-      continue
-    }
-    const text = ponytailPrompt(level)
-    assert.equal(typeof text, 'string', `${level} must resolve to text`)
-    assert.equal(text.length, PONYTAIL_LENGTHS[level],
-      `${level} length changed — the prompt was edited or truncated`)
-    assert.ok(text.includes(PONYTAIL_MARKERS[level]), `${level} lost its opening instruction`)
-    for (const boundary of PONYTAIL_BOUNDARIES) {
-      assert.ok(text.includes(boundary), `${level} lost a shared boundary: ${boundary}`)
-    }
-    assert.ok(!text.includes('\n'), `${level} must stay a single line`)
-  }
-})
 
 check('a level outside the menu resolves to null, not to undefined text', () => {
   assert.equal(cavemanPrompt('bogus'), null)
@@ -459,5 +403,5 @@ check('hasInjected reports each wire and shape', () => {
 })
 
 if (failures > 0) console.error(`prompt-saver-test: ${failures} failure(s)`)
-else console.log('prompt-saver-test: the prompt families are verbatim and the injector is reversible')
+else console.log('prompt-saver-test: the authored prompt families retain boundaries and the injector is reversible')
 process.exitCode = failures > 0 ? 1 : 0

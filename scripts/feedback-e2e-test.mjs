@@ -10,12 +10,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-const require = createRequire(import.meta.url)
-// 与同目录其它浏览器套件一致：环境变量优先，缺省走本机全局安装，避免 CI 上
-// `require(undefined)` 直接抛 ERR_INVALID_ARG_TYPE 而不是"没有浏览器"。
-const { chromium } = require(process.env.OFM_PLAYWRIGHT_MODULE ?? 'D:/Cache/npm-global/node_modules/playwright')
+import { loadChromium } from './lib/playwright.mjs'
+
+const chromium = loadChromium()
+if (chromium === null) {
+  console.log('skip feedback-e2e: playwright or its browser is not installed')
+  process.exit(0)
+}
 
 // ── 假 GitHub ───────────────────────────────────────────────────────────────
 const gh = http.createServer((req, res) => {

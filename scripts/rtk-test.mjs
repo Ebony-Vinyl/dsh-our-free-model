@@ -362,7 +362,7 @@ check('gitDiff: a hunk over 100 lines is cut and both markers appear', () => {
   const out = gitDiff(big)
   assert.ok(out.includes('  ... (50 lines truncated)'), 'per-hunk skip count')
   assert.ok(out.includes('  +150 -0'), 'counts the whole hunk, not just the shown part')
-  assert.ok(out.includes('[full diff: rtk git diff --no-compact]'), 'the get-the-full-diff hint')
+  assert.ok(out.includes('[diff truncated by OFM; disable tool-output compression and request the diff again]'), 'the get-the-full-diff hint')
 })
 
 check('gitStatus: porcelain groups staged/modified/untracked with counts', () => {

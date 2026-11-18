@@ -1,142 +1,51 @@
-/**
- * Compact build-tool output (npm, yarn, cargo, rustc, maven, gradle).
- *
- * Build logs are mostly progress: "Compiling X" once per crate, "Downloading
- * X" once per package, deprecation spam. The parts a model can act on are the
- * errors (with rustc's continuation lines, which carry the file, the span and
- * the note), a bounded number of warnings, and the final summary. Everything
- * else is replaced by counts, so the model still learns that work happened
- * without paying for each line of it.
- *
- * @module src/token-saver/rtk/filters/buildOutput.js
- */
-
-// Cargo/rustc error continuation: " --> file:line", "  |", "N | code", "  = note: ..."
-const RE_CARGO_ERR_CONT = /^\s*(-->|\||\d+\s*\||=)/
-const DEPRECATION_KEEP = 3
+/** Preserve build diagnostics and summaries, counting repetitive progress rows. */
+const summaryPattern = /^(?:(?:added|removed|changed|audited|installed)\s+\d+\s+package|Finished\s+|BUILD SUCCESS|\d+\s+(?:vulnerabilities|packages?|warnings?|errors?)|Successfully (?:installed|built)|To address .* issues|Run `npm (?:audit|fund)`)|packages are looking for funding/i
 
 export function buildOutput(input) {
-  const lines = input.split('\n')
-  if (lines.length === 0) return input
-
-  const errors = []
-  const warnings = []
-  const deprecations = []
-  let summary = null
-  let compilingCount = 0
-  let downloadingCount = 0
-  let inCargoError = false
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-
-    // Continuation of cargo error block: keep verbatim while in block
-    if (inCargoError) {
-      if (!trimmed) { inCargoError = false; continue }
-      if (RE_CARGO_ERR_CONT.test(line)) { errors.push(line); continue }
-      inCargoError = false
+  const errors = [], warnings = [], deprecated = [], summaries = []
+  let warningCount = 0, deprecatedCount = 0, compiled = 0, downloaded = 0
+  let diagnostic = false, offset = 0
+  while (offset <= input.length) {
+    const newline = input.indexOf('\n', offset)
+    const end = newline < 0 ? input.length : newline
+    const row = input.slice(offset, end)
+    const text = row.trim()
+    const continuation = diagnostic && text !== '' && /^\s*(?:-->|\||\d+\s*\||=)/.test(row)
+    if (continuation) errors.push(row)
+    else {
+      diagnostic = false
+      if (/^(?:npm (?:ERR!|error)|yarn error|\[ERROR\]|BUILD FAILED)/i.test(text)) errors.push(row)
+      else if (/^npm warn deprecated/i.test(text)) {
+        deprecatedCount++
+        if (deprecated.length < 3) deprecated.push(row)
+      } else if (/^(?:npm warn|yarn warn|\[WARNING\])/i.test(text)) {
+        warningCount++
+        if (warnings.length < 5) warnings.push(row)
+      } else if (/^error(?:\[|:)/i.test(text) || text.startsWith('error -->')) {
+        errors.push(row)
+        diagnostic = true
+      } else if (/^warning(?:\[|:)/i.test(text) || text.startsWith('warning -->')) {
+        warningCount++
+        if (warnings.length < 5) warnings.push(row)
+        diagnostic = true
+      } else if (/^Compiling\s+\S+/i.test(text)) compiled++
+      else if (/^(?:Downloading\s+\S+|Fetching\s+)/i.test(text)) downloaded++
+      else if (summaryPattern.test(text)) summaries.push(row)
     }
-
-    if (!trimmed) continue
-
-    if (/^npm (ERR!|error)/i.test(trimmed) || /^yarn error/i.test(trimmed)) {
-      errors.push(line)
-      continue
-    }
-
-    // Deprecations are package-name noise repeated once per dependency; the
-    // first few are enough to tell the model the tree is aging.
-    if (/^npm warn deprecated/i.test(trimmed)) {
-      deprecations.push(line)
-      continue
-    }
-    if (/^npm warn/i.test(trimmed) || /^yarn warn/i.test(trimmed)) {
-      warnings.push(line)
-      continue
-    }
-
-    if (/^error(\[|:)/i.test(trimmed) || trimmed.startsWith('error -->')) {
-      errors.push(line)
-      inCargoError = true
-      continue
-    }
-
-    if (/^warning(\[|:)/i.test(trimmed) || trimmed.startsWith('warning -->')) {
-      warnings.push(line)
-      inCargoError = true
-      continue
-    }
-
-    if (/^ERROR:/i.test(trimmed)) {
-      errors.push(line)
-      continue
-    }
-
-    if (/^\[ERROR\]/i.test(trimmed) || /^BUILD FAILED/i.test(trimmed)) {
-      errors.push(line)
-      continue
-    }
-
-    if (/^\[WARNING\]/i.test(trimmed)) {
-      warnings.push(line)
-      continue
-    }
-
-    if (/^\s*Compiling\s+\S+/i.test(trimmed)) {
-      compilingCount++
-      continue
-    }
-    if (/^\s*Downloading\s+\S+/i.test(trimmed) || /^Fetching\s+/i.test(trimmed)) {
-      downloadingCount++
-      continue
-    }
-
-    // Summary lines are the outcome; keep every one that matches.
-    if (
-      /^(added|removed|changed|audited|installed)\s+\d+\s+package/i.test(trimmed) ||
-      /^\s*Finished\s+/i.test(trimmed) ||
-      /^BUILD SUCCESS/i.test(trimmed) ||
-      /^\d+\s+(vulnerabilities|packages?|warnings?|errors?)/i.test(trimmed) ||
-      /^Successfully (installed|built)/i.test(trimmed) ||
-      /^To address .* issues/i.test(trimmed) ||
-      /^Run `npm (audit|fund)`/i.test(trimmed) ||
-      /packages are looking for funding/i.test(trimmed)
-    ) {
-      summary = summary ? `${summary}\n${line}` : line
-      continue
-    }
+    if (newline < 0) break
+    offset = newline + 1
   }
-
-  let out = ''
-
-  // Keep first N deprecations verbatim (package name + reason), count the rest
-  const keepDep = deprecations.slice(0, DEPRECATION_KEEP)
-  for (const d of keepDep) out += `${d}\n`
-  if (deprecations.length > DEPRECATION_KEEP) {
-    out += `... +${deprecations.length - DEPRECATION_KEEP} more deprecated packages\n`
-  }
-
-  if (compilingCount > 0) {
-    out += `Compiled ${compilingCount} packages\n`
-  }
-  if (downloadingCount > 0) {
-    out += `Downloaded ${downloadingCount} packages\n`
-  }
-
-  for (const e of errors) out += `${e}\n`
-
-  const keepWarnings = warnings.slice(0, 5)
-  for (const w of keepWarnings) out += `${w}\n`
-  if (warnings.length > 5) {
-    out += `... +${warnings.length - 5} more warnings\n`
-  }
-
-  if (summary) out += `${summary}\n`
-
-  // If every line was progress noise there is nothing to say; the original is
-  // more honest than an empty string (which would read as "the build printed
-  // nothing").
-  return out.replace(/\n+$/, '') || input
+  const output = deprecated
+  if (deprecatedCount > 3) output.push(`... +${deprecatedCount - 3} more deprecated packages`)
+  if (compiled) output.push(`Compiled ${compiled} packages`)
+  if (downloaded) output.push(`Downloaded ${downloaded} packages`)
+  // Do not spread unbounded diagnostic arrays into a function argument list.
+  let result = output.join('\n')
+  for (const row of errors) result += `${result ? '\n' : ''}${row}`
+  for (const row of warnings) result += `${result ? '\n' : ''}${row}`
+  if (warningCount > 5) result += `${result ? '\n' : ''}... +${warningCount - 5} more warnings`
+  for (const row of summaries) result += `${result ? '\n' : ''}${row}`
+  return result || input
 }
 
 buildOutput.filterName = 'build-output'

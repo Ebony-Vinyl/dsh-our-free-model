@@ -10,7 +10,7 @@
  * (v1.4.7 `BindOfficial`: a folded-name match rides the wire under the
  * official spelling with the caller's own definition) or is renamed to an
  * opaque `clint_<digest>`; the **full 13-tool official CLI set** is appended
- * from the captured `opencode_tools.json` minus whatever is already served;
+ * from the captured `ofm-tool-contracts.json` minus whatever is already served;
  * and **ghost call history is dropped** (calls naming tools this request no
  * longer serves, with their paired results). Each case below is one of the
  * behaviors the shaping must keep.
@@ -274,7 +274,7 @@ console.log('\n=== 9. the injected definitions are byte-for-byte the official on
   // even though the name is right. The definitions must equal the captured
   // asset (whose property order the reference also emits — Go serialises its
   // maps alphabetically).
-  const captured = JSON.parse(fs.readFileSync(new URL('../src/o2a/assets/opencode_tools.json', import.meta.url), 'utf8'))
+  const captured = JSON.parse(fs.readFileSync(new URL('../src/o2a/assets/ofm-tool-contracts.json', import.meta.url), 'utf8'))
   const body = {}
   applyFingerprint(body, false)
   const read = body.tools.find(tool => tool.function.name === 'read').function
@@ -330,11 +330,11 @@ console.log('\n=== 10b. title requests ship unshaped (v1.4.7) ===')
 
   const chat = { messages: [{ role: 'user', content: 'Generate a title for this conversation: hello' }], tools: [chatTool('read')] }
   applyFingerprint(chat, false)
-  check('a title-shaped body with tools is still shaped', /opencode, an interactive CLI tool|You are opencode/.test(noteOf(chat)), true)
+  check('a title-shaped body with tools is still shaped', noteOf(chat).includes("You are assisting with a user's software project through OFM."), true)
 
   const plain = { messages: [{ role: 'user', content: 'hello' }] }
   applyFingerprint(plain, false)
-  check('a plain toolless turn is still shaped', /You are opencode/.test(noteOf(plain)), true)
+  check('a plain toolless turn is still shaped', noteOf(plain).includes("You are assisting with a user's software project through OFM."), true)
 }
 
 console.log('\n=== 11. the port names the release it mirrors ===')
