@@ -12,7 +12,6 @@ const cleanups = []
 const adapters = new Map()
 const routes = new Map()
 const controllers = new Map()
-const aliasMap = new Map()
 let closed = false
 
 function friendlyModelId(name) {
@@ -23,20 +22,20 @@ function friendlyModelId(name) {
   return clean.replace(/\s+/g, '-')
 }
 
-async function getModelAdapterId(provider, model) {
-  const key = `${provider}/${model}`.toLowerCase()
-  if (aliasMap.has(key)) return aliasMap.get(key)
-  try {
-    const list = await ctx.llm.listModels(provider)
-    for (const row of list) {
-      aliasMap.set(`${provider}/${row.id}`.toLowerCase(), row.id)
-      const friendly = friendlyModelId(row.name)
-      if (friendly) {
-        aliasMap.set(`${provider}/${friendly}`.toLowerCase(), row.id)
-      }
-    }
-  } catch {}
-  return aliasMap.get(key) ?? model
+function modelAliases(provider, models) {
+  const aliases = new Map()
+  if (provider !== 'qoder' && provider !== 'qodercn') return aliases
+  const unavailable = new Set(models.map(row => row.id.toLowerCase()))
+  for (const row of models) {
+    const alias = friendlyModelId(row.name)
+    const key = alias.toLowerCase()
+    if (!key || unavailable.has(key)) continue
+    if (aliases.has(key)) {
+      aliases.delete(key)
+      unavailable.add(key)
+    } else aliases.set(key, { alias, model: row.id })
+  }
+  return aliases
 }
 const send = message => parentPort.postMessage(message)
 const logger = Object.fromEntries(['info', 'warn', 'error'].map(level => [level, message => send({ type: 'log', level, message: String(message) })]))
@@ -99,33 +98,17 @@ async function models() {
       return info
     },
   }, groups, onError)
+  const aliasesByModel = new Map(groups.flatMap(({ provider, models }) =>
+    [...modelAliases(provider, models).values()].map(({ alias, model }) => [`${provider}/${model}`, `${provider}/${alias}`]),
+  ))
   const rows = toOpenAiModels(groups, views).flatMap(row => {
-    const slash = row.id.indexOf('/')
-    const provider = slash >= 0 ? row.id.slice(0, slash) : row.owned_by
-    const rawModel = slash >= 0 ? row.id.slice(slash + 1) : row.id
-
     const baseRow = {
-      ...row,
-      channel: row.owned_by,
-      vision: row.input?.includes('image') === true,
+      ...row, channel: row.owned_by, vision: row.input?.includes('image') === true,
       context_window: row.context_window ?? infos.get(row.id)?.context?.contextWindow,
       max_tokens: row.max_tokens ?? infos.get(row.id)?.defaultMaxTokens,
     }
-
-    if (provider === 'qodercn' || provider === 'qoder') {
-      aliasMap.set(`${provider}/${rawModel}`.toLowerCase(), rawModel)
-      const friendly = friendlyModelId(row.name)
-      if (friendly && friendly.toLowerCase() !== rawModel.toLowerCase()) {
-        aliasMap.set(`${provider}/${friendly}`.toLowerCase(), rawModel)
-        const friendlyRow = {
-          ...baseRow,
-          id: `${provider}/${friendly}`,
-        }
-        return [friendlyRow, baseRow]
-      }
-    }
-
-    return [baseRow]
+    const alias = aliasesByModel.get(row.id)
+    return alias === undefined ? [baseRow] : [{ ...baseRow, id: alias }, baseRow]
   })
   return { rows, sources }
 }
@@ -160,9 +143,11 @@ async function complete(request, id, signal) {
   const slash = request.model.indexOf('/')
   const provider = request.model.slice(0, slash)
   const incomingModel = request.model.slice(slash + 1)
-  const model = await getModelAdapterId(provider, incomingModel)
-  // 禁用模型和供应商必须同时影响统一 API，不能只隐藏页面。
-  if (!(await ctx.llm.listModels(provider)).some(row => row.id === model)) throw Object.assign(new Error('模型不存在或已停用'), { statusCode: 404 })
+  // 每次按启用的模型解析，原始 ID 优先，冲突的别名不公开也不接受。
+  const models = await ctx.llm.listModels(provider)
+  const model = models.find(row => row.id === incomingModel)?.id
+    ?? modelAliases(provider, models).get(incomingModel.toLowerCase())?.model
+  if (model === undefined) throw Object.assign(new Error('模型不存在或已停用'), { statusCode: 404 })
   const body = { ...(request.responsesBody ?? request.openAi ?? harnessBody(request)), model: `${provider}/${model}` }
   const resolved = await ctx.llm.resolveModel(provider, model, signal)
   const effort = normalizeReasoningEffort(request.responses ? responsesReasoningEffort(body) : body.reasoning_effort, resolved, provider, model,
