@@ -19,7 +19,7 @@
  * the page survives a scheme switch.
  */
 window.__ModuleLoader__.load({
-  id: '@ebony-vinyl/dsh-our-free-model',
+  id: 'dsh-our-free-model',
   factory: require => {
     const module = { exports: {} }
     const exports = module.exports

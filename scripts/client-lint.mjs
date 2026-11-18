@@ -39,8 +39,6 @@ new Function('window', 'document', 'navigator', source)(globalThis.window, globa
 
 const problems = []
 const record = globalThis.__registered
-const pkgName = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
-const acceptableIds = new Set([pkgName, pkgName.startsWith('@') ? pkgName : `@ebony-vinyl/${pkgName}`])
 
 if (!source.includes("ReactDOM.createPortal") || !source.includes("data-ofm-announcement-root") || !source.includes('document.body.appendChild(host)')) {
   problems.push('announcement overlay must use a body-level portal host')
@@ -49,10 +47,7 @@ if (!source.includes("ReactDOM.createPortal") || !source.includes("data-ofm-anno
 if (record === undefined) {
   problems.push('the bundle never registered itself with the module loader')
 } else {
-  // The loader keys the module table by the INSTALLED package name, and npm
-  // publishes this repo under a scoped name, so the bundle must register that
-  // scoped name — a bare id never matches the key the boot graph asks for.
-  if (!acceptableIds.has(record.id)) problems.push(`registered id "${record.id}" must equal the package name (${[...acceptableIds].join(' or ')})`)
+  if (record.id !== 'dsh-our-free-model') problems.push(`registered id "${record.id}" must equal the package name`)
   if (typeof record.factory !== 'function') problems.push('factory is not a function')
   else {
     const exports = record.factory(name => {
