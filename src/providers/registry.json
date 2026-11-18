@@ -19,10 +19,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Reasoning arrives as think tags on this route (FCC profile).",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://agnes-ai.com/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/agnes",
     "modelsUrl": "https://apihub.agnes-ai.com/v1/models"
   },
   {
@@ -46,28 +47,28 @@
       },
       {
         "id": "kimi-k2.5",
-        "name": "Kimi K2.5",
+        "name": "kimi-k2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5",
-        "name": "GLM 5",
+        "name": "glm-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "MiniMax-M2.5",
-        "name": "MiniMax M2.5",
+        "name": "MiniMax-M2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3-coder-next",
-        "name": "Qwen3 Coder Next",
+        "name": "qwen3-coder-next",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -81,17 +82,18 @@
       },
       {
         "id": "glm-4.7",
-        "name": "GLM 4.7",
+        "name": "glm-4.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "DashScope international compatible-mode endpoint (9router alims-intl, same base URL as FCC).",
+    "notes": "Existing international DashScope endpoint retained for saved configurations. Model availability varies by region and plan; catalog inclusion does not confirm access from this endpoint.",
     "website": "https://www.alibabacloud.com/en/product/modelstudio",
     "local": false,
-    "source": "fcc",
-    "baseUrlOverrideEnv": "ALIBABA_CLOUD_BASE_URL"
+    "source": "models.dev",
+    "baseUrlOverrideEnv": "ALIBABA_CLOUD_BASE_URL",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/alibaba"
   },
   {
     "id": "anthropic",
@@ -104,6 +106,8 @@
     },
     "baseUrl": "https://api.anthropic.com/v1",
     "format": "anthropic-messages",
+    "website": "https://www.anthropic.com/",
+    "local": false,
     "models": [
       {
         "id": "claude-sonnet-4-20250514",
@@ -121,16 +125,15 @@
       },
       {
         "id": "claude-3-5-sonnet-20241022",
-        "name": "Claude 3.5 Sonnet",
+        "name": "Claude Sonnet 3.5 v2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Native Anthropic Messages passthrough (FCC marks it native_messages_passthrough).",
-    "website": "https://www.anthropic.com/",
-    "local": false,
-    "source": "fcc"
+    "notes": "模型目录依据 models.dev（MIT）及历史快照重建；保留既有配置与模型标识，历史记录不代表当前服务可用性。",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/anthropic"
   },
   {
     "id": "azure_openai",
@@ -144,10 +147,11 @@
     "baseUrl": null,
     "format": "openai-chat",
     "models": [],
-    "notes": "No default endpoint: AZURE_OPENAI_BASE_URL and the deployment name are required (FCC required_settings_attrs).",
+    "notes": "配置自己的 Azure 资源 /openai/v1 根地址，并以部署名称作为 model。AZURE_OPENAI_BASE_URL 与 AZURE_OPENAI_API_KEY 为 OFM 兼容配置名。",
     "website": "https://azure.microsoft.com/en-us/products/ai-services/openai-service/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://learn.microsoft.com/en-us/azure/developer/ai/how-to/switching-endpoints",
     "baseUrlOverrideEnv": "AZURE_OPENAI_BASE_URL"
   },
   {
@@ -232,16 +236,17 @@
     "models": [
       {
         "id": "openai.gpt-oss-120b",
-        "name": "GPT-OSS 120B (Bedrock)",
+        "name": "openai.gpt-oss-120b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Bedrock Mantle OpenAI-compatible endpoint; the base URL stays configurable because keys and model availability are region-scoped (FCC).",
+    "notes": "通过 Bedrock Mantle 的 Chat Completions 接口访问模型；使用 Bedrock API key，区域可由 BEDROCK_BASE_URL 覆盖。",
     "website": "https://aws.amazon.com/bedrock/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-120b.html",
     "baseUrlOverrideEnv": "BEDROCK_BASE_URL"
   },
   {
@@ -258,52 +263,53 @@
     "models": [
       {
         "id": "gpt-oss-120b",
-        "name": "GPT OSS 120B",
+        "name": "gpt-oss-120b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "zai-glm-4.7",
-        "name": "ZAI GLM 4.7",
+        "name": "Z.AI GLM-4.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "llama-3.3-70b",
-        "name": "Llama 3.3 70B",
+        "name": "llama-3.3-70b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "llama-4-scout-17b-16e-instruct",
-        "name": "Llama 4 Scout",
+        "name": "llama-4-scout-17b-16e-instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen-3-235b-a22b-instruct-2507",
-        "name": "Qwen3 235B A22B",
+        "name": "Qwen 3 235B Instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen-3-32b",
-        "name": "Qwen3 32B",
+        "name": "qwen-3-32b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "max_tokens is sent as max_completion_tokens (FCC profile).",
+    "notes": "Historical model IDs remain for saved configurations. Check the provider catalog before use; deprecated models may not accept requests.",
     "website": "https://www.cerebras.ai/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://api.cerebras.ai/v1/models"
+    "source": "models.dev",
+    "modelsUrl": "https://api.cerebras.ai/v1/models",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/cerebras"
   },
   {
     "id": "cheaperinference",
@@ -319,16 +325,17 @@
     "models": [
       {
         "id": "gpt-5.4-mini",
-        "name": "GPT-5.4 Mini",
+        "name": "gpt-5.4-mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Listing is filtered to streaming text models (FCC profile).",
+    "notes": "OpenAI-compatible chat endpoint with API-key authentication. Model availability and charges follow the provider catalog.",
     "website": "https://cheaperinference.com/",
     "local": false,
-    "source": "fcc"
+    "source": "official",
+    "sourceUrl": "https://api.cheaperinference.com/models/gpt-5.4-mini"
   },
   {
     "id": "chutes",
@@ -344,16 +351,17 @@
     "models": [
       {
         "id": "Qwen/Qwen3-32B-TEE",
-        "name": "Qwen3 32B TEE",
+        "name": "Qwen/Qwen3-32B-TEE",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "FCC lists only text-in/text-out models that advertise tool support.",
+    "notes": "使用 Chutes API key 调用 OpenAI 兼容聊天接口；配额和模型服务状态由 Chutes 账号决定。",
     "website": "https://chutes.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://chutes.ai/docs/models/chutes-qwen-qwen3-32b-tee",
     "modelsUrl": "https://llm.chutes.ai/v1/models"
   },
   {
@@ -370,86 +378,87 @@
     "models": [
       {
         "id": "cline-pass/glm-5.2",
-        "name": "GLM-5.2 (ClinePass)",
+        "name": "cline-pass/glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/kimi-k2.7-code",
-        "name": "Kimi K2.7 Code (ClinePass)",
+        "name": "cline-pass/kimi-k2.7-code",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/kimi-k2.6",
-        "name": "Kimi K2.6 (ClinePass)",
+        "name": "cline-pass/kimi-k2.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/deepseek-v4-pro",
-        "name": "DeepSeek V4 Pro (ClinePass)",
+        "name": "cline-pass/deepseek-v4-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/deepseek-v4-flash",
-        "name": "DeepSeek V4 Flash (ClinePass)",
+        "name": "cline-pass/deepseek-v4-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/mimo-v2.5",
-        "name": "MiMo-V2.5 (ClinePass)",
+        "name": "cline-pass/mimo-v2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/mimo-v2.5-pro",
-        "name": "MiMo-V2.5-Pro (ClinePass)",
+        "name": "cline-pass/mimo-v2.5-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/minimax-m3",
-        "name": "MiniMax M3 (ClinePass)",
+        "name": "cline-pass/minimax-m3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/qwen3.7-max",
-        "name": "Qwen3.7 Max (ClinePass)",
+        "name": "cline-pass/qwen3.7-max",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/qwen3.7-plus",
-        "name": "Qwen3.7 Plus (ClinePass)",
+        "name": "cline-pass/qwen3.7-plus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "cline-pass/kimi-k3",
-        "name": "Kimi K3 (ClinePass)",
+        "name": "cline-pass/kimi-k3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "ClinePass subscription key; FCC lists it from /ai/cline/recommended-models.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://cline.bot/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/cline-pass",
     "modelsUrl": "https://api.cline.bot/api/v1/ai/cline/recommended-models"
   },
   {
@@ -466,37 +475,38 @@
     "models": [
       {
         "id": "command-r-plus-08-2024",
-        "name": "Command R+ (Aug 2024)",
+        "name": "command-r-plus-08-2024",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "command-r-08-2024",
-        "name": "Command R (Aug 2024)",
+        "name": "command-r-08-2024",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "command-a-03-2025",
-        "name": "Command A (Mar 2025)",
+        "name": "command-a-03-2025",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "command-a-plus-05-2026",
-        "name": "Command A Plus",
+        "name": "command-a-plus-05-2026",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Compatibility layer at /compatibility/v1; several body keys are stripped (FCC profile).",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://cohere.com/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/cohere",
     "modelsUrl": "https://api.cohere.ai/v1/models"
   },
   {
@@ -513,16 +523,17 @@
     "models": [
       {
         "id": "deepseek-ai/DeepSeek-V4-Flash",
-        "name": "DeepSeek V4 Flash",
+        "name": "deepseek-ai/DeepSeek-V4-Flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "FCC reads DeepInfra’s own /models/list shape (model_name / reported_type).",
+    "notes": "使用服务方 API key；模型标识已由公开模型目录核对，实际调用权限以账号为准。",
     "website": "https://deepinfra.com/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://docs.deepinfra.com/chat/overview",
     "modelsUrl": "https://api.deepinfra.com/models/list"
   },
   {
@@ -594,10 +605,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Cache usage is reported on this endpoint (FCC).",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留旧 API 模型 ID 供已有配置继续使用；部分后缀可能表示历史思考档位而非当前独立模型，当前支持范围以账号模型目录为准。",
     "website": "https://www.deepseek.com/",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
     "modelsUrl": "https://api.deepseek.com/models"
   },
   {
@@ -620,10 +632,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Experiential Labs gateway.",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。union-alpha 作为旧配置标识保留；公开模型接口要求认证，尚未确认该标识当前可调用。",
     "website": "https://www.experientiallabs.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md"
   },
   {
     "id": "featherless",
@@ -639,66 +652,67 @@
     "models": [
       {
         "id": "deepseek-ai/DeepSeek-V4-Pro",
-        "name": "DeepSeek V4 Pro",
+        "name": "DeepSeek-V4-Pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-V4-Flash",
-        "name": "DeepSeek V4 Flash",
+        "name": "DeepSeek-V4-Flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "zai-org/GLM-5.2",
-        "name": "GLM 5.2",
+        "name": "GLM-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "zai-org/GLM-5.1",
-        "name": "GLM 5.1",
+        "name": "GLM-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "moonshotai/Kimi-K2.7-Code",
-        "name": "Kimi K2.7 Code",
+        "name": "Kimi-K2.7-Code",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "moonshotai/Kimi-K2.6",
-        "name": "Kimi K2.6",
+        "name": "Kimi-K2.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "moonshotai/Kimi-K2.5",
-        "name": "Kimi K2.5",
+        "name": "Kimi-K2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "Qwen/Qwen3-32B",
-        "name": "Qwen3 32B",
+        "name": "Qwen3-32B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "FCC asks for tool_use + available_on_current_plan rows; pagination is numbered.",
+    "notes": "OpenAI-compatible inference with API-key authentication. Model IDs are provider/model paths; account access and concurrency depend on the plan.",
     "website": "https://featherless.ai/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://api.featherless.ai/v1/models"
+    "source": "official",
+    "modelsUrl": "https://api.featherless.ai/v1/models",
+    "sourceUrl": "https://featherless.ai/models"
   },
   {
     "id": "fireworks",
@@ -721,24 +735,25 @@
       },
       {
         "id": "accounts/fireworks/models/llama-v3p3-70b-instruct",
-        "name": "Llama 3.3 70B",
+        "name": "accounts/fireworks/models/llama-v3p3-70b-instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "accounts/fireworks/models/qwen3-235b-a22b",
-        "name": "Qwen3 235B",
+        "name": "Qwen3 235B-A22B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Embedding id omitted; model ids are account-scoped paths.",
+    "notes": "Account-scoped model paths. Llama 3.3 70B is listed for on-demand deployment, not serverless access; availability depends on the account deployment.",
     "website": "https://fireworks.ai/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://api.fireworks.ai/inference/v1/models"
+    "source": "models.dev",
+    "modelsUrl": "https://api.fireworks.ai/inference/v1/models",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/fireworks-ai"
   },
   {
     "id": "fleetrelay_t1",
@@ -752,8 +767,20 @@
     "baseUrl": "https://vpn2.asigo.top:8443/v1",
     "format": "openai-responses",
     "models": [
-      { "id": "deepseek-v4.1-flash-free", "name": "DeepSeek V4.1 Flash Free", "contextWindow": null, "vision": null, "reasoning": null },
-      { "id": "gpt-6-astra", "name": "GPT-6 Astra", "contextWindow": null, "vision": null, "reasoning": null }
+      {
+        "id": "deepseek-v4.1-flash-free",
+        "name": "DeepSeek V4.1 Flash Free",
+        "contextWindow": null,
+        "vision": null,
+        "reasoning": null
+      },
+      {
+        "id": "gpt-6-astra",
+        "name": "GPT-6 Astra",
+        "contextWindow": null,
+        "vision": null,
+        "reasoning": null
+      }
     ],
     "notes": "Production fallback gateway for the two models it advertises. Its third-party T1 pool is disabled; traffic currently uses the enabled T2/T3 paths. Requires a FleetRelay client key.",
     "website": "https://vpn2.asigo.top:8443",
@@ -938,37 +965,38 @@
     "models": [
       {
         "id": "llama-3.3-70b-versatile",
-        "name": "Llama 3.3 70B",
+        "name": "llama-3.3-70b-versatile",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "meta-llama/llama-4-maverick-17b-128e-instruct",
-        "name": "Llama 4 Maverick",
+        "name": "meta-llama/llama-4-maverick-17b-128e-instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen/qwen3-32b",
-        "name": "Qwen3 32B",
+        "name": "qwen/qwen3-32b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "openai/gpt-oss-120b",
-        "name": "GPT-OSS 120B",
+        "name": "openai/gpt-oss-120b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "OpenAI-compatible endpoint; audio ids from the same registry listing are omitted (chat catalog).",
+    "notes": "保留既有模型标识以兼容配置；Maverick 已退役，Qwen3 32B 和 Llama 3.3 的免费及开发者档已退役，企业合同例外以官方说明为准。新接入请使用账号可用模型。",
     "website": "https://groq.com/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://console.groq.com/docs/openai",
     "modelsUrl": "https://api.groq.com/openai/v1/models"
   },
   {
@@ -985,16 +1013,17 @@
     "models": [
       {
         "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct:fastest",
-        "name": "Qwen3 Coder 480B A35B",
+        "name": "Qwen3-Coder-480B-A35B-Instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Inference Providers router; FCC resolves the context window from the live provider consensus.",
+    "notes": "使用 Hugging Face token；:fastest 指定路由偏好，实际可用性以服务返回为准。",
     "website": "https://huggingface.co/",
     "local": false,
-    "source": "fcc"
+    "source": "official",
+    "sourceUrl": "https://huggingface.co/docs/inference-providers/en/index"
   },
   {
     "id": "hyperbolic",
@@ -1078,23 +1107,24 @@
     "auth": {
       "kind": "apiKey",
       "env": "KIMI_API_KEY",
-      "url": "https://platform.moonshot.cn/console/api-keys"
+      "url": "https://platform.kimi.ai/"
     },
     "baseUrl": "https://api.moonshot.ai/v1",
     "format": "openai-chat",
     "models": [
       {
         "id": "kimi-k2.5",
-        "name": "Kimi K2.5",
+        "name": "kimi-k2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Moonshot platform key; caller extra_body is rejected on this route (FCC profile).",
+    "notes": "使用 Kimi 平台 API key；KIMI_API_KEY 保留 OFM 配置兼容。kimi-k2.5 已在官方模型表标为弃用，保留标识不代表该模型仍可调用。",
     "website": "https://www.kimi.com/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://platform.kimi.ai/docs/models",
     "modelsUrl": "https://api.moonshot.ai/v1/models"
   },
   {
@@ -1180,10 +1210,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Kimi Code subscription; ids from the 9router kimi registry (same host, api.kimi.com/coding/v1).",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留旧编程套餐 ID；官方协议 ID 与产品版本名并不等同，部分旧 ID 可能被上游回落到其他模型。不会在本地自动改名；调用成功也不保证上游实际使用旧 ID 指向的模型。",
     "website": "https://www.kimi.com/code",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
     "modelsUrl": "https://api.kimi.com/coding/v1/models"
   },
   {
@@ -1200,16 +1231,17 @@
     "models": [
       {
         "id": "lightning-ai/Qwen3.8-27B",
-        "name": "Qwen3.8 27B",
+        "name": "Qwen3.8-27B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Lightning AI Model APIs gateway.",
+    "notes": "API-key access through the Lightning model API. Availability and account limits follow the provider catalog.",
     "website": "https://lightning.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "official",
+    "sourceUrl": "https://lightning.ai/lightning-ai/apps"
   },
   {
     "id": "llm7",
@@ -1280,10 +1312,11 @@
         "reasoning": null
       }
     ],
-    "notes": "FCC also pins the default/fast/pro aliases; the listing is filtered to streaming tool models.",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留历史 ID 和上下文预算供配置兼容；最近公开列表仅匹配 claude-opus-5、kimi-k3，default/fast/pro 是主页描述的路由别名，其他旧 ID 的当前服务状态未确认。",
     "website": "https://llm7.io/",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
     "modelsUrl": "https://api.llm7.io/v1/models"
   },
   {
@@ -1297,40 +1330,41 @@
     },
     "baseUrl": "https://api.minimax.io/v1",
     "format": "openai-chat",
+    "website": "https://www.minimax.io/",
+    "local": false,
     "models": [
       {
         "id": "MiniMax-M3",
-        "name": "MiniMax M3",
+        "name": "MiniMax-M3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "MiniMax-M2.7",
-        "name": "MiniMax M2.7",
+        "name": "MiniMax-M2.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "MiniMax-M2.5",
-        "name": "MiniMax M2.5",
+        "name": "MiniMax-M2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "MiniMax-M2.1",
-        "name": "MiniMax M2.1",
+        "name": "MiniMax-M2.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Reasoning is split out of the text stream (FCC profile); speech/image ids omitted.",
-    "website": "https://www.minimax.io/",
-    "local": false,
-    "source": "fcc",
+    "notes": "模型目录依据 models.dev（MIT）及历史快照重建；保留既有配置与模型标识，历史记录不代表当前服务可用性。",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/minimax",
     "modelsUrl": "https://api.minimax.io/v1/models"
   },
   {
@@ -1397,37 +1431,38 @@
     "models": [
       {
         "id": "mistral-large-latest",
-        "name": "Mistral Large 3",
+        "name": "mistral-large-latest",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "codestral-latest",
-        "name": "Codestral",
+        "name": "codestral-latest",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "mistral-medium-latest",
-        "name": "Mistral Medium 3",
+        "name": "mistral-medium-latest",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "devstral-small-latest",
-        "name": "Devstral Small",
+        "name": "devstral-small-latest",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "La Plateforme keys; embedding id omitted.",
+    "notes": "使用 Mistral API key 访问 Chat Completions；latest 为供应商维护的模型别名，实际版本与权限以账号目录为准。",
     "website": "https://mistral.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://docs.mistral.ai/api",
     "modelsUrl": "https://api.mistral.ai/v1/models"
   },
   {
@@ -1444,16 +1479,17 @@
     "models": [
       {
         "id": "codestral-latest",
-        "name": "Codestral",
+        "name": "Codestral (latest)",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Codestral IDE endpoint, distinct from La Plateforme keys (FCC).",
+    "notes": "Dedicated Codestral API-key endpoint. Configure a key issued for this endpoint; La Plateforme keys use a separate endpoint.",
     "website": "https://mistral.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/mistral"
   },
   {
     "id": "morph",
@@ -1536,14 +1572,15 @@
         "reasoning": null
       }
     ],
-    "notes": "Multi-vendor gateway; reasoning is surfaced as a boolean in the listing (FCC profile).",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留 kimi-k3-free 旧 ID；最近公开模型列表未包含该标识，免费标签不是当前可用或免额度承诺。",
     "website": "https://router.bynara.id/",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
+    "modelsUrl": "https://router.bynara.id/v1/models",
     "freeModelsHint": [
       "kimi-k3-free"
-    ],
-    "modelsUrl": "https://router.bynara.id/v1/models"
+    ]
   },
   {
     "id": "nebius",
@@ -1559,24 +1596,25 @@
     "models": [
       {
         "id": "meta-llama/Llama-3.3-70B-Instruct",
-        "name": "Llama 3.3 70B Instruct",
+        "name": "Llama-3.3-70B-Instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "Qwen/Qwen3-30B-A3B",
-        "name": "Qwen3 30B A3B",
+        "name": "Qwen/Qwen3-30B-A3B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Embedding id omitted; FCC requires architecture.modality=text->text in the listing.",
+    "notes": "Saved model IDs remain selectable. Consult the provider catalog for current availability and deployment requirements; a documented model ID does not guarantee shared-endpoint access.",
     "website": "https://tokenfactory.nebius.com/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://api.tokenfactory.nebius.com/v1/models?verbose=true"
+    "source": "models.dev",
+    "modelsUrl": "https://api.tokenfactory.nebius.com/v1/models?verbose=true",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/nebius"
   },
   {
     "id": "novita",
@@ -1592,16 +1630,17 @@
     "models": [
       {
         "id": "deepseek/deepseek-v4-flash-0731",
-        "name": "DeepSeek V4 Flash 0731",
+        "name": "deepseek/deepseek-v4-flash-0731",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "FCC README example id.",
+    "notes": "使用服务方 API key；模型标识已由公开模型目录核对，实际调用权限以账号为准。",
     "website": "https://novita.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://docs.novita.ai/api-reference/model-apis-llm-create-chat-completion",
     "modelsUrl": "https://api.novita.ai/openai/v1/models"
   },
   {
@@ -1615,6 +1654,8 @@
     },
     "baseUrl": "https://api.openai.com/v1",
     "format": "openai-responses",
+    "website": "https://platform.openai.com/",
+    "local": false,
     "models": [
       {
         "id": "gpt-5.5",
@@ -1632,14 +1673,14 @@
       },
       {
         "id": "gpt-5.4-mini",
-        "name": "GPT-5.4 Mini",
+        "name": "GPT-5.4 mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-nano",
-        "name": "GPT-5.4 Nano",
+        "name": "GPT-5.4 nano",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1660,7 +1701,7 @@
       },
       {
         "id": "gpt-5",
-        "name": "GPT-5",
+        "name": "gpt-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1688,7 +1729,7 @@
       },
       {
         "id": "gpt-4o-mini",
-        "name": "GPT-4o Mini",
+        "name": "GPT-4o mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1709,72 +1750,71 @@
       },
       {
         "id": "gpt-4.1-mini",
-        "name": "GPT-4.1 Mini",
+        "name": "GPT-4.1 mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-4.1-nano",
-        "name": "GPT-4.1 Nano",
+        "name": "GPT-4.1 nano",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "o3",
-        "name": "O3",
+        "name": "o3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "o3-mini",
-        "name": "O3 Mini",
+        "name": "o3-mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "o3-pro",
-        "name": "O3 Pro",
+        "name": "o3-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "o4-mini",
-        "name": "O4 Mini",
+        "name": "o4-mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "o1",
-        "name": "O1",
+        "name": "o1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "o1-mini",
-        "name": "O1 Mini",
+        "name": "o1-mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-sol",
-        "name": "GPT-5.6 Sol",
+        "name": "gpt-5.6-sol",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Platform API key; FCC drives this route over the Responses API. Non-chat ids (embeddings, speech, images) are omitted.",
-    "website": "https://platform.openai.com/",
-    "local": false,
-    "source": "fcc"
+    "notes": "模型目录依据 models.dev（MIT）及历史快照重建；保留既有配置与模型标识，历史记录不代表当前服务可用性。",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/openai"
   },
   {
     "id": "opencode_go",
@@ -1787,6 +1827,8 @@
     },
     "baseUrl": "https://opencode.ai/zen/go/v1",
     "format": "openai-chat",
+    "website": "https://opencode.ai/go",
+    "local": false,
     "models": [
       {
         "id": "deepseek-flash",
@@ -1797,35 +1839,35 @@
       },
       {
         "id": "glm-5.3-flash",
-        "name": "GLM 5.3 Flash (Vision)",
+        "name": "glm-5.3-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.3",
-        "name": "GLM 5.3",
+        "name": "glm-5.3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.2",
-        "name": "GLM 5.2",
+        "name": "glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.1",
-        "name": "GLM 5.1",
+        "name": "GLM-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "kimi-k2.7-code",
-        "name": "Kimi K2.7 Code",
+        "name": "kimi-k2.7-code",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1839,7 +1881,7 @@
       },
       {
         "id": "kimi-k3",
-        "name": "Kimi K3",
+        "name": "kimi-k3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1860,14 +1902,14 @@
       },
       {
         "id": "deepseek-v4-flash-vision-exp",
-        "name": "DeepSeek V4 Flash Vision (Exp)",
+        "name": "deepseek-v4-flash-vision-exp",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "longcat-2.0",
-        "name": "LongCat 2.0",
+        "name": "longcat-2.0",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1888,84 +1930,84 @@
       },
       {
         "id": "minimax-m3",
-        "name": "MiniMax M3",
+        "name": "minimax-m3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "minimax-m2.7",
-        "name": "MiniMax M2.7",
+        "name": "minimax-m2.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "minimax-m2.5",
-        "name": "MiniMax M2.5",
+        "name": "MiniMax-M2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.8-max",
-        "name": "Qwen 3.8 Max",
+        "name": "qwen3.8-max",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.8-flash",
-        "name": "Qwen 3.8 Flash",
+        "name": "qwen3.8-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.7-max",
-        "name": "Qwen 3.7 Max",
+        "name": "Qwen3.7 Max",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.7-plus",
-        "name": "Qwen 3.7 Plus",
+        "name": "qwen3.7-plus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.6-plus",
-        "name": "Qwen 3.6 Plus",
+        "name": "Qwen3.6 Plus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "hy4-preview",
-        "name": "Hy4 Preview",
+        "name": "hy4-preview",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "hy3",
-        "name": "Hy3",
+        "name": "hy3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "grok-4.6",
-        "name": "Grok 4.6",
+        "name": "grok-4.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-luna",
-        "name": "GPT 5.6 Luna",
+        "name": "gpt-5.6-luna",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -1985,10 +2027,9 @@
         "reasoning": null
       }
     ],
-    "notes": "OpenCode Go subscription ($5/mo per the 9router notice).",
-    "website": "https://opencode.ai/go",
-    "local": false,
-    "source": "fcc"
+    "notes": "模型目录依据 models.dev（MIT）及历史快照重建；保留既有配置与模型标识，历史记录不代表当前服务可用性。",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/opencode-go"
   },
   {
     "id": "opper",
@@ -2004,16 +2045,17 @@
     "models": [
       {
         "id": "claude-sonnet-4-6",
-        "name": "Claude Sonnet 4.6",
+        "name": "claude-sonnet-4-6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Opper gateway (v3/compat base).",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://opper.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/opper",
     "modelsUrl": "https://api.opper.ai/v3/models"
   },
   {
@@ -2030,20 +2072,21 @@
     "models": [
       {
         "id": "deepseek/deepseek-v4-flash-free",
-        "name": "DeepSeek V4 Flash (free)",
+        "name": "deepseek/deepseek-v4-flash-free",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Multi-provider gateway with a free slug.",
+    "notes": "通过官方兼容接口访问；公开目录已核对模型标识，额度与调用权限取决于账号。",
     "website": "https://www.orcarouter.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://www.orcarouter.ai/",
+    "modelsUrl": "https://api.orcarouter.ai/v1/models",
     "freeModelsHint": [
       "deepseek/deepseek-v4-flash-free"
-    ],
-    "modelsUrl": "https://api.orcarouter.ai/v1/models"
+    ]
   },
   {
     "id": "perplexity",
@@ -2080,7 +2123,7 @@
   },
   {
     "id": "poolside",
-    "name": "Poolside AI",
+    "name": "Poolside",
     "category": "apikey",
     "auth": {
       "kind": "apiKey",
@@ -2092,28 +2135,29 @@
     "models": [
       {
         "id": "poolside/laguna-s-2.1",
-        "name": "Laguna S 2.1",
+        "name": "poolside/laguna-s-2.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "poolside/laguna-xs-2.1",
-        "name": "Laguna XS 2.1",
+        "name": "poolside/laguna-xs-2.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Poolside platform key.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://poolside.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/poolside",
     "modelsUrl": "https://inference.poolside.ai/v1/models"
   },
   {
     "id": "qwencloud",
-    "name": "QwenCloud Token Plan",
+    "name": "Alibaba Token Plan",
     "category": "apikey",
     "auth": {
       "kind": "apiKey",
@@ -2125,55 +2169,56 @@
     "models": [
       {
         "id": "qwen3.8-max-preview",
-        "name": "Qwen3.8 Max Preview",
+        "name": "qwen3.8-max-preview",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.7-max",
-        "name": "Qwen3.7 Max",
+        "name": "qwen3.7-max",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.7-plus",
-        "name": "Qwen3.7 Plus",
+        "name": "qwen3.7-plus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.6-flash",
-        "name": "Qwen3.6 Flash",
+        "name": "qwen3.6-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.2",
-        "name": "GLM 5.2",
+        "name": "glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-v4-pro",
-        "name": "DeepSeek V4 Pro",
+        "name": "deepseek-v4-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "QwenCloud Token Plan endpoint (9router alitp-intl, same base URL as FCC).",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://qwencloud.com/",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/alibaba-token-plan"
   },
   {
     "id": "qwencloud_coding",
-    "name": "QwenCloud Coding Plan",
+    "name": "Alibaba Coding Plan",
     "category": "apikey",
     "auth": {
       "kind": "apiKey",
@@ -2199,14 +2244,14 @@
       },
       {
         "id": "glm-5",
-        "name": "GLM 5",
+        "name": "GLM-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "MiniMax-M2.5",
-        "name": "MiniMax M2.5",
+        "name": "MiniMax-M2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -2227,16 +2272,17 @@
       },
       {
         "id": "glm-4.7",
-        "name": "GLM 4.7",
+        "name": "GLM-4.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "QwenCloud Coding Plan endpoint (9router alicode-intl, same base URL as FCC).",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://qwencloud.com/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/alibaba-coding-plan",
     "modelsUrl": "https://coding-intl.dashscope.aliyuncs.com/v1/models"
   },
   {
@@ -2253,16 +2299,17 @@
     "models": [
       {
         "id": "Meta-Llama-3.3-70B-Instruct",
-        "name": "Llama 3.3 70B Instruct",
+        "name": "Meta-Llama-3.3-70B-Instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "FCC README example id; the 9router registry keeps this provider hidden.",
+    "notes": "通过官方兼容接口访问；公开目录已核对模型标识，额度与调用权限取决于账号。",
     "website": "https://sambanova.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://docs.sambanova.ai/docs/en/get-started/api-keys-urls",
     "modelsUrl": "https://api.sambanova.ai/v1/models"
   },
   {
@@ -2285,10 +2332,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Scaleway Generative APIs; SCW secret key.",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留旧 deepseek/deepseek-v4-flash 标识；官方当前列出带版本后缀的模型，未自动映射到不同版本，旧别名是否仍可调用未确认。",
     "website": "https://www.scaleway.com/",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
     "modelsUrl": "https://api.scaleway.ai/v1/models"
   },
   {
@@ -2305,128 +2353,129 @@
     "models": [
       {
         "id": "deepseek-ai/DeepSeek-V4-Pro",
-        "name": "DeepSeek V4 Pro",
+        "name": "deepseek-ai/DeepSeek-V4-Pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-V4-Flash",
-        "name": "DeepSeek V4 Flash",
+        "name": "deepseek-ai/DeepSeek-V4-Flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-V3.2",
-        "name": "DeepSeek V3.2",
+        "name": "deepseek-ai/DeepSeek-V3.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-V3.2-Exp",
-        "name": "DeepSeek V3.2 Exp",
+        "name": "deepseek-ai/DeepSeek-V3.2-Exp",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-V3.1",
-        "name": "DeepSeek V3.1",
+        "name": "deepseek-ai/DeepSeek-V3.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-V3.1-Terminus",
-        "name": "DeepSeek V3.1 Terminus",
+        "name": "deepseek-ai/DeepSeek-V3.1-Terminus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-R1",
-        "name": "DeepSeek R1",
+        "name": "deepseek-ai/DeepSeek-R1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "Qwen/Qwen3.5-397B-A17B",
-        "name": "Qwen 3.5 397B A17B",
+        "name": "Qwen/Qwen3.5-397B-A17B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "Qwen/Qwen3.5-122B-A10B",
-        "name": "Qwen 3.5 122B A10B",
+        "name": "Qwen/Qwen3.5-122B-A10B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "zai-org/GLM-5.1",
-        "name": "GLM 5.1",
+        "name": "zai-org/GLM-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "zai-org/GLM-5",
-        "name": "GLM 5",
+        "name": "zai-org/GLM-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "moonshotai/Kimi-K2.6",
-        "name": "Kimi K2.6",
+        "name": "moonshotai/Kimi-K2.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "moonshotai/Kimi-K2.5",
-        "name": "Kimi K2.5",
+        "name": "moonshotai/Kimi-K2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "openai/gpt-oss-120b",
-        "name": "GPT OSS 120B",
+        "name": "openai/gpt-oss-120b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "MiniMaxAI/MiniMax-M2.5",
-        "name": "MiniMax M2.5",
+        "name": "MiniMaxAI/MiniMax-M2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "inclusionAI/Ling-flash-2.0",
-        "name": "Ling Flash 2.0",
+        "name": "inclusionAI/Ling-flash-2.0",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "Qwen/Qwen3-32B",
-        "name": "Qwen3 32B",
+        "name": "Qwen/Qwen3-32B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Chat ids from the 9router registry; listing is filtered with sub_type=chat.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://siliconflow.com/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/siliconflow",
     "modelsUrl": "https://api.siliconflow.com/v1/models"
   },
   {
@@ -2476,45 +2525,46 @@
     "models": [
       {
         "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "name": "Llama 3.3 70B Turbo",
+        "name": "Llama 3.3 70B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/DeepSeek-R1",
-        "name": "DeepSeek R1",
+        "name": "deepseek-ai/DeepSeek-R1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "Qwen/Qwen3-235B-A22B",
-        "name": "Qwen3 235B",
+        "name": "Qwen/Qwen3-235B-A22B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-        "name": "Llama 4 Maverick",
+        "name": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "zai-org/GLM-5.2",
-        "name": "GLM-5.2",
+        "name": "zai-org/GLM-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Embedding ids omitted; the FCC profile lists models at /models with context_length.",
+    "notes": "Saved model IDs remain selectable. Consult the provider catalog for current availability and deployment requirements; a documented model ID does not guarantee shared-endpoint access.",
     "website": "https://www.together.ai/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://api.together.ai/v1/models"
+    "source": "models.dev",
+    "modelsUrl": "https://api.together.ai/v1/models",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/togetherai"
   },
   {
     "id": "tokenrouter",
@@ -2683,15 +2733,16 @@
         "reasoning": null
       }
     ],
-    "notes": "Multi-vendor gateway with free slugs.",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留历史模型 ID 与 Chat 接入方式；官方目录对不同模型列出不同 API formats，尚未确认所有旧 ID 均支持此 Chat 端点，不自动切换协议或模型。",
     "website": "https://www.tokenrouter.com/",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
+    "modelsUrl": "https://api.tokenrouter.com/v1/models",
     "freeModelsHint": [
       "moonshotai/kimi-k3-free",
       "z-ai/glm-5.3-free"
-    ],
-    "modelsUrl": "https://api.tokenrouter.com/v1/models"
+    ]
   },
   {
     "id": "venice",
@@ -2789,16 +2840,17 @@
     "models": [
       {
         "id": "openai/gpt-5.5",
-        "name": "GPT-5.5 (Vercel)",
+        "name": "GPT 5.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Vercel AI Gateway; models are vendor-namespaced.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://vercel.com/ai-gateway",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/vercel"
   },
   {
     "id": "vertex",
@@ -2814,21 +2866,21 @@
     "models": [
       {
         "id": "gemini-3.1-pro-preview",
-        "name": "Gemini 3.1 Pro Preview",
+        "name": "gemini-3.1-pro-preview",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.1-flash-lite-preview",
-        "name": "Gemini 3.1 Flash Lite Preview",
+        "name": "gemini-3.1-flash-lite-preview",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3-flash-preview",
-        "name": "Gemini 3 Flash Preview",
+        "name": "gemini-3-flash-preview",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -2842,16 +2894,17 @@
       },
       {
         "id": "google/gemini-3.5-flash",
-        "name": "Gemini 3.5 Flash (Vertex)",
+        "name": "google/gemini-3.5-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "ADC (no key): VERTEX_PROJECT_ID and VERTEX_LOCATION compose the endpoint (FCC providers/vertex/endpoint.py).",
+    "notes": "Google Cloud OpenAI-compatible endpoint with Application Default Credentials. Configure the project and location using the existing OFM settings.",
     "website": "https://cloud.google.com/vertex-ai",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/google-vertex"
   },
   {
     "id": "vertex-partner",
@@ -2995,20 +3048,21 @@
     "models": [
       {
         "id": "DeepSeek-V4-Pro",
-        "name": "DeepSeek V4 Pro (Wafer)",
+        "name": "DeepSeek-V4-Pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Wafer pass endpoint.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://www.wafer.ai/",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/wafer.ai"
   },
   {
     "id": "wandb",
-    "name": "W&B Inference",
+    "name": "CoreWeave",
     "category": "apikey",
     "auth": {
       "kind": "apiKey",
@@ -3020,16 +3074,17 @@
     "models": [
       {
         "id": "openai/gpt-oss-20b",
-        "name": "GPT-OSS 20B",
+        "name": "gpt-oss-20b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "W&B Serverless Inference; reasoning arrives as think tags (FCC profile).",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://wandb.ai/site/inference/",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/wandb"
   },
   {
     "id": "xai",
@@ -3045,14 +3100,14 @@
     "models": [
       {
         "id": "grok-4.6",
-        "name": "Grok 4.6",
+        "name": "grok-4.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "grok-4.5",
-        "name": "Grok 4.5",
+        "name": "grok-4.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -3066,14 +3121,14 @@
       },
       {
         "id": "grok-4-fast-reasoning",
-        "name": "Grok 4 Fast Reasoning",
+        "name": "grok-4-fast-reasoning",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "grok-code-fast-1",
-        "name": "Grok Code Fast",
+        "name": "Grok Code Fast 1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -3086,11 +3141,12 @@
         "reasoning": null
       }
     ],
-    "notes": "Image and video ids from the same registry listing are omitted (chat catalog).",
+    "notes": "Saved model IDs are retained. The provider redirects retired Grok aliases to newer models; behavior and pricing can differ. Check the current xAI catalog before use.",
     "website": "https://x.ai/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://api.x.ai/v1/models"
+    "source": "models.dev",
+    "modelsUrl": "https://api.x.ai/v1/models",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/xai"
   },
   {
     "id": "xiaomi-tokenplan",
@@ -3159,19 +3215,20 @@
     "models": [
       {
         "id": "qwen/qwen3.7-flash:free",
-        "name": "Qwen3.7 Flash (free)",
+        "name": "Qwen3.7 Flash (Free)",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Multi-provider gateway; thinking is a capabilities.reasoning boolean in the listing (FCC profile).",
+    "notes": "OpenAI-compatible API-key endpoint. Free model availability is controlled by the provider.",
     "website": "https://xkiro.com/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
     "freeModelsHint": [
       "qwen/qwen3.7-flash:free"
-    ]
+    ],
+    "sourceUrl": "https://xkiro.com/models/qwen/qwen3.7-flash%3Afree"
   },
   {
     "id": "zai",
@@ -3184,72 +3241,73 @@
     },
     "baseUrl": "https://api.z.ai/api/coding/paas/v4",
     "format": "openai-chat",
+    "website": "https://z.ai/",
+    "local": false,
     "models": [
       {
         "id": "glm-5.3",
-        "name": "GLM 5.3",
+        "name": "glm-5.3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.3-flash",
-        "name": "GLM 5.3 Flash (Vision)",
+        "name": "glm-5.3-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.2",
-        "name": "GLM 5.2",
+        "name": "glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.1",
-        "name": "GLM 5.1",
+        "name": "GLM-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5-turbo",
-        "name": "GLM 5 Turbo",
+        "name": "glm-5-turbo",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5",
-        "name": "GLM 5",
+        "name": "GLM-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-4.7",
-        "name": "GLM 4.7",
+        "name": "glm-4.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-4.6v",
-        "name": "GLM 4.6V (Vision)",
+        "name": "GLM-4.6V",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Z.ai coding-plan endpoint; caller extra_body is rejected (FCC profile). Ids are shared across Z.ai routes per the 9router glm registry.",
-    "website": "https://z.ai/",
-    "local": false,
-    "source": "fcc"
+    "notes": "模型目录依据 models.dev（MIT）及历史快照重建；保留既有配置与模型标识，历史记录不代表当前服务可用性。",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/zai-coding-plan"
   },
   {
     "id": "zai_api",
-    "name": "Z.ai API",
+    "name": "Z.AI",
     "category": "apikey",
     "auth": {
       "kind": "apiKey",
@@ -3261,72 +3319,73 @@
     "models": [
       {
         "id": "glm-5.3",
-        "name": "GLM 5.3",
+        "name": "glm-5.3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.3-flash",
-        "name": "GLM 5.3 Flash (Vision)",
+        "name": "glm-5.3-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.2",
-        "name": "GLM 5.2",
+        "name": "glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.1",
-        "name": "GLM 5.1",
+        "name": "glm-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5-turbo",
-        "name": "GLM 5 Turbo",
+        "name": "glm-5-turbo",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5",
-        "name": "GLM 5",
+        "name": "glm-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-4.7",
-        "name": "GLM 4.7",
+        "name": "glm-4.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-4.6v",
-        "name": "GLM 4.6V (Vision)",
+        "name": "glm-4.6v",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-4.7-flash",
-        "name": "GLM 4.7 Flash",
+        "name": "glm-4.7-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Z.ai pay-as-you-go endpoint; ids are shared across Z.ai routes per the 9router glm registry.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://z.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/zai",
     "modelsUrl": "https://api.z.ai/api/paas/v4/models"
   },
   {
@@ -3343,19 +3402,20 @@
     "models": [
       {
         "id": "deepseek/deepseek-v4-flash-free",
-        "name": "DeepSeek V4 Flash (free)",
+        "name": "DeepSeek V4 Flash 0731 (Free)",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "max_tokens is sent as max_completion_tokens (FCC profile).",
+    "notes": "Historical free model entry retained for saved configurations. The provider currently labels its routes Sunset; this is not an active-availability guarantee.",
     "website": "https://zenmux.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
     "freeModelsHint": [
       "deepseek/deepseek-v4-flash-free"
-    ]
+    ],
+    "sourceUrl": "https://zenmux.ai/deepseek/deepseek-v4-flash-free"
   },
   {
     "id": "bazaarlink",
@@ -3642,14 +3702,14 @@
       },
       {
         "id": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
-        "name": "Llama 3.1 8B Instruct FP8 Fast",
+        "name": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "@cf/meta/llama-3.1-8b-instruct-awq",
-        "name": "Llama 3.1 8B Instruct AWQ",
+        "name": "Llama 3.1 8B Instruct Awq",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -3663,21 +3723,21 @@
       },
       {
         "id": "@cf/meta/llama-3.1-70b-instruct-fp8-fast",
-        "name": "Llama 3.1 70B Instruct FP8 Fast",
+        "name": "@cf/meta/llama-3.1-70b-instruct-fp8-fast",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        "name": "Llama 3.3 70B Instruct FP8 Fast",
+        "name": "Llama 3.3 70B Instruct fp8 Fast",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
-        "name": "DeepSeek R1 Distill Qwen 32B",
+        "name": "Deepseek R1 Distill Qwen 32B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -3691,41 +3751,42 @@
       },
       {
         "id": "@cf/moonshotai/kimi-k2.6",
-        "name": "Kimi K2.6",
+        "name": "@cf/moonshotai/kimi-k2.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "@cf/zai-org/glm-4.7-flash",
-        "name": "GLM 4.7 Flash",
+        "name": "@cf/zai-org/glm-4.7-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "@cf/qwen/qwq-32b",
-        "name": "QwQ 32B",
+        "name": "Qwq 32B",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
-        "name": "Qwen 2.5 Coder 32B Instruct",
+        "name": "Qwen2.5 Coder 32B Instruct",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Account-scoped URL — replace {account_id}; Workers AI has a free allocation and 9router lists it as free-tier. Image ids omitted.",
+    "notes": "Workers AI account endpoint. Saved model IDs are retained; consult Cloudflare model lifecycle notices for availability. A pricing entry alone does not confirm that inference is active.",
     "website": "https://www.cloudflare.com/developer-platform/products/workers-ai/",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/cloudflare-workers-ai"
   },
   {
     "id": "gemini",
-    "name": "Gemini",
+    "name": "Google",
     "category": "free-tier",
     "auth": {
       "kind": "apiKey",
@@ -3737,28 +3798,28 @@
     "models": [
       {
         "id": "gemini-3.8-flash",
-        "name": "Gemini 3.8 Flash",
+        "name": "gemini-3.8-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.7-flash",
-        "name": "Gemini 3.7 Flash",
+        "name": "gemini-3.7-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.6-flash",
-        "name": "Gemini 3.6 Flash",
+        "name": "gemini-3.6-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.5-flash-lite",
-        "name": "Gemini 3.5 Flash Lite",
+        "name": "gemini-3.5-flash-lite",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -3786,21 +3847,21 @@
       },
       {
         "id": "gemini-2.5-pro",
-        "name": "Gemini 2.5 Pro",
+        "name": "gemini-2.5-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-2.5-flash",
-        "name": "Gemini 2.5 Flash",
+        "name": "gemini-2.5-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-2.5-flash-lite",
-        "name": "Gemini 2.5 Flash Lite",
+        "name": "Gemini 2.5 Flash-Lite",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -3813,10 +3874,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Google AI Studio key; 9router lists it as free-tier. FCC speaks the OpenAI-compatible layer at /v1beta/openai/.",
+    "notes": "目录依据 models.dev（MIT）重建；保留 OFM 配置标识，模型能力未声明，服务可用性与权限以提供商为准。",
     "website": "https://ai.google.dev/",
     "local": false,
-    "source": "fcc"
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/google"
   },
   {
     "id": "kilo",
@@ -3839,21 +3901,21 @@
       },
       {
         "id": "nvidia/nemotron-3.5-super-vl:free",
-        "name": "NVIDIA: Nemotron 3.5 Super VL",
+        "name": "NVIDIA: Nemotron 3.5 Super VL (free)",
         "contextWindow": 1000000,
         "vision": true,
         "reasoning": true
       },
       {
         "id": "reflection/beam-free",
-        "name": "Reflection: Beam 1.0",
+        "name": "Reflection: Beam 1.0 (Free)",
         "contextWindow": 1048576,
         "vision": false,
         "reasoning": true
       },
       {
         "id": "stealth/glyph-cluster",
-        "name": "Stealth: Glyph Cluster",
+        "name": "Glyph Cluster",
         "contextWindow": 256000,
         "vision": false,
         "reasoning": true
@@ -3867,35 +3929,35 @@
       },
       {
         "id": "dots-studio/dots-3-note-preview:free",
-        "name": "Dots Studio: Dots3-Note Preview",
+        "name": "Dots Studio: Dots3-Note Preview (free)",
         "contextWindow": 512000,
         "vision": true,
         "reasoning": true
       },
       {
         "id": "nvidia/nemotron-3.5-lightning:free",
-        "name": "NVIDIA: Nemotron 3.5 Lightning",
+        "name": "NVIDIA: Nemotron 3.5 Lightning (free)",
         "contextWindow": 1000000,
         "vision": false,
         "reasoning": true
       },
       {
         "id": "cohere/north-mini-code:free",
-        "name": "Cohere: North Mini Code",
+        "name": "Cohere: North Mini Code (free)",
         "contextWindow": 256000,
         "vision": false,
         "reasoning": true
       },
       {
         "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "name": "NVIDIA: Nemotron 3 Ultra",
+        "name": "NVIDIA: Nemotron 3 Ultra (free)",
         "contextWindow": 1000000,
         "vision": false,
         "reasoning": true
       },
       {
         "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        "name": "NVIDIA: Nemotron 3 Nano Omni",
+        "name": "NVIDIA: Nemotron 3 Nano Omni (free)",
         "contextWindow": 256000,
         "vision": true,
         "reasoning": true
@@ -3908,10 +3970,10 @@
         "reasoning": true
       }
     ],
-    "notes": "Kilo gateway free pool, snapshot 2026-11-07; the plugin’s own Kilo channel serves it keyless from the live listing — this row is the aggregate-lane fallback for a pasted key.",
+    "notes": "API-key gateway catalog. Saved model IDs are retained, including historical entries; use the live catalog to check current availability. The separate OFM Kilo channel manages its own model discovery.",
     "website": "https://kilo.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "models.dev",
     "freeModelsHint": [
       "kilo-auto/free",
       "nvidia/nemotron-3.5-super-vl:free",
@@ -3925,7 +3987,8 @@
       "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
       "openrouter/free"
     ],
-    "modelsUrl": "https://ai-gateway.kilo.ai/api/v1/models"
+    "modelsUrl": "https://ai-gateway.kilo.ai/api/v1/models",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/kilo"
   },
   {
     "id": "kimchi",
@@ -4018,66 +4081,67 @@
     "models": [
       {
         "id": "minimaxai/minimax-m2.7",
-        "name": "MiniMax M2.7",
+        "name": "minimaxai/minimax-m2.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "minimaxai/minimax-m3",
-        "name": "MiniMax M3",
+        "name": "minimaxai/minimax-m3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "z-ai/glm-5.2",
-        "name": "GLM 5.2",
+        "name": "z-ai/glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/deepseek-v4-pro",
-        "name": "DeepSeek V4 Pro",
+        "name": "deepseek-ai/deepseek-v4-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-ai/deepseek-v4-flash",
-        "name": "DeepSeek V4 Flash",
+        "name": "deepseek-ai/deepseek-v4-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "moonshotai/kimi-k2.6",
-        "name": "Kimi K2.6",
+        "name": "moonshotai/kimi-k2.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "nvidia/nemotron-3-ultra-550b-a55b",
-        "name": "Nemotron 3 Ultra",
+        "name": "nvidia/nemotron-3-ultra-550b-a55b",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "nvidia/nemotron-3-super-120b-a12b",
-        "name": "Nemotron 3 Super 120B",
+        "name": "Nemotron 3 Super",
         "contextWindow": 131072,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Free access for NVIDIA Developer Program members (prototyping and testing) per the 9router registry; FCC ships it as the default provider.",
+    "notes": "NVIDIA API catalog entry. Existing model IDs remain selectable for compatibility; historical catalog entries may no longer be served. Availability and account limits are determined by NVIDIA.",
     "website": "https://build.nvidia.com/",
     "local": false,
-    "source": "fcc",
-    "modelsUrl": "https://integrate.api.nvidia.com/v1/models"
+    "source": "models.dev",
+    "modelsUrl": "https://integrate.api.nvidia.com/v1/models",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/nvidia"
   },
   {
     "id": "ollama_cloud",
@@ -4155,10 +4219,11 @@
         "reasoning": null
       }
     ],
-    "notes": "Free tier: light usage, one cloud model at a time (9router notice). Tags are not OpenAI ids but Ollama model names.",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留旧云端 ID；本地 :cloud 标签与直接云端 API 模型名不一定等价，部分旧模型已弃用或未确认，实际权限与可用 ID 以云端账号为准。 历史 free tier 分类仅供既有目录筛选，不构成当前免费承诺。",
     "website": "https://ollama.com/",
     "local": false,
-    "source": "fcc",
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md",
     "modelsUrl": "https://ollama.com/api/tags"
   },
   {
@@ -4175,20 +4240,21 @@
     "models": [
       {
         "id": "openrouter/free",
-        "name": "OpenRouter Free Router",
+        "name": "openrouter/free",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       }
     ],
-    "notes": "Free tier: 27+ free models, no credit card, ~200 requests/day (9router registry).",
+    "notes": "通过官方兼容接口访问；公开目录已核对模型标识，额度与调用权限取决于账号。",
     "website": "https://openrouter.ai/",
     "local": false,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://openrouter.ai/docs/api_reference/overview",
+    "modelsUrl": "https://openrouter.ai/api/v1/models",
     "freeModelsHint": [
       "openrouter/free"
-    ],
-    "modelsUrl": "https://openrouter.ai/api/v1/models"
+    ]
   },
   {
     "id": "opencode_zen",
@@ -4201,45 +4267,47 @@
     },
     "baseUrl": "https://opencode.ai/zen/v1",
     "format": "openai-chat",
+    "website": "https://opencode.ai/zen",
+    "local": false,
     "models": [
       {
         "id": "claude-fable-5",
-        "name": "Claude Fable 5",
+        "name": "claude-fable-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "claude-fable-5-1",
-        "name": "Claude Fable 5.1",
+        "name": "claude-fable-5-1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "claude-opus-5",
-        "name": "Claude Opus 5",
+        "name": "claude-opus-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "claude-opus-4-8",
-        "name": "Claude Opus 4.8",
+        "name": "claude-opus-4-8",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "claude-opus-4-7",
-        "name": "Claude Opus 4.7",
+        "name": "claude-opus-4-7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "claude-opus-4-6",
-        "name": "Claude Opus 4.6",
+        "name": "claude-opus-4-6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4253,14 +4321,14 @@
       },
       {
         "id": "claude-sonnet-5",
-        "name": "Claude Sonnet 5",
+        "name": "claude-sonnet-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "claude-sonnet-4-6",
-        "name": "Claude Sonnet 4.6",
+        "name": "claude-sonnet-4-6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4288,42 +4356,42 @@
       },
       {
         "id": "gemini-3.6-flash",
-        "name": "Gemini 3.6 Flash",
+        "name": "gemini-3.6-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.8-flash",
-        "name": "Gemini 3.8 Flash",
+        "name": "gemini-3.8-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.7-flash",
-        "name": "Gemini 3.7 Flash",
+        "name": "gemini-3.7-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.5-flash-lite",
-        "name": "Gemini 3.5 Flash Lite",
+        "name": "gemini-3.5-flash-lite",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.5-flash",
-        "name": "Gemini 3.5 Flash",
+        "name": "gemini-3.5-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gemini-3.1-pro",
-        "name": "Gemini 3.1 Pro",
+        "name": "gemini-3.1-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4337,203 +4405,203 @@
       },
       {
         "id": "gpt-6-astra",
-        "name": "GPT 6 Astra",
+        "name": "gpt-6-astra",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-sol",
-        "name": "GPT 5.6 Sol",
+        "name": "gpt-5.6-sol",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-terra",
-        "name": "GPT 5.6 Terra",
+        "name": "gpt-5.6-terra",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.6-luna",
-        "name": "GPT 5.6 Luna",
+        "name": "gpt-5.6-luna",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.5",
-        "name": "GPT 5.5",
+        "name": "gpt-5.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.5-pro",
-        "name": "GPT 5.5 Pro",
+        "name": "gpt-5.5-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.4",
-        "name": "GPT 5.4",
+        "name": "gpt-5.4",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-pro",
-        "name": "GPT 5.4 Pro",
+        "name": "gpt-5.4-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-mini",
-        "name": "GPT 5.4 Mini",
+        "name": "GPT-5.4 Mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.4-nano",
-        "name": "GPT 5.4 Nano",
+        "name": "GPT-5.4 Nano",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.3-codex-spark",
-        "name": "GPT 5.3 Codex Spark",
+        "name": "gpt-5.3-codex-spark",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.3-codex",
-        "name": "GPT 5.3 Codex",
+        "name": "gpt-5.3-codex",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.2",
-        "name": "GPT 5.2",
+        "name": "gpt-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.2-codex",
-        "name": "GPT 5.2 Codex",
+        "name": "gpt-5.2-codex",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.1",
-        "name": "GPT 5.1",
+        "name": "gpt-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.1-codex-max",
-        "name": "GPT 5.1 Codex Max",
+        "name": "gpt-5.1-codex-max",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.1-codex",
-        "name": "GPT 5.1 Codex",
+        "name": "gpt-5.1-codex",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5.1-codex-mini",
-        "name": "GPT 5.1 Codex Mini",
+        "name": "GPT-5.1 Codex Mini",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5",
-        "name": "GPT 5",
+        "name": "gpt-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5-codex",
-        "name": "GPT 5 Codex",
+        "name": "GPT-5 Codex",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "gpt-5-nano",
-        "name": "GPT 5 Nano",
+        "name": "gpt-5-nano",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "grok-build-0.1",
-        "name": "Grok Build 0.1",
+        "name": "grok-build-0.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "grok-4.6",
-        "name": "Grok 4.6",
+        "name": "grok-4.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "grok-4.5",
-        "name": "Grok 4.5",
+        "name": "grok-4.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "muse-spark-1.3",
-        "name": "Muse Spark 1.3",
+        "name": "muse-spark-1.3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "muse-spark-1.2",
-        "name": "Muse Spark 1.2",
+        "name": "muse-spark-1.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.6-plus",
-        "name": "Qwen 3.6 Plus",
+        "name": "qwen3.6-plus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "qwen3.5-plus",
-        "name": "Qwen 3.5 Plus",
+        "name": "qwen3.5-plus",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "deepseek-v4-pro",
-        "name": "DeepSeek V4 Pro",
+        "name": "deepseek-v4-pro",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4547,91 +4615,91 @@
       },
       {
         "id": "deepseek-v4-flash-vision-exp",
-        "name": "DeepSeek V4 Flash Vision Exp",
+        "name": "deepseek-v4-flash-vision-exp",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.3-flash",
-        "name": "GLM 5.3 Flash (Vision)",
+        "name": "glm-5.3-flash",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.3",
-        "name": "GLM 5.3",
+        "name": "glm-5.3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.2",
-        "name": "GLM 5.2",
+        "name": "glm-5.2",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5.1",
-        "name": "GLM 5.1",
+        "name": "glm-5.1",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "glm-5",
-        "name": "GLM 5",
+        "name": "glm-5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "minimax-m3",
-        "name": "MiniMax M3",
+        "name": "minimax-m3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "minimax-m2.7",
-        "name": "MiniMax M2.7",
+        "name": "minimax-m2.7",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "minimax-m2.5",
-        "name": "MiniMax M2.5",
+        "name": "minimax-m2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "kimi-k3",
-        "name": "Kimi K3",
+        "name": "kimi-k3",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "kimi-k2.7-code",
-        "name": "Kimi K2.7 Code",
+        "name": "kimi-k2.7-code",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "kimi-k2.6",
-        "name": "Kimi K2.6",
+        "name": "kimi-k2.6",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "kimi-k2.5",
-        "name": "Kimi K2.5",
+        "name": "kimi-k2.5",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4645,7 +4713,7 @@
       },
       {
         "id": "union-alpha",
-        "name": "Union Alpha",
+        "name": "Union Alpha Free",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4659,7 +4727,7 @@
       },
       {
         "id": "mimo-v2.6-flash-free",
-        "name": "MiMo V2.6 Flash Free",
+        "name": "MiMo-V2.6-Flash Free",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4694,21 +4762,21 @@
       },
       {
         "id": "muse-spark-1.3-contributor-free",
-        "name": "Muse Spark 1.3 Contributor Free",
+        "name": "Muse Spark 1.3 Free",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "muse-spark-1.2-contributor-free",
-        "name": "Muse Spark 1.2 Contributor Free",
+        "name": "Muse Spark 1.2 Free",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
       },
       {
         "id": "jev-1.13",
-        "name": "Jev 1.13",
+        "name": "jev-1.13",
         "contextWindow": null,
         "vision": null,
         "reasoning": null
@@ -4721,10 +4789,10 @@
         "reasoning": null
       }
     ],
-    "notes": "PAYG key with free models on the fast lane (9router notice); FCC dispatches each catalog route over chat or responses.",
-    "website": "https://opencode.ai/zen",
-    "local": false,
-    "source": "fcc",
+    "notes": "模型目录依据 models.dev（MIT）及历史快照重建；保留既有配置与模型标识，历史记录不代表当前服务可用性。",
+    "source": "models.dev",
+    "sourceUrl": "https://github.com/anomalyco/models.dev/tree/dev/providers/opencode",
+    "modelsUrl": "https://opencode.ai/zen/v1/models",
     "freeModelsHint": [
       "deepseek-v4-flash-free",
       "mimo-v2.6-flash-free",
@@ -4735,12 +4803,11 @@
       "muse-spark-1.3-contributor-free",
       "muse-spark-1.2-contributor-free",
       "jev-1.13-free"
-    ],
-    "modelsUrl": "https://opencode.ai/zen/v1/models"
+    ]
   },
   {
     "id": "llamacpp",
-    "name": "LLaMA.cpp",
+    "name": "llama.cpp",
     "category": "local",
     "auth": {
       "kind": "none",
@@ -4750,10 +4817,11 @@
     "baseUrl": "http://localhost:8080/v1",
     "format": "openai-chat",
     "models": [],
-    "notes": "Local server; the model list is whatever the user has loaded, so the registry carries no ids.",
+    "notes": "连接 llama-server 的 OpenAI 兼容接口；8080 保留 OFM 既有配置，可按服务实际监听端口覆盖。",
     "website": "https://github.com/ggml-org/llama.cpp",
     "local": true,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
     "baseUrlOverrideEnv": "LLAMACPP_BASE_URL"
   },
   {
@@ -4768,10 +4836,11 @@
     "baseUrl": "http://localhost:1234/v1",
     "format": "openai-chat",
     "models": [],
-    "notes": "Local server; the model list is whatever the user has loaded, so the registry carries no ids.",
+    "notes": "连接本机 OpenAI 兼容服务；模型由本地安装或加载状态决定。",
     "website": "https://lmstudio.ai/",
     "local": true,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://lmstudio.ai/docs/developer/openai-compat",
     "baseUrlOverrideEnv": "LM_STUDIO_BASE_URL"
   },
   {
@@ -4786,10 +4855,11 @@
     "baseUrl": "http://localhost:11434/v1",
     "format": "openai-chat",
     "models": [],
-    "notes": "Local server; FCC normalizes the configured root to /v1, and the model list is whatever the user has pulled.",
+    "notes": "连接本机 OpenAI 兼容服务；模型由本地安装或加载状态决定。",
     "website": "https://ollama.com/",
     "local": true,
-    "source": "fcc",
+    "source": "official",
+    "sourceUrl": "https://docs.ollama.com/api/openai-compatibility",
     "baseUrlOverrideEnv": "OLLAMA_BASE_URL"
   },
   {
@@ -4924,10 +4994,11 @@
         "reasoning": null
       }
     ],
-    "notes": "GitHub account sign-in; the usable model set depends on the subscription (embedding ids omitted).",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留旧订阅模型 ID；模型和内部别名随套餐及账号变化，goldeneye-free-auto 等旧别名的当前语义未确认，不自动迁移到其他付费模型。",
     "website": "https://github.com/features/copilot",
     "local": false,
-    "source": "fcc"
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md"
   },
   {
     "id": "openai",
@@ -4998,9 +5069,10 @@
         "reasoning": null
       }
     ],
-    "notes": "ChatGPT subscription via browser sign-in (connected account); responses wire on chatgpt.com/backend-api/codex.",
+    "notes": "OFM 手工维护的历史配置兼容记录；不代表供应商当前模型目录。保留旧 ChatGPT 订阅模型 ID 和 Responses 接入方式；历史 ID 不等同于账号当前可用模型，未确认的 ID 不保证生成成功，不自动更换模型。",
     "website": "https://openai.com/",
     "local": false,
-    "source": "fcc"
+    "source": "custom",
+    "sourceUrl": "https://github.com/Ebony-Vinyl/dsh-our-free-model/blob/main/docs/provider-compatibility.md"
   }
 ]

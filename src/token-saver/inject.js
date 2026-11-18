@@ -1,35 +1,6 @@
 /**
- * System-prompt injection for the three wires this plugin builds.
- *
- * The prompt families in `./prompts.js` only matter once their text is inside
- * the outgoing body, and each wire keeps its system text somewhere else:
- * a `{role:'system'}` message on `chat`, the `system` field on `messages`
- * (a string or a list of blocks), and `instructions` or a system item on
- * `responses`. This module puts one prompt into whichever of those the body
- * has, exactly once, without disturbing anything around it.
- *
- * Idempotency and stripping share one mechanism: the injected text travels as
- * a marker-delimited segment
- *
- *     <!-- ofm-token-saver -->
- *     <prompt text>
- *     <!-- /ofm-token-saver -->
- *
- * The upstream RTK injector deduped on the raw prompt as an exact `\n\n`
- * delimited segment instead (`systemInject.js`, `hasPrompt`), but it never had
- * to take an injection back. This port needs `stripInjected` for the
- * user-facing off switch and for round-trip tests, and a bare prompt cannot be
- * told apart from the user's own system text of the same wording — so the
- * segment carries a marker, and stripping removes exactly the marked region
- * plus the separator that joined it to its neighbours. The exact-segment test
- * itself is kept: a body is "already injected" only when this very segment is
- * present, so two different prompts coexist and a re-injection of either is a
- * no-op.
- *
- * Every failure is fail-open: an unrecognised wire or body shape changes
- * nothing and says so. This module sits between the user's turn and the
- * provider, so its worst acceptable outcome is injecting nothing.
- *
+ * Add and remove OFM-owned prompt segments at each wire's system-text boundary.
+ * Markers distinguish generated instructions from user text during removal.
  * @module src/token-saver/inject.js
  */
 
@@ -199,236 +170,118 @@ function cutMarked(content) {
 // ── chat (OpenAI Chat Completions) ───────────────────────────────────────────
 
 function injectChat(payload, segment) {
-  const messages = payload.messages
-  if (!Array.isArray(messages)) return result(payload, false, 'shape-not-recognised')
-  if (messages.some(message => isSystem(message) && contentHasSegment(message.content, segment))) {
-    return result(payload, false, 'already-injected')
+  if (!Array.isArray(payload.messages)) return result(payload, false, 'shape-not-recognised')
+  let target
+  for (const message of payload.messages) {
+    if (!isSystem(message)) continue
+    if (contentHasSegment(message.content, segment)) return result(payload, false, 'already-injected')
+    target ??= message
   }
-  const target = chatSystemMessage(messages)
-  if (target === undefined) {
-    messages.unshift({ role: 'system', content: segment })
-    return result(payload, true, 'injected')
-  }
-  appendChatSegment(target, segment)
+  if (!target) payload.messages.unshift({ role: 'system', content: segment })
+  else if (Array.isArray(target.content)) target.content.push({ type: 'text', text: segment })
+  else target.content = typeof target.content === 'string' && target.content ? `${target.content}${SEP}${segment}` : segment
   return result(payload, true, 'injected')
 }
 
-/**
- * The message to append to.
- *
- * `messages[0]` is checked first because that is where `buildPayload` and the
- * sealed-lane pacing hint both keep the system turn; any later system or
- * developer turn is still preferred over adding a second one, which is the
- * upstream behaviour and keeps one system message per body.
- */
-function chatSystemMessage(messages) {
-  const first = messages[0]
-  if (isSystem(first)) return first
-  return messages.find(message => isSystem(message))
+/** Strip marked text in place; blocks retain identity and cache annotations. */
+function stripContent(owner, key) {
+  const value = owner[key]
+  if (typeof value === 'string') {
+    const cut = cutMarked(value)
+    if (cut === null) return false
+    owner[key] = cut
+    return true
+  }
+  if (!Array.isArray(value)) return false
+  let changed = false, write = 0
+  for (const block of value) {
+    if (block && typeof block === 'object' && typeof block.text === 'string') {
+      const cut = cutMarked(block.text)
+      if (cut !== null) {
+        changed = true
+        if (!cut) continue
+        block.text = cut
+      }
+    }
+    value[write++] = block
+  }
+  if (changed) value.length = write
+  return changed
 }
 
-function appendChatSegment(message, segment) {
-  const content = message.content
-  if (typeof content === 'string') {
-    message.content = content === '' ? segment : `${content}${SEP}${segment}`
-    return
+function stripRows(rows, predicate) {
+  let stripped = false, write = 0
+  for (const row of rows) {
+    if (predicate(row) && stripContent(row, 'content')) {
+      stripped = true
+      if (row.content.length === 0) continue
+    }
+    rows[write++] = row
   }
-  if (Array.isArray(content)) {
-    content.push({ type: 'text', text: segment })
-    return
-  }
-  message.content = segment
+  if (stripped) rows.length = write
+  return stripped
 }
 
 function stripChat(payload) {
-  const messages = payload.messages
-  if (!Array.isArray(messages)) return { payload, stripped: false, reason: 'shape-not-recognised' }
-  let stripped = false
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i]
-    if (!isSystem(message)) continue
-    const content = message.content
-    if (typeof content === 'string') {
-      const cut = cutMarked(content)
-      if (cut === null) continue
-      stripped = true
-      // An emptied system message is the shell a whole-message injection
-      // leaves behind; removing it restores "no system message" exactly. An
-      // original empty-string system message is indistinguishable, and no
-      // projector in this project emits one.
-      if (cut === '') messages.splice(i, 1)
-      else message.content = cut
-      continue
-    }
-    if (!Array.isArray(content)) continue
-    let changed = false
-    for (let j = content.length - 1; j >= 0; j -= 1) {
-      const block = content[j]
-      if (block === null || typeof block !== 'object' || typeof block.text !== 'string') continue
-      const cut = cutMarked(block.text)
-      if (cut === null) continue
-      changed = true
-      if (cut === '') content.splice(j, 1)
-      else block.text = cut
-    }
-    if (!changed) continue
-    stripped = true
-    if (content.length === 0) messages.splice(i, 1)
-  }
+  if (!Array.isArray(payload.messages)) return { payload, stripped: false, reason: 'shape-not-recognised' }
+  const stripped = stripRows(payload.messages, isSystem)
   return { payload, stripped, reason: stripped ? 'stripped' : 'not-injected' }
 }
 
 // ── messages (Anthropic Messages) ────────────────────────────────────────────
 
 function injectMessages(payload, segment) {
-  // An Anthropic body is identified by its `messages` list; the `system` field
-  // is optional on this wire (`toClaudeMessages` reports `undefined` for an
-  // empty system text), so an absent `system` is a shape to fill, not a
-  // failure — but a body without `messages` is not a Messages body at all.
   if (!Array.isArray(payload.messages)) return result(payload, false, 'shape-not-recognised')
   const system = payload.system
-  if (typeof system === 'string') {
-    if (system.includes(segment)) return result(payload, false, 'already-injected')
-    payload.system = system === '' ? segment : `${system}${SEP}${segment}`
-    return result(payload, true, 'injected')
-  }
+  if (contentHasSegment(system, segment)) return result(payload, false, 'already-injected')
   if (Array.isArray(system)) {
-    if (system.some(block => block !== null && typeof block === 'object'
-      && typeof block.text === 'string' && block.text.includes(segment))) {
-      return result(payload, false, 'already-injected')
+    let position = system.length
+    // Keep the new instructions inside the final cache breakpoint.
+    for (let i = system.length - 1; i >= 0; i--) {
+      if (system[i]?.cache_control) { position = i; break }
     }
-    const block = { type: 'text', text: segment }
-    // Insert *before* the last cache_control block, never after it. The
-    // provider caches the prompt prefix up to that breakpoint, so text
-    // appended past it would be the one part of the system prompt processed
-    // and billed uncached on every turn — exactly the cost the injection
-    // exists to avoid. Anchoring the new block inside the cached prefix keeps
-    // the caller's breakpoint as the last block, so it still terminates the
-    // list and the whole system prompt stays cache-eligible.
-    let lastCached = -1
-    for (let i = system.length - 1; i >= 0; i -= 1) {
-      if (system[i]?.cache_control) { lastCached = i; break }
-    }
-    if (lastCached >= 0) system.splice(lastCached, 0, block)
-    else system.push(block)
-    return result(payload, true, 'injected')
-  }
-  if (system === undefined || system === null) {
-    payload.system = segment
-    return result(payload, true, 'injected')
-  }
-  return result(payload, false, 'shape-not-recognised')
+    system.splice(position, 0, { type: 'text', text: segment })
+  } else if (system == null || typeof system === 'string') {
+    payload.system = system ? `${system}${SEP}${segment}` : segment
+  } else return result(payload, false, 'shape-not-recognised')
+  return result(payload, true, 'injected')
 }
 
 function stripMessages(payload) {
   if (!Array.isArray(payload.messages)) return { payload, stripped: false, reason: 'shape-not-recognised' }
-  const system = payload.system
-  if (typeof system === 'string') {
-    const cut = cutMarked(system)
-    if (cut === null) return { payload, stripped: false, reason: 'not-injected' }
-    // `toClaudeMessages` reports an empty system as `undefined`, never as `''`,
-    // so an emptied field is restored by removing it.
-    if (cut === '') delete payload.system
-    else payload.system = cut
-    return { payload, stripped: true, reason: 'stripped' }
-  }
-  if (Array.isArray(system)) {
-    let changed = false
-    for (let i = system.length - 1; i >= 0; i -= 1) {
-      const block = system[i]
-      if (block === null || typeof block !== 'object' || typeof block.text !== 'string') continue
-      const cut = cutMarked(block.text)
-      if (cut === null) continue
-      changed = true
-      if (cut === '') system.splice(i, 1)
-      else block.text = cut
-    }
-    return { payload, stripped: changed, reason: changed ? 'stripped' : 'not-injected' }
-  }
-  return { payload, stripped: false, reason: 'not-injected' }
+  const stripped = stripContent(payload, 'system')
+  if (stripped && payload.system === '') delete payload.system
+  return { payload, stripped, reason: stripped ? 'stripped' : 'not-injected' }
 }
 
 // ── responses (OpenAI Responses) ─────────────────────────────────────────────
 
 function injectResponses(payload, segment) {
-  // `instructions` is the dedicated field and wins when present, matching the
-  // upstream dispatch: a body carrying both must not have its system text
-  // split across two places.
   if (typeof payload.instructions === 'string') {
     if (payload.instructions.includes(segment)) return result(payload, false, 'already-injected')
-    payload.instructions = payload.instructions === '' ? segment : `${payload.instructions}${SEP}${segment}`
+    payload.instructions = payload.instructions ? `${payload.instructions}${SEP}${segment}` : segment
     return result(payload, true, 'injected')
   }
-  const input = payload.input
-  if (!Array.isArray(input)) return result(payload, false, 'shape-not-recognised')
-  if (input.some(item => isResponsesSystem(item) && contentHasSegment(item.content, segment))) {
-    return result(payload, false, 'already-injected')
+  if (!Array.isArray(payload.input)) return result(payload, false, 'shape-not-recognised')
+  let target
+  for (const item of payload.input) {
+    if (!isResponsesSystem(item)) continue
+    if (contentHasSegment(item.content, segment)) return result(payload, false, 'already-injected')
+    target ??= item
   }
-  const target = input.find(item => isResponsesSystem(item))
-  if (target === undefined) {
-    input.unshift({ type: 'message', role: 'system', content: [{ type: 'input_text', text: segment }] })
-  } else {
-    appendResponsesSegment(target, segment)
-  }
+  const block = { type: 'input_text', text: segment }
+  if (!target) payload.input.unshift({ type: 'message', role: 'system', content: [block] })
+  else if (Array.isArray(target.content)) target.content.push(block)
+  else if (typeof target.content === 'string') target.content = target.content ? `${target.content}${SEP}${segment}` : segment
+  else target.content = [block]
   return result(payload, true, 'injected')
 }
 
-function appendResponsesSegment(item, segment) {
-  const content = item.content
-  if (typeof content === 'string') {
-    item.content = content === '' ? segment : `${content}${SEP}${segment}`
-    return
-  }
-  if (Array.isArray(content)) {
-    content.push({ type: 'input_text', text: segment })
-    return
-  }
-  item.content = [{ type: 'input_text', text: segment }]
-}
-
 function stripResponses(payload) {
-  let stripped = false
-  if (typeof payload.instructions === 'string') {
-    const cut = cutMarked(payload.instructions)
-    if (cut !== null) {
-      stripped = true
-      if (cut === '') delete payload.instructions
-      else payload.instructions = cut
-    }
-  }
-  const input = payload.input
-  if (Array.isArray(input)) {
-    for (let i = input.length - 1; i >= 0; i -= 1) {
-      const item = input[i]
-      if (!isResponsesSystem(item)) continue
-      const content = item.content
-      if (typeof content === 'string') {
-        const cut = cutMarked(content)
-        if (cut === null) continue
-        stripped = true
-        if (cut === '') input.splice(i, 1)
-        else item.content = cut
-        continue
-      }
-      if (!Array.isArray(content)) continue
-      let changed = false
-      for (let j = content.length - 1; j >= 0; j -= 1) {
-        const part = content[j]
-        if (part === null || typeof part !== 'object' || typeof part.text !== 'string') continue
-        const cut = cutMarked(part.text)
-        if (cut === null) continue
-        changed = true
-        if (cut === '') content.splice(j, 1)
-        else part.text = cut
-      }
-      if (!changed) continue
-      stripped = true
-      if (content.length === 0) input.splice(i, 1)
-    }
-  }
-  if (stripped) return { payload, stripped: true, reason: 'stripped' }
-  if (typeof payload.instructions !== 'string' && !Array.isArray(input)) {
-    return { payload, stripped: false, reason: 'shape-not-recognised' }
-  }
-  return { payload, stripped: false, reason: 'not-injected' }
+  let stripped = typeof payload.instructions === 'string' && stripContent(payload, 'instructions')
+  if (stripped && payload.instructions === '') delete payload.instructions
+  if (Array.isArray(payload.input)) stripped = stripRows(payload.input, isResponsesSystem) || stripped
+  const reason = stripped ? 'stripped' : typeof payload.instructions !== 'string' && !Array.isArray(payload.input)
+    ? 'shape-not-recognised' : 'not-injected'
+  return { payload, stripped, reason }
 }

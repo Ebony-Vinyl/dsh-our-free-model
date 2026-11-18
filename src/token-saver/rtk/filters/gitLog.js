@@ -1,114 +1,45 @@
-/**
- * Compact `git log`.
- *
- * Three output modes reach a model — default (commit headers with a full body),
- * `--oneline`, and `--graph` — and all three are handled here because the model
- * cannot tell the caller to re-run with different flags. What survives is the
- * information a model uses: sha, subject, author, date, and the diffstat line
- * that says how large the change was. What goes is commit-body prose, graph
- * decoration, and any embedded diff, none of which changes what the model can
- * conclude about the history.
- *
- * @module src/token-saver/rtk/filters/gitLog.js
- */
-
+/** Extract bounded commit summaries from plain, graph and full Git histories. */
 import { GIT_LOG_MAX_LINES } from '../constants.js'
 
 export function gitLog(text, maxLines = GIT_LOG_MAX_LINES) {
   if (!text) return ''
-
   const input = String(text)
-  const lines = input.split('\n')
-  const out = []
-  let skipped = 0
-  let inCommit = false
-  let subjectSeen = false
-
-  // Every mode pushes through here so the cap applies uniformly, and the
-  // dropped count is reported at the end instead of being silently lost.
-  function pushLine(l) {
-    if (out.length < maxLines) {
-      out.push(l)
-      return true
-    }
-    skipped++
-    return false
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i]
-    const line = raw.trimEnd()
-    const trimmed = line.trim()
-
-    // commit <sha> header — starts new commit entry
-    // Also matched with leading graph decoration (`*   commit abc1234...` — --graph without --oneline)
-    if (/^commit [0-9a-f]{7,40}$/i.test(trimmed) || /^[*|/\\ ]+commit [0-9a-f]{7,40}/i.test(trimmed)) {
+  const output = []
+  let inCommit = false, subject = false, skipped = 0, offset = 0
+  while (offset <= input.length) {
+    const newline = input.indexOf('\n', offset)
+    const end = newline < 0 ? input.length : newline
+    const row = input.slice(offset, end).trimEnd()
+    const trimmed = row.trim()
+    let selected
+    if (/^(?:commit [0-9a-f]{7,40}$|[*|/\\ ]+commit [0-9a-f]{7,40})/i.test(trimmed)) {
       inCommit = true
-      subjectSeen = false
-      pushLine(line)
-      continue
-    }
-
-    if (inCommit) {
-      // Author / Date — keep as-is (already column 0 in raw, or graph-prefix stripped by commit-header match)
-      if (/^[*|/\\ ]*(Author|Date):/i.test(trimmed)) {
-        pushLine(trimmed)
-        continue
+      subject = false
+      selected = row
+    } else if (inCommit) {
+      if (/^[*|/\\ ]*(?:Author|Date):/i.test(trimmed)) selected = trimmed
+      else if (trimmed) {
+        if (!subject && /^[*|/\\ ]*    \S/.test(row)) {
+          selected = `  Subject: ${trimmed}`
+          subject = true
+        } else if (/^\d+ file\w* changed/.test(trimmed)) selected = `  ${trimmed}`
+        else if (trimmed.startsWith('diff --git ')) selected = '  ... diff body omitted'
       }
-      // blank — skip
-      if (trimmed === '') continue
-      // indented subject (4 spaces, optionally preceded by graph decoration) — first one is subject
-      if (!subjectSeen && /^[*|/\\ ]*    \S/.test(line)) {
-        pushLine('  Subject: ' + trimmed)
-        subjectSeen = true
-        continue
-      }
-      // stat summary: "N file(s) changed, N insertions(+), N deletions(-)"
-      if (/^\d+ file\w* changed/.test(trimmed)) {
-        pushLine('  ' + trimmed)
-        continue
-      }
-      // embedded diff header — one-line marker
-      if (/^diff --git /.test(trimmed)) {
-        pushLine('  ... diff body omitted')
-        continue
-      }
-      // everything else in commit body — drop
-      continue
+    } else {
+      const graph = /^[*|/\\ ]+([0-9a-f]{7,40}\s+.+)/i.exec(trimmed)
+      if (graph) selected = graph[1]
+      else if (!/^[*|/\\ ]+$/.test(trimmed) || !/[*|/\\]/.test(trimmed)) selected = trimmed
     }
-
-    // Not in a commit block (--oneline / --graph modes):
-
-    // Graph decoration + sha + subject: "*|/\ <sha7> <subject>"
-    const graphMatch = trimmed.match(/^[*|/\\ ]+([0-9a-f]{7,40}\s+.+)/i)
-    if (graphMatch) {
-      pushLine(graphMatch[1])
-      continue
+    if (selected !== undefined) {
+      if (output.length < maxLines) output.push(selected)
+      else skipped++
     }
-
-    // Plain oneline: "<sha7> <subject>"
-    if (/^[0-9a-f]{7,40}\s+/.test(trimmed)) {
-      pushLine(trimmed)
-      continue
-    }
-
-    // Pure graph decoration (no sha) — drop
-    if (/^[*|/\\ ]+$/.test(trimmed) && /[*|/\\]/.test(trimmed)) {
-      continue
-    }
-
-    // catch-all pass-through
-    pushLine(trimmed)
+    if (newline < 0) break
+    offset = newline + 1
   }
-
-  if (skipped > 0) out.push(`... (${skipped} more lines)`)
-
-  const result = out.join('\n')
-  // A filter must never make the request bigger or blank it out; both are
-  // worse than the original, so the original wins.
-  if (!result && input) return input
-  if (result.length > input.length) return input
-  return result
+  if (skipped) output.push(`... (${skipped} more lines)`)
+  const result = output.join('\n')
+  return result && result.length <= input.length ? result : input
 }
 
 gitLog.filterName = 'git-log'
