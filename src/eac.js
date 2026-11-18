@@ -33,6 +33,7 @@ import { Readable } from 'node:stream'
 import { ReadableStream } from 'node:stream/web'
 import { CODE, UpstreamError, classifyFailure, classifyStreamFailure, readHead, readSse, replayStream, sniffBody, transportCause } from './http.js'
 import { readEacUser } from './eac-user.js'
+import { openTunnel } from './egress.js'
 
 const LISTING_TIMEOUT_MS = 15000
 const TURN_TIMEOUT_MS = 300000
@@ -46,7 +47,6 @@ const TURN_TIMEOUT_MS = 300000
  */
 export const lane = { fetch: null, proxy: undefined }
 
-const proxyDispatchers = new Map()
 let windowsProxy
 let windowsProxyAt = 0
 
@@ -120,36 +120,6 @@ async function proxyFor(target) {
   return config === null ? null : supportedProxy(windowsProxyFor(target, config))
 }
 
-// The proxy path needs undici's proxy-aware dispatcher. undici ships only as a
-// dev dependency (the DSH host does not hand it to every plugin), so it loads
-// on first proxy use. A configured proxy without it must fail loudly instead
-// of silently falling back to a direct connection — that would leak the signed
-// bytes (and the user's address) past the proxy they asked for.
-let undiciModule
-async function loadUndici() {
-  if (undiciModule === undefined) {
-    try { undiciModule = await import('undici') } catch { undiciModule = null }
-  }
-  return undiciModule
-}
-
-async function dispatcherFor(address) {
-  const url = new URL(String(address).includes('://') ? String(address) : `http://${address}`)
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error(`unsupported EAC proxy protocol ${url.protocol}`)
-  const mod = await loadUndici()
-  if (mod === null) {
-    throw new UpstreamError(
-      `an EAC proxy is configured (${url.host}) but undici is unavailable in this host; install undici or clear the proxy`,
-      CODE.transport,
-    )
-  }
-  const key = url.href
-  if (!proxyDispatchers.has(key)) {
-    proxyDispatchers.set(key, new mod.EnvHttpProxyAgent({ httpProxy: key, httpsProxy: key, noProxy: '' }))
-  }
-  return proxyDispatchers.get(key)
-}
-
 /**
  * Test seam for the per-user authorization token (src/eac-user.js), same
  * convention as `lane`: `undefined` reads the file, any other value —
@@ -194,26 +164,49 @@ async function laneFetch(url, { method = 'GET', headers = {}, body = undefined, 
   const target = new URL(url)
   const proxy = await proxyFor(target)
   if (signal?.aborted === true) throw new UpstreamError('request aborted', CODE.aborted)
-  if (proxy) {
-    if ((await loadUndici()) === null) {
-      throw new UpstreamError(
-        `an EAC proxy is configured (${new URL(proxy).host}) but undici is unavailable in this host; install undici or clear the proxy`,
-        CODE.transport,
-      )
+  const proxyUrl = proxy ? new URL(proxy.includes('://') ? proxy : `http://${proxy}`) : null
+  const forward = proxyUrl?.protocol === 'http:' && target.protocol === 'http:'
+  let agent
+  if (proxyUrl && !forward) {
+    let socket
+    const abortDial = () => socket?.destroy()
+    signal?.addEventListener('abort', abortDial, { once: true })
+    try {
+      socket = await openTunnel(target, { kind: 'url', url: proxyUrl }, pending => {
+        socket = pending
+        if (signal?.aborted) abortDial()
+      })
+      if (signal?.aborted) {
+        socket.destroy()
+        throw new UpstreamError('request aborted', CODE.aborted)
+      }
+      agent = new http.Agent({ keepAlive: false })
+      agent.createConnection = () => socket
+    } catch (error) {
+      if (signal?.aborted) throw new UpstreamError('request aborted', CODE.aborted)
+      throw error
+    } finally {
+      signal?.removeEventListener('abort', abortDial)
     }
-    return (await loadUndici()).fetch(target, {
-      method, headers, body, signal, redirect: 'manual', dispatcher: await dispatcherFor(proxy),
-    })
   }
   return new Promise((resolve, reject) => {
-    const transport = target.protocol === 'http:' ? http : https
+    const endpoint = forward ? proxyUrl : target
+    const transport = agent || endpoint.protocol === 'http:' ? http : https
+    const proxyAuth = forward && proxyUrl.username !== ''
+      ? 'Basic ' + Buffer.from(`${decodeURIComponent(proxyUrl.username)}:${decodeURIComponent(proxyUrl.password)}`).toString('base64')
+      : undefined
     const request = transport.request({
-      protocol: target.protocol,
-      hostname: target.hostname,
-      port: target.port || (target.protocol === 'http:' ? 80 : 443),
-      path: target.pathname + target.search,
+      hostname: endpoint.hostname,
+      port: endpoint.port || (endpoint.protocol === 'http:' ? 80 : 443),
+      path: forward ? target.href : target.pathname + target.search,
       method,
-      headers: body !== undefined ? { ...headers, 'content-length': Buffer.byteLength(body, 'utf8') } : headers,
+      agent: agent ?? (forward ? false : undefined),
+      headers: {
+        ...headers,
+        ...proxyUrl ? { host: target.host } : {},
+        ...proxyAuth ? { 'proxy-authorization': proxyAuth } : {},
+        ...body === undefined ? {} : { 'content-length': Buffer.byteLength(body, 'utf8') },
+      },
     }, response => {
       resolve({
         ok: response.statusCode >= 200 && response.statusCode < 300,
@@ -232,7 +225,7 @@ async function laneFetch(url, { method = 'GET', headers = {}, body = undefined, 
       })
     })
     request.on('error', reject)
-    const abort = () => request.destroy(new Error('The operation was aborted'))
+    const abort = () => request.destroy(new UpstreamError('request aborted', CODE.aborted))
     signal?.addEventListener('abort', abort, { once: true })
     request.on('close', () => signal?.removeEventListener?.('abort', abort))
     if (body !== undefined) request.write(body, 'utf8')

@@ -628,7 +628,7 @@ function failOnce(res, error) {
  * Connect to `upstream` through `outlet` and return a socket ready for plain
  * http framing — already TLS-wrapped when the target is https.
  */
-async function openTunnel(upstream, outlet, onSocket) {
+export async function openTunnel(upstream, outlet, onSocket) {
   const isTls = upstream.protocol === 'https:'
   const host = upstream.hostname
   const port = Number(upstream.port) || (isTls ? 443 : 80)
