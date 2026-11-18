@@ -20,6 +20,7 @@
     "./locale/*.json": "./locale/*.json"
   },
   "scripts": {
+    "pack:scoped": "node scripts/pack-scoped-npm.mjs",
     "pack:standalone": "node scripts/pack-standalone.mjs",
     "test:package": "node scripts/standalone-package-test.mjs",
     "start:standalone": "node packages/standalone/cli.mjs",
