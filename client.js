@@ -7,8 +7,12 @@
  *      forward listener and the plugin's own switches;
  *   2. a first-run announcement (`settings.onboarding`) that is versioned, so
  *      bumping the copy re-announces once and never nags again;
- *   3. nothing else — no shadowing of the stock model picker, whose grouping by
- *      provider route is exactly the mechanism this plugin uses for its tag.
+ *   3. a state dot on the composer's model label (`conversation.input.model.label`)
+ *      so the free models in the stock picker say whether they answer from this
+ *      machine before a turn is spent on them; the picker's own grouping by
+ *      provider route is left exactly as it is, only the name gains the dot and,
+ *      when the state is not plainly `available`, a short state word;
+ *   4. nothing else — the picker itself is never shadowed or re-implemented.
  *
  * Data is read over the plugin's own same-origin `/api/our-free-model/*` routes
  * rather than a typed Remote binding, because those routes are served by the same
@@ -3082,6 +3086,14 @@ window.__ModuleLoader__.load({
 .ofm_fbseg:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
 .ofm_fbseg:disabled{cursor:default;opacity:.6}
 .ofm_fbseg:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
+/* 选择器行内的实测状态：圆点常驻，状态文字只在非「可用」时出现，长名称先截断 */
+.ofm_modeltag{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%}
+.ofm_modeldot{width:6px;height:6px;border-radius:999px;flex:none;background:var(--dsw-alias-state-success-primary)}
+.ofm_modeldot.region-blocked{background:var(--dsw-alias-state-warning-primary,#f0a441)}
+.ofm_modeldot.throttled,.ofm_modeldot.unavailable{background:var(--dsw-alias-state-error-primary)}
+.ofm_modeldot.unknown{background:var(--dsw-alias-label-tertiary);opacity:.55}
+.ofm_modelname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofm_modelstate{flex:none;font-size:11px;color:var(--dsw-alias-label-tertiary)}
 `
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -8907,6 +8919,86 @@ window.__ModuleLoader__.load({
         h('ul', null, list(t, ['ann.u1', 'ann.u2', 'ann.u3', 'ann.u4'])))
     }
 
+    // ── composer label: measured state next to the model name ────────────────
+    // The stock picker groups by provider route and prints the bare name, so a
+    // throttled or never-probed free model looks exactly like a healthy one
+    // until a turn is wasted on it. One shared `/summary` snapshot — cached on a
+    // TTL instead of fetched per row — lets the label repeat what the roster
+    // already knows, and every model that is not ours keeps the plain name.
+    const LABEL_TTL = 60_000
+    const labelCache = { at: 0, index: null, pending: null }
+
+    function labelIndex(payload) {
+      const index = new Map()
+      for (const entry of payload?.catalog ?? []) {
+        if (entry === null || typeof entry !== 'object') continue
+        if (typeof entry.id === 'string') index.set(entry.id, entry)
+        if (typeof entry.name === 'string') index.set(`name:${entry.name}`, entry)
+      }
+      return index
+    }
+
+    function composerIndex() {
+      if (labelCache.index !== null && Date.now() - labelCache.at < LABEL_TTL) return Promise.resolve(labelCache.index)
+      if (labelCache.pending !== null) return labelCache.pending
+      labelCache.pending = api('/summary')
+        .then(payload => {
+          labelCache.index = labelIndex(payload)
+          labelCache.at = Date.now()
+          return labelCache.index
+        })
+        .catch(error => {
+          // A flaky probe round must not blank what was right a minute ago:
+          // keep the last good snapshot and retry on the next mount.
+          labelCache.at = Date.now()
+          throw error
+        })
+        .finally(() => { labelCache.pending = null })
+      return labelCache.pending
+    }
+
+    function labelLookup(index, model) {
+      if (index === null || model === null || model === undefined) return undefined
+      if (typeof model.id === 'string') {
+        const hit = index.get(model.id)
+        if (hit !== undefined) return hit
+        const bare = model.id.slice(model.id.lastIndexOf('/') + 1)
+        if (bare !== '' && index.has(bare)) return index.get(bare)
+      }
+      return typeof model.name === 'string' ? index.get(`name:${model.name}`) : undefined
+    }
+
+    function ModelLabel(props) {
+      const { model, t: translate } = props
+      const [index, setIndex] = useState(labelCache.index)
+      useEffect(() => {
+        if (labelCache.index !== null && Date.now() - labelCache.at < LABEL_TTL) {
+          setIndex(labelCache.index)
+          return
+        }
+        let alive = true
+        composerIndex().then(next => { if (alive) setIndex(next) }, () => { /* keep the bare name */ })
+        return () => { alive = false }
+      }, [])
+      const entry = labelLookup(index, model)
+      const name = typeof model?.name === 'string' && model.name !== '' ? model.name : entry?.name ?? ''
+      if (entry === undefined) return h(Fragment, null, name)
+      // Listing-only rows never ran a turn here, so the roster calls them unprobed
+      // too; the label must not claim more than the roster does.
+      const listed = entry.availabilitySource === 'listing'
+      const state = listed ? 'unknown' : (entry.availability ?? 'unknown')
+      const hint = listed ? 'hint.listed'
+        : state === 'region-blocked' ? 'hint.region'
+          : state === 'unknown' ? 'hint.unknown'
+            : state === 'unavailable' ? 'hint.hidden'
+              : undefined
+      const title = hint === undefined ? translate(`state.${state}`) : `${translate(`state.${state}`)} · ${translate(hint)}`
+      return h('span', { className: 'ofm_modeltag', title },
+        h('span', { className: `ofm_modeldot ${state}` }),
+        h('span', { className: 'ofm_modelname' }, name),
+        state === 'available' ? null : h('span', { className: 'ofm_modelstate' }, translate(`state.${state}`)))
+    }
+
     // ── registration ──────────────────────────────────────────────────────────
     // The shell mirrors the active language onto <html lang>, so a render-time
     // read survives a language switch without owning a subscription.
@@ -9108,6 +9200,14 @@ window.__ModuleLoader__.load({
         order: -50,
         locale: NS,
       }, props => h(AnnouncementGate, { ...props, t: Object.assign(x => t(x), { locale: localeTag(ctx) }) })))
+
+      // `conversation.input.model.label` is a `single` child slot: registering
+      // here replaces the bare-name fallback for every model, so the component
+      // itself has to render the name untouched when the model is not ours.
+      ctx.slots.inject('conversation.input.model.label', () => ctx.slots.register({
+        name: 'conversation.input.model.label',
+        locale: NS,
+      }, props => h(ModelLabel, { ...props, t })))
     }
     /**
      * Owns the announcement's readiness.
