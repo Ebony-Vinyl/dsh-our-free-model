@@ -1,7 +1,7 @@
 {
   "version": "2.8.6",
   "base": "../",
-  "publishedAt": "2026-11-18T00:01:59.038Z",
+  "publishedAt": "2026-11-18T02:23:09.505Z",
   "notes": "重写请求适配、工具输出压缩、本地应答和失败分类，重建供应商目录并保留旧ID及配置。历史模型可能退役或被上游回落，不自动换模型。社区桥需单独迁移；详见2.8.6说明。",
   "files": [
     {
@@ -31,8 +31,8 @@
     },
     {
       "path": "index.js",
-      "size": 142965,
-      "sha256": "2de88e911c9e8317c4dd38232471c03c1f118336e080cf87b8b70992016ffdf9"
+      "size": 143309,
+      "sha256": "d460f03f7fef4183174108734b7036c203b1886bd63be799bc5c7059817797df"
     },
     {
       "path": "LICENSE",
@@ -405,5 +405,5 @@
       "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ],
-  "signature": "FXhAdHBoFBFhOUTkfnq596U7dQSMPnZzWfVdk8nelTLZCtJueriec1dY5lOEQqeGS6ZSHnxCT8d0E/006PnfCA=="
+  "signature": "V/ltDWrajiHViF5rSgc3eO6t7tqUuls7lVP0K93xHMp1SgLOn4LwFSxpRsbzDP0lVWPAp83XHmBNjJFXjO3WCw=="
 }
