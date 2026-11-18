@@ -39,8 +39,7 @@
  *   RATE_LIMIT_PER_DAY   per-IP per-day cap, default 1000, 0 = off
  *   CONCURRENCY_PER_IP   per-IP in-flight chat turns, default 5, 0 = off
  *   POOL_SIZE            optional. The real provisioned account count for the
- *                        public /pool snapshot; when unset the snapshot derives
- *                        capacity from the repo's stars (× 1.5)
+ *                        public /pool snapshot
  *   POOL_PRESSURE_BUSY   optional. In-flight chat turns at which the /pool
  *                        snapshot reports "busy" (default 30, 0 = off)
  *   POOL_PRESSURE_OVER   optional. In-flight turns at which it reports
@@ -56,24 +55,10 @@
  *   LOG_SALT             optional salt for the IP hash in log lines (default:
  *                        derived from the accepted secrets)
  *
- * GitHub authorization gate (see auth-github.mjs for the whole flow):
- *
- *   GITHUB_CLIENT_ID     OAuth app id. Together with the secret below this
- *   GITHUB_CLIENT_SECRET enables the gate; either missing = auth routes answer
- *                        "not configured" and (if enforcement is on) the lane
- *                        refuses every chat turn.
- *   REQUIRE_STAR_REPO    repo a user must have starred (default
- *                        Ebony-Vinyl/dsh-our-free-model)
- *   REQUIRE_USER_TOKEN   "1" = chat turns require a per-user token issued only
- *                        after GitHub login + star. Default 0: the compatibility
- *                        window — tokens are tracked, nothing is refused.
- *                        Flipping this flag is the entire cutover.
- *   STAR_RECHECK_HOURS   star re-check window, default 12; a removed star ends
- *                        access at the next sweep. GitHub being unreachable
- *                        keeps the last verdict (never takes access away).
- *   PUBLIC_ORIGIN        public base URL used to build the OAuth callback
- *                        (default: derived from the request's forwarded headers)
- *   USER_STORE_KEY       key for users.json encryption; defaults to the first
+ * NOTE: the GitHub authorization gate is gone. A chat turn needs the lane
+ * signature only; /auth/*, REQUIRE_STAR_REPO, REQUIRE_USER_TOKEN,
+ * STAR_RECHECK_HOURS and USER_STORE_KEY no longer exist. /pool reports the
+ * provisioned POOL_SIZE, never a number derived from the repo's stars.
  *                        signing secret when unset
  *   USER_STORE_PATH      users.json path, default ./users.json next to this file
  *   TOKEN_RATE_LIMIT_PER_MINUTE / TOKEN_RATE_LIMIT_PER_DAY / TOKEN_CONCURRENCY_PER_USER
@@ -90,7 +75,6 @@ import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import perfHooks from 'node:perf_hooks'
 import gateway from './worker.js'
-import { createAuthGate } from './auth-github.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -320,12 +304,10 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
   }
   const inflight = new Map()
 
-  // ── GitHub authorization gate + per-account ceilings ────────────────────────
-  // The gate is the lane's real door (see auth-github.mjs); the ceilings below
-  // bound one account however many IPs a shared token travels from.
-  const auth = createAuthGate(env, { storePath: env.USER_STORE_PATH || path.join(here, 'users.json'), fetchImpl: options.authFetch })
-  const tokenMinute = buildRateLimiter(Number.parseInt(env.TOKEN_RATE_LIMIT_PER_MINUTE ?? String(perMinute), 10), 60_000)
-  const tokenDay = buildRateLimiter(Number.parseInt(env.TOKEN_RATE_LIMIT_PER_DAY ?? String(perDay), 10), DAY_MS)
+  // ── per-account ceilings ────────────────────────────────────────────────────
+  // The ceilings below bound one account however many IPs a shared token
+  // travels from. There is no login gate: a chat turn needs the lane signature
+  // and nothing else.
   const tokenConcLimit = (() => { const n = Number.parseInt(env.TOKEN_CONCURRENCY_PER_USER ?? String(concLimit), 10); return Number.isFinite(n) ? n : concLimit })()
   const tokenInflight = new Map()
 
@@ -342,7 +324,6 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
   // "busy"/"overloaded" when the event loop itself is saturating — a setting
   // page showing a calm pool while the box is dying is worse than none.
   const poolSizeOverride = Number.parseInt(env.POOL_SIZE ?? '', 10)
-  const starsOverride = Number.parseInt(env.GITHUB_STARS_OVERRIDE ?? '', 10)
   const pressureBusy = Math.max(0, Number.parseInt(env.POOL_PRESSURE_BUSY ?? '30', 10) || 0)
   const pressureOver = Math.max(0, Number.parseInt(env.POOL_PRESSURE_OVER ?? '80', 10) || 0)
   const loopDelay = perfHooks.monitorEventLoopDelay({ resolution: 20 })
@@ -360,51 +341,12 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
     loopDelay.reset()
   }, 5_000)
   loopSampler.unref?.()
-  const starCache = { stars: Number.isFinite(starsOverride) && starsOverride >= 0 ? starsOverride : null, at: Number.isFinite(starsOverride) && starsOverride >= 0 ? Date.now() : 0 }
-  /** Earliest time the next GitHub attempt may happen after a failure. */
-  let starRetryAt = 0
-  const loadStars = async () => {
-    if (Number.isFinite(starsOverride) && starsOverride >= 0) return starsOverride
-    if (poolSizeOverride > 0) return starCache.stars
-    if (starCache.stars !== null && Date.now() - starCache.at < 30 * 60_000) return starCache.stars
-    // A failed attempt used to be retried by EVERY /pool call, which put a
-    // 5-second GitHub round trip on the snapshot each time the API was rate
-    // limiting this host — the snapshot must never wait on GitHub more than
-    // once per backoff window.
-    if (Date.now() < starRetryAt) return starCache.stars
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 3000)
-      timer.unref?.()
-      const impl = poolProbe.fetchImpl ?? fetch
-      const response = await impl('https://api.github.com/repos/Ebony-Vinyl/dsh-our-free-model', {
-        headers: { 'user-agent': 'eac-gateway', accept: 'application/vnd.github+json' },
-        signal: controller.signal,
-      })
-      clearTimeout(timer)
-      if (response.ok) {
-        const body = await response.json()
-        if (Number.isFinite(body?.stargazers_count)) starCache.stars = body.stargazers_count
-        starCache.at = Date.now()
-      } else {
-        starRetryAt = Date.now() + 120_000
-      }
-    } catch {
-      // Keep the last good count (null only until one fetch lands) and back
-      // off two minutes so a rate-limited or unreachable GitHub does not add
-      // latency to every snapshot call.
-      starRetryAt = Date.now() + 120_000
-    }
-    return starCache.stars
-  }
   const poolSnapshot = async () => {
-    let pool = null
-    let poolSource = 'unavailable'
-    if (poolSizeOverride > 0) { pool = poolSizeOverride; poolSource = 'configured' }
-    else {
-      const stars = await loadStars()
-      if (Number.isFinite(stars)) { pool = Math.round(stars * 1.5); poolSource = 'formula' }
-    }
+    // Capacity is what the operator actually provisions. The old snapshot
+    // inferred it from the repo's star count (stars × 1.5), so the gauge could
+    // report a pool nobody had provisioned.
+    const pool = poolSizeOverride > 0 ? poolSizeOverride : null
+    const poolSource = poolSizeOverride > 0 ? 'configured' : 'unavailable'
     const cutoff = Date.now() - DAY_MS
     let active24h = 0
     for (const row of Object.values(analytics.state.ips)) if ((row.last ?? 0) > cutoff) active24h += 1
@@ -414,7 +356,7 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
     const level = (pressureOver > 0 && (inFlight >= pressureOver || (loopMs !== null && loopMs >= 300))) ? 'over'
       : (pressureBusy > 0 && (inFlight >= pressureBusy || (loopMs !== null && loopMs >= 100))) ? 'busy'
         : 'ok'
-    return { ok: true, stars: starCache.stars, pool, poolSource, active24h, inflight: inFlight, concurrencyPerIp: concLimit, level, loopDelayMs: loopMs, ts: Date.now() }
+    return { ok: true, pool, poolSource, active24h, inflight: inFlight, concurrencyPerIp: concLimit, level, loopDelayMs: loopMs, ts: Date.now() }
   }
 
   analytics.load(statsPath)
@@ -469,7 +411,7 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
         if (!timingSafeEqual(String(url.searchParams.get('t') ?? req.headers['x-admin-token'] ?? ''), adminToken)) {
           return json(res, 401, { error: 'bad admin token' })
         }
-        return json(res, 200, { ...analytics.snapshot(), auth: auth.stats() })
+        return json(res, 200, analytics.snapshot())
       }
       if (url.pathname === prefix + '/stats') {
         // The page itself is public: it self-gates on the token (prompted once
@@ -477,14 +419,6 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
         // for data, which is where the real check lives.
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
         return res.end(DASHBOARD_HTML())
-      }
-
-      // ── GitHub authorization surface (start / callback / poll / status) ────
-      // Reached without the lane signature on purpose: a caller who has not
-      // logged in yet has nothing to sign with, and the token itself is the
-      // credential these routes speak.
-      if (url.pathname === prefix + '/auth' || url.pathname.startsWith(prefix + '/auth/')) {
-        return void auth.handle(req, res, url)
       }
 
       // ── public pool snapshot (aggregate numbers only) ─────────────────────
@@ -535,33 +469,9 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
         let model = null
         if (isChat) { try { model = String(JSON.parse(bodyText).model ?? '') || null } catch { /* malformed body is the caller's fault */ } }
 
-        // ── GitHub authorization gate on chat turns ───────────────────────
-        // The listing stays open so the plugin can show the lane (locked)
-        // before anyone logs in; the turn is where the per-user token — and
-        // behind it a live star verdict — is required. `check` reads the
-        // stored verdict and never waits on GitHub.
-        let accountKey = null
-        if (isChat) {
-          const verdict = auth.check(String(req.headers['x-ofm-user'] ?? ''))
-          if (verdict.ok !== true) {
-            analytics.record({ hash: ipHash, chat: true, status: 401, tokensIn: 0, tokensOut: 0, model, rejected: true })
-            const message = verdict.reason === 'unstarred'
-              ? `GitHub 授权无效：请先 star ${auth.stats().repo}，再在插件设置页重新登录（${verdict.detail ?? 'star removed'}）`
-              : '需要 GitHub 授权：请在插件设置页用 GitHub 登录，并 star 仓库后使用 EAC 模型'
-            return json(res, 401, { error: { message, type: 'AuthorizationRequired', reason: verdict.reason ?? 'missing' } })
-          }
-          if (typeof verdict.githubId === 'string' && verdict.githubId !== '') {
-            accountKey = analytics.ipHash(`account:${verdict.githubId}`, logSalt)
-            for (const limiter of [tokenMinute, tokenDay]) {
-              if (limiter === undefined) continue
-              const limit = await limiter.limit({ key: accountKey })
-              if (limit.success === false) {
-                analytics.record({ hash: ipHash, chat: true, status: 429, tokensIn: 0, tokensOut: 0, model, rejected: true })
-                return json(res, 429, { error: { message: 'rate limit reached for this account; retry later' } })
-              }
-            }
-          }
-        }
+        // No login gate: the lane signature is the whole door. `accountKey`
+        // stays null so the per-account ceilings below simply do not engage.
+        const accountKey = null
 
         // A caller that left while the limiters were still answering must not
         // take a slot it will never hand back.
@@ -709,10 +619,6 @@ export function createGatewayServer(hostEnv = {}, options = {}) {
     req.on('error', () => res.destroy())
   })
 
-  // The authorization gate owns a recheck timer and a users.json handle; the
-  // server carries it so a test can close both, and so callers can read the
-  // same counts /stats-data reports.
-  server.authGate = auth
   server.once('close', () => {
     clearInterval(loopSampler)
     loopDelay.disable()
