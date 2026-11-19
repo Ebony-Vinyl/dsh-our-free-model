@@ -374,6 +374,8 @@ export interface StartedGeminiLoginFlow {
   result: Promise<GeminiCredential>
   /** 关闭回调服务器；**幂等**。 */
   close: () => Promise<void>
+  /** 手动提交回调 URL / 查询串 / 授权码（用于无法直接回调到本机的场景）。 */
+  submit: (raw: string) => { message: string }
 }
 
 /** `startGeminiOAuthFlow` 的选项。 */
@@ -467,6 +469,14 @@ export async function startGeminiOAuthFlow(
     rejectCode = reject
   })
 
+  let delivered = false
+  const deliverCode = (code: string): boolean => {
+    if (delivered) return false
+    delivered = true
+    resolveCode(code)
+    return true
+  }
+
   const handler: CallbackHandler = (req, res) => {
     const url = new URL(req.url ?? '/', `http://${GEMINI_REDIRECT_HOST}`)
     if (url.pathname !== GEMINI_CALLBACK_PATH) {
@@ -492,7 +502,49 @@ export async function startGeminiOAuthFlow(
       return
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(GEMINI_CALLBACK_HTML)
-    resolveCode(code)
+    deliverCode(code)
+  }
+
+  const submitCallback = (raw: string): { message: string } => {
+    const text = typeof raw === 'string' ? raw.trim() : ''
+    if (text === '') throw new Error('没有收到回调链接或授权码')
+    let code = ''
+    let callbackState: string | null = null
+    let failure: string | null = null
+    let description = ''
+    const readParams = (params: URLSearchParams) => {
+      code = params.get('code') ?? ''
+      callbackState = params.get('state')
+      failure = params.get('error')
+      description = params.get('error_description') ?? ''
+    }
+    if (/^https?:\/\//i.test(text)) {
+      let parsed: URL
+      try {
+        parsed = new URL(text)
+      } catch {
+        throw new Error('回调链接无法解析，请复制浏览器地址栏里的完整 URL')
+      }
+      readParams(parsed.searchParams)
+    } else if (text.includes('code=') || text.includes('state=')) {
+      try {
+        readParams(new URLSearchParams(text.startsWith('?') ? text.slice(1) : text))
+      } catch {
+        throw new Error('回调参数无法解析，请粘贴完整链接')
+      }
+    } else {
+      code = text
+    }
+    if (failure !== null && failure !== '') {
+      rejectCode(new GeminiLoginCancelledError(description === '' ? failure : `${failure}: ${description}`))
+      throw new Error('Google 返回授权失败：' + failure + (description === '' ? '' : ' — ' + description))
+    }
+    if (callbackState !== null && callbackState !== state) {
+      throw new Error('回调链接里的 state 与当前登录会话不一致（多半是复制了上一次登录的旧链接），请回面板重新点「添加账号」后再授权')
+    }
+    if (code === '') throw new Error('链接里没有 code 参数，也不是授权码')
+    if (!deliverCode(code)) throw new Error('这次登录已经提交过回调，请回面板重新点「添加账号」')
+    return { message: '已提交回调链接，正在用授权码换 token' }
   }
 
   const preferred = options.callbackPort ?? 0
@@ -541,5 +593,5 @@ export async function startGeminiOAuthFlow(
   // 那一段窗口里 Node 会把它当成未处理拒绝并打印告警。
   result.catch(() => {}).finally(() => { void close() })
 
-  return { loginUrl, result, close }
+  return { loginUrl, result, close, submit: submitCallback }
 }
