@@ -548,6 +548,23 @@ window.__ModuleLoader__.load({
         'eac.tankLabel': '协付池压力',
         'chan.title': 'EAC router',
         'chan.sub': '账号渠道',
+        'chan.name.qodercn': 'Qoder 中国版',
+        'chan.org.youdao': '有道',
+        'chan.org.alibaba': '阿里系',
+        'chan.org.bytedance': '字节',
+        'chan.org.iflytek': '讯飞',
+        'chan.org.sensetime': '商汤',
+        'chan.org.zhipu': '智谱',
+        'chan.note.lobsterai': '龙虾 · 每日签到积分',
+        'chan.note.qoder': '每日 100 Credits，加密推理端点',
+        'chan.note.qodercn': '中国版端点与模型池',
+        'chan.note.trae': '手机号登录',
+        'chan.note.cline': 'Cline 账号免费额度',
+        'chan.note.loomy': '微信扫码，或短信验证码备用',
+        'chan.note.raccoon': '手机号登录',
+        'chan.note.minimax': '设备码 + PKCE，每日签到',
+        'chan.note.zcode': '浏览器登录（需本机可开浏览器）',
+        'chan.note.gemini': '本地回调 OAuth 免费线',
         'chan.search': '搜索渠道、厂商或 ID',
         'chan.filterStatus': '连接状态',
         'chan.filterAll': '全部',
@@ -1016,7 +1033,7 @@ window.__ModuleLoader__.load({
         'tag.eacChannel': 'EAC lane · co-paid',
         'tag.new': 'NEW',
         'tag.newTitle': 'Just added: relayed to the EAC lane from OpenCode’s free tier.',
-        'tag.hot': '爆',
+        'tag.hot': 'HOT',
         'tag.hotTitle': 'One of the most requested free models right now.',
         'tag.fast': 'Fast',
         'tag.fastTitle': 'Quick first token and high throughput — good for long or back-to-back turns.',
@@ -1202,7 +1219,7 @@ window.__ModuleLoader__.load({
         'ann.p2': 'The roster follows upstream: models, context lengths and capabilities are re-fetched on every refresh.',
         'ann.p3': 'Honest capability claims: anything a probe cannot confirm stays hidden, and each effort level is a real output budget.',
         'ann.n1': 'Two new models are live on the EAC lane, relayed from OpenCode’s free tier: DeepSeek V4.1 Flash Free and GLM 5.3 Flash Free.',
-        'ann.n2': 'They lead the EAC models page, marked with a red NEW / 爆 badge and a “Fast” tag.',
+        'ann.n2': 'They lead the EAC models page, marked with a red NEW / HOT badge and a “Fast” tag.',
         'ann.n3': 'Both expose real thinking levels (Low / High / Max), and DeepSeek can also switch thinking off; the level goes to the upstream as-is, not as a prompt hint.',
         'ann.s1': 'Pick any model under the “Our Free Model” group in the composer’s model selector.',
         'ann.s2': 'For harder reasoning, open the Effort menu — it sends a real budget, not a prompt hint.',
@@ -1466,6 +1483,23 @@ window.__ModuleLoader__.load({
         'eac.tankLabel': 'Co-paid pool pressure',
         'chan.title': 'EAC router',
         'chan.sub': 'Account channels',
+        'chan.name.qodercn': 'Qoder China',
+        'chan.org.youdao': 'Youdao',
+        'chan.org.alibaba': 'Alibaba',
+        'chan.org.bytedance': 'ByteDance',
+        'chan.org.iflytek': 'iFlytek',
+        'chan.org.sensetime': 'SenseTime',
+        'chan.org.zhipu': 'Zhipu',
+        'chan.note.lobsterai': 'Lobster · daily check-in credits',
+        'chan.note.qoder': '100 Credits daily, encrypted inference endpoint',
+        'chan.note.qodercn': 'China endpoints and model pool',
+        'chan.note.trae': 'Phone number sign-in',
+        'chan.note.cline': 'Free quota with a Cline account',
+        'chan.note.loomy': 'Scan with WeChat, or use an SMS code',
+        'chan.note.raccoon': 'Phone number sign-in',
+        'chan.note.minimax': 'Device code + PKCE, daily check-in',
+        'chan.note.zcode': 'Browser sign-in (requires a local browser)',
+        'chan.note.gemini': 'Free OAuth lane with a local callback',
         'chan.search': 'Search channel, vendor or ID',
         'chan.filterStatus': 'Connection status',
         'chan.filterAll': 'All',
@@ -5278,6 +5312,23 @@ window.__ModuleLoader__.load({
       { id: 'gemini', name: 'Gemini', org: 'Google Code Assist', accent: '#4285F4', note: '本地回调 OAuth 免费线', login: 'browser' },
     ]
 
+    // Keep the shared provider records unchanged; translate only their display copy.
+    function channelDisplay(channel, t) {
+      switch (channel.id) {
+        case 'lobsterai': return { ...channel, org: t('chan.org.youdao'), note: t('chan.note.lobsterai') }
+        case 'qoder': return { ...channel, org: t('chan.org.alibaba'), note: t('chan.note.qoder') }
+        case 'qodercn': return { ...channel, name: t('chan.name.qodercn'), org: t('chan.org.alibaba'), note: t('chan.note.qodercn') }
+        case 'trae': return { ...channel, org: t('chan.org.bytedance'), note: t('chan.note.trae') }
+        case 'cline': return { ...channel, note: t('chan.note.cline') }
+        case 'loomy': return { ...channel, org: t('chan.org.iflytek'), note: t('chan.note.loomy') }
+        case 'raccoon': return { ...channel, org: t('chan.org.sensetime'), note: t('chan.note.raccoon') }
+        case 'minimax': return { ...channel, note: t('chan.note.minimax') }
+        case 'zcode': return { ...channel, org: t('chan.org.zhipu'), note: t('chan.note.zcode') }
+        case 'gemini': return { ...channel, note: t('chan.note.gemini') }
+        default: return channel
+      }
+    }
+
     /** 与现有 RPC 的能力对应：余额、每日领取及独立签到状态分别判断。 */
     const CHANNEL_CREDITS = {
       lobsterai: { claim: true },
@@ -5369,6 +5420,7 @@ window.__ModuleLoader__.load({
 
     function ChannelCard(props) {
       const { channel, status, rpc, t, onError, onChanged, compact = false, pending = false } = props
+      const display = channelDisplay(channel, t)
       const [open, setOpen] = useState(null)
       const [accounts, setAccounts] = useState(undefined)
       const [models, setModels] = useState(undefined)
@@ -5658,14 +5710,14 @@ window.__ModuleLoader__.load({
           h('span', { className: 'ofm_chanlogo', 'aria-hidden': 'true' },
             CHANNEL_ICONS[channel.id] !== undefined
               ? h('img', { src: CHANNEL_ICONS[channel.id], alt: '' })
-              : channel.name.slice(0, 2).toUpperCase()),
+              : display.name.slice(0, 2).toUpperCase()),
           h('span', { className: 'ofm_chanid' },
-            h('b', null, channel.name),
-            h('span', null, channel.org)),
+            h('b', null, display.name),
+            h('span', null, display.org)),
           h('span', { className: 'ofm_chanstate' },
             h('span', { className: `ofm_dot ${connected ? 'ok' : status?.closed === true ? 'err' : ''}` }),
             stateText)),
-        h('p', { className: 'ofm_note' }, channel.note),
+        h('p', { className: 'ofm_note' }, display.note),
         h('div', { className: 'ofm_chanmeta' },
           h('span', null, `${t('chan.meta.accounts')} `, h('b', null, `${enabledCount}/${accountsCount}`)),
           h('span', null, `${t('chan.meta.models')} `, h('b', null, modelsTotal === 0 ? '—' : `${modelsTotal - modelsOff}/${modelsTotal}`)),
@@ -5827,8 +5879,8 @@ window.__ModuleLoader__.load({
                 }, model.dead === true ? t('chan.model.restore') : model.disabled === true ? t('chan.model.on') : t('chan.model.off'))))))) : null) : null)
 
       const modal = login === null ? null : h('div', { className: 'ofm_scrim' },
-        h('div', { className: 'ofm_modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('chan.login.title').replace('{name}', channel.name) },
-          h('div', { className: 'ofm_modalhead' }, t('chan.login.title').replace('{name}', channel.name)),
+        h('div', { className: 'ofm_modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('chan.login.title').replace('{name}', display.name) },
+          h('div', { className: 'ofm_modalhead' }, t('chan.login.title').replace('{name}', display.name)),
           h('div', { className: 'ofm_modalbody ofm_loginbody' },
             h('div', { className: 'ofm_loginstep' }, h('b', null, '1'), h('span', null, t('chan.login.step1'))),
             h('div', { className: 'ofm_loginstep' }, h('b', null, '2'), h('span', null, t('chan.login.step2'))),
@@ -5919,16 +5971,18 @@ window.__ModuleLoader__.load({
 
       const onError = useCallback((channel, err) => {
         const reason = String(err?.message ?? err)
-        showToast({ title: t('chan.error').replace('{reason}', reason).slice(0, 120), body: channel.name, tone: 'warn' })
+        showToast({ title: t('chan.error').replace('{reason}', reason).slice(0, 120), body: channelDisplay(channel, t).name, tone: 'warn' })
       }, [t])
 
       const stateOf = channel => !available ? 'disconnected' : statuses?.[channel.id]?.closed === true ? 'closed'
         : (statuses?.[channel.id]?.accounts?.enabled ?? 0) > 0 ? 'connected' : 'disconnected'
       const connected = CHANNEL_PROVIDERS.filter(row => stateOf(row) === 'connected').length
       const needle = query.trim().toLowerCase()
-      const rows = CHANNEL_PROVIDERS.filter(channel =>
-        (filter === '' || (statuses !== undefined || !available) && stateOf(channel) === filter)
-        && (needle === '' || `${channel.id} ${channel.name} ${channel.org}`.toLowerCase().includes(needle)))
+      const rows = CHANNEL_PROVIDERS.filter(channel => {
+        const display = channelDisplay(channel, t)
+        return (filter === '' || (statuses !== undefined || !available) && stateOf(channel) === filter)
+          && (needle === '' || `${channel.id} ${channel.name} ${channel.org} ${display.name} ${display.org}`.toLowerCase().includes(needle))
+      })
       const failed = !ready && pack.state === 'failed'
 
       return h('div', { className: 'ofm_page' },
