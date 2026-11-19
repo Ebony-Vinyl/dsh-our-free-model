@@ -589,6 +589,8 @@ window.__ModuleLoader__.load({
         'chan.login.expired': '等待超时，请重新发起登录。',
         'chan.login.done': '已接入：{login}',
         'chan.login.failed': '登录未完成：{reason}',
+        'chan.login.manualHint': '如果浏览器跳转后显示「无法访问 localhost」：把地址栏里那条完整链接粘贴到这里，点提交即可完成登录（云端/容器部署用）。',
+        'chan.login.manualSubmit': '提交回调链接',
         'chan.test.ok': '连接正常（{ms} ms）',
         'chan.test.failed': '测试失败：{reason}',
         'chan.claim.result': '已领取 {count} 个账号，共 {credit} 积分。',
@@ -1507,6 +1509,8 @@ window.__ModuleLoader__.load({
         'chan.login.expired': 'Timed out — please start the sign-in again.',
         'chan.login.done': 'Connected: {login}',
         'chan.login.failed': 'Sign-in did not complete: {reason}',
+        'chan.login.manualHint': 'If the browser says it cannot reach localhost: paste the full callback URL from the address bar here and submit (for remote/container deployments).',
+        'chan.login.manualSubmit': 'Submit callback URL',
         'chan.test.ok': 'Connection healthy ({ms} ms)',
         'chan.test.failed': 'Test failed: {reason}',
         'chan.claim.result': 'Claimed for {count} account(s), {credit} credits in total.',
@@ -5379,6 +5383,9 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [notice, setNotice] = useState('')
       const [login, setLogin] = useState(null)
+      const [manualUrl, setManualUrl] = useState('')
+      const [manualBusy, setManualBusy] = useState(false)
+      const [manualError, setManualError] = useState('')
       const modelBatchPending = useRef(false)
       const [balanceError, setBalanceError] = useState('')
       const [balanceLoading, setBalanceLoading] = useState(false)
@@ -5565,6 +5572,17 @@ window.__ModuleLoader__.load({
             setBusy('')
           }
         }
+      }
+
+      const submitManualCallback = async () => {
+        if (login === null || manualUrl.trim() === '' || manualBusy) return
+        setManualBusy(true); setManualError('')
+        try {
+          await rpc('account.completeLogin', { accountId: login.accountId, url: manualUrl.trim() })
+          setManualUrl('')
+        } catch (error) {
+          setManualError(String(error?.message ?? error))
+        } finally { setManualBusy(false) }
       }
 
       // Poll the placeholder until its credential lands. Ten minutes matches the
@@ -5832,6 +5850,23 @@ window.__ModuleLoader__.load({
           h('div', { className: 'ofm_modalbody ofm_loginbody' },
             h('div', { className: 'ofm_loginstep' }, h('b', null, '1'), h('span', null, t('chan.login.step1'))),
             h('div', { className: 'ofm_loginstep' }, h('b', null, '2'), h('span', null, t('chan.login.step2'))),
+            channel.id === 'gemini' ? h('div', { style: { display: 'grid', gap: 8, margin: '4px 0 10px' } },
+              h('p', { className: 'ofm_note' }, t('chan.login.manualHint')),
+              h('input', {
+                className: 'ofm_input',
+                value: manualUrl,
+                placeholder: 'http://localhost:42749/oauth-callback?code=...&state=...',
+                spellCheck: false,
+                onChange: e => setManualUrl(e.target.value),
+              }),
+              h('button', {
+                type: 'button', className: 'ofm_btn ghost',
+                disabled: manualBusy || manualUrl.trim() === '',
+                'aria-busy': manualBusy ? 'true' : undefined,
+                onClick: () => void submitManualCallback(),
+              }, manualBusy ? '…' : t('chan.login.manualSubmit')),
+              manualError === '' ? null : h('p', { className: 'ofm_note', role: 'alert' }, manualError),
+            ) : null,
             login.url === '' ? null : h('code', { className: 'ofm_mono', style: { wordBreak: 'break-all', whiteSpace: 'pre-wrap' } }, login.url),
             h('p', { className: 'ofm_note ofm_scanline' }, t('chan.login.waiting'))),
           h('div', { className: 'ofm_modalfoot' },
