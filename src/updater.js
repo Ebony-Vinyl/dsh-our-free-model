@@ -436,6 +436,20 @@ function sha256File(file) {
 const STAGE_ATTEMPTS = 3
 const STAGE_BACKOFF_MS = 700
 
+// How long one file may take before the attempt is abandoned. A flat window
+// serialises to failure on the vendored engine binary: a 30 MB file on a
+// mainland-CN edge measured ~437 KB/s, so a 30 s window aborts every attempt
+// and the update never stages (issue #786). Scale by size with the configured
+// budget as the floor and a ceiling that still bounds a hung socket.
+const STAGE_MIN_BYTES_PER_SEC = 64 * 1024
+const STAGE_MAX_TIMEOUT_MS = 10 * 60 * 1000
+
+export function stageTimeoutFor(size, baseTimeoutMs) {
+  const bytes = Number.isFinite(size) && size > 0 ? size : 0
+  const scaled = Math.ceil((bytes / STAGE_MIN_BYTES_PER_SEC) * 1000)
+  return Math.max(baseTimeoutMs, Math.min(STAGE_MAX_TIMEOUT_MS, scaled))
+}
+
 /** A CN egress to the CDN drops connections regularly, and a one-shot staging
  * turned one flaky second into a whole failed upgrade ("fetch failed" on a
  * random file). Transport-class failures retry with a short backoff; integrity
@@ -514,7 +528,7 @@ export async function stageRelease({ manifest, manifestUrl, stageDir, fetchImpl 
       let lastError
       for (let attempt = 1; attempt <= STAGE_ATTEMPTS; attempt += 1) {
         try {
-          const signal = AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined
+          const signal = AbortSignal.timeout ? AbortSignal.timeout(stageTimeoutFor(file.size, timeoutMs)) : undefined
           let body
           for (let mirror = 0; mirror < sources.length; mirror++) {
             try {
@@ -942,7 +956,7 @@ function modulesHoistsPackage(text, name) {
 /** The refusal `apply` raises for a package-manager-owned copy. Carries
  *  `statusCode: 409`, the settings API's refusal convention for an install
  *  whose bytes another writer owns (see index.js `MANAGED_MESSAGE`). */
-const PACKAGE_MANAGER_REFUSAL = 'this installation is owned by pnpm; the in-app upgrade would be a second writer and can corrupt the copy — update it with pnpm (or reinstall from a release)'
+const PACKAGE_MANAGER_REFUSAL = 'this installation is owned by pnpm; the in-app upgrade would be a second writer and can corrupt the copy — update it with pnpm, or set distribution: managed in the profile so pnpm stays the only writer, or reinstall from a release; a relative link: dependency keeps in-app upgrades safe'
 
 /**
  * The upgrade lifecycle. The optional activate callback lets the Host include
