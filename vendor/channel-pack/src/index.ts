@@ -67,6 +67,13 @@ import { primeOpencodeCapabilities, refreshOpencodeCapabilities } from './openco
 import { closeAllProxyDispatchers } from './opencode-proxy.js'
 import { createChannelFetch, type ChannelOutlet } from './channel-fetch.js'
 export { createChannelFetch, parseWindowsProxy, channelProxyBypassed } from './channel-fetch.js'
+// 国内直连：fake-ip 透明代理下用 DoH 真实 IP 绕过 DNS 劫持（见 domestic-direct.ts）。
+// `closeDomesticDispatcher` 单独 import：`export ... from` 不会把符号带进本文件作用域。
+import { closeDomesticDispatcher } from './domestic-direct.js'
+export {
+  isDomesticHost, isDomesticUrl, domesticDirectEnabled,
+  shouldUseDomesticDirect,
+} from './domestic-direct.js'
 import { execFile } from 'node:child_process'
 
 /**
@@ -247,7 +254,11 @@ export function makeReadImageRequest(ctx: Context) {
 
 export function apply(ctx: Context, config: { disableOpencode?: boolean; outlet?: ChannelOutlet } = {}): void {
   const network = createChannelFetch({ outlet: config.outlet })
-  ctx.effect(() => () => { void network.close() })
+  ctx.effect(() => () => {
+    void network.close()
+    // 国内直连的连接池是模块级单例，卸载时一并释放，避免热重载后残留 socket。
+    void closeDomesticDispatcher()
+  })
   // 本插件自带 Channel Pack 设置页，关闭 0.1.7 起由 Config schema 反渲染的自动表单
   // （老契约没有 configure()，静默跳过）。
   suppressAutoSettingsPage(ctx)
