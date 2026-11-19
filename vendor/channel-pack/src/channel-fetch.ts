@@ -5,6 +5,7 @@ import path from 'node:path'
 import { Dispatcher1Wrapper, type Dispatcher } from 'undici'
 import { normalizeProxy } from './opencode.js'
 import { createProxyDispatcher } from './opencode-proxy.js'
+import { domesticDirectFetch, shouldUseDomesticDirect } from './domestic-direct.js'
 
 export interface ChannelOutlet {
   active: () => boolean
@@ -155,6 +156,16 @@ export function createChannelFetch(options: ChannelFetchOptions = {}): { fetch: 
       }
       if (!address) {
         if (route !== '直连') route = '直连，代理例外或当前协议无代理'
+        // fake-ip 透明代理会让「直连」也落到伪地址上（DNS 被劫持），于是国内渠道
+        // 被送往海外节点、TLS 握手被重置。此时改用 DoH 取到的真实 IP 直连。
+        //
+        // ⚠️ 只在这条**本已判定直连**的分支里接管，因此不影响上面任何一级代理
+        // 选择（插件出口 > 环境代理 > Windows 系统代理 全部优先）。海外域名与
+        // 显式指定 dispatcher 的请求都由 `shouldUseDomesticDirect` 排除。
+        if (shouldUseDomesticDirect(input, init)) {
+          route = '国内直连（DoH 解析真实 IP）'
+          return await domesticDirectFetch(input, init)
+        }
         return await fetchImpl(input, init)
       }
       // 环境代理允许省略 HTTP(S) 的默认端口；账号表单的解析器要求显式端口。
