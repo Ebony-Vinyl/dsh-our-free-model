@@ -251,14 +251,30 @@ async function* streamLines(source, signal, timeoutMs, translate) {
 }
 
 /**
+ * Protocol identifiers, not credential carriers. A tool's `name` is what the
+ * host matches against its registry, so redacting it turns a valid call into
+ * `unknown tool` — the exact symptom #877 reported.
+ */
+const IDENTITY_KEYS = new Set(['type', 'blockType', 'kind', 'name', 'id', 'toolName', 'callId', 'toolCallId'])
+
+/**
  * Match only actual credential prefixes. The trie is linear in credential
  * length; each block retains at most one prefix, never its ordinary output.
- * At a block boundary an unresolved prefix is masked conservatively so that
- * concatenating different blocks or content types cannot reconstruct a secret.
+ *
+ * A trailing unfinished prefix is *held* across chunks so a secret split over
+ * a boundary is still caught. At a block boundary the fragment is masked so
+ * that two blocks cannot concatenate back into a secret — except when it is a
+ * single character, which carries no secret material: the attacker would still
+ * have to guess every remaining character. Releasing that one character is
+ * what fixes issue #877. Every magpie gateway key begins with `s`, so the trie
+ * root had a single child and every ordinary word ending in `s` was treated as
+ * the start of a key: `list_agents` became `list_agent[redacted]` (failing
+ * every tool call with `unknown tool`) and any message ending in `s` lost it.
  */
 function credentialRedactor(secrets, deliver) {
   const root = { children: new Map(), terminal: false }
   for (const secret of new Set(secrets)) {
+    if (typeof secret !== 'string' || secret === '') continue
     let node = root
     for (let i = 0; i < secret.length; i++) {
       const char = secret[i]
@@ -276,8 +292,14 @@ function credentialRedactor(secrets, deliver) {
         if (node.terminal) matched = end - position
       }
       if (end === text.length && node.children.size && end > position) {
-        if (final) return { output: output + '[redacted]', pending: '' }
-        return { output, pending: text.slice(position) }
+        // The walk reached the end of the text with a prefix still open, so a
+        // longer secret may continue in the next chunk. This takes priority
+        // over `matched`: stopping at the shorter terminal would emit the rest
+        // of the longer secret as ordinary text.
+        const held = text.slice(position)
+        if (!final) return { output, pending: held }
+        output += held.length === 1 ? held : '[redacted]'
+        return { output, pending: '' }
       }
       if (matched) { output += '[redacted]'; position += matched }
       else { output += text[position++] }
@@ -285,7 +307,7 @@ function credentialRedactor(secrets, deliver) {
     return { output, pending: '' }
   }
   const clean = (value, key) => {
-    if (['type', 'blockType', 'kind'].includes(key)) return value
+    if (IDENTITY_KEYS.has(key)) return value
     if (typeof value === 'string') return scan(value, true).output
     if (Array.isArray(value)) return value.map(clean)
     if (object(value)) return Object.fromEntries(Object.entries(value).map(([name, child]) => [name, clean(child, name)]))

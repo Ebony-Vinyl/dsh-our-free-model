@@ -1,8 +1,8 @@
 {
-  "version": "2.8.6",
+  "version": "2.8.9",
   "base": "../",
-  "publishedAt": "2026-11-18T02:24:18.746Z",
-  "notes": "重写请求适配、工具输出压缩、本地应答和失败分类，重建供应商目录并保留旧ID及配置。历史模型可能退役或被上游回落，不自动换模型。社区桥需单独迁移；详见2.8.6说明。",
+  "publishedAt": "2026-11-20T15:50:50.254Z",
+  "notes": "",
   "files": [
     {
       "path": "adapter/dsh-llm.d.ts",
@@ -16,8 +16,8 @@
     },
     {
       "path": "client.js",
-      "size": 664102,
-      "sha256": "470ec4508f1e530f55d7d699ff87d0fcf8672c69bb58ea606fad5504bb087a06"
+      "size": 669417,
+      "sha256": "612bd656f19eaaf77450e20fba59ed44da50072b6a931a48925119cc93032b73"
     },
     {
       "path": "cordis.patch.yml",
@@ -52,7 +52,7 @@
     {
       "path": "package.json",
       "size": 5263,
-      "sha256": "83f3086d1c2292bdeaad13878bc8582b9434d3e2dd6515e6dd758fc05d18901c"
+      "sha256": "1f1f63c359f93e188147aa8d1c4fbc9da3ebbfb2a93f8764eb1d28647c210823"
     },
     {
       "path": "src/adapter.js",
@@ -76,8 +76,8 @@
     },
     {
       "path": "src/catalog.js",
-      "size": 44164,
-      "sha256": "3ff5e01a09c87e23e4fd815d180575094223350225aa2c1996c9da77a47169a5"
+      "size": 47063,
+      "sha256": "e0d0bb4e02244766364ed222a07f88c34807db021d788ad3de4c908f71cdfc05"
     },
     {
       "path": "src/chan-relay.js",
@@ -121,8 +121,8 @@
     },
     {
       "path": "src/eac.js",
-      "size": 18435,
-      "sha256": "846423f1316ef18da4c7f857a9f0033a9410deefd206df326b4e0701a0477e22"
+      "size": 19842,
+      "sha256": "da60cf3152345b67900173e8d720f748e605c79a705733ccfd3b6e1567bc2bbd"
     },
     {
       "path": "src/effort.js",
@@ -186,13 +186,13 @@
     },
     {
       "path": "src/feed.js",
-      "size": 24206,
-      "sha256": "dfa391089200fd5b0ea7605f83d2694b8b12715765a362da7155aceb7f7765c9"
+      "size": 25864,
+      "sha256": "3ffd96146d5cf675eac17febf425f48bf78b680f4eff130f9055e9ffe47a79f3"
     },
     {
       "path": "src/forward.js",
-      "size": 68667,
-      "sha256": "6f9205c503e3ff39da7a3be8163bc575afb8c528cd4e1b9f5263b750da93255f"
+      "size": 72486,
+      "sha256": "51b93c7c3f2037b6a2622e5245ac9de8d7419635d2be0dee9bc38a0046e71d80"
     },
     {
       "path": "src/gemini.js",
@@ -226,8 +226,8 @@
     },
     {
       "path": "src/magpie-engine.js",
-      "size": 58641,
-      "sha256": "37e4fe37a927793b04a8e6a8f4d242174d008d954cdda486fee2a3e275ec4dff"
+      "size": 59765,
+      "sha256": "469b1df4f8ac906be938b24875b82abc7286a5ee31c831f2837f1108d27e2261"
     },
     {
       "path": "src/magpie-models.js",
@@ -326,8 +326,8 @@
     },
     {
       "path": "src/subscription-completion.js",
-      "size": 25388,
-      "sha256": "0455d2b0572749636901ae1ae648683725187a9a0950db0d8865e30de50a16cf"
+      "size": 26662,
+      "sha256": "beeb0de181a1f2d778ca9abad1900f3d63b7530994e29210de87c7ffc5ea2ed6"
     },
     {
       "path": "src/subscriptions.js",
@@ -381,8 +381,8 @@
     },
     {
       "path": "vendor/channel-pack/pack.js",
-      "size": 2847715,
-      "sha256": "5cdc0fec92787eba99ae07490451fc60be8c795960ec41247c736ae790e58937"
+      "size": 2627512,
+      "sha256": "04b160ac4dc9b2fff7eb418668e473a269941ae5db4f736a301dbb01313bb597"
     },
     {
       "path": "vendor/channel-pack/qoder-auth-wasm.wasm",
@@ -405,5 +405,5 @@
       "sha256": "0d4659c87afb6fa01dd291ae32e1d759cd248126eb95e392753ce3a4c48c3560"
     }
   ],
-  "signature": "zyoEnvxqwK/xt41pMhcZvl6PMHh2KlNuiicaAT7bypyfwbrTdnY/WbN06U30ucPKpVyJH6B3Z8zX8onPQ/rJBQ=="
+  "signature": "pfhX8osZFYNwnuYZleXyI5KrgjULihJHlGQy9BcdycWAySZlbDJjCSGA8b6AQgioSPNrqSTl8tTXWnPDM5FqCA=="
 }

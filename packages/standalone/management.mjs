@@ -135,15 +135,38 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       privilegedSessions.delete(id)
     }
   }
+  /**
+   * Sliding renewal: an active console session never expires mid-use.
+   *
+   * A fixed 8h deadline killed the page while the user was looking at it
+   * (issue #557) — the cookie outlived the server-side record, so the next
+   * request 401'd with no way to recover but a manual re-login. Touching the
+   * record on each authenticated request keeps an idle console expiring on
+   * schedule while a busy one stays alive. The cookie's `Max-Age` is not
+   * rewritten here, so a closed tab still drops the session within 8h.
+   */
+  const touchSession = id => {
+    if (typeof id !== 'string' || id === '') return
+    const until = sessions.get(id)
+    if (until === undefined) return
+    const renewed = Date.now() + SESSION_MS
+    // Only write when the extension is meaningful, so a busy console does not
+    // rewrite the map on every request.
+    if (renewed - until > 60_000) sessions.set(id, renewed)
+  }
   const authenticated = req => {
     const bearer = /^Bearer (.+)$/i.exec(String(req.headers.authorization ?? ''))?.[1]
     if (matches(bearer, stores.settings.get().forwardKey)) return true
     pruneSessions()
-    return sessions.has(cookie(req))
+    const id = cookie(req)
+    touchSession(id)
+    return sessions.has(id)
   }
   const sessionAuthenticated = req => {
     pruneSessions()
-    return sessions.has(cookie(req)) && privilegedSessions.has(cookie(req))
+    const id = cookie(req)
+    touchSession(id)
+    return sessions.has(id) && privilegedSessions.has(id)
   }
   const persist = patch => {
     const previous = stores.settings.get()
@@ -284,6 +307,11 @@ export function createManagement({ stores, runtime, channels, eac, subscriptions
       if (!validBootstrap && !validManagementKey && !matches(body.key, stores.settings.get().forwardKey)) throw fail(401, '登录链接已失效或登录令牌不正确')
       pruneSessions()
       if (sessions.size >= 64) throw fail(429, '管理会话过多，请稍后重试')
+      // The bootstrap link is deliberately single-use (a test pins that: a
+      // replayable one-time link is a replayable credential). What #557 asked
+      // for is the *session* surviving normal use, which `touchSession` now
+      // handles — a live console is renewed on every authenticated request
+      // instead of dying at a fixed 8h mark.
       if (validBootstrap) bootstrap = null
       const id = crypto.randomBytes(32).toString('base64url')
       sessions.set(id, Date.now() + SESSION_MS)

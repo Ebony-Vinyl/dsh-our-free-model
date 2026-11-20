@@ -43,6 +43,9 @@ const suites = [
   ['legacy-upgrade', 'legacy-upgrade-test.mjs', mode === 'contributor' ? [] : ['--production']],
   ['engine-payload', 'engine-payload-test.mjs', []],
   ['release-preparation', 'release-preparation-test.mjs', []],
+  // The npm channel is a rename of this tree; a missed registration literal
+  // ships a package whose two halves mount under different names (#725/#835).
+  ['scoped-publish', 'scoped-publish-test.mjs', []],
   ['client-lint', 'client-lint.mjs', []],
   ['sponsor', 'sponsor-test.mjs', []],
   ['heatmap', 'heatmap-test.mjs', []],

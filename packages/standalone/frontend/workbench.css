@@ -708,6 +708,17 @@
   flex-wrap: wrap;
   gap: 8px;
   padding-top: 4px;
+  /* The dialog body scrolls (`max-height: min(90dvh, 860px)`), so a long form
+     pushed Save below the fold and it read as clipped (#724). Pin the action
+     row to the bottom of the scroll box instead of letting it scroll away. */
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--surface, Canvas);
+  /* Fade what slides underneath instead of cutting it with a hard line. */
+  box-shadow: 0 -8px 12px -8px rgb(0 0 0 / 0.28);
+  margin-top: 4px;
+  padding-bottom: 4px;
 }
 
 .wb-import-tabs { align-self: stretch; }

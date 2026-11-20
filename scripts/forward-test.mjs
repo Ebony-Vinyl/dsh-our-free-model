@@ -262,6 +262,60 @@ await checkAsync('every streamed tool-call frame carries a function delta (#452)
   assert.equal(frames.map(frame => frame.function.arguments).join(''), '{"x":1}')
 })
 
+await checkAsync('a channel that only closes a tool block still emits its call (#829)', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  // The `minimax/*` shape measured in #829: text, then a block-end carrying the
+  // whole call, and not a single `tool-call-delta` in between. The stream used
+  // to announce `finish_reason: tool_calls` with zero tool frames, so the client
+  // had nothing to run and the turn ended after the preamble.
+  lane.script = () => ({
+    chunks: [
+      { type: 'text-delta', index: 0, text: 'I will list the files.' },
+      { type: 'block-end', index: 1, block: { type: 'tool-call', id: 'call_be', name: 'list_files', arguments: '{"path":"."}' } },
+      { type: 'usage', usage: { inputTokens: 5, outputTokens: 6, totalTokens: 11 } },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+    outcome: { text: 'I will list the files.', toolCalls: [{ slot: 1, id: 'call_be', name: 'list_files', arguments: '{"path":"."}' }] },
+  })
+  const response = await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free', stream: true,
+    tools: [{ type: 'function', function: { name: 'list_files', parameters: { type: 'object', properties: {} } } }],
+  })
+  assert.equal(response.status, 200)
+  const body = await response.text()
+  const frames = toolCallDeltas(body)
+  assert.ok(frames.length > 0, `a closed tool block must produce frames, got ${JSON.stringify(body)}`)
+  const opening = frames.find(frame => frame.function?.name !== undefined)
+  assert.equal(opening?.function?.name, 'list_files')
+  assert.equal(opening?.id, 'call_be')
+  const args = frames.filter(frame => frame.function?.arguments !== undefined).map(frame => frame.function.arguments).join('')
+  assert.equal(args, '{"path":"."}')
+  assert.ok(body.includes('"finish_reason":"tool_calls"'), 'the finish reason still reports the call')
+})
+
+await checkAsync('a block-end after its own deltas never doubles the arguments (#829)', async () => {
+  const lane = makeLane()
+  const base = await serve(lane)
+  lane.script = () => ({
+    chunks: [
+      { type: 'tool-call-delta', index: 0, id: 'call_a', name: 'read', argumentsDelta: '{"file"' },
+      { type: 'tool-call-delta', index: 0, argumentsDelta: ':"x"}' },
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_a', name: 'read', arguments: '{"file":"x"}' } },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ],
+    outcome: { text: '', toolCalls: [{ slot: 0, id: 'call_a', name: 'read', arguments: '{"file":"x"}' }] },
+  })
+  const response = await authFetch(base, '/v1/chat/completions', {
+    model: 'mimo-v2.6-flash-free', stream: true,
+    tools: [{ type: 'function', function: { name: 'read', parameters: { type: 'object', properties: {} } } }],
+  })
+  const frames = toolCallDeltas(await response.text())
+  assert.equal(frames.map(frame => frame.function?.arguments ?? '').join(''), '{"file":"x"}',
+    'the block-end must not append the arguments its deltas already sent')
+  assert.equal(frames.filter(frame => frame.id !== undefined).length, 1, 'identity rides one frame only')
+})
+
 await checkAsync('a decoy tool call never reaches the streaming client', async () => {
   const lane = makeLane()
   const base = await serve(lane)

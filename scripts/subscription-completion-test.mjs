@@ -428,6 +428,44 @@ try {
     assert.ok(!allDeltas.includes(TOKEN))
     assert.equal(result.toolCalls.length, 2)
   })
+  await check('a magpie-shaped key never truncates ordinary text or tool names (#877)', async () => {
+    // The magpie gateway key always begins with `s`, so the trie's root has a
+    // single child and every word ending in `s` used to look like a secret
+    // prefix. `list_agents` became `list_agent[redacted]`, so the host answered
+    // `unknown tool` for every call.
+    const magpie = `sk-magpie-key-${'a'.repeat(64)}`
+    for (const text of ['list_agents', 'yes', 'statuses', 'who is', 'read', 'wait_agents']) {
+      const chunks = []
+      const result = await redactionRuntime(
+        [{ choices: [{ delta: { content: text } }] }, { choices: [{ delta: {}, finish_reason: 'stop' }] }],
+        [magpie],
+      ).complete(request('subscription:redaction/model'), chunk => chunks.push(chunk))
+      assert.equal(result.text, text, `ordinary text must survive verbatim: ${text}`)
+      assert.ok(!JSON.stringify(chunks).includes('[redacted]'), `no spurious redaction for: ${text}`)
+    }
+    // Tool identity is a protocol identifier, not a credential carrier.
+    const chunks = []
+    await redactionRuntime([{
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'list_agents', arguments: '{"path":"."}' } }] } }],
+    }, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] }], [magpie])
+      .complete(request('subscription:redaction/model'), chunk => chunks.push(chunk))
+    const call = chunks.find(chunk => chunk.type === 'tool-call-delta')
+    assert.equal(call.name, 'list_agents', 'tool name must not be redacted')
+    assert.equal(call.argumentsDelta, '{"path":"."}', 'tool arguments survive when they hold no secret')
+  })
+  await check('a real secret is still redacted even when it begins like ordinary text (#877)', async () => {
+    const magpie = `sk-magpie-key-${'b'.repeat(64)}`
+    // Whole, split mid-way, and trailing the stream: all three must redact.
+    for (const parts of [[`use ${magpie} now`], [`use ${magpie.slice(0, 20)}`, `${magpie.slice(20)} now`], [`use ${magpie}`]]) {
+      const events = parts.map(content => ({ choices: [{ delta: { content } }] }))
+      events.push({ choices: [{ delta: {}, finish_reason: 'stop' }] })
+      const chunks = []
+      const result = await redactionRuntime(events, [magpie]).complete(request('subscription:redaction/model'), chunk => chunks.push(chunk))
+      assert.ok(result.text.includes('[redacted]'), 'a complete secret must still be redacted')
+      assert.ok(!result.text.includes(magpie), 'the secret must never reach the outcome')
+      assertRedactedLifecycle(chunks, result, [magpie])
+    }
+  })
   await check('ordinary output is immediate; only genuine secret prefixes wait for continuation', async () => {
     let source, wake
     let notice = new Promise(resolve => { wake = resolve })

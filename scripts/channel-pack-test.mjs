@@ -640,6 +640,26 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
       assert.deepEqual(quota.switched, [])
       assert.ok(quota.chunks.some(row => row.type === 'text-delta' && row.text === 'quota-rotated-ok'))
 
+      // 112 与带 pricingUrl 的引导页同样是额度耗尽（#721）：只认 110 时这两种
+      // 形态完全不匹配，死号永远不被标记，每轮都被重新选中。
+      for (const quotaBody of [
+        { code: 112, model_error: 'model quota exhausted', pricingUrl: 'https://qoder.com/pricing' },
+        { code: 110, message: 'Billing daily count exceeded' },
+        { error: { message: 'quota exhausted', pricingUrl: 'https://qoder.com/pricing' } },
+      ]) {
+        for (const transport of ['http', 'sse']) {
+          const shaped = await run({
+            kind: 'quota', candidates: ['b'], product: QODER_CN,
+            responseForAttempt: (_attempt, token) => token === 'token-a'
+              ? (transport === 'http' ? Response.json(quotaBody, { status: 403 }) : new Response(envelope(quotaBody)))
+              : answerSse('shaped-quota-ok'),
+          })
+          assert.equal(shaped.error, undefined, `${transport} ${JSON.stringify(quotaBody)} must rotate, not fail`)
+          assert.deepEqual(shaped.sent, ['token-a', 'token-b'], `${transport} ${JSON.stringify(quotaBody)} must rotate accounts`)
+          assert.deepEqual(shaped.marked.map(row => row[0]), ['a'], `${transport} ${JSON.stringify(quotaBody)} must mark the dead account`)
+        }
+      }
+
       for (const product of [undefined, QODER_CN]) {
         for (const transport of ['http', 'sse']) {
           const mixed = await run({
