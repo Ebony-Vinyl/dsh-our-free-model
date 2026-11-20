@@ -1024,6 +1024,53 @@ check('scoped layout: .modules.yaml hoistedLocations is read beside the profile 
     assert.equal(isPackageManagerOwned(pkg, '@ebony-vinyl/dsh-our-free-model'), true)
   } finally { fs.rmSync(profile, { recursive: true, force: true }) }
 })
+// The real linker matrix (issue #343 review). An isolated install lives in
+// pnpm's store: <profile>/node_modules/.pnpm/<name>@<version>/node_modules/<name>.
+// Walking to the first node_modules on the way up stops inside the store, so the
+// lockfile lookup never reaches the profile and an owned install is upgraded as
+// if it were self-managed.
+check('isolated linker: the profile root sits above .pnpm and the package is owned', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-isolated-'))
+  const pkg = path.join(profile, 'node_modules', '.pnpm', 'dsh-our-free-model@2.8.3', 'node_modules', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), PNPM_LOCKFILE)
+    assert.equal(profileDirOf(pkg), profile)
+    assert.equal(isPackageManagerOwned(pkg), true, 'an isolated store copy is still pnpm-owned')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('isolated linker: a scoped store copy resolves the same profile root', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-isolated-scoped-'))
+  const pkg = path.join(profile, 'node_modules', '.pnpm', '@ebony-vinyl+dsh-our-free-model@2.8.3', 'node_modules', '@ebony-vinyl', 'dsh-our-free-model')
+  fs.mkdirSync(pkg, { recursive: true })
+  try {
+    fs.writeFileSync(path.join(profile, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'",
+      '',
+      'importers:',
+      '',
+      '  .:',
+      '    dependencies:',
+      "      '@ebony-vinyl/dsh-our-free-model':",
+      '        specifier: link:vendor/dsh-our-free-model',
+      '        version: link:vendor/dsh-our-free-model',
+      '',
+    ].join('\n'))
+    assert.equal(profileDirOf(pkg), profile)
+    assert.equal(isPackageManagerOwned(pkg, '@ebony-vinyl/dsh-our-free-model'), false, 'a link: copy is not owned, including in the store')
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('a dependency copy nested inside the package keeps the outer profile root', () => {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm-nested-'))
+  const nested = path.join(profile, 'node_modules', 'dsh-our-free-model', 'node_modules', 'fast-lane')
+  fs.mkdirSync(nested, { recursive: true })
+  try {
+    assert.equal(profileDirOf(nested), profile)
+  } finally { fs.rmSync(profile, { recursive: true, force: true }) }
+})
+check('a path outside any node_modules falls back to its parent', () => {
+  assert.equal(profileDirOf('/tmp/somewhere/pkg'), '/tmp/somewhere')
+})
 check('a plain distribution: self install is not pnpm-owned', () => {
   const { profile, pkg } = makeProfilePackage()
   try {
