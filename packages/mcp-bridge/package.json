@@ -1,0 +1,22 @@
+{
+  "name": "@ebony-vinyl/ofm-mcp-bridge",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Official MCP stdio bridge for the Our Free Model standalone service. Exposes ofm_models / ofm_chat / ofm_task / ofm_usage tools to any MCP client.",
+  "license": "MIT",
+  "bin": {
+    "ofm-mcp": "./src/index.mjs"
+  },
+  "main": "./src/index.mjs",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node test/stdio.smoke.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2"
+  }
+}
