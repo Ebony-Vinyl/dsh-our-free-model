@@ -610,6 +610,16 @@ function buildLobsteraiFailure(input: LobsteraiFailureInput): LlmError {
     return new LlmError(`${prefix}（${detail}）`, 'QUOTA_EXCEEDED', { status })
   }
 
+  // 风控停用不是「等一下就好」：换号不解决、额度次日也不会恢复。
+  // 必须让用户知道该去平台申诉或换平台，否则只会反复重试（issue #850）。
+  if (kind === 'banned') {
+    return new LlmError(
+      `lobsterai: 账号被上游风控停用，需要到平台申诉或更换账号（${detail}）`,
+      'AUTH',
+      { status: status === 0 ? 403 : status },
+    )
+  }
+
   if (exhausted) {
     return new LlmError(
       `lobsterai: 模型 ${model} 所有账号均不可用（${detail}）`,
@@ -1101,6 +1111,18 @@ export class LobsteraiAdapter extends LlmAdapter {
         throw buildLobsteraiFailure({
           kind: lastKind, status: lastStatus, text: lastText,
           model: options.model, fromStream: lastFromStream, exhausted: false,
+        })
+      }
+
+      // 风控停用**立即止损**，不再换号（issue #850）。
+      //
+      // 上游是按「账号主体」判定的，同一批同源账号往往被连带停用；逐个试完
+      // 只会把剩下能用的号一起打进风控，还让用户等满 3 轮。额度用完可以等
+      // 次日、可以换号，封号不行 —— 这里如实把「需要申诉/换平台」报给用户。
+      if (lastKind === 'banned') {
+        throw buildLobsteraiFailure({
+          kind: lastKind, status: lastStatus, text: lastText,
+          model: options.model, fromStream: lastFromStream, exhausted: true,
         })
       }
 

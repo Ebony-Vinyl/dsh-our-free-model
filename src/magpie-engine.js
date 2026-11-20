@@ -702,10 +702,25 @@ export function createMagpieEngine({ dataDir, logger, binary } = {}) {
     await recovering
     assertOpen()
     if (!binary && !existsSync(executable) && entry?.compressed) {
-      executable = await materializeEngine({ pkgDir: fileURLToPath(new URL('../', import.meta.url)), dataDir, entry })
+      try {
+        executable = await materializeEngine({ pkgDir: fileURLToPath(new URL('../', import.meta.url)), dataDir, entry })
+      } catch (cause) {
+        // The shard reassembly failed, and the reason is the only thing that
+        // tells the user which of three very different repairs applies. #872
+        // arrived as "模型工作台无法使用 / Magpie engine binary is unavailable",
+        // a sentence that names no cause and no next step.
+        throw engineError(`Magpie engine binary could not be restored from its shipped shards for ${target}: ${String(cause?.message ?? cause)}. Reinstall the plugin (the engine ships as src/engine-parts/*.part inside the package), or rebuild it with \`node scripts/build-magpie-engine.mjs\` in a source checkout.`)
+      }
       assertOpen()
     }
-    if (!existsSync(executable)) throw engineError('Magpie engine binary is unavailable')
+    if (!existsSync(executable)) {
+      const why = binary
+        ? `the configured engine path ${executable} does not exist`
+        : entry?.compressed
+          ? `neither ${executable} nor the shipped shards under src/engine-parts/ are present`
+          : `no engine build is pinned for ${target}`
+      throw engineError(`Magpie engine binary is unavailable — ${why}. The model workspace needs this binary; reinstall the plugin, or run \`node scripts/build-magpie-engine.mjs\` in a source checkout. Other lanes are unaffected.`)
+    }
     const beside = path.dirname(await realpath(executable))
     if (existsSync(path.join(beside, '.portable')) || existsSync(path.join(beside, 'data'))) {
       throw engineError('Engine portable data would override private configuration')

@@ -40,6 +40,16 @@ export type LobsteraiErrorKind =
   | 'server'
   /** 其他 4xx / 业务错误。 */
   | 'client'
+  /**
+   * 上游**风控停用**：账号被平台判定异常并限制使用（403 为主）。
+   *
+   * 与 `hard-credit` 的区别是语义而非严重度：额度用完可以等次日，
+   * 风控停用只能申诉或换号，且**换号重试同一个池子里的其他号也可能已被连带**。
+   * 之所以单列一类：`hard-credit` 记的是「这个模型受限」徽章，
+   * 而风控停用要记的是「这个账号被平台封了」—— 前者随时间自愈，后者不会，
+   * 混在一起会让用户一直等一个不会好的徽章（issue #850）。
+   */
+  | 'banned'
 
 /**
  * 余额不足关键词（对齐 `classify.go:55-60` 的 `hardMarkers`）。
@@ -72,6 +82,23 @@ export const LOBSTERAI_HARD_CREDIT_MARKERS: readonly string[] = [
  */
 export const LOBSTERAI_SESSION_DEAD_MARKERS: readonly string[] = [
   '40100', '40101', 'token rejected', 'refresh token was rejected',
+]
+
+/**
+ * 风控停用标记（issue #850）。
+ *
+ * 上游对「账号存在异常行为，已被限制使用」这类响应给的是 **403**，且
+ * 文案里既有「异常行为 / 限制使用」也有英文的 abnormal / restricted。
+ * 这类错误**不是**额度问题，也不是会话过期 —— 反复换号重试只会把同一批
+ * 账号一起打进风控，所以必须单独识别、单独记徽章、并且**止损**。
+ *
+ * ⚠️ 关键词必须同时包含「账号主体」与「限制动作」两层语义，避免把
+ * 「该模型当前不可用」这类普通 403 也判成封号。
+ */
+export const LOBSTERAI_BANNED_MARKERS: readonly string[] = [
+  'abnormal behavior', 'abnormal behaviour', 'restricted use', 'account restricted',
+  'account suspended', 'account disabled', 'account banned', 'risk control',
+  '违反', '异常行为', '已被限制使用', '账号存在异常', '账号已被限制', '风控',
 ]
 
 /** HTTP 402 Payment Required：最直接的「余额不足」信号。 */
@@ -111,6 +138,11 @@ export function classifyLobsteraiError(status: number, body: string): LobsteraiE
   for (const marker of LOBSTERAI_HARD_CREDIT_MARKERS) {
     // 英文走小写比较，中文走原文比较（中文无大小写，lower 后仍相等，属冗余保险）。
     if (lower.includes(marker.toLowerCase()) || body.includes(marker)) return 'hard-credit'
+  }
+  // 风控停用排在 session-dead 之前：两者都要求「别再拿这个号重试」，
+  // 但封号连重新登录都救不回来，先认出来才能记对徽章（#850）。
+  for (const marker of LOBSTERAI_BANNED_MARKERS) {
+    if (lower.includes(marker.toLowerCase()) || body.includes(marker)) return 'banned'
   }
   for (const marker of LOBSTERAI_SESSION_DEAD_MARKERS) {
     if (body.includes(marker)) return 'session-dead'
@@ -199,7 +231,7 @@ export function shouldRotateLobsteraiAccount(kind: LobsteraiErrorKind): boolean 
  * 「这个模型受限」，而不是「这个账号出过错」。
  */
 export function recordsLobsteraiRateLimit(kind: LobsteraiErrorKind): boolean {
-  return kind === 'hard-credit' || kind === 'soft-rate' || kind === 'not-found'
+  return kind === 'hard-credit' || kind === 'soft-rate' || kind === 'not-found' || kind === 'banned'
 }
 
 /**

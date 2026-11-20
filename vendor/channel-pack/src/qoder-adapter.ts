@@ -52,6 +52,8 @@ import {
   QUEUE_BUSINESS_CODE,
   QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_DELAY_MS,
+  hasPricingHint,
+  hasPricingHintText,
   isBillingBusinessCode,
   isQueueBusinessCode,
   looksLikeBillingError,
@@ -79,6 +81,8 @@ export {
   QUEUE_BUSINESS_CODE as QODER_QUEUE_CODE,
   QUEUE_MAX_ATTEMPTS as QODER_QUEUE_MAX_ATTEMPTS,
   QUEUE_MAX_DELAY_MS as QODER_QUEUE_MAX_DELAY_MS,
+  hasPricingHint,
+  hasPricingHintText,
   isBillingBusinessCode,
   isQueueBusinessCode,
   looksLikeBillingError,
@@ -102,10 +106,15 @@ export {
 function isQuotaExceededError(error: unknown): boolean {
   if (error instanceof LlmError) {
     if (error.code === 'QUOTA_EXCEEDED' || error.code === 'QUOTA') return true
+    // 额度耗尽也可能以「带购买引导的错误对象」出现（`pricingUrl`，issue #721）。
+    // 通用层已把它归成 QUOTA_EXCEEDED，但别的错误源可能只把原始 JSON 塞进
+    // message，所以两条路都认。
+    if (hasPricingHint((error as LlmError & { body?: unknown }).body)) return true
+    if (hasPricingHintText(error.message)) return true
   }
   if (error instanceof Error) {
     // 仅在**没有**更精确的 code 时用文案兜底（避免把正常文本误判）
-    if (!(error instanceof LlmError)) return looksLikeBillingError(error.message)
+    if (!(error instanceof LlmError)) return looksLikeBillingError(error.message) || hasPricingHintText(error.message)
   }
   return false
 }
@@ -919,6 +928,9 @@ export class QoderAdapter extends LlmAdapter {
         // `message` 那个 JSON 字符串里（见 `parseQoderQueueError`）。
         const errorText = await response.text().catch(() => '')
         const queueInfo = parseQoderQueueError(errorText)
+        // `pricingUrl` 只在错误对象里出现，解析失败就是 undefined，判据自然不成立。
+        let errorBody: unknown
+        try { errorBody = JSON.parse(errorText) } catch { errorBody = undefined }
 
         if (queueInfo !== undefined) {
           await retryQueuedRequest(queueInfo)
@@ -930,7 +942,13 @@ export class QoderAdapter extends LlmAdapter {
         // 这条与 SSE 层那条**必须都有**：Qoder 的额度错误实测走 SSE 通道
         // （HTTP 200），但若哪天服务端改成用 HTTP 状态码下发，只处理一条就会漏。
         // 两处调用**同一个** `switchAccountOnQuota`，不会漂移。
-        if (isBillingBusinessCode(response.status) || looksLikeBillingError(errorText)) {
+        //
+        // 判据有三种形态，都要认（issue #721 补齐后两种）：
+        //   - 业务码 `110`（计费日额度）或 `112`（套餐/模型额度）；
+        //   - 明确的 billing 文案；
+        //   - 错误体里带 `pricingUrl` —— 这是 Qoder CN「去购买」引导页的形态，
+        //     没有码也没有上述文案，只认前两者时死号永远不被标记。
+        if (isBillingBusinessCode(response.status) || looksLikeBillingError(errorText) || hasPricingHint(errorBody)) {
           const switched = await this.switchAccountOnQuota(options, triedAccounts, activeAccountId)
           if (switched !== undefined) {
             credential = switched.credential

