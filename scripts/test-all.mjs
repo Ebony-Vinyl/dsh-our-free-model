@@ -45,6 +45,7 @@ const suites = [
   ['release-preparation', 'release-preparation-test.mjs', []],
   ['client-lint', 'client-lint.mjs', []],
   ['client-async-locale', 'client-async-locale-test.mjs', []],
+  ['client-async-locale-ui', 'client-async-locale-ui-test.mjs', []],
   ['channel-localization', 'channel-localization-test.mjs', []],
   ['sponsor', 'sponsor-test.mjs', []],
   ['heatmap', 'heatmap-test.mjs', []],
