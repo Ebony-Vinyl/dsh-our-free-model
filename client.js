@@ -3162,14 +3162,26 @@ window.__ModuleLoader__.load({
 
     function useAsync(loader, deps) {
       const [state, setState] = useState({ status: 'loading', data: undefined, error: '' })
-      const run = useCallback(() => {
-        let alive = true
+      const owner = useRef(null)
+      const latest = useRef(null)
+      const run = useCallback(async () => {
+        if (owner.current !== run) return
+        const request = {}
+        latest.current = request
         setState(current => ({ ...current, status: 'loading' }))
-        loader().then(data => { if (alive) setState({ status: 'ready', data, error: '' }) })
-          .catch(error => { if (alive) setState({ status: 'error', data: undefined, error: String(error?.message ?? error) }) })
-        return () => { alive = false }
+        try {
+          const data = await loader()
+          if (latest.current === request) setState({ status: 'ready', data, error: '' })
+        } catch (error) {
+          if (latest.current === request) setState({ status: 'error', data: undefined, error: String(error?.message ?? error) })
+        }
       }, deps)
-      useEffect(() => run(), [run])
+      useEffect(() => {
+        owner.current = run
+        void run()
+        // Cleanup owns manual reloads too, including callbacks retained by an old dependency set.
+        return () => { owner.current = null; latest.current = null }
+      }, [run])
       return { ...state, reload: run }
     }
 
@@ -7814,7 +7826,7 @@ window.__ModuleLoader__.load({
 
     function ModelWorkspace({ t, summary }) {
       const [state, setState] = useState('starting')
-      const [error, setError] = useState('')
+      const [error, setError] = useState(null)
       const [generation, setGeneration] = useState(0)
       const frame = useRef(null)
       const anchor = useRef(null)
@@ -7906,17 +7918,17 @@ window.__ModuleLoader__.load({
       }, [summary?.reload])
       useEffect(() => {
         let alive = true
-        setState('starting'); setError('')
+        setState('starting'); setError(null)
         post('/engine/start', {}, 120_000).then(() => {
           if (alive) { setState('ready'); summary?.reload?.() }
-        }).catch(() => {
-          if (alive) { setState('error'); setError(t('engine.failed')) }
+        }).catch(cause => {
+          if (alive) { setState('error'); setError({ key: 'engine.failed', detail: String(cause?.message ?? cause) }) }
         })
         return () => { alive = false }
       }, [generation])
       const refresh = async () => {
         try { await post('/engine/refresh', {}, 30_000); summary?.reload?.() }
-        catch { setError(t('engine.failed')) }
+        catch (cause) { setError({ key: 'engine.failed', detail: String(cause?.message ?? cause) }) }
       }
       const engineAction = action => frame.current?.contentWindow?.postMessage({
         type: 'ofm:engine-action', action,
@@ -7936,7 +7948,8 @@ window.__ModuleLoader__.load({
               onClick: () => engineAction('settings') }, h(WorkspaceIcon, { name: 'settings' })) : null))
       const content = h(Fragment, null,
         toolbar,
-        error ? h('div', { className: 'ofm_callout ofm_error', role: 'alert' }, error) : null,
+        error ? h('div', { className: 'ofm_callout ofm_error', role: 'alert' }, t(error.key),
+          error.detail ? h('div', null, error.detail) : null) : null,
         state === 'ready'
           ? h('iframe', { ref: frame, className: 'ofm_engineframe', src: `${API}/engine/ui/?mode=window&view=providers`, title: t('engine.title'),
             allow: 'clipboard-write', referrerPolicy: 'same-origin', onLoad: event => {
