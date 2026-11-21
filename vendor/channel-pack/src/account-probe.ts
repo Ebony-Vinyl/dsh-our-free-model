@@ -39,8 +39,10 @@ import { clineProductById } from './cline-product.js'
 import { zcodeProductById } from './zcode-product.js'
 import { GeminiAdapter } from './gemini-adapter.js'
 import { LoomyAdapter } from './loomy-adapter.js'
+import { BuddyAdapter } from './buddy-adapter.js'
 import { GEMINI, GEMINI_DEFAULT_PROJECT, GEMINI_SESSION_LANE_SMOKE } from './gemini.js'
 import { LOOMY } from './loomy-product.js'
+import { WORKBUDDY } from './product.js'
 import type { LobsteraiCredential } from './lobsterai.js'
 import type { QoderCredential } from './qoder.js'
 import type { ClineCredential } from './cline.js'
@@ -48,6 +50,7 @@ import type { ZcodeCredential } from './zcode.js'
 import type { TraeCredential } from './trae.js'
 import type { GeminiCredential } from './gemini.js'
 import type { LoomyCredential } from './loomy.js'
+import type { BuddyCredential } from './buddy.js'
 import type {
   ProbeAccountResult,
   ProbeModelResult,
@@ -230,6 +233,7 @@ async function probeWithAdapter(
     | TraeAdapter
     | GeminiAdapter
     | LoomyAdapter
+    | BuddyAdapter
   if (lobsteraiProduct !== undefined) {
     adapter = new LobsteraiAdapter({
       credentialRef: ref,
@@ -327,6 +331,25 @@ async function probeWithAdapter(
       sessionLane: GEMINI_SESSION_LANE_SMOKE,
       project: GEMINI_DEFAULT_PROJECT,
       product: GEMINI,
+    })
+  } else if (entry.provider === WORKBUDDY.id) {
+    // WorkBuddy（国际版）→ BuddyAdapter。
+    //
+    // ⚠️ 同型第 **5** 次（见上方 1-4 的记载）：恢复 WorkBuddy 时再次只接了渠道
+    // 注册，漏掉本分支 → 「测试」永远报 `Unsupported probe adapter: workbuddy`。
+    //
+    // **必须在此分派**：BuddyAdapter 的限流路径会写 `modelRateLimits`
+    //（见 `buddy-adapter.ts` 的 `updateModelRateLimit` 调用），写了标记就有
+    // 「重测 / 重置」按钮；漏本分支会让该标记永远清不掉（与 qoder / zcode 同因）。
+    //
+    // 探测不传 `accountPool` / `fetchRemoteModels`：`loadModels()` 会退回
+    // `product.fallbackModels`，`providerCatalogVisible` 在无账号池时直接放行。
+    // 探测只发一次最小纯文本请求，不涉及图片/工具，故其余钩子均可缺省。
+    adapter = new BuddyAdapter({
+      credentialRef: ref,
+      resolveCredential: async () => credential as BuddyCredential,
+      refresh: async () => {},
+      product: WORKBUDDY,
     })
   } else {
     throw new Error(`Unsupported probe adapter: ${entry.provider}`)

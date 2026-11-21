@@ -357,12 +357,49 @@ const REF_PREFIX_TO_PROVIDER: ReadonlyArray<readonly [string, string]> = [
   // `tests/unit/channel-pack-store.spec.ts` 的「恢复表覆盖客户端 PROVIDERS 的全部
   // provider（从真实清单派生）」用例锁死 —— 合并新增 provider 前**先跑它**。
   ['GEMINI', 'gemini'],
+  // ⚠️ 第 15 个 provider（workbuddy，本分支恢复）—— 同款坑第 **四** 次。
+  //
+  // 这张表是 `isSupportedProvider()` 的**唯一**判据，而后者在
+  // `channel-pack-rpc.ts` 的 `handleMethod()` 入口就会被调用：漏加 = 该 provider 的
+  // **所有 RPC 一律返回「不支持此渠道。」** —— 添加账号、刷新余额、账号列表、模型
+  // 列表全都不通，而客户端卡片仍会正常渲染（前端 PROVIDERS 是另一份数组）。
+  // 症状就是「面板能打开、一操作就报不支持此渠道」。
+  //
+  // 恢复 WorkBuddy 时踩的正是这一条：渠道注册、适配器、前端卡片都接好了，
+  // 唯独漏了这张表，于是 UI 全残。
+  ['WORKBUDDY', 'workbuddy'],
+]
+
+/**
+ * 仅用于**凭据恢复**的额外前缀，不参与 `isSupportedProvider()`。
+ *
+ * 为什么单列：`buddy`（CodeBuddy 国内版）本分支不注册渠道（服务端按账号封禁，
+ * 无法使用），但用户历史凭据里可能残留 `BUDDY_ACCOUNT_*`。若把它并进上表，
+ * `isSupportedProvider('buddy')` 就会为真，而适配器并未注册该 provider ——
+ * 自动签到、探测、RPC 分派都会挑中一个不存在实现，产生噪音错误。
+ *
+ * 故：**能识别（恢复索引、清理旧凭据）但不能当渠道用**。
+ */
+const RETIRED_ONLY_REF_PREFIX_TO_PROVIDER: ReadonlyArray<readonly [string, string]> = [
+  ['BUDDY', 'buddy'],
 ]
 
 /** 已实现渠道的统一判定，拒绝未知渠道且不依赖旧产品黑名单。 */
 export function isSupportedProvider(provider: unknown): provider is string {
   return typeof provider === 'string' && REF_PREFIX_TO_PROVIDER.some(([, id]) => id === provider)
 }
+
+/**
+ * 凭据恢复用的**完整**前缀表（含已退役渠道）。
+ *
+ * 恢复索引与 `ACCOUNT_REF_RE` 都走这张表：历史凭据必须能被**识别**（否则
+ * `state.json` 缺失时账号凭空消失），但「能识别」不等于「能当渠道用」——
+ * 那个判断在 `isSupportedProvider()`，只认上表。
+ */
+const ALL_REF_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ...REF_PREFIX_TO_PROVIDER,
+  ...RETIRED_ONLY_REF_PREFIX_TO_PROVIDER,
+]
 
 /** 账号凭据 ref 形态：`{PREFIX}_ACCOUNT_{HEX}`（前缀由单一真相源派生）。 */
 const ACCOUNT_REF_RE = new RegExp(
@@ -371,7 +408,7 @@ const ACCOUNT_REF_RE = new RegExp(
   // 但那时匹配结果就取决于引擎的尝试顺序而非规则 —— 一旦将来加入更多同前缀的
   // provider（如 `QODERX`），就会变成静默错归属：账号挂到 `qoder` 面板，而它的
   // 凭据是 CN 的，请求必然失败。故这里显式定序，而非依赖回溯。
-  `^(${REF_PREFIX_TO_PROVIDER
+  `^(${ALL_REF_PREFIXES
     .map(([prefix]) => prefix)
     .sort((a, b) => b.length - a.length)
     .join('|')})_ACCOUNT_([0-9A-Fa-f]{6,})$`,
@@ -410,7 +447,11 @@ function accountFromCredentialRef(ref: string): ProviderAccountEntry | undefined
   if (prefix === undefined || suffix === undefined) return undefined
   // 查表也走同一份真相源：正则捕获组只证明「前缀被登记过」，provider 仍由表给出，
   // 避免这里再写一份「前缀 → provider」的映射。
-  const provider = REF_PREFIX_TO_PROVIDER.find(([candidate]) => candidate === prefix)?.[1]
+  //
+  // ⚠️ 用 `ALL_REF_PREFIXES`（含退役渠道）而不是 `REF_PREFIX_TO_PROVIDER`：
+  // 恢复索引的目的是「让 `.credentials.yaml` 里已有的凭据不丢」，历史 `BUDDY_*`
+  // 也属于不该丢的数据。是否可当渠道用由 `isSupportedProvider()` 另行判定。
+  const provider = ALL_REF_PREFIXES.find(([candidate]) => candidate === prefix)?.[1]
   if (provider === undefined) return undefined
   const id = `${provider}-${suffix.toLowerCase()}`
   return {
