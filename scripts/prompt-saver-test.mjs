@@ -459,6 +459,15 @@ check('prose trimming covers the messages and responses wire blocks', () => {
   assert.equal(res.input[0].content[0].text, '稍等')
 })
 
+check('punctuation and politeness are independent switches', () => {
+  const body = { messages: [{ role: 'user', content: '谢谢，请稍等。' }] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: true, politeness: false } }))
+  assert.equal(body.messages[0].content, '谢谢，请稍等')
+  const other = { messages: [{ role: 'user', content: '谢谢，请稍等。' }] }
+  applyTokenSavers(other, 'chat', saverConfig({ tokenSaver: { prose: false, politeness: true } }))
+  assert.equal(other.messages[0].content, '稍等。')
+})
+
 check('pytest output collapses to its verdict', () => {
   const body = { messages: [{ role: 'tool', content: `${'test_a.py ..\n'.repeat(60)}\n===== 2 passed in 0.12s =====` }] }
   applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: false } }))

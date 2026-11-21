@@ -500,6 +500,10 @@ let boundPort = 0
   check('an over-long custom prompt is refused', tooLong.status, 400)
   await post('/token-saver', { customPrompt: '' })
 
+  const politeness = await post('/token-saver', { politeness: false })
+  check('the politeness switch is saved', politeness.json.tokenSaver.politeness, false)
+  await post('/token-saver', { politeness: true })
+
   const optimize = await get('/local-optimize')
   check('the local-answer switches answer', optimize.status, 200)
   check('all five on by default', [optimize.json.quota, optimize.json.prefix, optimize.json.title, optimize.json.suggestion, optimize.json.filepath], [true, true, true, true, true])

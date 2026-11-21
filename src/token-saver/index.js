@@ -51,9 +51,11 @@ export function saverConfig(settings) {
     /** A user-written system instruction, appended through the same injector as
      *  the built-in prompts. Empty (the default) injects nothing. */
     customPrompt: typeof section.customPrompt === 'string' ? section.customPrompt : '',
-    /** Trim politeness words and trailing sentence marks from user/assistant
-     *  prose on every wire. On by default: it only ever removes filler. */
+    /** Trim trailing sentence marks from user/assistant prose on every wire.
+     *  On by default: it only ever removes filler. */
     prose: section.prose !== false,
+    /** Trim politeness words from user/assistant prose on every wire. */
+    politeness: section.politeness !== false,
     /** Per-request header/query opt-out is handled by the caller; this is the
      *  stored preference only. */
   }
@@ -78,10 +80,13 @@ export function applyTokenSavers(payload, wire, config) {
   if (config?.enabled === false || payload === null || typeof payload !== 'object') return report
 
   // Prose trimming runs first: it rewrites user/assistant text, never tool
-  // output, so RTK sees the same tool blobs it always did.
-  if (config.prose !== false) {
+  // output, so RTK sees the same tool blobs it always did. Punctuation and
+  // politeness are independent switches.
+  const prosePunctuation = config.prose !== false
+  const prosePoliteness = config.politeness !== false
+  if (prosePunctuation || prosePoliteness) {
     try {
-      const prose = trimRequestProse(payload, wire)
+      const prose = trimRequestProse(payload, wire, { punctuation: prosePunctuation, politeness: prosePoliteness })
       report.prose = prose
       report.bytesBefore += prose.bytesBefore
       report.bytesAfter += prose.bytesAfter

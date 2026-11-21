@@ -63,12 +63,17 @@ export function stripPoliteness(line) {
 }
 
 /** Trim one text blob; a non-prose or code line is copied through untouched. */
-export function trimProseText(text) {
+export function trimProseText(text, options = {}) {
+  const politeness = options.politeness !== false
+  const punctuation = options.punctuation !== false
+  if (!politeness && !punctuation) return String(text)
   return String(text)
     .split('\n')
     .map((line) => {
       if (!proseGuards(line) || looksLikeCode(line)) return line
-      return stripPoliteness(line).replace(/[.。,，]+(\s*)$/, '$1')
+      let next = politeness ? stripPoliteness(line) : line
+      if (punctuation) next = next.replace(/[.。,，]+(\s*)$/, '$1')
+      return next
     })
     .join('\n')
 }
@@ -80,16 +85,17 @@ const isChatRole = (role) => role === 'user' || role === 'assistant'
  *
  * @param {object} payload
  * @param {'chat'|'messages'|'responses'} wire
+ * @param {{ politeness?: boolean, punctuation?: boolean }} [options]
  * @returns {{bytesBefore: number, bytesAfter: number, saved: number, blocks: number}}
  */
-export function trimRequestProse(payload, wire) {
+export function trimRequestProse(payload, wire, options = {}) {
   const stats = { bytesBefore: 0, bytesAfter: 0, saved: 0, blocks: 0 }
   if (payload === null || typeof payload !== 'object') return stats
 
   const apply = (owner, key) => {
     const content = owner?.[key]
     if (typeof content === 'string') {
-      const next = trimProseText(content)
+      const next = trimProseText(content, options)
       if (next === content) return
       stats.bytesBefore += content.length
       stats.bytesAfter += next.length
@@ -100,7 +106,7 @@ export function trimRequestProse(payload, wire) {
     if (!Array.isArray(content)) return
     for (const part of content) {
       if (!part || typeof part.text !== 'string') continue
-      const next = trimProseText(part.text)
+      const next = trimProseText(part.text, options)
       if (next === part.text) continue
       stats.bytesBefore += part.text.length
       stats.bytesAfter += next.length

@@ -217,6 +217,7 @@ export const SETTINGS_INITIAL = {
     enabled: true,
     rtk: true,
     prose: true,
+    politeness: true,
     prompts: { caveman: 'off', ponytail: 'off' },
     /** User-authored system instruction, appended verbatim. Empty means off. */
     customPrompt: '',

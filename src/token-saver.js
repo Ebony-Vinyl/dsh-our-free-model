@@ -878,20 +878,25 @@ function stripPoliteness(line) {
   if (withoutWords === source) return source;
   return withoutWords.replace(/[ \t]{2,}/g, " ").replace(/^[ \t]*[，,、]+[ \t]*/, "").replace(/[，,、]+[ \t]*$/, "");
 }
-function trimProseText(text) {
+function trimProseText(text, options = {}) {
+  const politeness = options.politeness !== false;
+  const punctuation = options.punctuation !== false;
+  if (!politeness && !punctuation) return String(text);
   return String(text).split("\n").map((line) => {
     if (!proseGuards(line) || looksLikeCode(line)) return line;
-    return stripPoliteness(line).replace(/[.。,，]+(\s*)$/, "$1");
+    let next = politeness ? stripPoliteness(line) : line;
+    if (punctuation) next = next.replace(/[.。,，]+(\s*)$/, "$1");
+    return next;
   }).join("\n");
 }
 var isChatRole = (role) => role === "user" || role === "assistant";
-function trimRequestProse(payload, wire) {
+function trimRequestProse(payload, wire, options = {}) {
   const stats = { bytesBefore: 0, bytesAfter: 0, saved: 0, blocks: 0 };
   if (payload === null || typeof payload !== "object") return stats;
   const apply = (owner, key) => {
     const content = owner?.[key];
     if (typeof content === "string") {
-      const next = trimProseText(content);
+      const next = trimProseText(content, options);
       if (next === content) return;
       stats.bytesBefore += content.length;
       stats.bytesAfter += next.length;
@@ -902,7 +907,7 @@ function trimRequestProse(payload, wire) {
     if (!Array.isArray(content)) return;
     for (const part of content) {
       if (!part || typeof part.text !== "string") continue;
-      const next = trimProseText(part.text);
+      const next = trimProseText(part.text, options);
       if (next === part.text) continue;
       stats.bytesBefore += part.text.length;
       stats.bytesAfter += next.length;
@@ -945,9 +950,11 @@ function saverConfig(settings) {
     /** A user-written system instruction, appended through the same injector as
      *  the built-in prompts. Empty (the default) injects nothing. */
     customPrompt: typeof section.customPrompt === "string" ? section.customPrompt : "",
-    /** Trim politeness words and trailing sentence marks from user/assistant
-     *  prose on every wire. On by default: it only ever removes filler. */
-    prose: section.prose !== false
+    /** Trim trailing sentence marks from user/assistant prose on every wire.
+     *  On by default: it only ever removes filler. */
+    prose: section.prose !== false,
+    /** Trim politeness words from user/assistant prose on every wire. */
+    politeness: section.politeness !== false
     /** Per-request header/query opt-out is handled by the caller; this is the
      *  stored preference only. */
   };
@@ -955,9 +962,11 @@ function saverConfig(settings) {
 function applyTokenSavers(payload, wire, config) {
   const report = { prompt: null, prose: null, rtk: null, saved: 0, bytesBefore: 0, bytesAfter: 0, notes: [] };
   if (config?.enabled === false || payload === null || typeof payload !== "object") return report;
-  if (config.prose !== false) {
+  const prosePunctuation = config.prose !== false;
+  const prosePoliteness = config.politeness !== false;
+  if (prosePunctuation || prosePoliteness) {
     try {
-      const prose = trimRequestProse(payload, wire);
+      const prose = trimRequestProse(payload, wire, { punctuation: prosePunctuation, politeness: prosePoliteness });
       report.prose = prose;
       report.bytesBefore += prose.bytesBefore;
       report.bytesAfter += prose.bytesAfter;

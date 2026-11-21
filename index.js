@@ -1331,6 +1331,7 @@ export function apply(ctx, config) {
           ...patch.enabled === undefined ? {} : { enabled: patch.enabled === true },
           ...patch.rtk === undefined ? {} : { rtk: patch.rtk === true },
           ...patch.prose === undefined ? {} : { prose: patch.prose === true },
+          ...patch.politeness === undefined ? {} : { politeness: patch.politeness === true },
         } })
         settings.flush()
         return publicTokenSaver(settings.get().tokenSaver)
@@ -2543,6 +2544,7 @@ function publicTokenSaver(section) {
     enabled: config.enabled,
     rtk: config.rtk,
     prose: config.prose,
+    politeness: config.politeness,
     prompts: { caveman: config.caveman, ponytail: config.ponytail },
     customPrompt: config.customPrompt,
     cavemanLevels: CAVEMAN_LEVELS,
