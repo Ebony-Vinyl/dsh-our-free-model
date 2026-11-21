@@ -47,7 +47,7 @@ await new Promise(resolve => dead.close(resolve))
 
 process.env.OUR_FREE_MODEL_BASE = deadBase
 
-const { apply, inject } = await import('../index.js')
+const { apply, inject, version } = await import('../index.js')
 const { ROUTE_MAIN } = await import('../src/adapter.js')
 
 /** Boot one plugin generation against its own scratch home. */
@@ -76,7 +76,12 @@ const dataDir = home => path.join(home, 'our-free-model')
 
 // ── offline, no key: the plugin must still be usable ─────────────────────────
 {
-  const { ctx, api, home } = await boot()
+  const updateNotifiedFor = '1.1.0'
+  const { ctx, api, home } = await boot({ settings: { installedVersion: '1.0.0', updateNotifiedFor } })
+  const bootSettings = JSON.parse(fs.readFileSync(path.join(dataDir(home), 'settings.json'), 'utf8'))
+  check('cold boot reconciles a stale installed version to the loaded package', bootSettings.installedVersion, version)
+  check('version reconciliation preserves notification history', bootSettings.updateNotifiedFor, updateNotifiedFor)
+
   const adapter = ctx.__captured.adapters[0]?.adapter
   check('the plugin activates with the gateway unreachable', adapter !== undefined, true)
   check('and registers the model lane', ctx.__captured.routes.includes(ROUTE_MAIN), true)
@@ -154,6 +159,8 @@ const dataDir = home => path.join(home, 'our-free-model')
   const token = 'ofm-subscription-token-0123456789abcdef'
   const address = `https://outlet.example.com/s/${token}`
   const { ctx, api, home } = await boot({ settings: { egress: { enabled: false, mode: 'subscription', url: address, mihomoPath: '' } } })
+  check('a mount initializes a missing installed version',
+    JSON.parse(fs.readFileSync(path.join(dataDir(home), 'settings.json'), 'utf8')).installedVersion, version)
 
   const summary = await callRoute(api(), 'GET', '/api/our-free-model/summary')
   const egress = summary.json.settings.egress
@@ -178,7 +185,9 @@ const dataDir = home => path.join(home, 'our-free-model')
 
 // ── managed installation (config): the self-channel stands down ──────────────
 {
-  const { ctx, api, home } = await boot({ config: { distribution: 'managed' } })
+  const { ctx, api, home } = await boot({ config: { distribution: 'managed' }, settings: { installedVersion: '1.0.0' } })
+  const bootSettings = JSON.parse(fs.readFileSync(path.join(dataDir(home), 'settings.json'), 'utf8'))
+  check('managed mounts also reconcile the installed version', bootSettings.installedVersion, version)
 
   const meta = await callRoute(api(), 'GET', '/api/our-free-model/meta')
   check('the config flag puts /meta under managed distribution', meta.json.distribution, 'managed')
@@ -219,6 +228,28 @@ const dataDir = home => path.join(home, 'our-free-model')
   check('and closes the same update route', (await callRoute(api(), 'POST', '/api/our-free-model/update/check')).status, 409)
   dispose(ctx)
   fs.rmSync(home, { recursive: true, force: true })
+}
+
+// Simulate mounting the successor before the in-app updater commits.
+{
+  const pendingKey = Symbol.for('our-free-model.pending-upgrade')
+  const pending = { version }
+  globalThis[pendingKey] = pending
+  try {
+    const previousVersion = '1.0.0'
+    const { ctx, home } = await boot({ config: { distribution: 'managed' }, settings: { installedVersion: previousVersion } })
+    try {
+      const readInstalled = () => JSON.parse(fs.readFileSync(path.join(dataDir(home), 'settings.json'), 'utf8')).installedVersion
+      check('a pending hot upgrade keeps the previous version while activating', readInstalled(), previousVersion)
+      pending.notify()
+      check('the post-commit callback records the successor version', readInstalled(), version)
+    } finally {
+      dispose(ctx)
+      fs.rmSync(home, { recursive: true, force: true })
+    }
+  } finally {
+    delete globalThis[pendingKey]
+  }
 }
 
 console.log(failures === 0 ? '\noffline: no key needed offline, and managed installs self-govern' : `\n${failures} check(s) failed`)

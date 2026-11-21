@@ -167,6 +167,16 @@ export function apply(ctx, config) {
   const stores = createRuntimeStores({ dataDir, logger })
   const { settings, stats, availability } = stores
 
+  // Manual and package-manager installs bypass the in-app upgrade callback.
+  // Reconcile with this module's version, including ordinary hot reloads, but
+  // let a pending self-upgrade record success only after its transaction commits.
+  const pendingUpgrade = globalThis[Symbol.for('our-free-model.pending-upgrade')]
+  if (packageVersion !== '' && pendingUpgrade?.version !== packageVersion
+    && settings.get().installedVersion !== packageVersion) {
+    settings.update({ installedVersion: packageVersion })
+    settings.flush()
+  }
+
   if (generation > 1) {
     settings.update({ reloadedAt: Date.now(), reloadCount: generation - 1 })
     settings.flush()
@@ -441,7 +451,6 @@ export function apply(ctx, config) {
   // The successor offers a notification callback, but only the caller that
   // confirmed selfReload() and committed the outcome may invoke it. Booting a
   // replacement is not yet evidence that every fiber started successfully.
-  const pendingUpgrade = globalThis[Symbol.for('our-free-model.pending-upgrade')]
   if (pendingUpgrade?.version === packageVersion) {
     pendingUpgrade.notify = () => {
       if (disposed) return
