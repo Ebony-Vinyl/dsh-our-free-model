@@ -37,7 +37,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError } from './src/http.js'
-import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive, laneProxyEcho } from './src/egress.js'
+import { egressActive, egressFetch, outletLabel, readOutletSelection, refreshOutletExit, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive, laneProxyEcho } from './src/egress.js'
 import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
@@ -498,6 +498,7 @@ export function apply(ctx, config) {
     sealedCredential: sealedCredentialOf,
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
+    onEgressQuotaRefusal: () => scheduleOutletRotation(),
   })
   const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog, clearLaneBreaker } = modelRuntime
   const runForwarded = modelRuntime.complete
@@ -889,7 +890,7 @@ export function apply(ctx, config) {
     const relay = outletRelay
     if (relay === null) {
       outletNode = { node: '', delayMs: 0, at: 0 }
-      return { node: '', nodeDelayMs: 0, nodeAt: 0, latencyMs: 0, latencyAt: 0 }
+      return { node: '', nodeDelayMs: 0, nodeAt: 0, latencyMs: 0, latencyAt: 0, rotation: outletRotationSnapshot() }
     }
     await measureGatewayLatency().catch(() => {})
     const selection = await readOutletSelection(relay).catch(() => null)
@@ -903,6 +904,7 @@ export function apply(ctx, config) {
       nodeAt: Date.now(),
       latencyMs: modelRuntime.gatewayLatency.ms,
       latencyAt: modelRuntime.gatewayLatency.at,
+      rotation: outletRotationSnapshot(),
     }
   }
   // Same serialisation gate as the two listeners above: the boot chain and every
@@ -947,6 +949,9 @@ export function apply(ctx, config) {
       const closing = outletRelay
       outletRelay = null
       outletFingerprint = ''
+      limitedNodes.clear()
+      outletRotateAt = 0
+      outletLastRotation = null
       await closing.close().catch(() => {})
       // The way out changed under every fetch: re-detect the exit so the pill and
       // the model verdicts describe the path the next request actually takes.
@@ -1010,6 +1015,105 @@ export function apply(ctx, config) {
       void syncEgress().catch(() => {})
     }, delay)
     outletRestartTimer.unref?.()
+  }
+
+  // Per-IP free-lane quota refusals (FreeUsageLimitError) are invisible to
+  // mihomo's gstatic health-check, so url-test keeps the exhausted node on top.
+  // Only triggered from the free lane when routed through the managed outlet.
+  const OUTLET_ROTATE_COOLDOWN_MS = 60_000
+  const OUTLET_LIMITED_TTL_MS = 10 * 60_000
+  const limitedNodes = new Map()
+  let outletRotateAt = 0
+  let outletRotation = null
+  let outletLastRotation = null
+  function pruneLimitedNodes(now = Date.now()) {
+    for (const [node, until] of limitedNodes) if (until <= now) limitedNodes.delete(node)
+  }
+  function outletRotationSnapshot() {
+    pruneLimitedNodes()
+    return {
+      rotating: outletRotation !== null,
+      limitedCount: limitedNodes.size,
+      last: outletLastRotation === null ? null : { ...outletLastRotation },
+    }
+  }
+  function scheduleOutletRotation() {
+    if (disposed || freeLaneProxyActive()) return
+    const relay = outletRelay
+    if (relay === null || relay.managed === null || relay.managed === undefined) return
+    if (outletRotation !== null) return
+    if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return
+    outletRotateAt = Date.now()
+    outletRotation = rotateOutletExit({ reason: 'quota' })
+      .catch(error => logger.debug?.(`our-free-model: outlet re-measure failed (${error?.message ?? error})`))
+      .finally(() => { outletRotation = null })
+  }
+  async function rotateOutletManual() {
+    const relay = outletRelay
+    if (disposed || relay === null) throw httpError(409, 'Egress outlet is not running')
+    if (relay.managed === null || relay.managed === undefined) {
+      throw httpError(409, 'Node rotation is only available in subscription mode')
+    }
+    if (outletRotation !== null) {
+      await outletRotation.catch(() => {})
+    } else {
+      const run = rotateOutletExit({ reason: 'manual' })
+      outletRotation = run
+      try { await run } finally { if (outletRotation === run) outletRotation = null }
+    }
+    return {
+      ok: true,
+      rotated: outletLastRotation === null ? null : { ...outletLastRotation },
+      outlet: await readOutletStatus(),
+    }
+  }
+  async function rotateOutletExit({ reason = 'quota' } = {}) {
+    const relay = outletRelay
+    if (disposed || relay === null) return null
+    if (reason === 'quota' && freeLaneProxyActive()) return null
+    if (relay.managed === null || relay.managed === undefined) return null
+    const now = Date.now()
+    pruneLimitedNodes(now)
+    const live = await readOutletSelection(relay).catch(() => null)
+    const current = live?.node ?? outletNode.node
+    const avoid = [...limitedNodes.keys()]
+    if (current !== '') avoid.push(current)
+    const rotated = await refreshOutletExit(relay, { avoid })
+    if (reason === 'quota' && current !== '') limitedNodes.set(current, now + OUTLET_LIMITED_TTL_MS)
+    if (disposed) return null
+    const finishedAt = Date.now()
+    if (rotated === null) {
+      outletLastRotation = {
+        at: finishedAt,
+        from: current,
+        to: current,
+        delayMs: live?.delayMs ?? outletNode.delayMs,
+        candidates: 0,
+        reason,
+        switched: false,
+      }
+      logger.warn?.(reason === 'manual'
+        ? 'our-free-model: manual outlet rotation found no other reachable node; staying on the current exit'
+        : 'our-free-model: the lane rate-limited this exit and no other measured node is available; staying on it')
+      return outletLastRotation
+    }
+    const previous = rotated.previous === '' ? current : rotated.previous
+    outletNode = { node: rotated.node, delayMs: rotated.delayMs, at: finishedAt }
+    outletLastRotation = {
+      at: finishedAt,
+      from: previous,
+      to: rotated.node,
+      delayMs: rotated.delayMs,
+      candidates: rotated.candidates,
+      reason,
+      switched: rotated.switched === true,
+    }
+    const prefix = reason === 'manual' ? 'our-free-model: manual outlet rotation' : 'our-free-model: the lane rate-limited'
+    logger.warn?.(rotated.switched
+      ? `${prefix} moved from "${previous}" to "${rotated.node}" (${rotated.delayMs} ms, best of ${rotated.candidates})`
+      : `${prefix} re-measured the outlet and "${rotated.node}" is still the only node measured (${rotated.delayMs} ms)`)
+    if (rotated.switched) void settleOutletWatch()
+    return outletLastRotation
   }
 
   // ── hot reload + in-app upgrade ─────────────────────────────────────────────
@@ -1414,6 +1518,7 @@ export function apply(ctx, config) {
       nodeAt: outletNode.at,
       latencyMs: modelRuntime.gatewayLatency.ms,
       latencyAt: modelRuntime.gatewayLatency.at,
+      rotation: outletRotationSnapshot(),
       // `dead` is the managed mihomo dying after startup — surfaced through the
       // same field so the settings page shows why traffic fell back to direct.
       error: outletError !== '' ? outletError : (outletRelay?.dead ?? ''),
@@ -1422,6 +1527,7 @@ export function apply(ctx, config) {
     // carrying traffic on is mihomo's own state, and it changes without anything
     // else in this process moving.
     outletStatus: () => readOutletStatus(),
+    rotateOutlet: () => rotateOutletManual(),
     rotateKey: () => {
       const minted = generateKey()
       settings.update({ forwardKey: minted })
@@ -1964,6 +2070,10 @@ export function createApiRoutes(deps) {
       }
       if (method === 'GET' && routePath === '/outlet') {
         return send(200, await deps.outletStatus())
+      }
+      if (method === 'POST' && routePath === '/outlet/rotate') {
+        if (!deps.rotateOutlet) return send(503, { error: 'Outlet rotation is unavailable' })
+        return send(200, await deps.rotateOutlet())
       }
       if (routePath === '/subscriptions' || routePath.startsWith('/subscriptions/')) {
         const action = routePath.slice('/subscriptions'.length)
@@ -2791,6 +2901,7 @@ function publicSettings(settings, forwardInfo, egressInfo) {
       nodeDelayMs: egressInfo?.nodeDelayMs ?? 0,
       latencyMs: egressInfo?.latencyMs ?? 0,
       latencyAt: egressInfo?.latencyAt ?? 0,
+      rotation: egressInfo?.rotation ?? null,
       error: egressInfo?.error ?? '',
     },
   }

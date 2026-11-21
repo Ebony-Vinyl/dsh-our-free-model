@@ -210,6 +210,11 @@ var FALLBACK_CATALOG = buildCatalog([
   "flint-40b-free"
 ]);
 var LANE_QUOTA_DEFAULT_MS = 6 * 60 * 60 * 1e3;
+function isEgressQuotaRefusal(error) {
+  if (error?.code !== CODE.quota || error?.laneQuota === true) return false;
+  if (error?.type === "FreeUsageLimitError") return true;
+  return /free usage limit|usage limit reached/i.test(String(error?.message ?? ""));
+}
 function createRuntimeStores({ dataDir, logger = console }) {
   if (typeof dataDir !== "string" || !path.isAbsolute(dataDir)) {
     throw new TypeError("dataDir must be an absolute path");
@@ -253,6 +258,8 @@ function createModelRuntime({
   onSealedUnavailable = () => {
   },
   onTopology = () => {
+  },
+  onEgressQuotaRefusal = () => {
   },
   subscriptionRuntime,
   extensionRuntime = null
@@ -362,6 +369,12 @@ function createModelRuntime({
       const retryAt = Number.isFinite(retryAfter) && retryAfter > 0 ? Date.now() + retryAfter : Date.now() + LANE_QUOTA_DEFAULT_MS;
       setLaneState("quota", { retryAt, message: String(error?.message ?? "free usage limit reached").slice(0, 300) });
       recordPassiveResult(entry.id, STATE.throttled);
+      if (isEgressQuotaRefusal(error)) {
+        try {
+          onEgressQuotaRefusal(error);
+        } catch {
+        }
+      }
       return;
     }
     if (code === CODE.laneLocked) {
@@ -836,6 +849,7 @@ export {
   createRuntimeStores,
   foldForwardOutcome,
   fromOpenAiMessages,
+  isEgressQuotaRefusal,
   publicModelRows,
   routableModelIds
 };
