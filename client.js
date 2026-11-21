@@ -187,6 +187,16 @@ window.__ModuleLoader__.load({
         'egress.node': '当前最佳节点',
         'egress.latency': '访问 opencode',
         'egress.measuring': '测量中…',
+        'egress.rotateNow': '立即换节点',
+        'egress.rotating': '切换中…',
+        'egress.rotation': '自动轮换',
+        'egress.rotationReady': '已就绪（按 IP 限额时自动切换）',
+        'egress.rotationSwitched': '{from} → {to} · {reason} · {when}',
+        'egress.rotationStayed': '无其它可用节点，保持当前 · {reason} · {when}',
+        'egress.rotationQuota': '限额自动切换',
+        'egress.rotationManual': '手动切换',
+        'egress.rotationAvoid': '避让中 {n} 个限额节点',
+        'egress.rotateFailed': '切换节点失败：{message}',
         'egress.direct': '关闭时请求直连发出；订阅地址按密钥对待——只存在本机设置里，不随常规接口数据下发，仅点「显示」时读取，面板默认打码。',
         'egress.error': '出口启动失败：{message}',
         'section.prefs': '插件设置',
@@ -1073,6 +1083,16 @@ window.__ModuleLoader__.load({
         'egress.node': 'Best node',
         'egress.latency': 'opencode access',
         'egress.measuring': 'measuring…',
+        'egress.rotateNow': 'Switch node',
+        'egress.rotating': 'Switching…',
+        'egress.rotation': 'Auto rotation',
+        'egress.rotationReady': 'Ready (auto-switches on per-IP quota limit)',
+        'egress.rotationSwitched': '{from} → {to} · {reason} · {when}',
+        'egress.rotationStayed': 'No other reachable node; kept current · {reason} · {when}',
+        'egress.rotationQuota': 'quota auto-switch',
+        'egress.rotationManual': 'manual switch',
+        'egress.rotationAvoid': 'avoiding {n} rate-limited',
+        'egress.rotateFailed': 'Failed to switch node: {message}',
         'egress.direct': 'While off, requests go direct; the address is treated as a credential — kept in this machine\'s settings only, never sent down with the regular API payloads, readable only through the reveal button, masked here by default.',
         'egress.error': 'The outlet failed to start: {message}',
         'section.prefs': 'Plugin settings',
@@ -4639,6 +4659,9 @@ window.__ModuleLoader__.load({
       const [urlShown, setUrlShown] = useState(false)
       const [urlValue, setUrlValue] = useState('')
       const [copied, setCopied] = useState('')
+      const [rotating, setRotating] = useState(false)
+      const [rotateError, setRotateError] = useState('')
+      const [rotatedOutlet, setRotatedOutlet] = useState(null)
       const readUrl = () => api('/egress/url').then(payload => String(payload?.url ?? '')).catch(() => '')
       // Which node url-test is carrying traffic on, and what the last gateway
       // round trip cost. mihomo re-ranks on its own schedule, so while the outlet
@@ -4649,15 +4672,61 @@ window.__ModuleLoader__.load({
       const reloadOutlet = live.reload
       const running = settings.egress?.active === true
       useEffect(() => {
-        if (!running) return undefined
+        if (!running) {
+          setRotatedOutlet(null)
+          setRotateError('')
+          return undefined
+        }
         const timer = setInterval(() => reloadOutlet(), 15_000)
         return () => clearInterval(timer)
       }, [running, reloadOutlet])
-      const status = running && live.data ? live.data : draft
+      const status = running
+        ? ((rotatedOutlet?.nodeAt ?? 0) >= (live.data?.nodeAt ?? 0) && rotatedOutlet !== null ? rotatedOutlet : (live.data ?? draft))
+        : draft
       const node = typeof status?.node === 'string' ? status.node : ''
       const nodeDelayMs = Number(status?.nodeDelayMs ?? 0)
       const latencyMs = Number(status?.latencyMs ?? 0)
+      const rotation = status?.rotation ?? draft?.rotation ?? null
       const subscription = draft?.mode !== 'client'
+      const managed = running && settings.egress?.mode !== 'client'
+      const rotationBusy = rotating || rotation?.rotating === true
+      const lastRotation = rotation?.last ?? null
+      const limitedCount = Number(rotation?.limitedCount ?? 0)
+      const rotationText = (() => {
+        if (!lastRotation) {
+          return limitedCount > 0
+            ? `${t('egress.rotationReady')} · ${t('egress.rotationAvoid').replace('{n}', String(limitedCount))}`
+            : t('egress.rotationReady')
+        }
+        const reasonLabel = lastRotation.reason === 'manual' ? t('egress.rotationManual') : t('egress.rotationQuota')
+        const when = ago(lastRotation.at, t.locale)
+        const base = lastRotation.switched
+          ? t('egress.rotationSwitched')
+            .replace('{from}', lastRotation.from || '—')
+            .replace('{to}', lastRotation.to || node || '—')
+            .replace('{reason}', reasonLabel)
+            .replace('{when}', when)
+          : t('egress.rotationStayed')
+            .replace('{reason}', reasonLabel)
+            .replace('{when}', when)
+        return limitedCount > 0
+          ? `${base} · ${t('egress.rotationAvoid').replace('{n}', String(limitedCount))}`
+          : base
+      })()
+      const rotateNow = async () => {
+        if (rotating || !managed) return
+        setRotating(true)
+        setRotateError('')
+        try {
+          const payload = await post('/outlet/rotate', {}, 25_000)
+          if (payload?.outlet) setRotatedOutlet(payload.outlet)
+          else reloadOutlet()
+        } catch (error) {
+          setRotateError(String(error?.message ?? error))
+        } finally {
+          setRotating(false)
+        }
+      }
       const statusLine = text => h('code', { className: 'ofm_mono', style: { padding: '4px 8px', flex: 1, minWidth: 200 } }, text)
       // The stored address is never in the payload this panel was rendered
       // from, so "see it" and "copy it" both cost one on-demand fetch, and the
@@ -4718,10 +4787,15 @@ window.__ModuleLoader__.load({
           statusLine(`${draft.outlet ?? ''} · ${draft.mode ?? ''}`)) : null,
         running ? h('div', { className: 'ofm_row' },
           h('span', { className: 'ofm_note' }, t('egress.node')),
-          statusLine(node === '' ? t('egress.measuring') : nodeDelayMs > 0 ? `${node} · ${nodeDelayMs}ms` : node)) : null,
+          statusLine(node === '' ? t('egress.measuring') : nodeDelayMs > 0 ? `${node} · ${nodeDelayMs}ms` : node),
+          managed ? h(Button, { kind: 'ghost', disabled: rotationBusy || busy, onClick: rotateNow }, rotationBusy ? t('egress.rotating') : t('egress.rotateNow')) : null) : null,
         running ? h('div', { className: 'ofm_row' },
           h('span', { className: 'ofm_note' }, t('egress.latency')),
-          statusLine(latencyMs > 0 ? `${(latencyMs / 1000).toFixed(2)}s` : t('egress.measuring'))) : null)
+          statusLine(latencyMs > 0 ? `${(latencyMs / 1000).toFixed(2)}s` : t('egress.measuring'))) : null,
+        managed ? h('div', { className: 'ofm_row' },
+          h('span', { className: 'ofm_note' }, t('egress.rotation')),
+          statusLine(rotationText)) : null,
+        rotateError !== '' ? h('div', { className: 'ofm_callout ofm_error' }, t('egress.rotateFailed').replace('{message}', rotateError)) : null)
     }
 
     const field = (label, control) => h('label', { className: 'ofm_field' }, h('span', null, label), control)

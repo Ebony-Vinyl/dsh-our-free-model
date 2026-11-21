@@ -172,6 +172,11 @@ const dataDir = home => path.join(home, 'our-free-model')
   const cleared = await callRoute(api(), 'POST', '/api/our-free-model/settings', { egress: { enabled: false, url: '' } })
   check('clearing it is still possible, and says so in the payload', [cleared.status, cleared.json.settings.egress.hasUrl], [200, false])
 
+  const outlet = await callRoute(api(), 'GET', '/api/our-free-model/outlet')
+  check('outlet status includes the rotation snapshot', [outlet.status, outlet.json.rotation?.rotating, outlet.json.rotation?.limitedCount, outlet.json.rotation?.last], [200, false, 0, null])
+  const refusedRotate = await callRoute(api(), 'POST', '/api/our-free-model/outlet/rotate', {})
+  check('manual outlet rotation refuses cleanly when the outlet is off', refusedRotate.status, 409)
+
   dispose(ctx)
   fs.rmSync(home, { recursive: true, force: true })
 }

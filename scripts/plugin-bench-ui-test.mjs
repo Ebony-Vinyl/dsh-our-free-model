@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 
 const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
-  .replace('exports.__test = {', 'exports.__test = { SettingsPage, ModelCard, Roster, Tank, useCountUp,')
+  .replace('exports.__test = {', 'exports.__test = { SettingsPage, ModelCard, Roster, Tank, useCountUp, Egress,')
 const tick = () => new Promise(resolve => setImmediate(resolve))
 let checks = 0
 async function check(name, run) { await run(); checks++; console.log('  ok  ' + name) }
@@ -255,6 +255,64 @@ await check('the disclaimer renders both excluded channels and acknowledges thro
   accept.props.onClick()
   assert.ok(app2.calls.some(call => call.endpoint === '/disclaimer/ack'), 'acknowledgement is posted')
   app.dispose(); app2.dispose()
+})
+
+await check('egress panel shows auto-rotation status and switches nodes via manual button', async () => {
+  const now = Date.now()
+  let rotatedCalls = 0
+  const app = boot({
+    fetchImpl: (endpoint, options) => {
+      if (endpoint === '/outlet') {
+        return {
+          node: 'JP-A', nodeDelayMs: 55, nodeAt: now - 5000, latencyMs: 420, latencyAt: now - 5000,
+          rotation: { rotating: false, limitedCount: 0, last: null },
+        }
+      }
+      if (endpoint === '/outlet/rotate' && options?.method === 'POST') {
+        rotatedCalls += 1
+        return {
+          ok: true,
+          rotated: { at: now, from: 'JP-A', to: 'TW-A', delayMs: 48, candidates: 12, reason: 'manual', switched: true },
+          outlet: {
+            node: 'TW-A', nodeDelayMs: 48, nodeAt: now, latencyMs: 390, latencyAt: now,
+            rotation: {
+              rotating: false,
+              limitedCount: 1,
+              last: { at: now, from: 'JP-A', to: 'TW-A', delayMs: 48, candidates: 12, reason: 'manual', switched: true },
+            },
+          },
+        }
+      }
+      return {}
+    },
+  })
+  const props = {
+    settings: {
+      egress: {
+        enabled: true, mode: 'subscription', hasUrl: true, urlLabel: 'https://outlet.example.com',
+        outlet: 'https://outlet.example.com', running: true, active: true, node: 'JP-A', nodeDelayMs: 55, latencyMs: 420,
+      },
+    },
+    t: app.t,
+    onApply() {},
+    busy: false,
+  }
+  let tree = app.draw(app.api.Egress, props)
+  await tick()
+  tree = app.draw(app.api.Egress, props)
+  const beforeText = flatten(tree).filter(node => typeof node === 'string').join(' ')
+  assert.match(beforeText, /JP-A · 55ms/, 'renders current best node')
+  assert.match(beforeText, /已就绪（按 IP 限额时自动切换）/, 'renders auto-rotation ready state')
+  const switchBtn = flatten(tree).find(node => node?.props?.onClick && flatten(node.children).includes('立即换节点'))
+  assert.ok(switchBtn, 'renders manual switch node button in subscription mode')
+  await switchBtn.props.onClick()
+  tree = app.draw(app.api.Egress, props)
+  const afterText = flatten(tree).filter(node => typeof node === 'string').join(' ')
+  assert.equal(rotatedCalls, 1, 'calls POST /outlet/rotate once')
+  assert.match(afterText, /TW-A · 48ms/, 'updates best node immediately from rotate response')
+  assert.match(afterText, /JP-A → TW-A · 手动切换/, 'shows last rotation record')
+  assert.match(afterText, /避让中 1 个限额节点/, 'shows rate-limited avoided node count')
+  app.dispose()
 })
 
 console.log(checks + ' plugin benchmark UI checks passed')
