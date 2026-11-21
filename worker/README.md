@@ -32,39 +32,21 @@ x-ofm-signature: hex(HMAC-SHA256(secret, "<ts>\n<METHOD>\n<path>\n<hex(sha256(bo
 
 New API 面板本身不按 IP 记账，这些视图由网关提供。Cloudflare 部署（方式一）无进程内状态，此三层仅自建形态可用。
 
-## GitHub 授权闸门（自建形态）
+## 授权闸门已移除
 
-闸门回答的是「谁可以用 EAC」，而不是「请求是否来自本插件」。插件里密封的签名密钥人人都能逆向取出，所以真正按人计的门只能设在网关——这里也是唯一持有中继 key 的地方。
+这里原本有一道 GitHub 授权闸门：登录并发 star 才发令牌，`POST /v1/chat/completions` 没令牌就 401。它连同 `auth-github.mjs` 一起删了。
 
-```
-插件（签名 + x-ofm-user 令牌） → 网关（验签 + 验令牌 + 验 star） → 中继
-```
+原因是这道门没解决它想解决的问题。它把使用权和 star 绑在一起，公告里写的是「每 1 个 Star，号池 +1.5」，可号池本身只是拿 star 数乘出来的一个数字（见 `poolSnapshot`），不是真加出来的账号。门立着，数字涨着，能用的还是那几个排队的模型。
 
-- 只有 `POST /v1/chat/completions` 需要令牌；`GET /v1/models` 不拦，插件才能在登录前把 EAC 模型列出来（并显示锁标记）。
-- 令牌在浏览器完成 GitHub 登录且**已 star 仓库**之后由网关签发（32 字节随机，服务端只存 SHA-256），插件自动领取，全程无需复制粘贴。
-- star 由 `GET /user/starred/<REQUIRE_STAR_REPO>` 判定：204 = 已 star，404 = 未 star。未 star 的登录会保留一张「重新检查」票据（30 分钟），用户去 star 后点一下即可，不必重新登录。
-- **定期复查**：每 `STAR_RECHECK_HOURS`（默认 12）小时用保存的 GitHub 授权复查一次；取消 star 即吊销令牌。GitHub 侧网络故障 / 限流（5xx、403、超时）保留既有判定，绝不误伤已授权用户；GitHub 返回 401（用户撤回了应用授权）视为失效，需重新登录。
-- **按账号限流**：`TOKEN_RATE_LIMIT_PER_MINUTE` / `TOKEN_RATE_LIMIT_PER_DAY` / `TOKEN_CONCURRENCY_PER_USER` 各自默认沿用同名的按 IP 值——分享出去的令牌不能靠换 IP 绕过额度。
-- 用户表 `users.json`（0600，与 `stats.json` 同目录）：GitHub id / 登录名 / 令牌哈希 / star 判定；GitHub 授权以 AES-256-GCM 加密存储（密钥 `USER_STORE_KEY`，缺省回落到第一个签名密钥），只用于 star 复查。删除该文件即吊销全部令牌（用户需重新登录）。
-- 环境变量：
+去掉之后：
 
-  ```ini
-  GITHUB_CLIENT_ID=<OAuth App 的 Client ID>
-  GITHUB_CLIENT_SECRET=<OAuth App 的 Client Secret>
-  REQUIRE_STAR_REPO=Ebony-Vinyl/dsh-our-free-model
-  REQUIRE_USER_TOKEN=0        # 0=兼容期（只记录不拒绝）；1=对话必须携带有效令牌
-  STAR_RECHECK_HOURS=12
-  PUBLIC_ORIGIN=https://<网关域名>   # 用于拼 OAuth 回调地址；留空则按请求头推导
-  USER_STORE_KEY=<32 字节以上随机串，可用 openssl rand -base64 32>
-  ```
+- `POST /v1/chat/completions` 只看签名，不再要 `x-ofm-user`；
+- `/auth/*` 路由、`REQUIRE_STAR_REPO`、`REQUIRE_USER_TOKEN`、`STAR_RECHECK_HOURS`、`USER_STORE_KEY`、`users.json` 全部不再需要；
+- `/pool` 的容量只认 `POOL_SIZE`，没配就如实报 unavailable，不再拿 star 数乘 1.5 编一个；
+- 按 IP 的限流、并发、看板统计原样保留。
 
-- **GitHub OAuth App**（用仓库 owner 账号建，1 分钟）：GitHub → Settings → Developer settings → OAuth Apps → New OAuth App；Homepage URL 填仓库地址；**Authorization callback URL 必须精确填 `https://<网关域名>/eac/auth/github/callback`**；创建后复制 Client ID 并生成 Client Secret，只放进服务器的 `.env`（600 权限），绝不写进仓库或插件。只申请 `read:user` 一个 scope。
-- **上线顺序**：先以 `REQUIRE_USER_TOKEN=0` 部署（旧版插件照常可用）→ 发布带登录入口的插件版本 → 公告 → 把 `REQUIRE_USER_TOKEN` 改成 `1` 并重启网关。这就是全部切换动作，回滚同理（改回 0）。
-- 网关自带一个授权页（`{mount}/auth/github/start|callback|recheck`）与插件用的 JSON 接口（`{mount}/auth/poll`、`{mount}/auth/status`、`{mount}/auth/logout`、`{mount}/auth/ack`），全部挂在 `{mount}/auth/*` 下，nginx 现有的 `/eac/` 反代直接透传，**不需要改 nginx**。若站点 WAF 拦截，只需在该站点 URL 白名单里放行 `/eac/auth/*`。
-- **GitHub 出网走 `node:https`，不是全局 fetch**——实测本机部署的服务器上 undici（全局 fetch）对 GitHub 一律 `UND_ERR_CONNECT_TIMEOUT`，而同一台机器 `node:https` 毫秒级拿到应答（403/404 都是 GitHub 的真实回复）。`auth-github.mjs` 里的 `nodeFetch` 就是为此存在，换服务器也不需要改配置；离线套件用注入的桩，不受影响。
-- 看板 `/stats-data` 的 `auth` 字段报告已授权 / 已知 / 待领取数量与强制开关状态。
+想按人限流的，自己在网关外面套一层，比让所有人为了一个 star 去授权要干净。
 
-新版插件使用 `/auth/poll?link=...&retain=1` 领取，确认本机已保存后以 `x-ofm-user` 调用 `POST /auth/ack?link=...`。网关在确认前保留令牌最多 15 分钟，响应丢失可以重领；旧插件继续幂等领取，新插件也兼容没有 ACK 的网关。待领取令牌沿用上游实现加密保存在 users.json 中，同一存储与密钥下重启仍可领取；旧版一次领取且不持久化的网关不能保证重领。升级请避开正在授权的会话，并保持以下单实例配置。
 
 ## ⚠️ 只能单实例运行（cluster / instances>1 会直接坏）
 
@@ -129,7 +111,7 @@ New API 面板本身不按 IP 记账，这些视图由网关提供。Cloudflare 
 前提：服务器装了宝塔面板（Linux 版），有一个能解析到这台服务器的域名（比如在 DNS 服务商给 `eac.你的域名` 加一条 A 记录指向服务器 IP）。
 
 1. **装 Node**：宝塔 → 软件商店 → 搜索「Node.js版本管理器」→ 安装，再在其中安装 Node 20 或 22（LTS）。
-2. **上传文件**：宝塔 → 文件 → 新建目录 `/www/eac-gateway/`，把本目录的 **三个文件** 上传进去：`worker.js`、`gateway-node.mjs`、`auth-github.mjs`（必须同目录）。
+2. **上传文件**：宝塔 → 文件 → 新建目录 `/www/eac-gateway/`，把本目录的 **两个文件** 上传进去：`worker.js`、`gateway-node.mjs`（必须同目录）。
 3. **写配置**：在 `/www/eac-gateway/` 新建文件 `.env`，内容（三个真实值取自 `D:\our free model\eac-channel.private.json`：`base`→UPSTREAM_URL、`apiKey`→UPSTREAM_API_KEY、`signingSecret`→SIGNING_SECRETS）：
    ```ini
    UPSTREAM_URL=https://<中继地址>/v1（必须以 /v1 结尾——网关按它拼 /models 与 /chat/completions）
@@ -139,14 +121,6 @@ New API 面板本身不按 IP 记账，这些视图由网关提供。Cloudflare 
    HOST=127.0.0.1
    PORT=17788
    RATE_LIMIT_PER_MINUTE=60
-   # GitHub 授权闸门（见上一节；不填则闸门不启用，旧行为不变）
-   GITHUB_CLIENT_ID=
-   GITHUB_CLIENT_SECRET=
-   REQUIRE_STAR_REPO=Ebony-Vinyl/dsh-our-free-model
-   REQUIRE_USER_TOKEN=0
-   STAR_RECHECK_HOURS=12
-   PUBLIC_ORIGIN=https://<网关域名>
-   USER_STORE_KEY=<openssl rand -base64 32>
    ```
    把 `.env` 权限改成 600（右键 → 权限），不要让其它用户可读。
 4. **建 Node 项目**：宝塔 → 网站 → Node 项目 → 添加 Node 项目：
@@ -203,4 +177,3 @@ npx wrangler deploy        # 如需限速，先取消 wrangler.toml 里 bindings
 
 离线套件直接驱动本仓库的 `worker.js`（同一份代码，无逻辑漂移）：`node scripts/test-all.mjs --only vault`，覆盖验签通过/时间戳过期/坏签名/未知路径/白名单外模型/超限 body/流式转发全链路。
 
-授权闸门另有一整套离线验收：`node scripts/test-all.mjs --only eac-auth`（或 `node scripts/eac-auth-test.mjs`）——GitHub 全部打桩、中继是本机回环服务器，覆盖 start 跳转形状、state 篡改/过期、star 通过 / 未 star 重检、令牌幂等领取且重启后仍可领取、新协议保存后匹配确认、未知链接按过期答复、users.json 不落明文、无令牌 / 未知令牌 / 已吊销令牌被拒、listing 不拦、取消 star 吊销、GitHub 不可达不误伤、退出登录、兼容期放行与按账号限流。
