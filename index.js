@@ -37,7 +37,7 @@ import { STATE } from './src/probe.js'
 import { generateKey, rankLanAddresses, startForwardServer, startLanRelay } from './src/forward.js'
 import { chanGatewayCredential, chanGatewayEnabled, chanGatewayPort, startChanRelay } from './src/chan-relay.js'
 import { CODE, UpstreamError } from './src/http.js'
-import { egressActive, egressFetch, outletLabel, readOutletSelection, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive, laneProxyEcho } from './src/egress.js'
+import { egressActive, egressFetch, outletLabel, readOutletSelection, refreshOutletExit, startEgressRelay, setFreeLaneProxy, freeLaneProxyActive, laneProxyEcho } from './src/egress.js'
 import { directFetch } from './src/eac.js'
 import { clearEacUser, readEacUser, writeEacUser } from './src/eac-user.js'
 import { createEacLoginPoller } from './src/eac-login.js'
@@ -498,6 +498,7 @@ export function apply(ctx, config) {
     sealedCredential: sealedCredentialOf,
     onSealedUnavailable: () => logger.warn?.('our-free-model: the sealed lane is not available in this composition (no recognized host profile); its models stay hidden'),
     onTopology: () => emitTopology(),
+    onEgressQuotaRefusal: () => scheduleOutletRotation(),
   })
   const { state, adapter, refreshCatalog, refreshAvailability, watchEgress, fetchListing, publicModelRows, syncAggregateCatalog, clearLaneBreaker } = modelRuntime
   const runForwarded = modelRuntime.complete
@@ -1010,6 +1011,49 @@ export function apply(ctx, config) {
       void syncEgress().catch(() => {})
     }, delay)
     outletRestartTimer.unref?.()
+  }
+
+  // Per-IP free-lane quota refusals (FreeUsageLimitError) are invisible to
+  // mihomo's gstatic health-check, so url-test keeps the exhausted node on top.
+  // Only triggered from the free lane when routed through the managed outlet.
+  const OUTLET_ROTATE_COOLDOWN_MS = 60_000
+  const OUTLET_LIMITED_TTL_MS = 10 * 60_000
+  const limitedNodes = new Map()
+  let outletRotateAt = 0
+  let outletRotation = null
+  function scheduleOutletRotation() {
+    if (disposed || freeLaneProxyActive()) return
+    const relay = outletRelay
+    if (relay === null || relay.managed === null || relay.managed === undefined) return
+    if (outletRotation !== null) return
+    if (Date.now() - outletRotateAt < OUTLET_ROTATE_COOLDOWN_MS) return
+    outletRotateAt = Date.now()
+    outletRotation = rotateOutletExit()
+      .catch(error => logger.debug?.(`our-free-model: outlet re-measure failed (${error?.message ?? error})`))
+      .finally(() => { outletRotation = null })
+  }
+  async function rotateOutletExit() {
+    const relay = outletRelay
+    if (disposed || relay === null || freeLaneProxyActive()) return
+    if (relay.managed === null || relay.managed === undefined) return
+    const now = Date.now()
+    for (const [node, until] of limitedNodes) if (until <= now) limitedNodes.delete(node)
+    const live = await readOutletSelection(relay).catch(() => null)
+    const current = live?.node ?? outletNode.node
+    const avoid = [...limitedNodes.keys()]
+    if (current !== '') avoid.push(current)
+    const rotated = await refreshOutletExit(relay, { avoid })
+    if (current !== '') limitedNodes.set(current, now + OUTLET_LIMITED_TTL_MS)
+    if (disposed) return
+    if (rotated === null) {
+      logger.warn?.('our-free-model: the lane rate-limited this exit and no other measured node is available; staying on it')
+      return
+    }
+    outletNode = { node: rotated.node, delayMs: rotated.delayMs, at: Date.now() }
+    logger.warn?.(rotated.switched
+      ? `our-free-model: the lane rate-limited "${rotated.previous === '' ? current : rotated.previous}"; re-measured the outlet and moved to "${rotated.node}" (${rotated.delayMs} ms, best of ${rotated.candidates})`
+      : `our-free-model: the lane rate-limited this exit; re-measured the outlet and "${rotated.node}" is still the only node measured (${rotated.delayMs} ms)`)
+    if (rotated.switched) void settleOutletWatch()
   }
 
   // ── hot reload + in-app upgrade ─────────────────────────────────────────────

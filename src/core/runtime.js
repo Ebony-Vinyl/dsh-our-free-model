@@ -28,6 +28,13 @@ const FALLBACK_CATALOG = buildCatalog([
  */
 const LANE_QUOTA_DEFAULT_MS = 6 * 60 * 60 * 1000
 
+/** True only when an upstream free-lane response itself proves per-IP quota exhaustion. */
+export function isEgressQuotaRefusal(error) {
+  if (error?.code !== CODE.quota || error?.laneQuota === true) return false
+  if (error?.type === 'FreeUsageLimitError') return true
+  return /free usage limit|usage limit reached/i.test(String(error?.message ?? ''))
+}
+
 /** 路径由产品入口决定；核心不解析 DSH_HOME，也不发现宿主服务。 */
 export function createRuntimeStores({ dataDir, logger = console }) {
   if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) {
@@ -73,6 +80,7 @@ export function createModelRuntime({
   sealedCredential = () => null,
   onSealedUnavailable = () => {},
   onTopology = () => {},
+  onEgressQuotaRefusal = () => {},
   subscriptionRuntime,
   extensionRuntime = null,
 }) {
@@ -218,6 +226,9 @@ export function createModelRuntime({
         : Date.now() + LANE_QUOTA_DEFAULT_MS
       setLaneState('quota', { retryAt, message: String(error?.message ?? 'free usage limit reached').slice(0, 300) })
       recordPassiveResult(entry.id, STATE.throttled)
+      if (isEgressQuotaRefusal(error)) {
+        try { onEgressQuotaRefusal(error) } catch { /* best-effort outlet rotation */ }
+      }
       return
     }
     if (code === CODE.laneLocked) {

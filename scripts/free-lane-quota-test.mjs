@@ -60,14 +60,16 @@ process.env.OUR_FREE_MODEL_KILO_BASE = 'http://127.0.0.1:1'
 const { server, turns, script, port } = await startFixture()
 process.env.OUR_FREE_MODEL_BASE = `http://127.0.0.1:${port}`
 
-const { createRuntimeStores, createModelRuntime } = await import('../src/core/runtime.js')
+const { createRuntimeStores, createModelRuntime, isEgressQuotaRefusal } = await import('../src/core/runtime.js')
 const { CODE } = await import('../src/http.js')
 
+const quotaExits = []
 const stores = createRuntimeStores({ dataDir, logger: { warn: () => {} } })
 const runtime = createModelRuntime({
   ...stores,
   logger: { warn: () => {}, info: () => {} },
   onTopology: () => {},
+  onEgressQuotaRefusal: error => quotaExits.push(error),
 })
 const adapter = runtime.adapter
 const entry = runtime.catalog.find(row => row.id === 'deepseek-v4.1-flash-free')
@@ -106,6 +108,7 @@ console.log('=== 1. one real 429 opens the breaker with the upstream window ==='
   check('the breaker is open', [lane?.state, typeof lane?.retryAt], ['quota', 'number'])
   check('the window honours Retry-After', lane.retryAt > Date.now() + 110_000 && lane.retryAt <= Date.now() + 121_000, true)
   check('the refused model reads throttled', stores.availability.get().results[entry.id]?.state, 'throttled')
+  check('upstream FreeUsageLimitError triggers egress rotation once', [quotaExits.length, isEgressQuotaRefusal(first.failure)], [1, true])
 }
 
 console.log('\n=== 2. further turns are refused locally; the wall sees nothing ===')
@@ -115,6 +118,7 @@ console.log('\n=== 2. further turns are refused locally; the wall sees nothing =
   check('the second turn is refused with quota', [second.ok, second.code, second.failure?.laneQuota], [false, CODE.quota, true])
   check('the message names the reset', /retry after/i.test(second.message), true)
   check('the wall received no second request', turns.length, before)
+  check('local breaker refusal does not re-trigger egress rotation', [quotaExits.length, isEgressQuotaRefusal(second.failure)], [1, false])
   const third = await turn()
   check('a different session is refused too (per-IP window)', [third.ok, turns.length], [false, before])
 }
@@ -152,6 +156,16 @@ console.log('\n=== 6. the client gate locks the lane without a window ===')
   const again = await turn()
   check('the next turn is refused locally', [again.ok, again.code, again.failure?.laneState], [false, CODE.quota, 'locked'])
   check('the wall saw no retry', turns.length, before)
+  runtime.clearLaneBreaker()
+}
+
+console.log('\n=== 7. generic 429 without usage-limit evidence does not rotate egress ===')
+{
+  const beforeExits = quotaExits.length
+  script.push({ status: 429, headers: { 'retry-after': '30' }, body: { type: 'error', error: { type: 'rate_limit_error', message: 'Too Many Requests' } } })
+  const generic = await turn()
+  check('generic 429 still opens the quota breaker', [generic.ok, generic.code], [false, CODE.quota])
+  check('generic 429 does not count as per-IP egress exhaustion', [quotaExits.length, isEgressQuotaRefusal(generic.failure)], [beforeExits, false])
   runtime.clearLaneBreaker()
 }
 
