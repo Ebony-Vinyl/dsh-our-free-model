@@ -567,6 +567,35 @@ function searchList(input) {
 }
 searchList.filterName = "search-list";
 
+// src/token-saver/rtk/filters/pytest.js
+var SUMMARY = /^[=\s]*(\d+\s+(?:passed|failed|error|errors|skipped|xfailed|xpassed)[^=\n]*?\bin\s+[\d.]+s)[=\s]*$/im;
+var LOOSE = /(\d+\s+(?:passed|failed|error|errors|skipped)[^\n]*?in\s+[\d.]+s)/i;
+var KEEP = /^(?:FAILED|ERROR)\b|^E\s+|^_{3,}\s|^=+\s*FAILURES\s*=+|^File "|^assert\b|^>\s+/;
+function pytest(input) {
+  const summary = (SUMMARY.exec(input)?.[1] ?? LOOSE.exec(input)?.[1])?.trim();
+  const failed = /\b(?:failed|error|errors)\b/i.test(summary ?? "") || /^(?:FAILED|ERROR)\b/m.test(input);
+  if (!failed) return summary ? `\u2713 ${summary}` : input;
+  const kept = input.split("\n").filter((line) => KEEP.test(line.trim()) || summary !== void 0 && line.includes(summary));
+  const body = kept.slice(0, 120).join("\n");
+  const out = `${summary === void 0 ? "" : `\u2717 ${summary}
+`}${body}`.trim();
+  return out || input;
+}
+pytest.filterName = "pytest";
+
+// src/token-saver/rtk/filters/tsc.js
+var ERROR = /error TS\d+:/;
+function tsc(input) {
+  const errors = input.split("\n").filter((line) => ERROR.test(line));
+  if (errors.length === 0) return input;
+  const kept = errors.slice(0, 100);
+  const more = errors.length > kept.length ? `
+... +${errors.length - kept.length} more errors` : "";
+  return `${kept.join("\n")}${more}
+Found ${errors.length} error(s)`;
+}
+tsc.filterName = "tsc";
+
 // src/token-saver/rtk/autodetect.js
 function autoDetectFilter(text) {
   const head = text.slice(0, DETECT_WINDOW);
@@ -574,6 +603,8 @@ function autoDetectFilter(text) {
   if (/^(?:diff --git |@@ )/m.test(head)) return gitDiff;
   if (/^(?:On branch |nothing to commit|Changes (?:not |to be )|Untracked files:)/m.test(head)) return gitStatus;
   if (/^(?:npm (?:warn|error|ERR!)|yarn (?:warn|error)|\s*Compiling\s+\S+|\s*Downloading\s+\S+|added \d+ package|\[ERROR\]|BUILD (?:SUCCESS|FAILED)|\s*Finished\s+|Successfully (?:installed|built)|ERROR:)/im.test(head)) return buildOutput;
+  if (/^(?:=+ .*\b\d+ (?:passed|failed|error|errors|skipped)[^=\n]* in [\d.]+s.*=+|(?:FAILED|ERROR) \S+)/m.test(text)) return pytest;
+  if (/error TS\d+:/m.test(head)) return tsc;
   const lines = head.split("\n");
   let nonempty = 0, porcelain = 0, paths = 0, listings = 0, numbered = 0, sample = 0;
   for (let index = 0; index < lines.length; index++) {
@@ -805,6 +836,107 @@ function injectResponses(payload, segment) {
   return result(payload, true, "injected");
 }
 
+// src/token-saver/prose.js
+var DIFF_LINE = /^[+-](?![+-])/;
+var CODE_START = /^(?:[{[]|<\/?[A-Za-z])/;
+var CODE_END = /[;{}=]$/;
+var URL = /(?:https?|ftp):\/\//i;
+var VERSION = /\b(?:v|version\s*)?\d+\.\d+(?:\.\d+)*\b/i;
+var EMAIL = /^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/;
+var FILE_EXTENSION = /\.(?:md|markdown|txt|log|json|jsonl|ya?ml|toml|ini|lock|ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|kts|cs|c|h|cpp|hpp|cc|rb|php|sh|bash|ps1|bat|cmd|html|htm|css|scss|sass|xml|sql|proto|vue|svelte|swift|dart|lua|r|scala|ex|exs|erl|hs|clj)$/i;
+function proseGuards(line) {
+  const value = String(line);
+  const trimmed = value.trim();
+  if (trimmed === "") return false;
+  if (/^(?:```|~~~)/.test(trimmed)) return false;
+  if (DIFF_LINE.test(trimmed)) return false;
+  if (CODE_START.test(trimmed)) return false;
+  if (CODE_END.test(trimmed)) return false;
+  if (URL.test(trimmed)) return false;
+  const marked = trimmed.replace(/[.。]$/, "");
+  if (EMAIL.test(marked)) return false;
+  if (FILE_EXTENSION.test(marked)) return false;
+  if (VERSION.test(trimmed)) return false;
+  if (/^[\w.-]+:\d+/.test(trimmed)) return false;
+  if (/^\s*[+*]\s/.test(trimmed)) return false;
+  if (trimmed.endsWith("...") || trimmed.endsWith("\u2026")) return false;
+  if (/(?:\be\.g\.|\bi\.e\.)$/i.test(trimmed)) return false;
+  if (!/[A-Za-z\u4e00-\u9fff]/.test(trimmed)) return false;
+  if (/[，,]\s*$/.test(value) && /[=();{}[\]]/.test(trimmed)) return false;
+  return true;
+}
+function looksLikeCode(text) {
+  const trimmed = text.trim();
+  if (/[=;{}]/.test(trimmed)) return true;
+  return /^(?:const|let|var|function|class|import|export|return|if|for|while|switch|def|fn|public|private|protected|package|#include)\b/.test(trimmed);
+}
+var POLITE_EN = /\b(?:please|thanks|thank you|kindly)\b[ \t]*/gi;
+var POLITE_ZH = /谢谢|多谢|感谢|请问|麻烦(?:您)?|劳驾|拜托|辛苦了?|(?<!申|邀|聘|提|呈|报|敬|恭|恳|函|回|奏|咨|声|争|催|敦|籲|吁|要|寻|约|宴|延)请(?!求|示|教|假|柬|帖|缨|战|命|辞|罪|愿|客)/g;
+function stripPoliteness(line) {
+  const source = String(line);
+  const withoutWords = source.replace(POLITE_EN, "").replace(POLITE_ZH, "");
+  if (withoutWords === source) return source;
+  return withoutWords.replace(/[ \t]{2,}/g, " ").replace(/^[ \t]*[，,、]+[ \t]*/, "").replace(/[，,、]+[ \t]*$/, "");
+}
+function trimProseText(text, options = {}) {
+  const politeness = options.politeness !== false;
+  const punctuation = options.punctuation !== false;
+  if (!politeness && !punctuation) return String(text);
+  return String(text).split("\n").map((line) => {
+    if (!proseGuards(line) || looksLikeCode(line)) return line;
+    let next = politeness ? stripPoliteness(line) : line;
+    if (punctuation) next = next.replace(/[.。,，]+(\s*)$/, "$1");
+    return next;
+  }).join("\n");
+}
+var isChatRole = (role) => role === "user" || role === "assistant";
+function trimRequestProse(payload, wire, options = {}) {
+  const stats = { bytesBefore: 0, bytesAfter: 0, saved: 0, blocks: 0 };
+  if (payload === null || typeof payload !== "object") return stats;
+  const apply = (owner, key) => {
+    const content = owner?.[key];
+    if (typeof content === "string") {
+      const next = trimProseText(content, options);
+      if (next === content) return;
+      stats.bytesBefore += content.length;
+      stats.bytesAfter += next.length;
+      stats.blocks += 1;
+      owner[key] = next;
+      return;
+    }
+    if (!Array.isArray(content)) return;
+    for (const part of content) {
+      if (!part || typeof part.text !== "string") continue;
+      const next = trimProseText(part.text, options);
+      if (next === part.text) continue;
+      stats.bytesBefore += part.text.length;
+      stats.bytesAfter += next.length;
+      stats.blocks += 1;
+      part.text = next;
+    }
+  };
+  try {
+    if (wire === "chat") {
+      for (const message of Array.isArray(payload.messages) ? payload.messages : []) {
+        if (message !== null && typeof message === "object" && isChatRole(message.role)) apply(message, "content");
+      }
+    } else if (wire === "messages") {
+      for (const message of Array.isArray(payload.messages) ? payload.messages : []) {
+        if (message === null || typeof message !== "object" || !isChatRole(message.role)) continue;
+        apply(message, "content");
+      }
+    } else if (wire === "responses") {
+      for (const item of Array.isArray(payload.input) ? payload.input : []) {
+        if (item === null || typeof item !== "object" || !isChatRole(item.role)) continue;
+        apply(item, "content");
+      }
+    }
+  } catch {
+  }
+  stats.saved = stats.bytesBefore - stats.bytesAfter;
+  return stats;
+}
+
 // src/token-saver/index.js
 var PROMPT_FAMILIES = ["caveman", "ponytail"];
 function saverConfig(settings) {
@@ -814,14 +946,35 @@ function saverConfig(settings) {
     enabled: section.enabled !== false,
     rtk: section.rtk !== false,
     caveman: PROMPT_FAMILIES.includes("caveman") ? String(prompts.caveman ?? "off") : "off",
-    ponytail: String(prompts.ponytail ?? "off")
+    ponytail: String(prompts.ponytail ?? "off"),
+    /** A user-written system instruction, appended through the same injector as
+     *  the built-in prompts. Empty (the default) injects nothing. */
+    customPrompt: typeof section.customPrompt === "string" ? section.customPrompt : "",
+    /** Trim trailing sentence marks from user/assistant prose on every wire.
+     *  On by default: it only ever removes filler. */
+    prose: section.prose !== false,
+    /** Trim politeness words from user/assistant prose on every wire. */
+    politeness: section.politeness !== false
     /** Per-request header/query opt-out is handled by the caller; this is the
      *  stored preference only. */
   };
 }
 function applyTokenSavers(payload, wire, config) {
-  const report = { prompt: null, rtk: null, saved: 0, bytesBefore: 0, bytesAfter: 0, notes: [] };
+  const report = { prompt: null, prose: null, rtk: null, saved: 0, bytesBefore: 0, bytesAfter: 0, notes: [] };
   if (config?.enabled === false || payload === null || typeof payload !== "object") return report;
+  const prosePunctuation = config.prose !== false;
+  const prosePoliteness = config.politeness !== false;
+  if (prosePunctuation || prosePoliteness) {
+    try {
+      const prose = trimRequestProse(payload, wire, { punctuation: prosePunctuation, politeness: prosePoliteness });
+      report.prose = prose;
+      report.bytesBefore += prose.bytesBefore;
+      report.bytesAfter += prose.bytesAfter;
+      report.saved += prose.saved;
+    } catch (error) {
+      report.notes.push(`prose-failed:${error?.message ?? error}`);
+    }
+  }
   if (config.caveman !== "off" || config.ponytail !== "off") {
     try {
       const prompts = activePrompts({ caveman: config.caveman, ponytail: config.ponytail });
@@ -835,13 +988,28 @@ function applyTokenSavers(payload, wire, config) {
       report.notes.push(`prompt-failed:${error?.message ?? error}`);
     }
   }
+  const custom = typeof config.customPrompt === "string" ? config.customPrompt.trim() : "";
+  if (custom !== "") {
+    try {
+      const result2 = injectSystem(payload, wire, custom);
+      const previous = report.prompt ?? { injected: false, reason: "", families: [] };
+      report.prompt = {
+        injected: previous.injected === true || result2.injected === true,
+        reason: result2.reason ?? previous.reason ?? "",
+        families: result2.injected === true ? [...previous.families ?? [], "custom"] : previous.families ?? []
+      };
+      if (result2.injected !== true && result2.reason !== void 0) report.notes.push(`prompt:${result2.reason}`);
+    } catch (error) {
+      report.notes.push(`prompt-failed:${error?.message ?? error}`);
+    }
+  }
   if (config.rtk !== false) {
     try {
       const result2 = compressRequest(payload, wire, true);
       report.rtk = result2.stats;
-      report.saved = Number(result2.stats?.saved) || 0;
-      report.bytesBefore = Number(result2.stats?.bytesBefore) || 0;
-      report.bytesAfter = Number(result2.stats?.bytesAfter) || 0;
+      report.saved += Number(result2.stats?.saved) || 0;
+      report.bytesBefore += Number(result2.stats?.bytesBefore) || 0;
+      report.bytesAfter += Number(result2.stats?.bytesAfter) || 0;
     } catch (error) {
       report.notes.push(`rtk-failed:${error?.message ?? error}`);
     }

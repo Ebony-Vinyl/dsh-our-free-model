@@ -872,6 +872,10 @@ window.__ModuleLoader__.load({
         'saver.rtk': 'RTK 工具输出压缩',
         'saver.rtkWhat': '压缩的是工具结果：git diff / status / log、grep、find、ls、tree、构建日志、带行号的文件转储，以及重复的日志行。',
         'saver.rtkSafety': '安全边界：报错的工具结果原样保留，小体积内容不碰，替换只在新文本更小且非空时发生——压缩结果永远不会比原文更大。',
+        'saver.prose': '删除句末标点',
+        'saver.proseWhat': '删除用户与助手文本末尾的句号/逗号；代码、URL、路径、版本号不动。',
+        'saver.politeness': '删除客套词',
+        'saver.politenessWhat': '删去用户与助手文本里的「谢谢」「请」「please」「thanks」等客套词；代码、URL、路径、版本号不动。',
         'saver.promptTitle': '提示词压缩',
         'saver.promptHint': '在系统提示里追加一条写作指令。这是唯一能减少输出 Token 的压缩，因为它改变的是模型怎么写。',
         'saver.caveman': 'Caveman',
@@ -879,6 +883,11 @@ window.__ModuleLoader__.load({
         'saver.ponytail': 'Ponytail',
         'saver.ponytailWhat': 'YAGNI 最小实现：只写被要求的那一件事，不主动加抽象、配置与兜底。',
         'saver.voiceWarn': '注意：这两族会改变助手的说话方式，并且会留在你的对话记录里。默认关闭。',
+        'saver.customTitle': '自定义系统提示词',
+        'saver.customHint': '追加到系统提示词末尾，下一次请求生效；留空则不注入。与内置提示词共用同一条安全注入路径。',
+        'saver.customPlaceholder': '写在这里的内容会追加到系统提示词…',
+        'saver.customSave': '保存提示词',
+        'saver.customClear': '清空',
         'saver.localTitle': '本地应答',
         'saver.localHint': '这五类请求的答案就在请求体里，转发出去只是白花一次上游额度与一个来回。',
         'saver.local.enabled': '启用本地应答',
@@ -1803,6 +1812,10 @@ window.__ModuleLoader__.load({
         'saver.rtk': 'RTK tool-output compaction',
         'saver.rtkWhat': 'What it compacts: tool results — git diff / status / log, grep, find, ls, tree, build logs, numbered file dumps and duplicate log lines.',
         'saver.rtkSafety': 'Safety rules: an error result is left untouched, small bodies are not touched, and a blob is replaced only when the new text is non-empty and strictly smaller — a compacted result is never larger than the original.',
+        'saver.prose': 'Trailing punctuation',
+        'saver.proseWhat': 'Drops sentence-final periods/commas from user and assistant text; code, URLs, paths and versions are left alone.',
+        'saver.politeness': 'Politeness words',
+        'saver.politenessWhat': 'Drops politeness words (谢谢, 请, please, thanks) from user and assistant text; code, URLs, paths and versions are left alone.',
         'saver.promptTitle': 'Prompt shaping',
         'saver.promptHint': 'Appends a writing instruction to the system prompt. It is the only saver that can cut output tokens, because it changes what the model writes.',
         'saver.caveman': 'Caveman',
@@ -1810,6 +1823,11 @@ window.__ModuleLoader__.load({
         'saver.ponytail': 'Ponytail',
         'saver.ponytailWhat': 'YAGNI-minimal replies: only the one thing that was asked for, no unrequested abstraction, config or fallback.',
         'saver.voiceWarn': 'Heads-up: both families change how the assistant talks, and that lands in your transcript. Off by default.',
+        'saver.customTitle': 'Custom system prompt',
+        'saver.customHint': "Appended to the system prompt; applied on the next request. Empty injects nothing, and it shares the built-in prompts' fail-open injection path.",
+        'saver.customPlaceholder': 'Text here is appended to the system prompt…',
+        'saver.customSave': 'Save prompt',
+        'saver.customClear': 'Clear',
         'saver.localTitle': 'Local answers',
         'saver.localHint': 'The answer to these five requests is already in the request body; forwarding one spends a round trip and upstream quota on a question with one right answer.',
         'saver.local.enabled': 'Enable local answers',
@@ -7328,6 +7346,16 @@ window.__ModuleLoader__.load({
       const local = panel.data?.local
       const savings = saver?.savings ?? null
 
+      // The custom prompt is edited locally and only posted on Save, so a
+      // half-typed instruction never reaches the next request.
+      const [promptDraft, setPromptDraft] = useState('')
+      const [promptReady, setPromptReady] = useState(false)
+      useEffect(() => {
+        if (promptReady || saver === undefined) return
+        setPromptDraft(typeof saver.customPrompt === 'string' ? saver.customPrompt : '')
+        setPromptReady(true)
+      }, [saver, promptReady])
+
       const write = async (kind, action) => {
         setBusy(kind)
         setError('')
@@ -7408,6 +7436,34 @@ window.__ModuleLoader__.load({
                     }),
                     h('span', null, t('saver.ponytailWhat')))),
                 h('p', { className: 'ofm_note' }, t('saver.voiceWarn')))),
+            h(Section, { title: t('saver.customTitle'), hint: t('saver.customHint') },
+              h('div', { className: 'ofm_panel ofm_rise' },
+                h('textarea', {
+                  className: 'ofm_input', rows: 5,
+                  value: promptDraft,
+                  placeholder: t('saver.customPlaceholder'),
+                  disabled: busy !== '',
+                  onChange: event => setPromptDraft(event.target.value),
+                }),
+                h('div', { className: 'ofm_row' },
+                  h(Button, { kind: 'primary', disabled: busy !== '', onClick: () => saveSaver({ customPrompt: promptDraft }) }, t('saver.customSave')),
+                  h(Button, {
+                    kind: 'ghost', disabled: busy !== '' || promptDraft === '',
+                    onClick: () => { setPromptDraft(''); saveSaver({ customPrompt: '' }) },
+                  }, t('saver.customClear'))))),
+            h(Section, { title: t('saver.prose'), hint: t('saver.proseWhat') },
+              h('div', { className: 'ofm_panel ofm_rise' },
+                h('div', { className: 'ofm_row' },
+                  h(Switch, {
+                    checked: saver.prose !== false, label: t('saver.prose'), disabled: busy !== '',
+                    onChange: () => { if (busy === '') saveSaver({ prose: saver.prose === false }) },
+                  })),
+                h('div', { className: 'ofm_row' },
+                  h(Switch, {
+                    checked: saver.politeness !== false, label: t('saver.politeness'), disabled: busy !== '',
+                    onChange: () => { if (busy === '') saveSaver({ politeness: saver.politeness === false }) },
+                  })),
+                h('p', { className: 'ofm_note' }, t('saver.politenessWhat')))),
             h(Section, { title: t('saver.rtk'), hint: t('saver.rtkWhat') },
               h('div', { className: 'ofm_panel ofm_rise' },
                 h('div', { className: 'ofm_row' },

@@ -842,7 +842,7 @@ check('registry resolves names and Rust aliases', () => {
   assert.equal(resolveFilter('fd'), find)
   assert.equal(resolveFilter('build-output'), null, 'build-output is autodetect-only, as in the source')
   assert.equal(resolveFilter('no-such-filter'), null)
-  assert.equal(Object.keys(allFilters()).length, 11)
+  assert.equal(Object.keys(allFilters()).length, 13)
 })
 
 check('the module tree imports nothing but its own relative files', () => {
@@ -852,7 +852,7 @@ check('the module tree imports nothing but its own relative files', () => {
     return entry.isDirectory() ? walk(absolute) : [absolute]
   })
   const files = walk(root)
-  assert.equal(files.length, 18, '12 filters + 6 top-level modules')
+  assert.equal(files.length, 20, '14 filters + 6 top-level modules')
   const offenders = []
   for (const file of files) {
     const body = fs.readFileSync(file, 'utf8')

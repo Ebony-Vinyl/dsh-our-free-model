@@ -29,6 +29,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS, activePrompts, cavemanPrompt, ponytailPrompt } from '../src/token-saver/prompts.js'
 import { INJECT_MARKER, hasInjected, injectSystem, stripInjected } from '../src/token-saver/inject.js'
+import { applyTokenSavers, saverConfig } from '../src/token-saver/index.js'
 
 let failures = 0
 const check = (name, fn) => {
@@ -400,6 +401,83 @@ check('hasInjected reports each wire and shape', () => {
   assert.equal(hasInjected(responses, 'responses'), false)
   injectSystem(responses, 'responses', CAVEMAN)
   assert.equal(hasInjected(responses, 'responses'), true)
+})
+
+// ── the user-authored instruction ────────────────────────────────────────────
+
+check('a custom system prompt is injected through the same marker', () => {
+  const body = { messages: [{ role: 'user', content: 'hi' }] }
+  const report = applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { customPrompt: 'Answer in French.' } }))
+  assert.equal(report.prompt?.injected, true)
+  assert.ok(body.messages[0].content.includes('Answer in French.'))
+  assert.equal(occurrences(body.messages[0].content, INJECT_MARKER), 1)
+  assert.ok(report.prompt.families.includes('custom'))
+})
+
+check('an empty custom prompt injects nothing and changes no body', () => {
+  const body = { messages: [{ role: 'user', content: 'hi' }] }
+  const before = JSON.parse(JSON.stringify(body))
+  const report = applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { customPrompt: '   ' } }))
+  assert.equal(report.prompt, null)
+  assert.deepEqual(body, before)
+})
+
+check('a custom prompt is reversible with the shared off switch', () => {
+  const body = { messages: [{ role: 'system', content: 'You are helpful.' }, { role: 'user', content: 'hi' }] }
+  const before = JSON.parse(JSON.stringify(body))
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { customPrompt: 'Answer in French.' } }))
+  stripInjected(body, 'chat')
+  assert.deepEqual(body, before)
+})
+
+// ── prose trimming ───────────────────────────────────────────────────────────
+
+check('prose trimming drops politeness and trailing marks from chat text', () => {
+  const body = { messages: [{ role: 'user', content: '谢谢，请稍等。' }, { role: 'assistant', content: 'Please fix the bug,' }] }
+  const report = applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(body.messages[0].content, '稍等')
+  assert.equal(body.messages[1].content, 'fix the bug')
+  assert.ok(report.prose.saved > 0)
+})
+
+check('prose trimming leaves tool output and code alone', () => {
+  const body = { messages: [
+    { role: 'user', content: "const msg = '谢谢'" },
+    { role: 'tool', tool_call_id: 't', content: '请稍等' },
+  ] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(body.messages[0].content, "const msg = '谢谢'")
+  assert.equal(body.messages[1].content, '请稍等')
+})
+
+check('prose trimming covers the messages and responses wire blocks', () => {
+  const msg = { messages: [{ role: 'user', content: [{ type: 'text', text: '谢谢。' }] }] }
+  applyTokenSavers(msg, 'messages', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(msg.messages[0].content[0].text, '')
+  const res = { input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: '请稍等。' }] }] }
+  applyTokenSavers(res, 'responses', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(res.input[0].content[0].text, '稍等')
+})
+
+check('punctuation and politeness are independent switches', () => {
+  const body = { messages: [{ role: 'user', content: '谢谢，请稍等。' }] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: true, politeness: false } }))
+  assert.equal(body.messages[0].content, '谢谢，请稍等')
+  const other = { messages: [{ role: 'user', content: '谢谢，请稍等。' }] }
+  applyTokenSavers(other, 'chat', saverConfig({ tokenSaver: { prose: false, politeness: true } }))
+  assert.equal(other.messages[0].content, '稍等。')
+})
+
+check('pytest output collapses to its verdict', () => {
+  const body = { messages: [{ role: 'tool', content: `${'test_a.py ..\n'.repeat(60)}\n===== 2 passed in 0.12s =====` }] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: false } }))
+  assert.ok(body.messages[0].content.includes('✓ 2 passed'))
+})
+
+check('tsc output keeps only its errors', () => {
+  const body = { messages: [{ role: 'tool', content: Array.from({ length: 40 }, (_, i) => `src/a${i}.ts(1,2): error TS2304: Cannot find name 'x'.\ncompiler chatter line ${i} that is not an error\n`).join('') }] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: false } }))
+  assert.ok(body.messages[0].content.includes('Found 40 error(s)'))
 })
 
 if (failures > 0) console.error(`prompt-saver-test: ${failures} failure(s)`)

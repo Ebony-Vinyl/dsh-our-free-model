@@ -10,10 +10,12 @@ import { tree } from './filters/tree.js'
 import { smartTruncate } from './filters/smartTruncate.js'
 import { readNumbered } from './filters/readNumbered.js'
 import { searchList } from './filters/searchList.js'
+import { pytest } from './filters/pytest.js'
+import { tsc } from './filters/tsc.js'
 
 const registry = Object.fromEntries([
   gitDiff, gitStatus, gitLog, grep, find, dedupLog, ls, tree,
-  smartTruncate, readNumbered, searchList,
+  smartTruncate, readNumbered, searchList, pytest, tsc,
 ].map(filter => [filter.filterName, filter]))
 
 export function resolveFilter(name) {

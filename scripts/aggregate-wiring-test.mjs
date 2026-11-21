@@ -492,6 +492,18 @@ let boundPort = 0
   check('an unknown level is refused', badLevel.status, 400)
   await post('/token-saver', { rtk: true, prompts: { caveman: 'lite' } })
 
+  const custom = await post('/token-saver', { customPrompt: 'Answer in French.' })
+  check('a custom system prompt is saved', custom.status, 200)
+  check('and echoed back', custom.json.tokenSaver.customPrompt, 'Answer in French.')
+  check('the GET serves it', (await get('/token-saver')).json.customPrompt, 'Answer in French.')
+  const tooLong = await post('/token-saver', { customPrompt: 'x'.repeat(8001) })
+  check('an over-long custom prompt is refused', tooLong.status, 400)
+  await post('/token-saver', { customPrompt: '' })
+
+  const politeness = await post('/token-saver', { politeness: false })
+  check('the politeness switch is saved', politeness.json.tokenSaver.politeness, false)
+  await post('/token-saver', { politeness: true })
+
   const optimize = await get('/local-optimize')
   check('the local-answer switches answer', optimize.status, 200)
   check('all five on by default', [optimize.json.quota, optimize.json.prefix, optimize.json.title, optimize.json.suggestion, optimize.json.filepath], [true, true, true, true, true])
