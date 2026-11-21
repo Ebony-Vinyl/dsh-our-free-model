@@ -46,25 +46,30 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const manifestPath = path.join(root, 'feed', 'manifest.json')
 const integrityPath = path.join(root, 'catalog', 'integrity.json')
 
-// The desktop installers embed their version from three files of their own
-// (tauri names the dmg by it, NSIS reports it, the app's updater compares
-// with it). A release whose desktop version lags package.json ships an
-// installer that calls itself the previous version — the 2.8.3 miss — so
-// the release gate refuses to run until the four agree.
-const desktopRoot = path.join(root, 'packages', 'desktop')
-const desktopVersions = {
-  'package.json': JSON.parse(fs.readFileSync(path.join(desktopRoot, 'package.json'), 'utf8')).version,
-  'src-tauri/tauri.conf.json': JSON.parse(fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'tauri.conf.json'), 'utf8')).version,
-  'src-tauri/Cargo.toml': /^version = "(.+)"$/m.exec(fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'Cargo.toml'), 'utf8'))[1],
-  'src-tauri/Cargo.lock': (() => {
-    const lock = fs.readFileSync(path.join(desktopRoot, 'src-tauri', 'Cargo.lock'), 'utf8')
+// The desktop installer and its embedded service each read their own version
+// metadata. Require those values to match the release before building or
+// checking the manifest.
+const desktopRoot = 'packages/desktop'
+const standaloneRoot = 'packages/standalone'
+const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+const versionOf = file => JSON.parse(read(file)).version
+const standaloneLock = JSON.parse(read(`${standaloneRoot}/package-lock.json`))
+const releaseVersions = {
+  [`${desktopRoot}/package.json`]: versionOf(`${desktopRoot}/package.json`),
+  [`${desktopRoot}/src-tauri/tauri.conf.json`]: versionOf(`${desktopRoot}/src-tauri/tauri.conf.json`),
+  [`${desktopRoot}/src-tauri/Cargo.toml`]: /^version = "(.+)"$/m.exec(read(`${desktopRoot}/src-tauri/Cargo.toml`))[1],
+  [`${desktopRoot}/src-tauri/Cargo.lock`]: (() => {
+    const lock = read(`${desktopRoot}/src-tauri/Cargo.lock`)
     const entry = lock.indexOf('name = "ofm-desktop"')
     return /^version = "(.+)"$/m.exec(lock.slice(entry))[1]
   })(),
+  [`${standaloneRoot}/package.json`]: versionOf(`${standaloneRoot}/package.json`),
+  [`${standaloneRoot}/package-lock.json (version)`]: standaloneLock.version,
+  [`${standaloneRoot}/package-lock.json (root package version)`]: standaloneLock.packages?.['']?.version,
 }
-for (const [file, version] of Object.entries(desktopVersions)) {
+for (const [file, version] of Object.entries(releaseVersions)) {
   if (version !== pkg.version) {
-    console.error(`packages/desktop/${file} is version ${version}, but package.json is ${pkg.version} — the installers would ship the wrong version; bump them together`)
+    console.error(`${file} is version ${version}, but package.json is ${pkg.version} — bump the release versions together`)
     process.exit(1)
   }
 }
