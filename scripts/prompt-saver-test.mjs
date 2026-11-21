@@ -29,6 +29,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { CAVEMAN_LEVELS, PONYTAIL_LEVELS, activePrompts, cavemanPrompt, ponytailPrompt } from '../src/token-saver/prompts.js'
 import { INJECT_MARKER, hasInjected, injectSystem, stripInjected } from '../src/token-saver/inject.js'
+import { applyTokenSavers, saverConfig } from '../src/token-saver/index.js'
 
 let failures = 0
 const check = (name, fn) => {
@@ -400,6 +401,33 @@ check('hasInjected reports each wire and shape', () => {
   assert.equal(hasInjected(responses, 'responses'), false)
   injectSystem(responses, 'responses', CAVEMAN)
   assert.equal(hasInjected(responses, 'responses'), true)
+})
+
+// ── the user-authored instruction ────────────────────────────────────────────
+
+check('a custom system prompt is injected through the same marker', () => {
+  const body = { messages: [{ role: 'user', content: 'hi' }] }
+  const report = applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { customPrompt: 'Answer in French.' } }))
+  assert.equal(report.prompt?.injected, true)
+  assert.ok(body.messages[0].content.includes('Answer in French.'))
+  assert.equal(occurrences(body.messages[0].content, INJECT_MARKER), 1)
+  assert.ok(report.prompt.families.includes('custom'))
+})
+
+check('an empty custom prompt injects nothing and changes no body', () => {
+  const body = { messages: [{ role: 'user', content: 'hi' }] }
+  const before = JSON.parse(JSON.stringify(body))
+  const report = applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { customPrompt: '   ' } }))
+  assert.equal(report.prompt, null)
+  assert.deepEqual(body, before)
+})
+
+check('a custom prompt is reversible with the shared off switch', () => {
+  const body = { messages: [{ role: 'system', content: 'You are helpful.' }, { role: 'user', content: 'hi' }] }
+  const before = JSON.parse(JSON.stringify(body))
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { customPrompt: 'Answer in French.' } }))
+  stripInjected(body, 'chat')
+  assert.deepEqual(body, before)
 })
 
 if (failures > 0) console.error(`prompt-saver-test: ${failures} failure(s)`)

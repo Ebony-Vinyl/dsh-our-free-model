@@ -1319,9 +1319,15 @@ export function apply(ctx, config) {
             prompts.ponytail = level
           }
         }
+        let customPrompt = typeof current.customPrompt === 'string' ? current.customPrompt : ''
+        if (patch.customPrompt !== undefined) {
+          customPrompt = String(patch.customPrompt)
+          if (customPrompt.length > 8000) throw httpError(400, 'customPrompt must be at most 8000 characters')
+        }
         settings.update({ tokenSaver: {
           ...current,
           prompts,
+          customPrompt,
           ...patch.enabled === undefined ? {} : { enabled: patch.enabled === true },
           ...patch.rtk === undefined ? {} : { rtk: patch.rtk === true },
         } })
@@ -2536,6 +2542,7 @@ function publicTokenSaver(section) {
     enabled: config.enabled,
     rtk: config.rtk,
     prompts: { caveman: config.caveman, ponytail: config.ponytail },
+    customPrompt: config.customPrompt,
     cavemanLevels: CAVEMAN_LEVELS,
     ponytailLevels: PONYTAIL_LEVELS,
   }

@@ -217,6 +217,8 @@ export const SETTINGS_INITIAL = {
     enabled: true,
     rtk: true,
     prompts: { caveman: 'off', ponytail: 'off' },
+    /** User-authored system instruction, appended verbatim. Empty means off. */
+    customPrompt: '',
   },
   /** The aggregate lane: third-party providers reached with the user's own key.
    *  Keys live in this 0600 file, never in a shared settings document, and the

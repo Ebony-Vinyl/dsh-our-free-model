@@ -47,6 +47,9 @@ export function saverConfig(settings) {
     rtk: section.rtk !== false,
     caveman: PROMPT_FAMILIES.includes('caveman') ? String(prompts.caveman ?? 'off') : 'off',
     ponytail: String(prompts.ponytail ?? 'off'),
+    /** A user-written system instruction, appended through the same injector as
+     *  the built-in prompts. Empty (the default) injects nothing. */
+    customPrompt: typeof section.customPrompt === 'string' ? section.customPrompt : '',
     /** Per-request header/query opt-out is handled by the caller; this is the
      *  stored preference only. */
   }
@@ -82,6 +85,29 @@ export function applyTokenSavers(payload, wire, config) {
         report.prompt = { injected: result.injected === true, reason: result.reason ?? '', families: prompts.map(entry => `${entry.id}:${entry.level}`) }
         if (result.injected !== true && result.reason !== undefined) report.notes.push(`prompt:${result.reason}`)
       }
+    } catch (error) {
+      report.notes.push(`prompt-failed:${error?.message ?? error}`)
+    }
+  }
+
+  // A user-authored instruction. It travels through the same marker-delimited,
+  // cache-aware injector as the built-in prompts — identical idempotency,
+  // identical fail-open behaviour, and Anthropic's cache breakpoint still
+  // terminates the block list. It is additive: the user's own system text is
+  // never replaced, only appended to.
+  const custom = typeof config.customPrompt === 'string' ? config.customPrompt.trim() : ''
+  if (custom !== '') {
+    try {
+      const result = injectSystem(payload, wire, custom)
+      const previous = report.prompt ?? { injected: false, reason: '', families: [] }
+      report.prompt = {
+        injected: previous.injected === true || result.injected === true,
+        reason: result.reason ?? previous.reason ?? '',
+        families: result.injected === true
+          ? [...(previous.families ?? []), 'custom']
+          : (previous.families ?? []),
+      }
+      if (result.injected !== true && result.reason !== undefined) report.notes.push(`prompt:${result.reason}`)
     } catch (error) {
       report.notes.push(`prompt-failed:${error?.message ?? error}`)
     }
