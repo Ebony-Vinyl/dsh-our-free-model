@@ -8,6 +8,7 @@ import { once } from 'node:events'
 import { pathToFileURL } from 'node:url'
 import { stageDesktopService, repositoryRoot } from './prepare-desktop.mjs'
 
+const desktopVersion = JSON.parse(fs.readFileSync(new URL('../packages/desktop/package.json', import.meta.url), 'utf8')).version
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ofm desktop 测试 '))
 const serviceRoot = path.join(scratch, 'service')
 const dataDir = path.join(scratch, 'data')
@@ -71,6 +72,8 @@ try {
       fs.rmSync(orphan, { force: true })
     }
     fs.copyFileSync(process.execPath, path.join(scratch, process.platform === 'win32' ? 'node.exe' : 'node'))
+    assert.equal(JSON.parse(fs.readFileSync(path.join(serviceRoot, 'packages/standalone/package.json'), 'utf8')).version, desktopVersion,
+      '桌面包必须复制与安装程序相同版本的独立服务元数据')
     for (const file of ['src/providers/registry.json', 'src/core/runtime.js', 'packages/standalone/web/assets.json',
       'packages/standalone/management.mjs', 'packages/standalone/channels/worker.mjs', 'vendor/channel-pack/qoder-auth-wasm.wasm']) {
       assert.ok(fs.existsSync(path.join(serviceRoot, file)), file)
@@ -98,6 +101,10 @@ try {
     assert.equal(response.status, 200)
     const summary = await fetch(`${url.origin}/api/management/summary`, { headers: { cookie: response.headers.get('set-cookie').split(';')[0] } })
     assert.equal(summary.status, 200)
+    assert.equal((await summary.json()).version, desktopVersion)
+    const health = await fetch(`${url.origin}/health`)
+    assert.equal(health.status, 200)
+    assert.equal((await health.json()).version, desktopVersion)
     const duplicate = await fetch(`${url.origin}/api/management/session`, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ bootstrapToken: new URLSearchParams(url.hash.slice(1)).get('login') }) })
     assert.equal(duplicate.status, 401)

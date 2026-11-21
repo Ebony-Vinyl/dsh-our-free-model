@@ -31,7 +31,7 @@ if (!['all', 'contributor', 'release'].includes(options.mode)) {
   process.exit(1)
 }
 const { mode, only } = options
-const releaseSuites = new Set(['manifest', 'legacy-payload', 'release', 'catalog', 'legacy-upgrade', 'engine-payload'])
+const releaseSuites = new Set(['manifest', 'legacy-payload', 'release', 'catalog', 'legacy-upgrade', 'engine-payload', 'desktop'])
 
 const suites = [
   ['manifest', 'build-manifest.mjs', ['--check']],

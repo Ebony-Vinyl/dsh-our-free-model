@@ -45,12 +45,13 @@ export function stageDesktopService(destination, { requireWorkspace = false } = 
   const target = `${process.platform}-${process.arch}`
   const binaries = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'vendor/magpie/engine.json'), 'utf8')).binaries ?? {}
   const binary = binaries[target]
-  if (binary && typeof binary.path === 'string') {
+  const binaryPath = binary && typeof binary.path === 'string' ? path.join(repositoryRoot, 'vendor/magpie', binary.path) : null
+  if (binaryPath !== null && fs.existsSync(binaryPath)) {
     copy(`vendor/magpie/${binary.path}`, `../vendor/magpie/${binary.path}`)
   } else if (requireWorkspace) {
     // A real installer without the engine ships a workspace page that can never
     // start, so packaging refuses. Staging alone (tests, source inspection) may
-    // run on a platform with no pinned build.
+    // run on a platform with no pinned build or an omitted local binary.
     throw new Error(`模型工作台需要 ${target} 的引擎二进制；先运行 node scripts/build-magpie-engine.mjs`)
   } else {
     console.log(`提示：${target} 没有引擎二进制，本次只生成不含模型工作台的服务资源`)
