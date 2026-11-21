@@ -466,7 +466,7 @@ check('pytest output collapses to its verdict', () => {
 })
 
 check('tsc output keeps only its errors', () => {
-  const body = { messages: [{ role: 'tool', content: Array.from({ length: 40 }, (_, i) => `src/a${i}.ts(1,2): error TS2304: Cannot find name 'x'.`).join('\n') }] }
+  const body = { messages: [{ role: 'tool', content: Array.from({ length: 40 }, (_, i) => `src/a${i}.ts(1,2): error TS2304: Cannot find name 'x'.\ncompiler chatter line ${i} that is not an error\n`).join('') }] }
   applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: false } }))
   assert.ok(body.messages[0].content.includes('Found 40 error(s)'))
 })
