@@ -65,5 +65,7 @@ export const FILTERS = {
   SMART_TRUNCATE: 'smart-truncate',
   READ_NUMBERED: 'read-numbered',
   SEARCH_LIST: 'search-list',
-  BUILD_OUTPUT: 'build-output'
+  BUILD_OUTPUT: 'build-output',
+  PYTEST: 'pytest',
+  TSC: 'tsc'
 }

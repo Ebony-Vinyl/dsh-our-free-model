@@ -567,6 +567,35 @@ function searchList(input) {
 }
 searchList.filterName = "search-list";
 
+// src/token-saver/rtk/filters/pytest.js
+var SUMMARY = /^[=\s]*(\d+\s+(?:passed|failed|error|errors|skipped|xfailed|xpassed)[^=\n]*?\bin\s+[\d.]+s)[=\s]*$/im;
+var LOOSE = /(\d+\s+(?:passed|failed|error|errors|skipped)[^\n]*?in\s+[\d.]+s)/i;
+var KEEP = /^(?:FAILED|ERROR)\b|^E\s+|^_{3,}\s|^=+\s*FAILURES\s*=+|^File "|^assert\b|^>\s+/;
+function pytest(input) {
+  const summary = (SUMMARY.exec(input)?.[1] ?? LOOSE.exec(input)?.[1])?.trim();
+  const failed = /\b(?:failed|error|errors)\b/i.test(summary ?? "") || /^(?:FAILED|ERROR)\b/m.test(input);
+  if (!failed) return summary ? `\u2713 ${summary}` : input;
+  const kept = input.split("\n").filter((line) => KEEP.test(line.trim()) || summary !== void 0 && line.includes(summary));
+  const body = kept.slice(0, 120).join("\n");
+  const out = `${summary === void 0 ? "" : `\u2717 ${summary}
+`}${body}`.trim();
+  return out || input;
+}
+pytest.filterName = "pytest";
+
+// src/token-saver/rtk/filters/tsc.js
+var ERROR = /error TS\d+:/;
+function tsc(input) {
+  const errors = input.split("\n").filter((line) => ERROR.test(line));
+  if (errors.length === 0) return input;
+  const kept = errors.slice(0, 100);
+  const more = errors.length > kept.length ? `
+... +${errors.length - kept.length} more errors` : "";
+  return `${kept.join("\n")}${more}
+Found ${errors.length} error(s)`;
+}
+tsc.filterName = "tsc";
+
 // src/token-saver/rtk/autodetect.js
 function autoDetectFilter(text) {
   const head = text.slice(0, DETECT_WINDOW);
@@ -574,6 +603,8 @@ function autoDetectFilter(text) {
   if (/^(?:diff --git |@@ )/m.test(head)) return gitDiff;
   if (/^(?:On branch |nothing to commit|Changes (?:not |to be )|Untracked files:)/m.test(head)) return gitStatus;
   if (/^(?:npm (?:warn|error|ERR!)|yarn (?:warn|error)|\s*Compiling\s+\S+|\s*Downloading\s+\S+|added \d+ package|\[ERROR\]|BUILD (?:SUCCESS|FAILED)|\s*Finished\s+|Successfully (?:installed|built)|ERROR:)/im.test(head)) return buildOutput;
+  if (/^(?:=+ .*\b\d+ (?:passed|failed|error|errors|skipped)[^=\n]* in [\d.]+s.*=+|(?:FAILED|ERROR) \S+)/m.test(text)) return pytest;
+  if (/error TS\d+:/m.test(head)) return tsc;
   const lines = head.split("\n");
   let nonempty = 0, porcelain = 0, paths = 0, listings = 0, numbered = 0, sample = 0;
   for (let index = 0; index < lines.length; index++) {

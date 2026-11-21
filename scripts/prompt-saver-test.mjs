@@ -459,6 +459,18 @@ check('prose trimming covers the messages and responses wire blocks', () => {
   assert.equal(res.input[0].content[0].text, '稍等')
 })
 
+check('pytest output collapses to its verdict', () => {
+  const body = { messages: [{ role: 'tool', content: `${'test_a.py ..\n'.repeat(60)}\n===== 2 passed in 0.12s =====` }] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: false } }))
+  assert.ok(body.messages[0].content.includes('✓ 2 passed'))
+})
+
+check('tsc output keeps only its errors', () => {
+  const body = { messages: [{ role: 'tool', content: Array.from({ length: 40 }, (_, i) => `src/a${i}.ts(1,2): error TS2304: Cannot find name 'x'.`).join('\n') }] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: false } }))
+  assert.ok(body.messages[0].content.includes('Found 40 error(s)'))
+})
+
 if (failures > 0) console.error(`prompt-saver-test: ${failures} failure(s)`)
 else console.log('prompt-saver-test: the authored prompt families retain boundaries and the injector is reversible')
 process.exitCode = failures > 0 ? 1 : 0

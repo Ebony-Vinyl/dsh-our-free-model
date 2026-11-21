@@ -12,6 +12,8 @@ import { tree } from './filters/tree.js'
 import { smartTruncate } from './filters/smartTruncate.js'
 import { readNumbered, READ_NUMBERED_LINE_RE } from './filters/readNumbered.js'
 import { searchList, SEARCH_LIST_HEADER_RE } from './filters/searchList.js'
+import { pytest } from './filters/pytest.js'
+import { tsc } from './filters/tsc.js'
 import { isGrepHit, splitGrepHit, parseGrepOutput } from './hitLine.js'
 
 export function autoDetectFilter(text) {
@@ -20,6 +22,8 @@ export function autoDetectFilter(text) {
   if (/^(?:diff --git |@@ )/m.test(head)) return gitDiff
   if (/^(?:On branch |nothing to commit|Changes (?:not |to be )|Untracked files:)/m.test(head)) return gitStatus
   if (/^(?:npm (?:warn|error|ERR!)|yarn (?:warn|error)|\s*Compiling\s+\S+|\s*Downloading\s+\S+|added \d+ package|\[ERROR\]|BUILD (?:SUCCESS|FAILED)|\s*Finished\s+|Successfully (?:installed|built)|ERROR:)/im.test(head)) return buildOutput
+  if (/^(?:=+ .*\b\d+ (?:passed|failed|error|errors|skipped)[^=\n]* in [\d.]+s.*=+|(?:FAILED|ERROR) \S+)/m.test(text)) return pytest
+  if (/error TS\d+:/m.test(head)) return tsc
 
   const lines = head.split('\n')
   let nonempty = 0, porcelain = 0, paths = 0, listings = 0, numbered = 0, sample = 0
