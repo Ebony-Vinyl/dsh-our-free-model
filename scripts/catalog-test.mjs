@@ -180,6 +180,26 @@ check('the adapter seam exists and is the one importer', own, ['adapter/kernel.j
 check('the entry reaches the kernel only through the seam', /from '\.\/adapter\/kernel\.js'/.test(read('index.js')), true)
 check('the seam is shipped', (pkg.files ?? []).includes('adapter'), true)
 
+// ── capability tags are derived, never hand-written (issue #869) ─────────────
+{
+  const { capabilityTagsOf, buildCatalog } = await import('../src/catalog.js')
+  const base = { id: 'x', contextWindow: 131072, maxOutput: 32768, vision: false, reasoning: false }
+  check('a 199_999 window does not earn the long-context tag', capabilityTagsOf({ ...base, contextWindow: 199_999 }).includes('long-context'), false)
+  check('a 200_000 window earns it', capabilityTagsOf({ ...base, contextWindow: 200_000 }).includes('long-context'), true)
+  check('a 65_535 output ceiling does not earn long-output', capabilityTagsOf({ ...base, maxOutput: 65_535 }).includes('long-output'), false)
+  check('a 65_536 output ceiling earns it', capabilityTagsOf({ ...base, maxOutput: 65_536 }).includes('long-output'), true)
+  check('vision comes from the entry, not from the id', capabilityTagsOf({ ...base, vision: true }).includes('vision'), true)
+  check('a fixed-thinking model does not advertise reasoning', capabilityTagsOf({ ...base, reasoning: true }).includes('reasoning'), false)
+  check('a tunable-thinking model does', capabilityTagsOf({ ...base, reasoning: true, canDisableThinking: true }).includes('reasoning'), true)
+  check('three levels are not multi-level', capabilityTagsOf({ ...base, efforts: ['low', 'high', 'max'] }).includes('thinking-levels'), false)
+  check('four levels are', capabilityTagsOf({ ...base, efforts: ['none', 'low', 'high', 'max'] }).includes('thinking-levels'), true)
+  check('a bare entry gets no tags at all', capabilityTagsOf({ id: 'y' }), [])
+  check('a null entry is not an error', capabilityTagsOf(null), [])
+  const tagged = buildCatalog(['deepseek-v4.1-flash-free', 'glm-5.3-flash-free'])
+  check('every free-lane row carries a tags array', tagged.every(row => Array.isArray(row.tags)), true)
+  check('the 1M-window row is tagged long-context', tagged.find(row => row.id === 'deepseek-v4.1-flash-free').tags.includes('long-context'), true)
+}
+
 // ── the plugin still declares only what it cannot exist without ───────────────
 const entry = await import('../index.js')
 check('inject stays `llm` only — a headless composition must keep working', entry.inject, ['llm'])

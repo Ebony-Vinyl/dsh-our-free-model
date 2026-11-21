@@ -70,6 +70,19 @@ window.__ModuleLoader__.load({
         'tag.rungTitle': '各档位实际发出的输出上限：{ladder}。档位是思考与回答共用的额度，且不会超过上面的最长输出与设置里的单次上限。',
         'tag.levels': '思考档',
         'tag.levelsTitle': '该模型自己声明的思考档位，选中后按原值下发到上游的 reasoning_effort 字段；档位之外的取值会被上游拒绝。',
+        'tag.longContext': '长文本',
+        'tag.longContextTitle': '上下文窗口 ≥ 200K：能装下整个仓库或一本书。',
+        'tag.longOutput': '长输出',
+        'tag.longOutputTitle': '单次最长输出 ≥ 64K：适合整文件重写与长文生成。',
+        'tag.thinkingLevels': '多档思考',
+        'tag.thinkingLevelsTitle': '声明了 4 档以上思考强度，可以在延迟与深度之间按请求切换。',
+        'tag.fast': '快',
+        'tag.fastTitle': '实测首字与吞吐明显优于同类。',
+        'tag.eac': 'EAC',
+        'tag.eacTitle': '走 EAC 协付车道。',
+        'tag.capabilities': '擅长',
+        'tag.visionTitle': '支持图片输入。',
+        'tag.thinkingTitle': '可以开关或调节思考强度。',
         'effort.off': '关闭',
         'effort.minimal': '最小',
         'effort.low': '低',
@@ -1006,6 +1019,19 @@ window.__ModuleLoader__.load({
         'tag.rungTitle': 'What each rung actually sends: {ladder}. A rung is one ceiling shared by thinking and the answer, and it never exceeds the max output above or the per-call ceiling in settings.',
         'tag.levels': 'Thinking levels',
         'tag.levelsTitle': 'The levels this model declares itself; the selected one is sent as-is in the upstream reasoning_effort field, and a value outside the set is rejected upstream.',
+        'tag.longContext': 'Long context',
+        'tag.longContextTitle': 'A context window of 200K or more: fits a whole repository or a book.',
+        'tag.longOutput': 'Long output',
+        'tag.longOutputTitle': 'A per-call output ceiling of 64K or more: suits whole-file rewrites and long-form generation.',
+        'tag.thinkingLevels': 'Multi-level thinking',
+        'tag.thinkingLevelsTitle': 'Declares four or more thinking levels, so a request can trade latency for depth.',
+        'tag.fast': 'Fast',
+        'tag.fastTitle': 'Measured time-to-first-token and throughput are clearly better than its peers.',
+        'tag.eac': 'EAC',
+        'tag.eacTitle': 'Served through the EAC co-paid lane.',
+        'tag.capabilities': 'Good at',
+        'tag.visionTitle': 'Accepts image input.',
+        'tag.thinkingTitle': 'Thinking can be toggled or tuned.',
         'effort.off': 'Off',
         'effort.minimal': 'Minimal',
         'effort.low': 'Low',
@@ -1975,6 +2001,11 @@ window.__ModuleLoader__.load({
 .ofm_id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ofm_tags{display:flex;gap:5px;flex-wrap:wrap}
 .ofm_tag{font-size:10.5px;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 70%,transparent);border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}
+/* 能力标签：与上面的规格标签分开一行，颜色更实一点，表示「擅长什么」而不是「多大」 */
+.ofm_captags{align-items:center;margin-top:2px}
+.ofm_caplabel{font-size:10px;font-weight:600;color:var(--dsw-alias-label-tertiary);letter-spacing:.3px}
+.ofm_tag.cap{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary) 38%,transparent);color:var(--dsw-alias-state-business-primary);font-weight:600}
+.ofm_tag.cap.fast{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 38%,transparent);color:var(--dsw-alias-state-success-primary)}
 .ofm_chantag{font-size:10px;font-weight:650;padding:2px 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-business-primary) 50%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 9%,transparent);color:var(--dsw-alias-state-business-primary);white-space:nowrap}
 /* ══ 新品/热门徽标与高速标签（置顶的 opencode 免费模型） ═════════════════ */
 .ofm_newtag{flex:none;font-size:9.5px;font-weight:750;letter-spacing:.4px;padding:2px 7px;border-radius:999px;color:#fff;background:var(--dsw-alias-state-error-primary);box-shadow:0 1px 4px color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,transparent);white-space:nowrap;text-transform:uppercase}
@@ -3192,6 +3223,30 @@ window.__ModuleLoader__.load({
       return String(n)
     }
 
+    /**
+     * A money balance, in the currency's own units.
+     *
+     * `kilo()` is a *token* formatter: it rounds to an integer and appends K/M.
+     * Running a dollar balance through it turned $5.00 into "5" and $1234.56
+     * into "1.2K", which reads as a token count, not a balance (issue #821).
+     * Cline is the channel that declares `unit: 'dollars'`.
+     */
+    function money(value, locale) {
+      const n = Number(value)
+      if (!Number.isFinite(n)) return '—'
+      const digits = Math.abs(n) >= 100 ? 0 : 2
+      try {
+        return n.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US',
+          { minimumFractionDigits: digits, maximumFractionDigits: digits })
+      } catch { return n.toFixed(digits) }
+    }
+
+    /** Format a balance with the formatter its declared unit calls for. */
+    function balanceText(value, capability, locale) {
+      if (capability?.unit === 'dollars') return money(value, locale)
+      return kilo(value)
+    }
+
     function ago(ts, locale) {
       if (!ts) return '—'
       const seconds = Math.max(1, Math.round((Date.now() - ts) / 1000))
@@ -3687,6 +3742,23 @@ window.__ModuleLoader__.load({
       const levels = Array.isArray(m.efforts) && m.efforts.length > 0
         ? m.efforts.map(levelName).join(' / ')
         : undefined
+      // Capability tags, translated from the ids the catalog derives. Every id
+      // is looked up with a literal call so the dictionary lint can see the key
+      // (an id with no entry is skipped rather than rendered raw).
+      const CAPABILITY_TAGS = {
+        'long-context': { label: () => t('tag.longContext'), title: () => t('tag.longContextTitle') },
+        'long-output': { label: () => t('tag.longOutput'), title: () => t('tag.longOutputTitle') },
+        vision: { label: () => t('tag.vision'), title: () => t('tag.visionTitle') },
+        reasoning: { label: () => t('tag.thinking'), title: () => t('tag.thinkingTitle') },
+        'thinking-levels': { label: () => t('tag.thinkingLevels'), title: () => t('tag.thinkingLevelsTitle') },
+        fast: { label: () => t('tag.fast'), title: () => t('tag.fastTitle') },
+        eac: { label: () => t('tag.eac'), title: () => t('tag.eacTitle') },
+      }
+      const capabilityTags = Array.isArray(m.tags) && m.tags.length > 0
+        ? m.tags.map(id => CAPABILITY_TAGS[id] === undefined ? null : {
+          id, label: CAPABILITY_TAGS[id].label(), title: CAPABILITY_TAGS[id].title(),
+        }).filter(tag => tag !== null)
+        : undefined
       return h('article', { className: 'ofm_card' + (dim ? ' dim' : '') + (m.pinned === true ? ' pinned' : '') },
         // Two rows, not one: the chips row carries the channel tag and the
         // badges, and the model name gets a full-width row of its own. They
@@ -3715,6 +3787,17 @@ window.__ModuleLoader__.load({
               `${t('tag.rung')} ${kilo(rung.tokens)}`),
           levels === undefined ? null
             : h('span', { className: 'ofm_tag', title: t('tag.levelsTitle') }, `${t('tag.levels')} ${levels}`)),
+        // Capability tags answer a different question from the spec tags above:
+        // those say "how big are its limits", these say "what is it good at"
+        // (issue #869). Derived from the entry's own fields by
+        // `capabilityTagsOf`, so a model with no declared facts gets no claim.
+        capabilityTags === undefined ? null : h('div', { className: 'ofm_tags ofm_captags' },
+          h('span', { className: 'ofm_caplabel' }, t('tag.capabilities')),
+          capabilityTags.map(tag => h('span', {
+            className: `ofm_tag cap ${tag.id}`,
+            key: tag.id,
+            title: tag.title,
+          }, tag.label))),
         m.channel === 'eac' && locked === true
           ? h(Fragment, null,
             h('p', { className: 'ofm_note' }, t('eac.lockedNote')),
@@ -5736,7 +5819,7 @@ window.__ModuleLoader__.load({
           creditCapability ? h('span', { className: 'ofm_credittotal' },
             `${balanceLabel} `,
             h('b', null, balanceLoading ? '…' : balancesKnown
-              ? creditCapability.quota ? t('chan.credits.loaded').replace('{count}', String((balances ?? []).filter(row => Number.isFinite(row.balance?.total)).length)) : kilo(balancesTotal)
+              ? creditCapability.quota ? t('chan.credits.loaded').replace('{count}', String((balances ?? []).filter(row => Number.isFinite(row.balance?.total)).length)) : balanceText(balancesTotal, creditCapability, t.locale)
               : balances === undefined ? '…' : '—')) : null),
         compact ? h('div', { className: 'ofm_directoryactions' },
           h('span', { className: 'ofm_id' }, channel.id),
@@ -5816,7 +5899,7 @@ window.__ModuleLoader__.load({
                         : result?.error || t('chan.credits.unavailable'))
                     const reading = creditCapability.quota
                       ? (balance.packages ?? []).map(pkg => `${pkg.name} ${pkg.remaining}%`).join(' · ') || '—'
-                      : kilo(balance.total)
+                      : balanceText(balance.total, creditCapability, t.locale)
                     return h('span', { className: 'ofm_creditbadge strong', title: balanceLabel },
                       `${balanceLabel} ${reading}`)
                   })(),

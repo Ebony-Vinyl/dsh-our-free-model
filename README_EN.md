@@ -40,9 +40,9 @@
 ## Community
 
 <div align="center">
-  <img src="docs/images/qq-group-891170115.png" alt="QR code for OFM技术交流[17群] (QQ group: 891170115)" width="300">
+  <img src="docs/images/qq-group-386179533.png" alt="QR code for OFM技术交流群[1群] (QQ group: 386179533)" width="300">
   <br>
-  <b>QQ group: 891170115 (OFM技术交流[17群])</b>
+  <b>QQ group: 386179533 (OFM技术交流群[1群])</b>
   <br>
   Scan the QR code to join, discuss the plugin, report issues and share tips.
 </div>
@@ -117,7 +117,7 @@ the picker by itself as soon as a probe gets through.
 > If you prefer npm:
 >
 > ```
-> dsh plugin --profile web add @ebony-vinyl/dsh-our-free-model@2.8.6
+> dsh plugin --profile web add @ebony-vinyl/dsh-our-free-model@2.8.9
 > ```
 >
 > Its bundle id carries the scope (`@ebony-vinyl/dsh-our-free-model`), so it cannot
@@ -150,7 +150,7 @@ and installation contract rather than assuming every desktop shell shares this g
 To install manually as a real directory, use a trusted local tarball:
 
 1. Create `<DSH_HOME>/profiles/<profile>/vendor/`. From the reviewed repository, run `npm pack --ignore-scripts --pack-destination "<DSH_HOME>/profiles/<profile>/vendor"`, or place an official same-version release tarball from this repository there. Local packing does not publish to npm.
-2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.8.6.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
+2. Add `"dsh-our-free-model": "file:./vendor/dsh-our-free-model-2.8.9.tgz"` to the profile's `package.json` dependencies, then use the host's installation flow to resolve it. Keep the filename version aligned with this repository's `package.json`; do not substitute a same-named npm registry version.
 3. Append `"dsh-our-free-model"` to `dsh.profile.bundles`.
 
 When the package manager owns the installed bytes, set `distribution: 'managed'` in the bundle config or plugin `settings.json`. The package manager then handles updates; in-app upgrades, announcement polling and hot reload stand down while model access remains available. For later updates, replace the trusted tarball and update its dependency path so the old lockfile cannot restore an older copy.

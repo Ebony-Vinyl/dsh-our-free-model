@@ -340,6 +340,13 @@ interface Glue {
   readString: (ptr: number, len: number) => string
   /** 写字符串进 wasm 内存，返回指针（长度经 `lastLength` 传出）。 */
   writeString: (text: string) => number
+  /** 释放 `writeString` 分配的缓冲区（`__wbindgen_free` 的配对）。 */
+  freeString: (ptr: number, len: number) => void
+  /**
+   * 分配若干输入串、执行调用、无论成败都释放它们。
+   * 回调收到的指针与长度按入参顺序排列。
+   */
+  withStrings: <T>(texts: string[], invoke: (pointers: number[], lengths: number[]) => T) => T
   lastLength: () => number
   /** 对象堆：JS 对象 ↔ 整数索引。 */
   heapObject: (index: number) => unknown
@@ -417,7 +424,34 @@ async function createGlue(): Promise<Glue> {
     lastLength = encoded.length
     return ptr
   }
-
+  /**
+   * Free a buffer `writeString` allocated.
+   *
+   * `__wbindgen_export2` is wasm-bindgen's `__wbindgen_malloc` and
+   * `__wbindgen_export4` its `__wbindgen_free` — the same pair `callString`
+   * already uses for the *returned* buffer. Every input buffer `writeString`
+   * hands to a wasm export leaked, because nothing ever called the free half
+   * (issue #826: the glue grew the wasm heap on each call and the leak was
+   * proportional to argument size). The wasm side copies the bytes it needs
+   * during the call, so freeing right after it returns is safe.
+   */
+  const freeString = (ptr: number, len: number): void => {
+    if (ptr) exports.__wbindgen_export4!(ptr, len, 1)
+  }
+  /** Allocate, run, and always free every input buffer written for the call. */
+  const withStrings = <T>(texts: string[], invoke: (pointers: number[], lengths: number[]) => T): T => {
+    const pointers: number[] = []
+    const lengths: number[] = []
+    try {
+      for (const text of texts) {
+        pointers.push(writeString(text))
+        lengths.push(lastLength)
+      }
+      return invoke(pointers, lengths)
+    } finally {
+      for (let i = 0; i < pointers.length; i++) freeString(pointers[i], lengths[i])
+    }
+  }
   const callString = (invoke: (stack: number) => void): string => {
     let ptr = 0
     let len = 0
@@ -533,6 +567,8 @@ async function createGlue(): Promise<Glue> {
     view,
     readString,
     writeString,
+    freeString,
+    withStrings,
     lastLength: () => lastLength,
     heapObject,
     pushObject,
@@ -556,10 +592,9 @@ export async function generateRuntimeAuthFields(user: QoderWasmUserInfo): Promis
     organization_tags: user.organizationTags ?? [],
     data_policy_agreed: user.dataPolicyAgreed ?? false,
   })
-  const raw = g.callString((stack) => {
-    const a = g.writeString(payload)
-    g.exports.generate_runtime_auth_fields!(stack, a, g.lastLength())
-  })
+  const raw = g.withStrings([payload], ([a], [aLen]) => g.callString((stack) => {
+    g.exports.generate_runtime_auth_fields!(stack, a, aLen)
+  }))
   return JSON.parse(raw) as QoderRuntimeAuthFields
 }
 
@@ -580,13 +615,9 @@ export async function generateRuntimeAuthFields(user: QoderWasmUserInfo): Promis
  */
 export async function decryptModelCatalog(encrypted: string, machineId: string): Promise<unknown> {
   const g = await getGlue()
-  const raw = g.callString((stack) => {
-    const a = g.writeString(encrypted)
-    const aLen = g.lastLength()
-    const b = g.writeString(machineId)
-    const bLen = g.lastLength()
+  const raw = g.withStrings([encrypted, machineId], ([a, b], [aLen, bLen]) => g.callString((stack) => {
     g.exports.model_cache_decrypt!(stack, a, aLen, b, bLen)
-  })
+  }))
   return JSON.parse(raw)
 }
 
@@ -634,14 +665,13 @@ export class QoderEncryptedInfer {
       data_policy_agreed: options.user.dataPolicyAgreed ?? false,
     })
 
-    const context = g.callPointer((stack) => {
-      const machine = g.writeString(options.machineId); const machineLen = g.lastLength()
-      const ver = g.writeString(version); const verLen = g.lastLength()
-      const info = g.writeString(userInfoJson); const infoLen = g.lastLength()
-      const meta = g.writeString(JSON.stringify(options.metadata)); const metaLen = g.lastLength()
-      // 参数顺序：(sp, machineId, len, version, len, userInfo, len, clientMeta, len)
-      g.exports.qodercontext_new!(stack, machine, machineLen, ver, verLen, info, infoLen, meta, metaLen)
-    })
+    const context = g.withStrings(
+      [options.machineId, version, userInfoJson, JSON.stringify(options.metadata)],
+      ([machine, ver, info, meta], [machineLen, verLen, infoLen, metaLen]) => g.callPointer((stack) => {
+        // 参数顺序：(sp, machineId, len, version, len, userInfo, len, clientMeta, len)
+        g.exports.qodercontext_new!(stack, machine, machineLen, ver, verLen, info, infoLen, meta, metaLen)
+      }),
+    )
 
     return new QoderEncryptedInfer(g, context, options.metadata, options.host)
   }
@@ -657,15 +687,14 @@ export class QoderEncryptedInfer {
     const g = this.g
     const payload = buildQoderInferPayload(ask)
 
-    const result = g.callPointer((stack) => {
-      const host = g.writeString(this.host); const hostLen = g.lastLength()
-      const body = g.writeString(JSON.stringify(payload)); const bodyLen = g.lastLength()
-      const key = g.writeString(ask.modelKey); const keyLen = g.lastLength()
-      const source = g.writeString(ask.source ?? 'system'); const sourceLen = g.lastLength()
-      g.exports.qodercontext_prepareInferRequest!(
-        stack, this.context, host, hostLen, body, bodyLen, key, keyLen, source, sourceLen,
-      )
-    })
+    const result = g.withStrings(
+      [this.host, JSON.stringify(payload), ask.modelKey, ask.source ?? 'system'],
+      ([host, body, key, source], [hostLen, bodyLen, keyLen, sourceLen]) => g.callPointer((stack) => {
+        g.exports.qodercontext_prepareInferRequest!(
+          stack, this.context, host, hostLen, body, bodyLen, key, keyLen, source, sourceLen,
+        )
+      }),
+    )
 
     const headerMap = g.takeObject(g.exports.requestresult_headers!(result))
     const headers: Record<string, string> = {}
@@ -675,15 +704,21 @@ export class QoderEncryptedInfer {
 
     const readResultString = (invoke: (stack: number, ptr: number) => void): string => {
       let out = ''
+      let outPtr = 0
+      let outLen = 0
       const v = g.view()
       const stack = g.exports.__wbindgen_add_to_stack_pointer!(-16)
       try {
         invoke(stack, result)
-        const ptr = v.getInt32(stack + 0, true)
-        const len = v.getInt32(stack + 4, true)
-        out = ptr ? g.readString(ptr, len) : ''
+        outPtr = v.getInt32(stack + 0, true)
+        outLen = v.getInt32(stack + 4, true)
+        out = outPtr ? g.readString(outPtr, outLen) : ''
       } finally {
         g.exports.__wbindgen_add_to_stack_pointer!(16)
+        // The url/body buffers are allocated by the wasm side and never freed
+        // by it — `callString` already frees its return value the same way, and
+        // leaving these leaked grew the heap once per inference request (#826).
+        g.freeString(outPtr, outLen)
       }
       return out
     }

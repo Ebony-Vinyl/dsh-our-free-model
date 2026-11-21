@@ -351,7 +351,34 @@ export async function postSealedStreamed({ credential, body, signal, onData, tim
   const shape = sniffBody(head.text)
   if (shape === 'empty') throw new UpstreamError('model stream returned no body', CODE.empty)
   if (shape === 'sse') {
-    await readSse(replayStream(head), onData, signal, timeoutMs)
+    // A stalled turn must say *why* it stopped (issue #433). The lane has no
+    // 60s cutoff any more — the only bound is the idle deadline — so when that
+    // deadline fires the user otherwise sees a bare "timeout" with no way to
+    // tell a silent upstream from a keepalive-only stream from a slow model.
+    // Count what actually arrived and report it.
+    const seen = { frames: 0, content: 0 }
+    const observe = text => {
+      seen.frames += 1
+      if (typeof text === 'string' && text !== '') seen.content += 1
+      onData(text)
+    }
+    try {
+      await readSse(replayStream(head), observe, signal, timeoutMs)
+    } catch (error) {
+      if (error?.code === CODE.timeout || error?.code === 'TIMEOUT') {
+        const detail = seen.frames === 0
+          ? 'the upstream accepted the request and then sent nothing at all'
+          : seen.content === 0
+            ? `the upstream sent ${seen.frames} keepalive frame(s) and no content`
+            : `the upstream sent ${seen.content} content frame(s) and then stopped`
+        throw new UpstreamError(
+          `EAC turn made no progress for ${Math.round(timeoutMs / 1000)}s — ${detail}. The lane has no fixed cutoff; this is the idle deadline, so the request was still open and simply produced nothing.`,
+          CODE.timeout,
+          { ...(error.providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs: error.providerRetryAfterMs }) },
+        )
+      }
+      throw error
+    }
     return { status: response.status }
   }
 

@@ -28,7 +28,7 @@ import {
   stripCourseLeakIfEnabled,
 } from './sse.js'
 import { normalizeHarnessMessages } from './message-shape.js'
-import { isBillingBusinessCode, looksLikeBillingError, parseQueueError, queueDelayMs, ModelQueuedError, throwIfModelQueued } from './model-queue.js'
+import { hasPricingHint, isBillingBusinessCode, looksLikeBillingError, parseQueueError, queueDelayMs, ModelQueuedError, throwIfModelQueued } from './model-queue.js'
 
 /** 将消息内容载荷展平为纯文本字符串。 */
 export function contentToText(content: unknown): string {
@@ -578,6 +578,13 @@ export async function* consumeOpenAiSse(
         if (data.choices === undefined && config.isQuotaError?.(data)) {
           throw new LlmError(`${label}: ${errorDetail(payload)}`, 'QUOTA_EXCEEDED')
         }
+        // Qoder CN 的「去购买」引导页形态：`{ error: { message, pricingUrl } }`
+        // —— 没有业务码也没有 billing 文案，只认下面两个分支时会被归成
+        // `SERVER`，死号永远不被标记（issue #721）。`pricingUrl` 在正常响应
+        // 里从不出现，所以它本身够判。
+        if (data.choices === undefined && hasPricingHint(data)) {
+          throw new LlmError(`${label}: ${errorDetail(payload)}`, 'QUOTA_EXCEEDED')
+        }
         if (data.error !== undefined) {
           throw new LlmError(`${label}: ${data.error.message ?? 'unknown error'}`, 'SERVER')
         }
@@ -625,7 +632,10 @@ export async function* consumeOpenAiSse(
           // 客户端权威映射（obf 产物）：`billing_error` → `permission`（不重试），
           // 与 `rate_limit` → `rate_limited`（可重试）**明确分开**。
           // 故这里抛 `QUOTA_EXCEEDED`（harness 不将其列入可重试集合）。
-          if (isBillingBusinessCode(data.code) || looksLikeBillingError(data.message)) {
+          // 判据有三种形态（#721 补齐后两种）：业务码 `110`/`112`、明确的
+          // billing 文案、或错误体里带 `pricingUrl`（Qoder CN 的「去购买」
+          // 引导页 —— 没有码也没有文案，只认前两者时死号永远不被标记）。
+          if (isBillingBusinessCode(data.code) || looksLikeBillingError(data.message) || hasPricingHint(data)) {
             throw new LlmError(
               `${label}: ${data.message}`,
               'QUOTA_EXCEEDED',

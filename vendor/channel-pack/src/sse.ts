@@ -374,8 +374,15 @@ export interface ReasoningLoopDiagnostics {
   readonly lines: number
   /** 命中时尾部窗口内的去重行数。 */
   readonly distinctLines: number
-  /** 命中时尾部窗口去重率（`distinctLines / lines`），判据为 `< 0.35`。 */
+  /** 命中时尾部窗口去重率（`distinctLines / lines`），**仅诊断用**。 */
   readonly distinctLineRatio: number
+  /**
+   * 命中时尾部窗口的**字符**去重率（`distinctChars / totalChars`）。
+   *
+   * 这是真正决定判定的比率（issue #748）：行数口径把「每行都很短」的正常
+   * 密集输出误判成循环，字符口径不会。判据为 `< 0.35`。
+   */
+  readonly distinctCharRatio: number
 }
 
 /** {@link createReasoningLoopDetector} 的可调参数。 */
@@ -509,6 +516,7 @@ export function createReasoningLoopDetector(
    */
   let hitLines = 0
   let hitDistinct = 0
+  let hitRatio = 1
 
   /**
    * 喂入一个**固定小片**并推进状态机。
@@ -541,8 +549,19 @@ export function createReasoningLoopDetector(
     // 只看尾部窗口：循环是「局部持续」现象，不必回溯全文。
     const window = text.slice(Math.max(0, text.length - windowChars))
     const lines = window.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+    // ⚠️ 去重率按**字符权重**算，不按行数（issue #748）。
+    //
+    // 行数口径把「每行都很短」的密集输出判成循环：一份正常的枚举
+    // （`1.`、`2.`、`- a`、`- b` …）在 40 行里只有十几行文字不同，行数去重率
+    // 落到 0.02–0.24，于是被误杀 8 次。循环的本质是**同样的内容反复占满输出**，
+    // 那是字符量的问题，不是行数的问题 —— 短行占的字符少，不该和长段落
+    // 同等计权。改成「不重复行的字符数 / 总字符数」后，短行密集的正常输出
+    // 去重率接近 1，而真正的复读（同一段长文本反复出现）依然趋近 0。
+    const totalChars = lines.reduce((sum, line) => sum + line.length, 0)
+    const distinctChars = [...new Set(lines)].reduce((sum, line) => sum + line.length, 0)
+    const charRatio = totalChars === 0 ? 1 : distinctChars / totalChars
     const looping = lines.length >= minLines
-      && new Set(lines).size / lines.length < maxDistinctLineRatio
+      && charRatio < maxDistinctLineRatio
     if (!looping) {
       // 恢复正常：清零持续计数，使「循环→正常→再循环」只认后一段。
       runStart = 0
@@ -557,6 +576,7 @@ export function createReasoningLoopDetector(
     // 就地记录命中瞬间的窗口统计（见 hitLines / hitDistinct 的注释）。
     hitLines = lines.length
     hitDistinct = new Set(lines).size
+    hitRatio = charRatio
     return true
   }
 
@@ -570,7 +590,11 @@ export function createReasoningLoopDetector(
         runChars,
         lines: hitLines,
         distinctLines: hitDistinct,
+        // Char-weighted, matching the verdict (#748). The line-count ratio is
+        // still reported so a past incident stays readable against these
+        // diagnostics, but it is no longer what decides.
         distinctLineRatio: hitLines === 0 ? 1 : hitDistinct / hitLines,
+        distinctCharRatio: hitRatio,
       }
     },
     observe(delta: string): boolean {
