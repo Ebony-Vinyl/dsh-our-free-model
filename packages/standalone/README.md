@@ -18,6 +18,15 @@ npm run start:standalone
 npm run start:standalone -- --port 18900 --data-dir F:\ofm-data
 ```
 
+默认只监听 `127.0.0.1`。如需让其他设备访问独立 Web 服务，可绑定所有网卡：
+
+```powershell
+npm run start:standalone -- --host 0.0.0.0
+```
+
+使用启动输出中的管理页面链接，或将链接中的主机地址替换为运行服务电脑的局域网 IP。
+此选项只影响独立服务；请勿在不可信网络中开放服务端口。
+
 启动打印管理页面的一次性登录链接、实际 API 地址与密钥文件位置，不打印 API Key。
 在浏览器打开管理链接即可使用控制台，链接 10 分钟内有效且仅能兑换一次。
 默认端口是 `18900`；
@@ -35,8 +44,9 @@ npm run start:standalone -- --port 18900 --data-dir F:\ofm-data
 - API Key 为此产品单独生成，保存在该目录的 `settings.json` 的 `forwardKey` 字段。
 - `GET /health` 提供不含凭据的产品状态；推理接口与模型清单需要 `Authorization: Bearer <API Key>`。
 - 同一个数据目录只能启动一个本地服务实例。正常退出会清除 `service.lock`。
-- 异常退出后若锁仍存在，先检查锁文件记录的 PID，确认旧进程已停止，再移除该锁文件。
-- 管理页面和管理 API 只监听回环地址；局域网推理需要显式开启独立中继。
+- Windows 和 Linux 启动时会先获取数据目录的进程互斥端点，再覆盖已有的 `service.lock`；同一数据目录已有服务运行时仍会拒绝启动。其他平台遇到已有锁时不会覆盖。
+- 默认情况下管理页面和管理 API 只监听回环地址；使用 `--host 0.0.0.0` 后，可经本机网卡地址访问独立服务。
+- 局域网推理中继仍需单独显式开启，与 Web 服务的 `--host` 选项无关。
 
 插件仍使用 `DSH_HOME/our-free-model` 或 `~/.dsh/our-free-model`，两者默认互不影响。
 不要主动把独立服务的 `OFM_HOME` 指向插件的数据目录。
@@ -80,11 +90,65 @@ LAN Key 保存在当前独立目录的 `settings.json` 的 `standaloneLanKey` �
 `baseUrls` 为检测到的本机网卡 IPv4 地址及实际端口，切换网络后重新读取摘要即可更新。
 未知字段、自定义监听 host、目标地址和客户端提交的密钥均不接受。
 
-这只解决 issue #351 的 LAN 推理接入。issue #216 的 Docker / FPK / NAS
-远程管理部署仍未实现：管理监听器和 Host 信任围栏仍限 loopback，
-不支持 `--host`、`OFM_ALLOW_NON_LOOPBACK` 或 `OFM_TRUSTED_HOSTS` 放宽管理访问。
-容器映射中继端口可供已配置的推理客户端连接，但不能据此从 LAN 打开管理页，
-也没有提供容器镜像、FPK 包或容器内账号 OAuth 登录适配。
+这只解决 issue #351 的 LAN 推理接入。Docker 支持容器内管理和推理监听，
+配置方式见下方「Docker」。issue #216 的远程管理部署、FPK / NAS 制品仍未实现；
+容器内 OAuth 登录适配也未提供。
+
+## Docker
+
+仓库根目录提供 Dockerfile 和 `docker-compose.yml`。在仓库根目录执行以下命令构建并启动：
+
+```bash
+docker compose up -d --build
+```
+
+查看启动日志和一次性管理登录链接：
+
+```bash
+docker compose logs -f ofm
+```
+
+停止服务但保留数据：
+
+```bash
+docker compose down
+```
+
+Compose 会构建使用 Node.js 22 的镜像，并将宿主机 `18900` 映射到容器的 `18900`。
+容器默认监听 `0.0.0.0:18900`，
+管理页面、推理 API 和 `/health` 均通过映射端口访问：
+
+```bash
+curl http://127.0.0.1:18900/health
+```
+
+容器启动参数固定为：
+
+```text
+npm run start:standalone -- --host 0.0.0.0 --port 18900 --data-dir /ofm-data
+```
+
+- Compose 使用具名卷 `ofm-data` 将 `/ofm-data` 持久化，保存账号凭据、密钥、EAC 授权、设置、账本和账号缓存；运行 `docker compose down -v` 会删除该卷及全部独立数据。
+- 宿主机访问 `http://127.0.0.1:18900/health`；局域网或 Codespaces 使用宿主机地址访问管理页。
+- Dockerfile 内置健康检查。
+- Dockerfile 设置 `OFM_ALLOW_NON_LOOPBACK=1`，允许管理页面经端口转发或反向代理访问。
+- 仅在可信网络暴露端口；公网部署应在 Docker 容器前增加防火墙、反向代理和访问控制。
+- 镜像不包含宿主机 DSH 凭据或插件配置。首次启动会生成独立 API Key 和管理会话。
+
+查看和清理容器：
+
+```bash
+docker ps
+docker inspect --format '{{json .State.Health.Status}}' ofm
+docker rm -f ofm
+```
+
+具名卷独立于容器；删除容器不会删除数据，确认清除数据后再删除卷：
+
+```bash
+docker volume ls
+docker volume rm ofm-data
+```
 
 ## 当前接口与渠道
 

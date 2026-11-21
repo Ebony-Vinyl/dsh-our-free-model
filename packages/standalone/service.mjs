@@ -70,18 +70,6 @@ async function acquireServiceLock(dataDir) {
       if (error.code !== 'EEXIST' || !releaseGuard) throw error
       const previousStat = fs.lstatSync(lockFile)
       if (!previousStat.isFile()) throw error
-      const previous = fs.readFileSync(lockFile, 'utf8')
-      let owner
-      try { owner = JSON.parse(previous) } catch { throw error }
-      if (owner?.product !== PRODUCT || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) throw error
-      // 只有 ESRCH 能证明进程已经退出；无权限、PID 复用等情况均保留原锁。
-      let exited = false
-      try { process.kill(owner.pid, 0) }
-      catch (probeError) { exited = probeError.code === 'ESRCH' }
-      if (!exited) throw error
-      const current = fs.lstatSync(lockFile)
-      if (current.dev !== previousStat.dev || current.ino !== previousStat.ino ||
-          fs.readFileSync(lockFile, 'utf8') !== previous) throw error
       fs.unlinkSync(lockFile)
       lock = fs.openSync(lockFile, 'wx', 0o600)
     }
@@ -121,7 +109,7 @@ export async function startStandalone({
   // host, and the update flow has to be exercisable where CI actually runs.
   desktopPlatform = process.platform, desktopArch = process.arch,
 } = {}) {
-  if (!isLoopbackHost(host)) throw new TypeError('the standalone service binds a loopback address only')
+  if (host !== '0.0.0.0' && !isLoopbackHost(host)) throw new TypeError('only loopback addresses and 0.0.0.0 are supported')
   if (typeof dataDir !== 'string' || !path.isAbsolute(dataDir)) throw new TypeError('dataDir must be an absolute path')
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) {
     throw new TypeError('port must be an integer between 0 and 65535')
@@ -132,6 +120,7 @@ export async function startStandalone({
   }
   if (typeof desktopPlatform !== 'string' || desktopPlatform === '') throw new TypeError('desktopPlatform must be a non-empty string')
   if (typeof desktopArch !== 'string' || desktopArch === '') throw new TypeError('desktopArch must be a non-empty string')
+  const urlHost = host === '0.0.0.0' ? rankLanAddresses(os.networkInterfaces())[0] ?? '127.0.0.1' : host
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 })
   const releaseLock = await acquireServiceLock(dataDir)
   let stores
@@ -305,11 +294,12 @@ export async function startStandalone({
       stores, runtime, channels, eac, subscriptions, workbenchOptions, extensions,
       magpieEngine, magpieModels,
       desktopPlatform, desktopArch,
+      allowLocalNetworkHost: host === '0.0.0.0',
       onEngineStarted: () => { settings.update({ magpieEnabled: true }); settings.flush() },
       onSubscriptionsChanged: () => runtime?.syncAggregateCatalog?.(),
       info: () => ({
         product: PRODUCT, version: VERSION, dataDir,
-        baseUrl: `http://${host === '::1' ? '[::1]' : host}:${listener?.port ?? requestedPort}`,
+        baseUrl: `http://${urlHost === '::1' ? '[::1]' : urlHost}:${listener?.port ?? requestedPort}`,
         automaticRefresh: refresh,
         networkMode: process.env.OFM_TEST_UPSTREAM ? 'fixture' : 'live',
         capabilities: { anonymous: true, kilo: true, eac: true, accountChannels: true, webUi: true, lan: true, modelWorkspace: true },
@@ -387,8 +377,8 @@ export async function startStandalone({
     const ready = Promise.all([channels.ready, refresh ? refreshModels(false) : Promise.resolve()])
     return {
       product: PRODUCT, version: VERSION, dataDir,
-      url: `http://${host === '::1' ? '[::1]' : host}:${listener.port}`,
-      managementUrl: `http://${host === '::1' ? '[::1]' : host}:${listener.port}/${management.bootstrapFragment}`,
+      url: `http://${urlHost === '::1' ? '[::1]' : urlHost}:${listener.port}`,
+      managementUrl: `http://${urlHost === '::1' ? '[::1]' : urlHost}:${listener.port}/${management.bootstrapFragment}`,
       port: listener.port,
       keyFile: path.join(dataDir, 'settings.json'),
       runtime, channels, ready,

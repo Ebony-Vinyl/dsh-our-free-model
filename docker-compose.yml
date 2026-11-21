@@ -1,0 +1,15 @@
+services:
+  ofm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ofm:latest
+    container_name: ofm
+    restart: unless-stopped
+    ports:
+      - "18900:18900"
+    volumes:
+      - ofm-data:/ofm-data
+
+volumes:
+  ofm-data:

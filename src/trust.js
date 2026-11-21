@@ -129,14 +129,23 @@ export function rejectionFor(req, connection, onRejection) {
  * rebinding defence via the Host header, cross-site fetch refusal, and an
  * Origin/Referer authority match.
  */
-export function structuralRejection(req) {
-  return structuralReason(req) === undefined ? undefined : 403
+export function structuralRejection(req, { allowLocalNetworkHost = false } = {}) {
+  return structuralReason(req, { allowLocalNetworkHost }) === undefined ? undefined : 403
 }
 
 /** Return a fixed reason without exposing caller-supplied strings. */
-function structuralReason(req) {
+function structuralReason(req, { allowLocalNetworkHost = false } = {}) {
+  const allowNonLoopback = process.env.OFM_ALLOW_NON_LOOPBACK === '1'
+  if (allowNonLoopback) return undefined
   const host = authorityOf(req.headers.host, 'http')
-  if (host === null || !LOOPBACK_NAMES.has(host.hostname)) return 'host-not-loopback'
+  const hostname = host?.hostname.replace(/^\[|\]$/g, '').replace(/^::ffff:/, '')
+  const localAddress = String(req.socket?.localAddress ?? '').toLowerCase()
+    .replace(/^\[|\]$/g, '').replace(/^::ffff:/, '')
+  const localLoopback = localAddress === '::1' || localAddress.startsWith('127.')
+  const hostAllowed = allowLocalNetworkHost
+    ? hostname === localAddress || (localLoopback && LOOPBACK_NAMES.has(host?.hostname))
+    : host !== null && LOOPBACK_NAMES.has(host.hostname)
+  if (host === null || !hostAllowed) return 'host-not-loopback'
   const site = String(req.headers['sec-fetch-site'] ?? '').toLowerCase()
   if (site === 'cross-site') return 'cross-site'
   for (const header of ['origin', 'referer']) {

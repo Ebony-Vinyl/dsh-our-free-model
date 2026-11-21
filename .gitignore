@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.log
 *.tgz
+*.tar
 .DS_Store
 Thumbs.db
 

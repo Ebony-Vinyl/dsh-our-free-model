@@ -43,6 +43,24 @@ check('a Host that is not loopback is refused (DNS rebinding)', () => {
   assert.equal(structuralRejection(req({ host: 'evil.example:8080' })), 403)
   assert.equal(structuralRejection(req({})), 403)
 })
+check('standalone LAN access is limited to the destination interface and same-origin requests', () => {
+  const localRequest = headers => ({
+    headers,
+    socket: { localAddress: '192.168.1.8' },
+  })
+  assert.equal(structuralRejection(localRequest({ host: '192.168.1.8:8080' }), { allowLocalNetworkHost: true }), undefined)
+  assert.equal(structuralRejection(localRequest({ host: 'evil.example:8080' }), { allowLocalNetworkHost: true }), 403)
+  assert.equal(structuralRejection(localRequest({ host: 'localhost:8080' }), { allowLocalNetworkHost: true }), 403)
+  assert.equal(structuralRejection(localRequest({
+    host: '192.168.1.8:8080', origin: 'http://evil.example:8080',
+  }), { allowLocalNetworkHost: true }), 403)
+  assert.equal(structuralRejection(localRequest({
+    host: '192.168.1.8:8080', 'sec-fetch-site': 'cross-site',
+  }), { allowLocalNetworkHost: true }), 403)
+  assert.equal(structuralRejection({
+    headers: { host: 'localhost:8080' }, socket: { localAddress: '127.0.0.1' },
+  }, { allowLocalNetworkHost: true }), undefined)
+})
 check('cross-site fetches are refused', () => {
   assert.equal(structuralRejection(req({ host: '127.0.0.1:8080', 'sec-fetch-site': 'cross-site' })), 403)
 })
