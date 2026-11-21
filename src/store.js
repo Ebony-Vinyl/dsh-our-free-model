@@ -216,6 +216,7 @@ export const SETTINGS_INITIAL = {
   tokenSaver: {
     enabled: true,
     rtk: true,
+    prose: true,
     prompts: { caveman: 'off', ponytail: 'off' },
     /** User-authored system instruction, appended verbatim. Empty means off. */
     customPrompt: '',

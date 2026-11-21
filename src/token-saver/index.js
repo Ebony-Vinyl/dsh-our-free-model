@@ -26,6 +26,7 @@
 import { compressRequest } from './rtk/index.js'
 import { activePrompts } from './prompts.js'
 import { injectSystem } from './inject.js'
+import { trimRequestProse } from './prose.js'
 
 /** Prompt families this pipeline knows, for the settings schema and the UI. */
 export const PROMPT_FAMILIES = ['caveman', 'ponytail']
@@ -50,6 +51,9 @@ export function saverConfig(settings) {
     /** A user-written system instruction, appended through the same injector as
      *  the built-in prompts. Empty (the default) injects nothing. */
     customPrompt: typeof section.customPrompt === 'string' ? section.customPrompt : '',
+    /** Trim politeness words and trailing sentence marks from user/assistant
+     *  prose on every wire. On by default: it only ever removes filler. */
+    prose: section.prose !== false,
     /** Per-request header/query opt-out is handled by the caller; this is the
      *  stored preference only. */
   }
@@ -70,8 +74,22 @@ export function saverConfig(settings) {
  * @returns {{prompt: object|null, rtk: object|null, saved: number, bytesBefore: number, bytesAfter: number, notes: string[]}}
  */
 export function applyTokenSavers(payload, wire, config) {
-  const report = { prompt: null, rtk: null, saved: 0, bytesBefore: 0, bytesAfter: 0, notes: [] }
+  const report = { prompt: null, prose: null, rtk: null, saved: 0, bytesBefore: 0, bytesAfter: 0, notes: [] }
   if (config?.enabled === false || payload === null || typeof payload !== 'object') return report
+
+  // Prose trimming runs first: it rewrites user/assistant text, never tool
+  // output, so RTK sees the same tool blobs it always did.
+  if (config.prose !== false) {
+    try {
+      const prose = trimRequestProse(payload, wire)
+      report.prose = prose
+      report.bytesBefore += prose.bytesBefore
+      report.bytesAfter += prose.bytesAfter
+      report.saved += prose.saved
+    } catch (error) {
+      report.notes.push(`prose-failed:${error?.message ?? error}`)
+    }
+  }
 
   // Prompt shaping first: the injected text is a system instruction, never a
   // tool result, so the order does not change RTK's input — but running it first
@@ -117,9 +135,9 @@ export function applyTokenSavers(payload, wire, config) {
     try {
       const result = compressRequest(payload, wire, true)
       report.rtk = result.stats
-      report.saved = Number(result.stats?.saved) || 0
-      report.bytesBefore = Number(result.stats?.bytesBefore) || 0
-      report.bytesAfter = Number(result.stats?.bytesAfter) || 0
+      report.saved += Number(result.stats?.saved) || 0
+      report.bytesBefore += Number(result.stats?.bytesBefore) || 0
+      report.bytesAfter += Number(result.stats?.bytesAfter) || 0
     } catch (error) {
       report.notes.push(`rtk-failed:${error?.message ?? error}`)
     }

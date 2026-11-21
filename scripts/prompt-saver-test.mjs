@@ -430,6 +430,35 @@ check('a custom prompt is reversible with the shared off switch', () => {
   assert.deepEqual(body, before)
 })
 
+// ── prose trimming ───────────────────────────────────────────────────────────
+
+check('prose trimming drops politeness and trailing marks from chat text', () => {
+  const body = { messages: [{ role: 'user', content: '谢谢，请稍等。' }, { role: 'assistant', content: 'Please fix the bug,' }] }
+  const report = applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(body.messages[0].content, '稍等')
+  assert.equal(body.messages[1].content, 'fix the bug')
+  assert.ok(report.prose.saved > 0)
+})
+
+check('prose trimming leaves tool output and code alone', () => {
+  const body = { messages: [
+    { role: 'user', content: "const msg = '谢谢'" },
+    { role: 'tool', tool_call_id: 't', content: '请稍等' },
+  ] }
+  applyTokenSavers(body, 'chat', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(body.messages[0].content, "const msg = '谢谢'")
+  assert.equal(body.messages[1].content, '请稍等')
+})
+
+check('prose trimming covers the messages and responses wire blocks', () => {
+  const msg = { messages: [{ role: 'user', content: [{ type: 'text', text: '谢谢。' }] }] }
+  applyTokenSavers(msg, 'messages', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(msg.messages[0].content[0].text, '')
+  const res = { input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: '请稍等。' }] }] }
+  applyTokenSavers(res, 'responses', saverConfig({ tokenSaver: { prose: true } }))
+  assert.equal(res.input[0].content[0].text, '稍等')
+})
+
 if (failures > 0) console.error(`prompt-saver-test: ${failures} failure(s)`)
 else console.log('prompt-saver-test: the authored prompt families retain boundaries and the injector is reversible')
 process.exitCode = failures > 0 ? 1 : 0
