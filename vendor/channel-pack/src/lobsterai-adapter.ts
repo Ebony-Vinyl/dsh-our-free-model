@@ -37,6 +37,7 @@ import { projectRequestImage, type ImageRequestTarget } from './image-budget.js'
 import {
   classifyLobsteraiError,
   classifyLobsteraiStreamError,
+  parseLobsteraiSuspendedResetAt,
   recordsLobsteraiRateLimit,
   shouldRotateLobsteraiAccount,
   type LobsteraiErrorKind,
@@ -610,6 +611,23 @@ function buildLobsteraiFailure(input: LobsteraiFailureInput): LlmError {
     return new LlmError(`${prefix}（${detail}）`, 'QUOTA_EXCEEDED', { status })
   }
 
+  // 临时停用（200 + 流内错误帧）与 403 封号同源：上游给了恢复时刻，但反复重试
+  // 或继续换号会把「暂时」变成「永久」。文案必须把时刻说清楚，并明确请用户
+  // 别再硬试、改走官方客户端 —— 否则用户只会看到一个可重试的 SERVER 错误，
+  // 然后靠重试把自己的账号推到封号（issue #850）。
+  if (kind === 'suspended') {
+    const resetAtMs = parseLobsteraiSuspendedResetAt(text)
+    const when = resetAtMs === null
+      ? '上游未给出可解析的恢复时刻'
+      : `预计 ${new Date(resetAtMs).toLocaleString('zh-CN')} 恢复`
+    return new LlmError(
+      `lobsterai: 账号被上游风控暂时停用，${when}；请避免连续重试，`
+        + `并改用有道龙虾官方客户端或官网访问（${detail}）`,
+      'PERMISSION',
+      { status: status === 0 ? 403 : status },
+    )
+  }
+
   // 风控停用不是「等一下就好」：换号不解决、额度次日也不会恢复。
   // 必须让用户知道该去平台申诉或换平台，否则只会反复重试（issue #850）。
   if (kind === 'banned') {
@@ -1086,43 +1104,42 @@ export class LobsteraiAdapter extends LlmAdapter {
         lastKind = classifyLobsteraiError(lastStatus, lastText)
       }
 
-      // 用**本轮**的 kind 判断是否该记徽章：只有 Go 里真正 `Cooldown(...)`
-      // 的三类才记（见 `recordsLobsteraiRateLimit` 的说明），且必须记在
-      // **真正失败的那个账号**上 —— currentAccountId 在下面会被推进到下一个账号。
+      // 用**本轮**的 kind 判断是否该记徽章：`recordsLobsteraiRateLimit` 为真的
+      // 类别才记（Go 的 Cooldown 三类 + 本插件新增的 banned/suspended），且必须
+      // 记在**真正失败的那个账号**上 —— currentAccountId 在下面会被推进到下一个账号。
       if (currentAccountId && recordsLobsteraiRateLimit(lastKind)) {
         // 两层取值：优先 `parseRateLimitError` 从错误体里抠出**服务端声明的**
         // 重置时刻；抠不到则用本地兜底。两者都要能落地 ——
         // 若在抠不到时直接跳过记录，UI 上就不会出现任何限流标记，
         // 「重测/重置」按钮也就无从操作。
         const parsed = parseRateLimitError(lastText, options.model)
+        // 临时停用的恢复时刻**只**写在纯文本正文里（「预计于 … (UTC+08:00) 恢复」），
+        // `parseRateLimitError` 的 JSON +「将在 / reset at」口径一个都不满足，
+        // 只会返回 null；不单独解析就会落成 1 小时兜底，徽章显示一个假的
+        // 恢复时刻 —— 比没有徽章更糟（#850）。
+        const suspendedResetAtMs = lastKind === 'suspended'
+          ? parseLobsteraiSuspendedResetAt(lastText)
+          : null
         await this.options.accountPool!.updateModelRateLimit(
           currentAccountId,
           parsed?.modelId ?? options.model,
-          // `parseRateLimitError` 内部要求错误体是 JSON（它 `JSON.parse` 取 msg），
-          // 而部分上游/网关会用**纯文本** 429。此时它返回 null，这里用
-          // 「1 小时后」兜底 —— 与它自己 JSON 路径下的 fallback 同一口径，
-          // 也与本插件「标记只是快照、可主动重测」的语义一致。
-          parsed?.resetTimeMs ?? Date.now() + LOBSTERAI_RATE_LIMIT_FALLBACK_MS,
+          // 三条取值都失败时的兜底：1 小时后，与 `parseRateLimitError` 自己的
+          // JSON fallback 同一口径，也与「标记只是快照、可主动重测」的语义一致。
+          suspendedResetAtMs ?? parsed?.resetTimeMs ?? Date.now() + LOBSTERAI_RATE_LIMIT_FALLBACK_MS,
         )
       }
 
       // 无账号池（或策略判定不该轮转）：如实报错，不做换号。
+      //
+      // `banned`（403 封号）与 `suspended`（200 流内临时停用）都由
+      // `shouldRotateLobsteraiAccount` 返回 false：上游按账号主体判定，同批
+      // 同源账号往往被连带停用，逐个试只会把剩下能用的号一起打进风控
+      // （issue #850）。止损判定只保留在那个函数里 —— 2.8.9 曾在这里手写
+      // `if (lastKind === 'banned') throw`，与函数语义分裂，现已删除。
       if (!this.options.accountPool || !shouldRotateLobsteraiAccount(lastKind)) {
         throw buildLobsteraiFailure({
           kind: lastKind, status: lastStatus, text: lastText,
           model: options.model, fromStream: lastFromStream, exhausted: false,
-        })
-      }
-
-      // 风控停用**立即止损**，不再换号（issue #850）。
-      //
-      // 上游是按「账号主体」判定的，同一批同源账号往往被连带停用；逐个试完
-      // 只会把剩下能用的号一起打进风控，还让用户等满 3 轮。额度用完可以等
-      // 次日、可以换号，封号不行 —— 这里如实把「需要申诉/换平台」报给用户。
-      if (lastKind === 'banned') {
-        throw buildLobsteraiFailure({
-          kind: lastKind, status: lastStatus, text: lastText,
-          model: options.model, fromStream: lastFromStream, exhausted: true,
         })
       }
 

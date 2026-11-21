@@ -30727,6 +30727,25 @@ var LOBSTERAI_BANNED_MARKERS = [
   "\u8D26\u53F7\u5DF2\u88AB\u9650\u5236",
   "\u98CE\u63A7"
 ];
+var LOBSTERAI_SUSPENDED_SUBJECT = "\u6682\u65F6\u65E0\u6CD5\u4F7F\u7528\u76F8\u5173\u670D\u52A1";
+var LOBSTERAI_SUSPENDED_ATTRIBUTIONS = [
+  "\u7B2C\u4E09\u65B9\u53CD\u5411\u4EE3\u7406",
+  "\u63D2\u4EF6\u8F6C\u63A5",
+  "\u5171\u4EAB\u672C\u8D26\u53F7\u7684\u670D\u52A1\u989D\u5EA6",
+  "\u5F02\u5E38\u4F7F\u7528"
+];
+function isLobsteraiSuspendedNotice(body) {
+  if (!body.includes(LOBSTERAI_SUSPENDED_SUBJECT)) return false;
+  if (!LOBSTERAI_SUSPENDED_ATTRIBUTIONS.some((marker) => body.includes(marker))) return false;
+  return body.includes("\u9884\u8BA1\u4E8E") && body.includes("\u6062\u590D") || body.includes("\u6C38\u4E45\u505C\u7528");
+}
+var LOBSTERAI_SUSPENDED_RESUME_PATTERN = /预计于\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*\((UTC[+-]\d{1,2}(?::\d{2})?)\)\s*恢复/;
+function parseLobsteraiSuspendedResetAt(text) {
+  const match = LOBSTERAI_SUSPENDED_RESUME_PATTERN.exec(text);
+  if (!match) return null;
+  const parsed = Date.parse(`${match[1]} ${match[2]}`);
+  return Number.isNaN(parsed) ? null : parsed;
+}
 var HTTP_PAYMENT_REQUIRED = 402;
 var HTTP_TOO_MANY_REQUESTS = 429;
 var HTTP_NOT_FOUND = 404;
@@ -30736,6 +30755,7 @@ function classifyLobsteraiError(status, body) {
   for (const marker of LOBSTERAI_HARD_CREDIT_MARKERS) {
     if (lower.includes(marker.toLowerCase()) || body.includes(marker)) return "hard-credit";
   }
+  if (isLobsteraiSuspendedNotice(body)) return "suspended";
   for (const marker of LOBSTERAI_BANNED_MARKERS) {
     if (lower.includes(marker.toLowerCase()) || body.includes(marker)) return "banned";
   }
@@ -30753,10 +30773,11 @@ function classifyLobsteraiStreamError(message) {
   return byKeyword === "none" ? "client" : byKeyword;
 }
 function shouldRotateLobsteraiAccount(kind) {
+  if (kind === "banned" || kind === "suspended") return false;
   return kind !== "none";
 }
 function recordsLobsteraiRateLimit(kind) {
-  return kind === "hard-credit" || kind === "soft-rate" || kind === "not-found" || kind === "banned";
+  return kind === "hard-credit" || kind === "soft-rate" || kind === "not-found" || kind === "banned" || kind === "suspended";
 }
 function isLobsteraiTerminalError(kind) {
   return kind === "session-dead";
@@ -31845,6 +31866,15 @@ function buildLobsteraiFailure(input) {
     const prefix = exhausted ? `lobsterai: \u6A21\u578B ${model} \u6240\u6709\u8D26\u53F7\u5747\u4E0D\u53EF\u7528` : "lobsterai: \u79EF\u5206\u4E0D\u8DB3";
     return new LlmError4(`${prefix}\uFF08${detail}\uFF09`, "QUOTA_EXCEEDED", { status });
   }
+  if (kind === "suspended") {
+    const resetAtMs = parseLobsteraiSuspendedResetAt(text);
+    const when = resetAtMs === null ? "\u4E0A\u6E38\u672A\u7ED9\u51FA\u53EF\u89E3\u6790\u7684\u6062\u590D\u65F6\u523B" : `\u9884\u8BA1 ${new Date(resetAtMs).toLocaleString("zh-CN")} \u6062\u590D`;
+    return new LlmError4(
+      `lobsterai: \u8D26\u53F7\u88AB\u4E0A\u6E38\u98CE\u63A7\u6682\u65F6\u505C\u7528\uFF0C${when}\uFF1B\u8BF7\u907F\u514D\u8FDE\u7EED\u91CD\u8BD5\uFF0C\u5E76\u6539\u7528\u6709\u9053\u9F99\u867E\u5B98\u65B9\u5BA2\u6237\u7AEF\u6216\u5B98\u7F51\u8BBF\u95EE\uFF08${detail}\uFF09`,
+      "PERMISSION",
+      { status: status === 0 ? 403 : status }
+    );
+  }
   if (kind === "banned") {
     return new LlmError4(
       `lobsterai: \u8D26\u53F7\u88AB\u4E0A\u6E38\u98CE\u63A7\u505C\u7528\uFF0C\u9700\u8981\u5230\u5E73\u53F0\u7533\u8BC9\u6216\u66F4\u6362\u8D26\u53F7\uFF08${detail}\uFF09`,
@@ -32191,14 +32221,13 @@ var LobsteraiAdapter = class extends LlmAdapter {
       }
       if (currentAccountId && recordsLobsteraiRateLimit(lastKind)) {
         const parsed = parseRateLimitError(lastText, options.model);
+        const suspendedResetAtMs = lastKind === "suspended" ? parseLobsteraiSuspendedResetAt(lastText) : null;
         await this.options.accountPool.updateModelRateLimit(
           currentAccountId,
           parsed?.modelId ?? options.model,
-          // `parseRateLimitError` 内部要求错误体是 JSON（它 `JSON.parse` 取 msg），
-          // 而部分上游/网关会用**纯文本** 429。此时它返回 null，这里用
-          // 「1 小时后」兜底 —— 与它自己 JSON 路径下的 fallback 同一口径，
-          // 也与本插件「标记只是快照、可主动重测」的语义一致。
-          parsed?.resetTimeMs ?? Date.now() + LOBSTERAI_RATE_LIMIT_FALLBACK_MS
+          // 三条取值都失败时的兜底：1 小时后，与 `parseRateLimitError` 自己的
+          // JSON fallback 同一口径，也与「标记只是快照、可主动重测」的语义一致。
+          suspendedResetAtMs ?? parsed?.resetTimeMs ?? Date.now() + LOBSTERAI_RATE_LIMIT_FALLBACK_MS
         );
       }
       if (!this.options.accountPool || !shouldRotateLobsteraiAccount(lastKind)) {
@@ -32209,16 +32238,6 @@ var LobsteraiAdapter = class extends LlmAdapter {
           model: options.model,
           fromStream: lastFromStream,
           exhausted: false
-        });
-      }
-      if (lastKind === "banned") {
-        throw buildLobsteraiFailure({
-          kind: lastKind,
-          status: lastStatus,
-          text: lastText,
-          model: options.model,
-          fromStream: lastFromStream,
-          exhausted: true
         });
       }
       if (attempt >= LOBSTERAI_MAX_ROTATE - 1) {

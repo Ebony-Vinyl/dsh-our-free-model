@@ -327,6 +327,58 @@ try {
   fs.rmSync(scratch, { recursive: true, force: true })
 }
 
+/**
+ * #850：上游「账号暂时无法使用相关服务」的临时风控停用。
+ *
+ * 验收口径（对齐 issue 提的四条）：
+ * 1. 200 + 流内错误帧的停用文案必须判成 `suspended`（2.8.9 落成 `client`，继续换号）；
+ * 2. `suspended` 与 `banned` 都不换号（换号会把同源账号一起打进风控）；
+ * 3. `suspended` 要落徽章，且恢复时刻取正文的「预计于 … (UTC+08:00) 恢复」，
+ *    不能退化成 1 小时兜底；
+ * 4. 判据是**共现**：缺主体/归因/后果的相似文案仍走旧的 `client` 行为。
+ */
+async function verifyLobsteraiSuspendedAccount() {
+  const errors = await import('../vendor/channel-pack/src/lobsterai-errors.ts')
+  const notice = '账号暂时无法使用相关服务，预计于 2026-11-18 11:08:21 (UTC+08:00) 恢复。'
+    + '请通过有道龙虾官方客户端或官网使用服务，勿通过第三方反向代理或插件转接、'
+    + '共享本账号的服务额度。再次出现异常使用可能导致永久停用。'
+
+  assert.equal(errors.classifyLobsteraiStreamError(notice), 'suspended', '#850 200+流内停用必须判 suspended')
+  assert.equal(errors.classifyLobsteraiError(200, notice), 'suspended', 'HTTP 200 走关键词分支也认得')
+  assert.equal(errors.classifyLobsteraiError(403, notice), 'suspended', '同一段文案换状态码也认得')
+  assert.equal(errors.classifyLobsteraiError(0, notice), 'suspended', '状态码未知（0）也认得')
+
+  assert.equal(errors.shouldRotateLobsteraiAccount('suspended'), false, '停用账号不再换号')
+  assert.equal(errors.shouldRotateLobsteraiAccount('banned'), false, '403 封号同样不换号')
+  assert.equal(errors.recordsLobsteraiRateLimit('suspended'), true, '解封时刻要落成徽章')
+  assert.equal(errors.recordsLobsteraiRateLimit('client'), false, '普通 client 不留徽章')
+
+  assert.equal(
+    errors.parseLobsteraiSuspendedResetAt(notice), 1794971301000,
+    '恢复时刻取正文（2026-11-18 11:08:21 UTC+08:00）',
+  )
+  // 抽不到时刻就返回 null 交给调用方兜底，绝不伪造一个时刻
+  assert.equal(errors.parseLobsteraiSuspendedResetAt('账号暂时无法使用相关服务，预计于稍后恢复'), null)
+
+  // 误判防护：缺任一层语义都不认，否则一次服务抖动就能让整个账号池停摆
+  for (const text of [
+    '服务暂时不可用，请稍后重试',
+    '该模型暂时无法使用相关服务',
+    '账号暂时无法使用相关服务，请稍后再试',
+    '不同账号共享本账号的服务额度时请谨慎',
+    '异常使用频率过高，请稍后再试',
+  ]) {
+    assert.equal(errors.classifyLobsteraiStreamError(text), 'client', `误判防护应保持 client: ${text}`)
+  }
+
+  // 既有分类不能被新判据挤掉
+  assert.equal(errors.classifyLobsteraiError(403, '账号存在异常行为，已被限制使用'), 'banned')
+  assert.equal(errors.classifyLobsteraiError(429, ''), 'soft-rate')
+  assert.equal(errors.classifyLobsteraiError(200, '免费额度已用完，请升级套餐'), 'hard-credit')
+  assert.equal(errors.shouldRotateLobsteraiAccount('hard-credit'), true, '额度耗尽仍应换号')
+  console.log('ok  lobsterai #850: 200+流内停用判 suspended、不换号、恢复时刻可解析，普通文案不误判')
+}
+
 async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   const { verifyChannelQueueRotation } = await import('./channel-queue-rotation-test.mjs')
   await verifyChannelQueueRotation()
@@ -334,6 +386,7 @@ async function verifySourceRegressions({ ctx, adapters, call, creds }) {
   await verifyChannelPrFixes()
   await verifyLoopResumeEvents()
   await verifyGatewayToolCallFrames()
+  await verifyLobsteraiSuspendedAccount()
 
   // ── #681：探测分派表、候选链与耗时回传 ─────────────────────────────────
   //
